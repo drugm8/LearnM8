@@ -8,7 +8,7 @@ from learners.rf_learner import rf_learner
 from learners.gp_learner import gp_learner
 from sklearn.ensemble import RandomForestRegressor
 from learners.sklearn_learner import sklearn_learner
-from dockm8_scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
+from scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
 from helpers.dock import dock
 from helpers.helpers import initialize_logging, log_and_save, log_list, remove_right_df_from_left_df
 
