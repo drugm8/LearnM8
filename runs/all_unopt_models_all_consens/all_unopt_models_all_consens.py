@@ -11,7 +11,7 @@ from rdkit.Chem import rdFingerprintGenerator
 from sklearn.ensemble import RandomForestRegressor
 from learners.sklearn_learner import sklearn_learner
 
-from scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
+from dockm8_scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
 from helpers.dock import dock
 from helpers.helpers import remove_right_df_from_left_df
 import sys

@@ -23,7 +23,17 @@ def trynmove(file):
     except:
         os.rename(file, file[:-3] + "_rename_error.txt")
         
-        
+def run_sub_for_all_python_files_in_directory(directory):
+    for root, dirs, files in os.walk(directory):
+        for file in files:
+            if file.endswith(".py"):
+                try:
+                    env_name = "threetwelve"  # Replace with your actual environment name
+                    subprocess.run(["conda", "run", "-n", env_name, "python", file], check=True)
+                    log_and_save(f"Executed and deleted: {file}")
+                    trynmove(file)
+                except subprocess.CalledProcessError as e:
+                    os.rename(file, file[:-3] + "_error.txt")
 
 class ScriptHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -41,6 +51,7 @@ class ScriptHandler(FileSystemEventHandler):
 
 if __name__ == "__main__":
     path_to_watch = "./RUNNER_FOLDER"
+    run_sub_for_all_python_files_in_directory(path_to_watch)
     event_handler = ScriptHandler()
     observer = Observer()
     observer.schedule(event_handler, path_to_watch, recursive=False)

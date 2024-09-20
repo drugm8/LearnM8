@@ -15,7 +15,7 @@ from learners.sklearn_learner import sklearn_learner
 #import gridsearch
 from sklearn.model_selection import GridSearchCV
 
-from scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
+from dockm8_scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
 from helpers.dock import dock
 from helpers.helpers import convert_list_of_smiles_to_morgan_fingerprints, remove_right_df_from_left_df
 import sys
