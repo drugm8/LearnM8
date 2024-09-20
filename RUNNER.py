@@ -15,7 +15,15 @@ def log_and_save(message):
     log_file.write(time.strftime("%Y-%m-%d %H:%M:%S") + " " + message + "\n")
     #log_file.write(message + "\n")
     log_file.flush()  # Ensure it's written to the file immediately
-
+def trynmove(file):
+    filename = file.split("/")[-1]
+    filename_without_py = filename[:-3]
+    try:
+        os.rename(file,"./runs/"+filename_without_py+"/"+filename)
+    except:
+        os.rename(file, file[:-3] + "_rename_error.txt")
+        
+        
 
 class ScriptHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -26,7 +34,7 @@ class ScriptHandler(FileSystemEventHandler):
                 env_name = "threetwelve"  # Replace with your actual environment name
                 subprocess.run(["conda", "run", "-n", env_name, "python", event.src_path], check=True)
                 log_and_save(f"Executed and deleted: {event.src_path}")
-                os.rename(event.src_path, str(event.src_path)[:-3] + "_done.txt")
+                trynmove(str(event.src_path))
             except subprocess.CalledProcessError as e:
                 os.rename(event.src_path, str(event.src_path)[:-3] + "_error.txt")
                 log_and_save(f"Error executing {event.src_path}: {e}")

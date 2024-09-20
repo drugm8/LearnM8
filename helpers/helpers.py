@@ -4,6 +4,7 @@ from rdkit.Chem import rdFingerprintGenerator
 import pandas as pd
 from joblib import Parallel, delayed
 import time
+import os
 
 # def convert_list_of_smiles_to_morgan_fingerprints(smiles_list):
 #         # Convert SMILES to RDKit molecules
@@ -47,3 +48,9 @@ def log_list(list_data,log_file):
     message += "]"
     log_and_save(message,log_file)     
 
+def initialize_logging(script_name):
+    filename = os.path.basename(script_name).split(".")[0]
+    if not os.path.exists("./runs/"+filename):
+        os.makedirs("./runs/"+filename)
+    log_file_path = "./runs/"+filename+"/"+"log_"+str(time.strftime("%Y-%m-%d %H:%M:%S"))+".txt"
+    return open(log_file_path, "w")
