@@ -1,0 +1,306 @@
+Loaded ground truth data from: ./data/data_raw.csv
+Loaded input data: (122495, 2) rows
+Selected initial random sample: (1000, 2) rows
+Remaining input after removing initial sample: (121486, 2) rows
+Docked initial random sample. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for initial sample. Resulting DataFrame shape: (1000, 3)
+Initialized Random Forest learner with batch size 1000
+Starting active learning cycle 1/10
+                     ID                                             SMILES
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1
+4       MCULE3694409790  CCCOc1ccnc2c1c(=O)n(CC(=O)NC[C@@H]1CCCO1)c(=O)n2C
+...                 ...                                                ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C
+
+[121486 rows x 2 columns]
+[ 0.03418958  0.1499753  -0.17468607 ... -0.17091025  0.2994683
+ -0.6628622 ]
+Queried new samples: (1000, 3) rows
+Remaining input after query 1: (120486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 1
+Starting active learning cycle 2/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...    0.034190
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O    0.149975
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.174686
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1    0.272579
+4       MCULE3694409790  CCCOc1ccnc2c1c(=O)n(CC(=O)NC[C@@H]1CCCO1)c(=O)n2C    0.160693
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.413612
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.248183
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.170910
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.299468
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.662862
+
+[120486 rows x 3 columns]
+[-0.09447249 -0.02936057 -0.18171857 ... -0.19297713  0.08248797
+ -0.54515177]
+Queried new samples: (1000, 3) rows
+Remaining input after query 2: (119486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 2
+Starting active learning cycle 3/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.094472
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.029361
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.181719
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1   -0.039946
+4       MCULE3694409790  CCCOc1ccnc2c1c(=O)n(CC(=O)NC[C@@H]1CCCO1)c(=O)n2C    0.231752
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.301883
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.387138
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.192977
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.082488
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.545152
+
+[119486 rows x 3 columns]
+[-0.15983657 -0.07216272 -0.17139535 ... -0.0834148   0.0358125
+ -0.44138698]
+Queried new samples: (1000, 3) rows
+Remaining input after query 3: (118486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 3
+Starting active learning cycle 4/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.159837
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.072163
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.171395
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1    0.036990
+4       MCULE3694409790  CCCOc1ccnc2c1c(=O)n(CC(=O)NC[C@@H]1CCCO1)c(=O)n2C    0.094641
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.306187
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.392759
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.083415
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.035813
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.441387
+
+[118486 rows x 3 columns]
+[-0.12436691  0.04277968 -0.01743565 ... -0.15236281  0.11981395
+ -0.5395924 ]
+Queried new samples: (1000, 3) rows
+Remaining input after query 4: (117486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 4
+Starting active learning cycle 5/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.124367
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O    0.042780
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.017436
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1   -0.013866
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl    0.086865
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.273607
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.334850
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.152363
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.119814
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.539592
+
+[117486 rows x 3 columns]
+[-0.19217618 -0.0279599  -0.17343919 ... -0.16817797  0.02691807
+ -0.47388695]
+Queried new samples: (1000, 3) rows
+Remaining input after query 5: (116486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 5
+Starting active learning cycle 6/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.192176
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.027960
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.173439
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1    0.031567
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl   -0.002352
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.167563
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.381231
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.168178
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.026918
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.473887
+
+[116486 rows x 3 columns]
+[-0.17231538  0.02532002 -0.19962272 ... -0.23663822 -0.10673232
+ -0.50734956]
+Queried new samples: (1000, 3) rows
+Remaining input after query 6: (115486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 6
+Starting active learning cycle 7/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.172315
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O    0.025320
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.199623
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1   -0.019887
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl   -0.036283
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.219772
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.305801
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.236638
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1   -0.106732
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.507350
+
+[115486 rows x 3 columns]
+[-0.15490924 -0.02613444 -0.15329303 ... -0.12030582 -0.04551877
+ -0.57985731]
+Queried new samples: (1000, 3) rows
+Remaining input after query 7: (114486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 7
+Starting active learning cycle 8/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.154909
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.026134
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.153293
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1   -0.053151
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl    0.023483
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.249078
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.225564
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.120306
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1   -0.045519
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.579857
+
+[114486 rows x 3 columns]
+[ 0.03391307 -0.01013109 -0.23661976 ... -0.14396975  0.00243054
+ -0.46196851]
+Queried new samples: (1000, 3) rows
+Remaining input after query 8: (113486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 8
+Starting active learning cycle 9/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...    0.033913
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.010131
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.236620
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1    0.041387
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl   -0.078302
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.218793
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.208776
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.143970
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.002431
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.461969
+
+[113486 rows x 3 columns]
+[-0.06972506 -0.00258087 -0.22347469 ... -0.20516974  0.00139056
+ -0.51090936]
+Queried new samples: (1000, 3) rows
+Remaining input after query 9: (112486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 9
+Starting active learning cycle 10/10
+                     ID                                             SMILES  estimation
+0       MCULE1626743745  CN(C)S(=O)(=O)N[C@@H]1CCN(C(=O)CCc2ccccc2F)C[C...   -0.069725
+1       MCULE3929746711        CC(C)N1C[C@@H](C(=O)Nc2ccc3c(c2)OCCO3)CC1=O   -0.002581
+2       MCULE2565544213       CCCNC(=O)[C@H]1CCCn2c1nn(Cc1c(F)cccc1Cl)c2=O   -0.223475
+3       MCULE1141861893                 C[C@H](Sc1ccccc1)C(=O)NC1CCN(C)CC1    0.023012
+5       MCULE7654172462         Cc1cc(NC(=O)CN2C[C@@H]3NCCO[C@H]3C2)ccc1Cl   -0.023500
+...                 ...                                                ...         ...
+122490  MCULE4726527232             Cc1cc(C)nc(-n2ncc(C#N)c2NC(=O)C2CC2)n1   -0.244090
+122491  MCULE7380925184         COc1ccc(-c2nnc(N3CCOCC3)[nH]2)c2ccc(C)nc12   -0.148543
+122492  MCULE6506891400                CS(=O)(=O)NCCC(=O)NCc1nncn1C1CCCCC1   -0.205170
+122493       Z992564888             CN[C@@H]1CCCN(S(=O)(=O)Cc2ccc(F)cc2)C1    0.001391
+122494  MCULE8534127697          Cc1c(NC(=O)N[C@H](C)c2nc3c(s2)CCCC3)cnn1C   -0.510909
+
+[112486 rows x 3 columns]
+[-0.19808887 -0.01121544 -0.1575932  ... -0.06077991 -0.00861809
+ -0.49134652]
+Queried new samples: (1000, 3) rows
+Remaining input after query 10: (111486, 3) rows
+Docked queried samples. Resulting DataFrame shape: (1000, 7)
+consensus wrapper
+Generated consensus for queried samples. Resulting DataFrame shape: (1000, 3)
+Taught learner with queried samples for cycle 10
+Predicted estimations for the full dataset. Resulting DataFrame shape: (122495, 3)
+                     ID  ECR_avg_scaled  ECR_best_scaled  ...  ConvexPLR  KORP-PL  estimation
+0       MCULE1626743745    6.120105e-07     4.507810e-08  ...       5.74  -121.62   -0.081535
+1       MCULE3929746711    6.495717e-08     4.637789e-08  ...       5.74  -110.19    0.012537
+2       MCULE2565544213    1.435274e-04     1.435887e-04  ...       5.94  -100.21   -0.275682
+3       MCULE1141861893    5.311100e-05     5.454341e-05  ...       5.71   -89.56   -0.013204
+4       MCULE3694409790    9.269039e-06     9.205192e-06  ...       5.70  -113.82    0.022731
+...                 ...             ...              ...  ...        ...      ...         ...
+122490  MCULE4726527232    7.867871e-05     2.040760e-09  ...       5.34  -156.54   -0.216503
+122491  MCULE7380925184    2.710079e-10     2.546724e-05  ...       5.50   -75.39   -0.258069
+122492  MCULE6506891400    3.038941e-07     4.092432e-09  ...       5.54  -119.18    0.047850
+122493       Z992564888    1.267176e-05     1.182625e-05  ...       5.75  -123.22   -0.010396
+122494  MCULE8534127697    7.460818e-08     8.779572e-10  ...       5.28  -114.27   -0.610438
+
+[122495 rows x 22 columns]
+                     ID  estimation
+80090   MCULE4790254743    1.237859
+66412   MCULE4497031463    1.122365
+73193   MCULE3466659701    1.108235
+86121   MCULE6877566940    1.092757
+73167   MCULE6579622807    1.073796
+...                 ...         ...
+22852   MCULE5154281982    0.123548
+35462   MCULE7801283455    0.123532
+11586   MCULE8243769836    0.123452
+112842  MCULE3162525451    0.123411
+60242   MCULE8940634121    0.123378
+
+[5000 rows x 2 columns]
+                     ID  Zscore_avg_scaled
+65473   MCULE3256081478           2.358720
+17851   MCULE4697001758           2.346410
+75950        Z109733942           2.301756
+43482         Z25957151           2.285241
+2861    MCULE3339001812           2.254987
+...                 ...                ...
+43344   MCULE6924002768           1.181330
+19198   MCULE4819637398           1.181242
+117180  MCULE4387334260           1.181081
+121576  MCULE4994507649           1.181061
+103935  MCULE5159425430           1.180797
+
+[5000 rows x 2 columns]
+65473     MCULE3256081478
+17851     MCULE4697001758
+75950          Z109733942
+43482           Z25957151
+2861      MCULE3339001812
+               ...       
+43344     MCULE6924002768
+19198     MCULE4819637398
+117180    MCULE4387334260
+121576    MCULE4994507649
+103935    MCULE5159425430
+Name: ID, Length: 5000, dtype: object
+80090     MCULE4790254743
+66412     MCULE4497031463
+73193     MCULE3466659701
+86121     MCULE6877566940
+73167     MCULE6579622807
+               ...       
+22852     MCULE5154281982
+35462     MCULE7801283455
+11586     MCULE8243769836
+112842    MCULE3162525451
+60242     MCULE8940634121
+Name: ID, Length: 5000, dtype: object
+Top X of X percentage score: 7.04
