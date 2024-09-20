@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestRegressor
 from learners.sklearn_learner import sklearn_learner
 from scripts.consensus.consensus_wrapper import consensus_wrapper as consensus
 from helpers.dock import dock
-from helpers.helpers import log_and_save, log_list, remove_right_df_from_left_df
+from helpers.helpers import initialize_logging, log_and_save, log_list, remove_right_df_from_left_df
 
 import time
 import os
@@ -22,11 +22,8 @@ CONSENSUS_METHOD = "WeightedSumModel_avg_scaled"
 #################################################
 #cs_methods = ['ECR_avg_scaled', 'ECR_best_scaled', 'RbR_avg_scaled', 'RbR_best_scaled', 'RbV_avg_scaled', 'RbV_best_scaled', 'Zscore_avg_scaled', 'Zscore_best_scaled', 'Pareto_rank_avg_scaled', 'Pareto_rank_best_scaled', 'TOPSIS_avg_scaled', 'TOPSIS_best_scaled', 'WeightedSumModel_avg_scaled', 'WeightedSumModel_best_scaled']
 # Open log file for writing
-filename = os.path.basename(__file__).split(".")[0]
-if not os.path.exists("./runs/"+filename):
-    os.makedirs("./runs/"+filename)
-log_file_path = "./runs/"+filename+"/"+"log_"+str(time.strftime("%Y-%m-%d %H:%M:%S"))+".txt"
-log_file = open(log_file_path, "w")
+
+log_file = initialize_logging(__file__)
 
 def evaluate_learner(learner):
     prediction_df = full_smids_final_input
