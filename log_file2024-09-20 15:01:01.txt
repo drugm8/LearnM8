@@ -1,4 +1,0 @@
-2024-09-20 15:01:25 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:ECR_avg_scaled;
-2024-09-20 15:01:25 Cycle 1
-2024-09-20 15:10:21 Cycle 2
-2024-09-20 15:24:40 Cycle 3
