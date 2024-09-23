@@ -1,0 +1,6 @@
+2024-09-21 22:59:59 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; DOCKING SCORE CNN-Score;
+2024-09-21 23:21:32 [18.32, 21.9, 24.0, 27.060000000000002, 28.96, 30.36, 31.680000000000003, 33.300000000000004, 34.9, 36.52, 38.42, ]
+2024-09-21 23:21:36 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; DOCKING SCORE GenScore-scoring;
+2024-09-21 23:42:17 [10.5, 13.58, 16.56, 17.560000000000002, 20.1, 21.62, 23.0, 24.98, 26.740000000000002, 28.060000000000002, 30.06, ]
+2024-09-21 23:42:21 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; DOCKING SCORE ConvexPLR;
+2024-09-21 23:59:50 [19.919999999999998, 21.26, 22.56, 23.22, 24.22, 26.3, 29.84, 35.6, 39.2, 41.14, 43.68, ]

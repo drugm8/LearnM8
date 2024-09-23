@@ -60,3 +60,32 @@
 2024-09-19 19:05:46 
 
 
+2024-09-20 15:01:25 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:ECR_avg_scaled;
+2024-09-20 17:38:30 [9.139999999999999, 9.139999999999999, 5.94, 4.7, 4.04, 3.52, ]
+2024-09-20 17:38:52 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:ECR_best_scaled;
+2024-09-20 20:09:51 [9.84, 10.16, 7.6, 7.16, 5.94, 5.140000000000001, ]
+2024-09-20 20:09:54 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:RbR_avg_scaled;
+2024-09-20 22:04:18 [6.6000000000000005, 6.4799999999999995, 6.419999999999999, 6.460000000000001, 6.419999999999999, 6.36, ]
+2024-09-20 22:04:21 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:RbR_best_scaled;
+2024-09-20 23:58:14 [0.58, 0.48, 0.45999999999999996, 0.42, 0.42, 0.42, ]
+2024-09-20 23:58:41 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:RbV_avg_scaled;
+2024-09-21 02:36:54 [9.82, 8.68, 8.86, 8.12, 8.28, 8.58, ]
+2024-09-21 02:37:23 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:RbV_best_scaled;
+2024-09-21 05:15:23 [9.520000000000001, 8.5, 9.06, 8.94, 8.72, 8.66, ]
+2024-09-21 05:15:34 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:Zscore_avg_scaled;
+2024-09-21 07:39:56 [12.18, 14.099999999999998, 14.099999999999998, 12.34, 14.04, 13.780000000000001, ]
+2024-09-21 07:40:08 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:Zscore_best_scaled;
+2024-09-21 10:05:10 [12.42, 13.38, 13.04, 11.44, 12.06, 11.940000000000001, ]
+2024-09-21 10:05:31 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:Pareto_rank_avg_scaled;
+2024-09-21 12:44:21 [8.62, 6.52, 5.72, 5.28, 6.02, 5.56, ]
+2024-09-21 12:44:40 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:Pareto_rank_best_scaled;
+2024-09-21 15:23:29 [8.36, 7.76, 8.16, 6.74, 7.42, 7.04, ]
+2024-09-21 15:23:33 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:TOPSIS_avg_scaled;
+2024-09-21 17:17:35 [0.16, 0.12, 0.12, 0.08, 0.08, 0.08, ]
+2024-09-21 17:17:38 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:TOPSIS_best_scaled;
+2024-09-21 19:11:49 [0.16, 0.12, 0.12, 0.08, 0.08, 0.08, ]
+2024-09-21 19:11:52 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:WeightedSumModel_avg_scaled;
+2024-09-21 21:05:47 [0.16, 0.13999999999999999, 0.13999999999999999, 0.13999999999999999, 0.12, 0.12, ]
+2024-09-21 21:05:51 Batch size: 1000; active learning cycles: 6; top X of X percentage score: 5000; Machine learning architecture:Gaussian Process Regressor; Consensus Method:WeightedSumModel_best_scaled;
+2024-09-21 22:59:54 [0.13999999999999999, 0.12, 0.13999999999999999, 0.13999999999999999, 0.12, 0.12, ]
+
