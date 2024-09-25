@@ -37,7 +37,7 @@ def run_sub_for_all_python_files_in_directory(directory):
                     importlib.import_module("RUNNER_FOLDER." + file[:-3], package=None)
                     log_and_save(f"Executed and deleted: {file}")
                     trynmove("./RUNNER_FOLDER/" + file)
-                except subprocess.CalledProcessError as e:
+                except:
                     os.rename(file, file[:-3] + "_error.txt")
 
 
@@ -56,7 +56,7 @@ class ScriptHandler(FileSystemEventHandler):
                 )
                 log_and_save(f"Executed and deleted: {event.src_path}")
                 trynmove(str(event.src_path))
-            except subprocess.CalledProcessError as e:
+            except:
                 os.rename(event.src_path, str(event.src_path)[:-3] + "_error.txt")
                 log_and_save(f"Error executing {event.src_path}: {e}")
 
