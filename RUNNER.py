@@ -36,7 +36,7 @@ def run_sub_for_all_python_files_in_directory(directory):
                     print("importing")
                     importlib.import_module("RUNNER_FOLDER." + file[:-3], package=None)
                     log_and_save(f"Executed and deleted: {file}")
-                    trynmove(file)
+                    trynmove("./RUNNER_FOLDER/" + file)
                 except subprocess.CalledProcessError as e:
                     os.rename(file, file[:-3] + "_error.txt")
 

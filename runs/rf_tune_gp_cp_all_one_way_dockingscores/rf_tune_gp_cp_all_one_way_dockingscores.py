@@ -17,7 +17,7 @@ from sklearn.model_selection import GridSearchCV
 import time
 import os
 from helpers.helpers import initialize_logging
-##############ADJUST THESE########################
+#############ADJUST THESE########################
 BATCH_SIZE = 1000
 AL_CYCLES = 10
 TOPX = 5000
@@ -28,10 +28,10 @@ rf_param_grid = {"n_estimators": [100, 200, 300, 400, 500],
                 "min_samples_leaf": [1, 2, 3, 4, 5],
                 "n_jobs": [-1]}
 
-#################################################
+################################################
 docking_scores = ["CNN-Score","GenScore-scoring","ConvexPLR"]
-#cs_methods = ['ECR_avg_scaled', 'ECR_best_scaled', 'RbR_avg_scaled', 'RbR_best_scaled', 'RbV_avg_scaled', 'RbV_best_scaled', 'Zscore_avg_scaled', 'Zscore_best_scaled', 'Pareto_rank_avg_scaled', 'Pareto_rank_best_scaled', 'TOPSIS_avg_scaled', 'TOPSIS_best_scaled', 'WeightedSumModel_avg_scaled', 'WeightedSumModel_best_scaled']
-# Open log file for writing
+cs_methods = ['ECR_avg_scaled', 'ECR_best_scaled', 'RbR_avg_scaled', 'RbR_best_scaled', 'RbV_avg_scaled', 'RbV_best_scaled', 'Zscore_avg_scaled', 'Zscore_best_scaled', 'Pareto_rank_avg_scaled', 'Pareto_rank_best_scaled', 'TOPSIS_avg_scaled', 'TOPSIS_best_scaled', 'WeightedSumModel_avg_scaled', 'WeightedSumModel_best_scaled']
+#Open log file for writing
 
 log_file = initialize_logging(__file__)
 
@@ -55,13 +55,17 @@ for do in docking_scores:
     docked_inital_random_sample  = dock(ground_truth_df_path, inital_random_sample)
 
     #gettigngood parameters from first batch based on grid search
-    rf = RandomForestRegressor()
-    gs = GridSearchCV(rf, rf_param_grid, cv=5, scoring='neg_mean_absolute_error')
-    gs.fit(convert_list_of_smiles_to_morgan_fingerprints(docked_inital_random_sample.loc[:,"SMILES"].values),  docked_inital_random_sample.loc[:,do].values)
-    best_model = gs.best_estimator_
-    log_and_save(f"Best model:{gs.best_parmameters_}",log_file)
+    if do == "CNN-Score":
+        params = {'max_depth': None, 'min_samples_leaf': 1, 'min_samples_split': 5, 'n_estimators': 100, 'n_jobs': -1}
+        best_model = RandomForestRegressor(**params)
+    else:
+        rf = RandomForestRegressor()
+        gs = GridSearchCV(rf, rf_param_grid, cv=5, scoring='neg_mean_absolute_error')
+        gs.fit(convert_list_of_smiles_to_morgan_fingerprints(docked_inital_random_sample.loc[:,"SMILES"].values),  docked_inital_random_sample.loc[:,do].values)
+        best_model = gs.best_estimator_
+        log_and_save(f"Best model:{gs.best_params_}",log_file)
 
-    learner = sklearn_learner(greedy_query_function, docked_inital_random_sample.loc[:,"SMILES"].values, docked_inital_random_sample.loc[:,do].values, batch_size=BATCH_SIZE)
+    learner = sklearn_learner(greedy_query_function, docked_inital_random_sample.loc[:,"SMILES"].values, docked_inital_random_sample.loc[:,do].values, batch_size=BATCH_SIZE, model=best_model)
 
     log_and_save(f"Batch size: {BATCH_SIZE}; active learning cycles: {AL_CYCLES}; top X of X percentage score: {TOPX}; Machine learning architecture:{learner.getName()}; DOCKING SCORE {do};",log_file)
     topxlist = []
@@ -110,6 +114,8 @@ for do in docking_scores:
 
     log_list(topxlist, log_file)
 log_and_save("\n\n\n",log_file)
+
+AL_CYCLES = 6
 
 for do in docking_scores:
     smids_final_input = pd.read_csv('./data/final_input.csv')

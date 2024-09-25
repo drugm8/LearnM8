@@ -21,6 +21,7 @@ class sklearn_learner(learner):
         self.batch_size = batch_size
         self.model = model
         self.model = self.train_new_model(dataset_x= self.dataset_x, dataset_y=self.dataset_y)
+        self.name = model.__class__.__name__
 
 
 
