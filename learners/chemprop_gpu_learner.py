@@ -8,11 +8,11 @@ from lightning import pytorch as pl
 
 from chemprop import data, featurizers, models, nn
 
-from _chemprop.do_chemprop import do_chempop
+from _chemprop.do_chemprop_gpu import do_chempop_gpu
 
 
 
-class chemprop_learner(learner):
+class chemprop_gpu_learner(learner):
     #SMILES INPUT, they are featurized here
     #my implementation of a learner has the most up to date training set always stored internally
 
@@ -22,14 +22,14 @@ class chemprop_learner(learner):
         self.dataset_x = dataset_x
         self.dataset_y = dataset_y
         self.batch_size = batch_size
-        self.trainer, self.mpnn = do_chempop(smiles= self.dataset_x, ys=self.dataset_y ) #!ys can be multiple i think
-        self.name = "chemprop"
+        self.trainer, self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y ) #!ys can be multiple i think
+        self.name = "chemprop_gpu"
 
 
     def teach(self, addition_of_dataset_x, addition_of_dataset_y):
         self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
         self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
-        self.trainer, self.mpnn = do_chempop(smiles= self.dataset_x, ys=self.dataset_y )
+        self.trainer, self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y )
 
     
     def query(self, smids_x_input):
@@ -48,7 +48,7 @@ class chemprop_learner(learner):
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
-        test_loader = data.build_dataloader(test_dset, num_workers=8, shuffle=False)
+        test_loader = data.build_dataloader(test_dset, num_workers=8, batch_size=256, shuffle=False) #!!!! ohmygod shuffle
         predictions = self.trainer.predict(self.mpnn, test_loader)
         flat_estimations = [item.item() for sublist in predictions for item in sublist]
         return flat_estimations

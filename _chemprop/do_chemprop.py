@@ -61,6 +61,7 @@ def do_chempop(smiles, ys ):
         enable_progress_bar=True,
         accelerator="auto",
         max_epochs=20, # number of epochs to train for
+        devices=1, # number of gpus to use
     )
 
     trainer.fit(mpnn, train_loader)

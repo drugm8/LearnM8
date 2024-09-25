@@ -1,0 +1,1 @@
+2024-09-25 14:07:18 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; DOCKING SCORE CNN-Score;
