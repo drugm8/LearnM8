@@ -48,7 +48,7 @@ class chemprop_learner(learner):
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
-        test_loader = data.build_dataloader(test_dset, num_workers=0)
+        test_loader = data.build_dataloader(test_dset, num_workers=8, shuffle=False)
         predictions = self.trainer.predict(self.mpnn, test_loader)
         flat_estimations = [item.item() for sublist in predictions for item in sublist]
         return flat_estimations
