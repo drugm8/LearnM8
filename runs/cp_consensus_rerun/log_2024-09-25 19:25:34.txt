@@ -1,0 +1,28 @@
+2024-09-25 19:26:13 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:ECR_avg_scaled;
+2024-09-25 20:07:33 [14.32, 5.88, 5.779999999999999, 6.88, 5.18, 5.92, 4.62, 5.4, 5.7, 5.2, 4.859999999999999, ]
+2024-09-25 20:08:35 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:ECR_best_scaled;
+2024-09-25 20:49:56 [13.900000000000002, 7.3, 6.0, 6.7, 7.7, 5.62, 8.18, 7.3, 7.26, 7.340000000000001, 6.12, ]
+2024-09-25 20:50:57 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:RbR_avg_scaled;
+2024-09-25 21:32:14 [16.7, 8.4, 9.78, 8.42, 10.16, 8.200000000000001, 9.36, 9.78, 9.24, 8.799999999999999, 8.76, ]
+2024-09-25 21:33:15 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:RbR_best_scaled;
+2024-09-25 22:14:34 [16.56, 11.08, 8.76, 8.18, 7.24, 8.34, 7.46, 6.78, 8.02, 7.12, 7.64, ]
+2024-09-25 22:15:36 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:RbV_avg_scaled;
+2024-09-25 22:56:58 [9.74, 5.72, 5.4399999999999995, 5.48, 5.46, 5.6000000000000005, 5.72, 4.66, 5.800000000000001, 4.92, 4.82, ]
+2024-09-25 22:58:00 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:RbV_best_scaled;
+2024-09-25 23:39:44 [10.84, 6.34, 6.140000000000001, 6.0600000000000005, 5.74, 6.0, 4.96, 5.52, 5.18, 5.04, 5.1, ]
+2024-09-25 23:40:46 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:Zscore_avg_scaled;
+2024-09-26 00:22:37 [11.14, 7.66, 6.1, 7.32, 5.66, 6.38, 5.779999999999999, 7.539999999999999, 5.56, 5.800000000000001, 6.419999999999999, ]
+2024-09-26 00:23:40 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:Zscore_best_scaled;
+2024-09-26 01:05:24 [15.040000000000001, 5.76, 6.3, 7.16, 6.74, 7.180000000000001, 7.180000000000001, 6.58, 7.3999999999999995, 7.4399999999999995, 6.4399999999999995, ]
+2024-09-26 01:06:28 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:Pareto_rank_avg_scaled;
+2024-09-26 01:48:04 [5.06, 4.9399999999999995, 4.26, 4.96, 4.84, 3.7600000000000002, 4.68, 3.7600000000000002, 4.3, 4.06, 3.52, ]
+2024-09-26 01:49:08 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:Pareto_rank_best_scaled;
+2024-09-26 02:30:41 [8.9, 7.26, 4.68, 5.26, 4.74, 4.68, 5.0, 4.8, 4.72, 4.82, 5.38, ]
+2024-09-26 02:31:46 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:TOPSIS_avg_scaled;
+2024-09-26 03:14:27 [31.44, 9.9, 8.82, 9.9, 9.959999999999999, 9.64, 10.18, 10.54, 8.3, 10.18, 8.76, ]
+2024-09-26 03:15:31 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:TOPSIS_best_scaled;
+2024-09-26 03:58:05 [32.42, 8.94, 7.739999999999999, 8.459999999999999, 9.4, 7.739999999999999, 7.140000000000001, 7.26, 8.32, 7.720000000000001, 8.12, ]
+2024-09-26 03:59:09 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:WeightedSumModel_avg_scaled;
+2024-09-26 04:41:46 [30.759999999999998, 10.6, 9.46, 9.46, 9.56, 9.1, 10.38, 10.72, 9.66, 8.98, 7.9, ]
+2024-09-26 04:42:51 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu; Consensus Method:WeightedSumModel_best_scaled;
+2024-09-26 05:25:12 [31.1, 11.1, 8.0, 7.32, 8.38, 8.48, 9.06, 8.780000000000001, 7.580000000000001, 6.4799999999999995, 8.260000000000002, ]
