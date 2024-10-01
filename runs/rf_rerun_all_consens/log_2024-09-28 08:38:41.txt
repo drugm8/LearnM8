@@ -1,0 +1,28 @@
+2024-09-28 08:38:51 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:ECR_avg_scaled;
+2024-09-28 09:07:13 [7.9, 8.0, 15.120000000000001, 13.38, 14.64, 18.72, 19.5, 21.3, 23.080000000000002, 24.54, 25.72, ]
+2024-09-28 09:07:26 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:ECR_best_scaled;
+2024-09-28 09:35:14 [7.6, 9.94, 12.5, 14.38, 18.279999999999998, 20.560000000000002, 21.86, 23.86, 25.72, 27.779999999999998, 29.299999999999997, ]
+2024-09-28 09:35:18 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:RbR_avg_scaled;
+2024-09-28 09:56:12 [11.940000000000001, 12.520000000000001, 14.180000000000001, 16.16, 17.44, 18.740000000000002, 19.759999999999998, 21.08, 21.16, 22.38, 23.18, ]
+2024-09-28 09:56:16 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:RbR_best_scaled;
+2024-09-28 10:17:40 [14.399999999999999, 17.66, 19.439999999999998, 22.42, 23.76, 26.72, 28.18, 30.520000000000003, 32.06, 33.98, 35.78, ]
+2024-09-28 10:17:46 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:RbV_avg_scaled;
+2024-09-28 10:45:05 [5.92, 7.06, 9.68, 11.3, 11.899999999999999, 13.420000000000002, 13.88, 15.86, 16.98, 17.18, 18.38, ]
+2024-09-28 10:45:11 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:RbV_best_scaled;
+2024-09-28 11:13:22 [4.9, 8.459999999999999, 10.36, 11.58, 12.139999999999999, 12.72, 14.540000000000001, 15.379999999999999, 16.34, 17.080000000000002, 18.240000000000002, ]
+2024-09-28 11:13:26 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:Zscore_avg_scaled;
+2024-09-28 11:35:07 [15.299999999999999, 13.5, 15.14, 15.5, 17.24, 18.3, 19.72, 20.74, 21.52, 22.62, 23.46, ]
+2024-09-28 11:35:11 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:Zscore_best_scaled;
+2024-09-28 11:56:21 [14.299999999999999, 15.58, 19.06, 21.78, 23.62, 25.22, 26.96, 28.74, 30.099999999999998, 32.12, 33.739999999999995, ]
+2024-09-28 11:56:27 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:Pareto_rank_avg_scaled;
+2024-09-28 12:17:03 [5.88, 7.02, 6.02, 6.140000000000001, 5.34, 5.56, 5.9799999999999995, 6.4799999999999995, 6.08, 6.16, 6.58, ]
+2024-09-28 12:17:09 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:Pareto_rank_best_scaled;
+2024-09-28 12:38:26 [10.26, 8.780000000000001, 11.4, 12.36, 13.320000000000002, 15.22, 16.1, 17.5, 17.98, 18.88, 19.64, ]
+2024-09-28 12:38:30 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:TOPSIS_avg_scaled;
+2024-09-28 12:56:46 [28.74, 22.220000000000002, 30.28, 35.4, 38.379999999999995, 42.04, 45.76, 48.339999999999996, 50.980000000000004, 54.14, 57.04, ]
+2024-09-28 12:56:50 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:TOPSIS_best_scaled;
+2024-09-28 13:14:35 [27.98, 21.12, 28.299999999999997, 33.82, 37.92, 42.32, 45.58, 48.1, 51.019999999999996, 53.82, 56.36, ]
+2024-09-28 13:14:38 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:WeightedSumModel_avg_scaled;
+2024-09-28 13:32:18 [27.92, 19.18, 29.82, 33.62, 36.08, 40.04, 42.38, 46.02, 48.66, 51.54, 54.36, ]
+2024-09-28 13:32:21 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:Random Forest Regressor; Consensus Method:WeightedSumModel_best_scaled;
+2024-09-28 13:50:01 [27.42, 18.38, 27.72, 32.5, 36.620000000000005, 39.22, 42.72, 45.48, 48.1, 50.5, 53.44, ]

@@ -1,0 +1,22 @@
+2024-09-26 18:26:57 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:ECR_avg_scaled;
+2024-09-26 19:56:20 [12.24, 8.780000000000001, 10.639999999999999, 13.0, 16.439999999999998, 15.98, 17.76, 20.04, 21.3, 22.74, 24.3, ]
+2024-09-26 19:59:38 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:ECR_best_scaled;
+2024-09-26 21:31:17 [13.54, 11.48, 13.4, 17.62, 16.919999999999998, 20.7, 22.16, 24.86, 27.18, 28.28, 29.720000000000002, ]
+2024-09-26 21:34:31 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbR_avg_scaled;
+2024-09-26 23:07:53 [15.079999999999998, 9.58, 10.58, 12.16, 13.459999999999999, 14.96, 16.32, 17.88, 17.8, 18.62, 19.12, ]
+2024-09-26 23:11:32 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbR_best_scaled;
+2024-09-27 00:45:36 [16.68, 11.62, 15.939999999999998, 17.599999999999998, 20.979999999999997, 22.96, 25.480000000000004, 27.139999999999997, 29.14, 30.819999999999997, 32.58, ]
+2024-09-27 00:48:52 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbV_avg_scaled;
+2024-09-27 09:10:47 [9.04, 8.6, 8.74, 11.72, 11.76, 13.08, 13.120000000000001, 13.719999999999999, 15.9, 16.919999999999998, 17.36, ]
+2024-09-27 09:14:18 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbV_best_scaled;
+2024-09-27 10:48:36 [9.76, 9.32, 9.379999999999999, 10.54, 11.52, 13.18, 14.48, 15.340000000000002, 16.0, 17.52, 18.14, ]
+2024-09-27 16:17:54 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Zscore_best_scaled;
+2024-09-27 17:49:42 [14.16, 10.979999999999999, 15.14, 17.86, 20.4, 22.38, 24.68, 26.86, 29.12, 30.84, 32.74, ]
+2024-09-27 17:52:57 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Pareto_rank_avg_scaled;
+2024-09-28 15:30:35 [5.0200000000000005, 3.5000000000000004, 4.9799999999999995, 4.62, 4.66, 4.82, 4.78, 5.220000000000001, 5.16, 4.9799999999999995, 4.8, ]
+2024-09-28 15:34:50 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Pareto_rank_best_scaled;
+2024-09-29 17:31:38 [8.86, 8.12, 8.459999999999999, 9.68, 10.459999999999999, 12.280000000000001, 12.5, 13.780000000000001, 14.499999999999998, 15.879999999999999, 16.34, ]
+2024-09-29 19:44:19 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:TOPSIS_best_scaled;
+2024-09-29 21:18:13 [29.62, 18.42, 21.12, 27.04, 30.36, 34.36, 38.84, 42.58, 46.2, 48.74, 51.800000000000004, ]
+2024-09-29 21:21:29 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:WeightedSumModel_best_scaled;
+2024-09-29 22:57:42 [27.66, 18.4, 23.18, 28.54, 33.98, 35.339999999999996, 40.12, 43.64, 46.82, 49.26, 52.26, ]

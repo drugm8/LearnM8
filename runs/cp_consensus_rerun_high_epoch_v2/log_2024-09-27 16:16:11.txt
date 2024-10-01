@@ -1,0 +1,3 @@
+2024-09-27 16:17:54 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Zscore_best_scaled;
+2024-09-27 17:49:42 [14.16, 10.979999999999999, 15.14, 17.86, 20.4, 22.38, 24.68, 26.86, 29.12, 30.84, 32.74, ]
+2024-09-27 17:52:57 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Pareto_rank_avg_scaled;

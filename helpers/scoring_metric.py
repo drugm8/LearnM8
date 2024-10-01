@@ -4,7 +4,7 @@ import pandas as pd
 def top_x_of_x_percentage(ground_truth_df_path, estimation_df, x, metric):
 
     ground_truth_df = pd.read_csv(ground_truth_df_path)
-    inner_joined_df = pd.merge(ground_truth_df, estimation_df, left_on=["ID","SMILES"], right_on = ["ID", "SMILES"])
+    inner_joined_df = pd.merge(ground_truth_df, estimation_df, left_on=["ID"], right_on = ["ID"])
     print(inner_joined_df)
     est = inner_joined_df.loc[:, ["ID","estimation"]]
     ground = inner_joined_df.loc[:, ["ID",metric]]
