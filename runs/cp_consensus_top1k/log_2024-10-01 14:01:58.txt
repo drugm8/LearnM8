@@ -1,0 +1,1 @@
+2024-10-01 14:03:53 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbR_best_scaled;

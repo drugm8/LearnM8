@@ -5,10 +5,10 @@ from helpers.query_functions import greedy_query_function, random_query_function
 from helpers.scoring_metric import top_x_of_x_percentage
 
 
-from abc import ABC, abstractmethod
+
 from learners.learner_abc import learner
 import pandas as pd
-from pathlib import Path
+
 import numpy as np
 
 from lightning import pytorch as pl
@@ -25,7 +25,7 @@ import pandas as pd
 from pathlib import Path
 
 from lightning import pytorch as pl
-from pytorch_lightning.loggers import TensorBoardLogger
+
 
 from chemprop import data, featurizers, models, nn
 
@@ -76,12 +76,11 @@ def do_chempop_gpu(smiles, ys):
     mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
     # Create TensorBoard logger
-    tb_logger = TensorBoardLogger("tb_logs", name=(__file__.split("/")[-1]).split(".")[0])#TODO __File__ to better distinguish in tensorboard
+    #tb_logger = TensorBoardLogger("tb_logs", name=(__file__.split("/")[-1]).split(".")[0])#TODO __File__ to better distinguish in tensorboard
 
     # Configure trainer for GPU with TensorBoard
     trainer = pl.Trainer(
-        logger=tb_logger,
-        enable_checkpointing=False,
+        enable_checkpointing=True,
         enable_progress_bar=False,
         accelerator="gpu",
         devices=1,
@@ -96,7 +95,7 @@ def do_chempop_gpu(smiles, ys):
 
 
 
-    return trainer, mpnn
+    return mpnn
 
 class chemprop_gpu_learner(learner):
     #SMILES INPUT, they are featurized here
@@ -108,7 +107,7 @@ class chemprop_gpu_learner(learner):
         self.dataset_x = dataset_x
         self.dataset_y = dataset_y
         self.batch_size = batch_size
-        self.trainer, self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y ) #!ys can be multiple i think
+        self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y ) #!ys can be multiple i think
         self.name = "chemprop_gpu_high epoch"
 
 
@@ -116,7 +115,7 @@ class chemprop_gpu_learner(learner):
         print("teaching...")
         self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
         self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
-        self.trainer, self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y )
+        self.mpnn = do_chempop_gpu(smiles= self.dataset_x, ys=self.dataset_y )
         print("done teaching...")
 
     
@@ -132,16 +131,16 @@ class chemprop_gpu_learner(learner):
     def estimate(self, x_input):
         print("estimating...")
         #takes a dataframe of smiles and returns a dataframe with the estimation
-        if self.trainer is None:
-            raise Exception("trainer not trained")
+
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
         test_loader = data.build_dataloader(test_dset, num_workers=8, batch_size=256, shuffle=False) #!!!! ohmygod shuffle
-        tb_logger = TensorBoardLogger("tb_logs", name=(__file__.split("/")[-1]).split(".")[0]+" inference mode")
+        #tb_logger = TensorBoardLogger("tb_logs", name=(__file__.split("/")[-1]).split(".")[0]+" inference mode")
+
         with torch.inference_mode():
             trainerr = pl.Trainer(
-                logger=tb_logger,
+
                 enable_progress_bar=False,
                 accelerator="gpu",
                 devices=1
@@ -158,12 +157,21 @@ class chemprop_gpu_learner(learner):
         print("datax", self.dataset_x)
         print("datay", self.dataset_y)
 
-BATCH_SIZE = 1000
-AL_CYCLES = 10
+    def cleanup(self):
+
+        self.mpnn = None
+        self.dataset_x = None
+        self.dataset_y = None
+        print("cleaned up")
+        
+
+BATCH_SIZE = 11000
+AL_CYCLES = 1
 TOPX = 5000
 
-metrics = ['ECR_avg_scaled', 'ECR_best_scaled', 'RbR_avg_scaled', 'RbR_best_scaled', 'RbV_avg_scaled', 'RbV_best_scaled', 'Zscore_avg_scaled', 'Zscore_best_scaled', 'Pareto_rank_avg_scaled', 'Pareto_rank_best_scaled', 'TOPSIS_avg_scaled', 'TOPSIS_best_scaled', 'WeightedSumModel_avg_scaled', 'WeightedSumModel_best_scaled']
-# Open log file for writing
+metrics_full = ['ECR_avg_scaled', 'ECR_best_scaled', 'RbR_avg_scaled', 'RbR_best_scaled', 'RbV_avg_scaled', 'RbV_best_scaled', 'Zscore_avg_scaled', 'Zscore_best_scaled', 'Pareto_rank_avg_scaled', 'Pareto_rank_best_scaled', 'TOPSIS_avg_scaled', 'TOPSIS_best_scaled', 'WeightedSumModel_avg_scaled', 'WeightedSumModel_best_scaled']
+metrics = ['WeightedSumModel_best_scaled']
+# 'Zscore_avg_scaled' removed bc of memory crash
 log_file = initialize_logging(__file__)
 
 
@@ -182,21 +190,23 @@ for met in metrics:
     smids_final_input = remove_right_df_from_left_df(smids_final_input, inital_random_sample)
     docked_inital_random_sample  = dock(ground_truth_df_path, inital_random_sample)
     consens = consensus(docked_inital_random_sample, met)
-    learner = chemprop_gpu_learner(greedy_query_function, consens.loc[:,"SMILES"].values, consens.loc[:,"consensus"].values, batch_size=BATCH_SIZE)
+    learner = chemprop_gpu_learner(random_query_function, consens.loc[:,"SMILES"].values, consens.loc[:,"consensus"].values, batch_size=BATCH_SIZE)
     log_and_save(f"Batch size: {BATCH_SIZE}; active learning cycles: {AL_CYCLES}; top X of X percentage score: {TOPX}; Machine learning architecture:{learner.getName()}; Consensus Method:{met};", log_file)
     topxlist = []
     topxlist.append(evaluate_learner(learner))
-    for i in range(AL_CYCLES):
-        print("cycle", i)
-        smids_queried = learner.query(smids_final_input)
-        smids_final_input = remove_right_df_from_left_df(smids_final_input, smids_queried)
-        docked_smids_queried = dock(ground_truth_df_path, smids_queried)
-        consens_queried = consensus(docked_smids_queried, met)
-        learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,"consensus"].values)
-        topxlist.append(evaluate_learner(learner))
-        print(topxlist)
+    # for i in range(AL_CYCLES):
+    #     print("cycle", i)
+    #     smids_queried = learner.query(smids_final_input)
+    #     smids_final_input = remove_right_df_from_left_df(smids_final_input, smids_queried)
+    #     docked_smids_queried = dock(ground_truth_df_path, smids_queried)
+    #     consens_queried = consensus(docked_smids_queried, met)
+    #     learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,"consensus"].values)
+    #     topxlist.append(evaluate_learner(learner))
+    #     print(topxlist)
     log_list(topxlist, log_file)
-
+    learner.cleanup()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 log_file.close()
