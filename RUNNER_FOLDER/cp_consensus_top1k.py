@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from helpers.query_functions import greedy_query_function, random_query_function
 from helpers.scoring_metric import top_x_of_x_percentage
-
+import gc
 
 
 from learners.learner_abc import learner
@@ -86,16 +86,16 @@ def do_chempop_gpu(smiles, ys):
         accelerator="gpu",
         devices=1,
         max_epochs=150,  # Increase epochs for better training
-        precision="16-mixed",  # Use mixed precision for faster training
-        gradient_clip_val=1.0,  # Add gradient clipping to prevent exploding gradients
-        accumulate_grad_batches=2,  # Accumulate gradients for larger effective batch size
-    )
+        gradient_clip_val=0.5,
+        accumulate_grad_batches=4,
+        precision=16
+       )
 
     # Train the model
     trainer.fit(mpnn, train_loader)
 
 
-
+    #gc.collect()
     return mpnn
 
 class chemprop_gpu_learner(learner):
@@ -151,6 +151,7 @@ class chemprop_gpu_learner(learner):
         ret = np.concatenate(predictions, axis=0)
         #flat_estimations = [item.item() for sublist in predictions for item in sublist]
         print("done estimating...")
+
         return ret
     
 
@@ -170,31 +171,41 @@ BATCH_SIZE = 1000
 AL_CYCLES = 10
 TOPX = 5000
 
-metrics = [ 'RbR_best_scaled', 'RbV_best_scaled', 'Zscore_best_scaled',  'Pareto_rank_best_scaled',  'TOPSIS_best_scaled', 'WeightedSumModel_best_scaled']
+metrics = [ 'RbV_best_scaled', 'Zscore_best_scaled',  'Pareto_rank_best_scaled',  'TOPSIS_best_scaled', 'WeightedSumModel_best_scaled']
 
 # 'Zscore_avg_scaled' removed bc of memory crash
 log_file = initialize_logging(__file__)
 
 
 def evaluate_learner(learner):
-    prediction_df = full_smids_final_input
-    prediction_df["estimation"] = learner.estimate(full_smids_final_input.loc[:,"SMILES"])#?unsure if .values here would be right
+    prediction_df = pd.read_csv('./data/final_input.csv')
+    prediction_df["estimation"] = learner.estimate(prediction_df.loc[:,"SMILES"])#?unsure if .values here would be right
     top_x_score = top_x_of_x_percentage(ground_truth_df_path, prediction_df, TOPX, metric=met)
+    del prediction_df
     return top_x_score
 
 
 ground_truth_df_path = "./data/data_raw.csv"
 for met in metrics:
     smids_final_input = pd.read_csv('./data/final_input.csv')
-    full_smids_final_input = smids_final_input.copy()
+
+    
     inital_random_sample = random_query_function(smids_final_input, None, BATCH_SIZE)
     smids_final_input = remove_right_df_from_left_df(smids_final_input, inital_random_sample)
     docked_inital_random_sample  = dock(ground_truth_df_path, inital_random_sample)
     consens = consensus(docked_inital_random_sample, met)
+
     learner = chemprop_gpu_learner(greedy_query_function, consens.loc[:,"SMILES"].values, consens.loc[:,"consensus"].values, batch_size=BATCH_SIZE)
     log_and_save(f"Batch size: {BATCH_SIZE}; active learning cycles: {AL_CYCLES}; top X of X percentage score: {TOPX}; Machine learning architecture:{learner.getName()}; Consensus Method:{met};", log_file)
     topxlist = []
     topxlist.append(evaluate_learner(learner))
+    del inital_random_sample
+    del docked_inital_random_sample
+    del consens
+
+
+    gc.collect()
+    print("collected")
     for i in range(AL_CYCLES):
         print("cycle", i)
         smids_queried = learner.query(smids_final_input)
@@ -204,6 +215,8 @@ for met in metrics:
         learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,"consensus"].values)
         topxlist.append(evaluate_learner(learner))
         print(topxlist)
+        gc.collect()
+        print("collected")
     log_list(topxlist, log_file)
     learner.cleanup()
     if torch.cuda.is_available():

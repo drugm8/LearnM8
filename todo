@@ -1,0 +1,19 @@
+learner.figueroutsystemandsetparametersaccordingly()
+
+durchoptimieren, dass learner auf alles predicted zum 
+        speichern aber nur die gefragten daten queried
+
+dochemprop wegoptimieren, kann in learner, und ebenfalls gpu und normaler chemprop learner kann da rein
+
+learner init overriden/changen, wird nur mit werten initialisiert, compute kommte spätere
+
+wrapper für dataframe gefunzel
+
+checkpoint clearing
+
+nice scoping not like evaluate learner
+
+code formatter tony suggested
+
+output format
+        maybe folder with timestamp, inside txt file with config and prediction df of each cycle
