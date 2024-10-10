@@ -5,6 +5,8 @@ import pandas as pd
 from joblib import Parallel, delayed
 import time
 import os
+import json
+import hashlib
 
 # def convert_list_of_smiles_to_morgan_fingerprints(smiles_list):
 #         # Convert SMILES to RDKit molecules
@@ -54,3 +56,19 @@ def initialize_logging(script_name):
         os.makedirs("./runs/"+filename)
     log_file_path = "./runs/"+filename+"/"+"log_"+str(time.strftime("%Y-%m-%d %H:%M:%S"))+".txt"
     return open(log_file_path, "w")
+
+def hash_params(dictionary):
+    # Sort the dictionary by keys to ensure consistent ordering
+    sorted_dict = dict(sorted(dictionary.items()))
+    
+    # Convert the sorted dictionary to a JSON string
+    json_string = json.dumps(sorted_dict, sort_keys=True)
+    
+    # Create a hash object (using SHA-256 in this example)
+    hash_object = hashlib.sha256()
+    
+    # Update the hash object with the JSON string encoded as UTF-8
+    hash_object.update(json_string.encode('utf-8'))
+    
+    # Return the hexadecimal representation of the hash
+    return hash_object.hexdigest()
