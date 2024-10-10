@@ -1,22 +1,26 @@
 from active_learning_function import active_learning_function
 import itertools
 import gc
+import json
+import time
+import os
 
 from helpers.helpers import hash_params
 from helpers.query_functions import greedy_query_function, random_query_function
-from learners.pipe_cp_learner import chemprop_gpu_learner as cp_learner
+from learners.pipe_cp_learner import pipe_cp_learner as ler
 from learners.rf_learner import rf_learner as rf_learner
 from learners.gp_learner import gp_learner as gp_learner
 
 learner="learner"
-SMIDS="smids"
-GTP="ground_truth_path"
+SMIDS='./data/final_input.csv'
+GTP="./data/data_raw.csv"
 
-path_tuples = [("sdf","gttt")]
+
+path_tuples = [[SMIDS,GTP]]
 
 def get_learner_from_string(learner_string):
     if learner_string == "cp_learner":
-        return cp_learner
+        return ler
     elif learner_string == "rf_learner":
         return rf_learner
     elif learner_string == "gp_learner":
@@ -29,24 +33,27 @@ def get_query_function_from_string(query_function_string):
         return greedy_query_function
     elif query_function_string == "random_query_function":
         return random_query_function
+    
+    #mcdm py 
 
 param_combinations = {
-    "path_id": [0,1], #this is for each dataset tuple
+    "path_id": [0], #this is for each dataset tuple
     'learner': ["cp_learner"],
-    'hyperparameter_tuning': [True, False],
-    'batch_size_percentage': [0.05, 0.1, 0.5, 1],
-    'smids_input_path': None, #!stay
-    'ground_truth_path': None, #!stay 
-    'cycles': [-1, 10], #-1 is flag for one batch
-    'column_to_learn': ['docking1', 'consensus1'],
-    'do_scoring_function_list_prediction': [True, False],
-    'first_query_function': ["random_query_function"], #todo cluster functio
-    'query_function': ["greedy_query_function", "random_query_function"], 
+    'hyperparameter_tuning': [True],
+    'batch_size_percentage': [1, 0.1],
+    'smids_input_path': [None], #!stay
+    'ground_truth_path': [None], #!stay 
+    'cycles': [10], #-1 is flag for one batch
+    'column_to_learn': ['Zscore_best_scaled'],
+    'do_scoring_function_list_prediction': [False],
+    'first_query_function': ["random_query_function"], #todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
+    'query_function': ["greedy_query_function"], 
 }
 
 # Generate all combinations
 keys, values = zip(*param_combinations.items())
 combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+print(combinations)
 
 # Call the function with each combination
 for combo in combinations:
@@ -55,12 +62,19 @@ for combo in combinations:
     combo['ground_truth_path'] = path_tuples[path_id][1]
     #Assumption: combo purely consists of json serializable objects
     experiment_hash = hash_params(combo)
-    combo['experiment_hash'] = experiment_hash
+    os.mkdir("./results/"+experiment_hash)
+    with open("./results/"+experiment_hash+"/"+experiment_hash+'run'+time.time()+'.txt', 'w') as convert_file: 
+        convert_file.write(json.dumps(combo))
 
     combo['learner'] = get_learner_from_string(combo['learner'])(max_out_system=True)#instantiate learner
     combo['first_query_function'] = get_query_function_from_string(combo.pop("first_query_function"))
     combo['query_function'] = get_query_function_from_string(combo.pop("query_function"))
     
 
+    
     active_learning_function(**combo)
+
+    os.rename("./internal_al_chache/", "./results/"+experiment_hash+"/"+experiment_hash+"_internal_al_chache.csv")
+
+    os.rename("./hpopt/", "./results/"+experiment_hash+"/"+experiment_hash+"_hpopt.csv")
     gc.collect()
