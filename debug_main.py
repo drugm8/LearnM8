@@ -37,18 +37,21 @@ def get_query_function_from_string(query_function_string):
     #mcdm py 
 
 param_combinations = {
-    "path_id": [0], #this is for each dataset tuple
-    'learner': ["cp_learner"],
-    'hyperparameter_tuning': [True],
-    'batch_size_percentage': [1, 0.1],
+    "path_id": [0], #index in list of dataset paths
+    'learner': ["cp_learner", "rf_learner", "xgboost_learner", "gp_learner"],
+    'hyperparameter_tuning': [True, False],
+    'batch_size_percentage': [1, 0.5, 0.1, 0.01],
     'smids_input_path': [None], #!stay
     'ground_truth_path': [None], #!stay 
-    'cycles': [10], #-1 is flag for one batch
-    'column_to_learn': ['Zscore_best_scaled'],
-    'do_scoring_function_list_prediction': [False],
-    'first_query_function': ["random_query_function"], #todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
-    'query_function': ["greedy_query_function"], 
+    'cycles': [10, -1], #-1 is flag for one batch
+    'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
+    'do_scoring_function_list_prediction': [False, True],
+    'first_query_function': ["random_query_function", "cluster_query_function"], 
+    'query_function': ["greedy_query_function", "random_query_function"], 
+    'statistical' : [0,1,2,3,4,5]
 }
+
+#todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
 
 # Generate all combinations
 keys, values = zip(*param_combinations.items())
@@ -57,6 +60,7 @@ print(combinations)
 
 # Call the function with each combination
 for combo in combinations:
+    del combo["statistical"]
     path_id=combo.pop("path_id")#paths are only a valid combo if the are to the same two parts of a dataset
     combo['smids_input_path'] = path_tuples[path_id][0]
     combo['ground_truth_path'] = path_tuples[path_id][1]
