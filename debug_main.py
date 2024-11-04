@@ -20,11 +20,6 @@ GTP="./data/data_raw.csv"
 
 path_tuples = [[SMIDS,GTP]]
 
-smiles_df = pd.read_csv(SMIDS)
-
-cluster_query_function(smiles_df,0.0,10000)
-exit()
-
 def get_learner_from_string(learner_string):
     if learner_string == "cp_learner":
         return ler
@@ -41,7 +36,7 @@ def get_query_function_from_string(query_function_string):
     elif query_function_string == "random_query_function":
         return random_query_function
     elif query_function_string == "cluster_query_function":
-        return None
+        return cluster_query_function
     #mcdm py 
 
 param_combinations = {
@@ -100,8 +95,8 @@ for combo in combinations:
         print("skipping"+experiment_hash+" because it already exists")
         continue
 
-    #active_learning_function(**combo)
-    continue
+    active_learning_function(**combo)
+
     os.rename("./internal_al_chache/", path+experiment_hash+"_internal_al_chache.csv")
 
     os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")

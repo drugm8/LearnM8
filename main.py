@@ -32,7 +32,7 @@ def get_query_function_from_string(query_function_string):
 
 param_combinations = {
     "path_id": [0,1], #this is for each dataset tuple
-    'learner': ["cp_learner"],
+    'learner': ["cp_learner","rf_learner"],
     'hyperparameter_tuning': [True, False],
     'batch_size_percentage': [0.05, 0.1, 0.5, 1],
     'smids_input_path': None, #!stay
@@ -40,7 +40,7 @@ param_combinations = {
     'cycles': [-1, 10], #-1 is flag for one batch
     'column_to_learn': ['docking1', 'consensus1'],
     'do_scoring_function_list_prediction': [True, False],
-    'first_query_function': ["random_query_function"], #todo cluster functio
+    'first_query_function': ["random_query_function", "cl"], #todo cluster functio
     'query_function': ["greedy_query_function", "random_query_function"], 
 }
 
