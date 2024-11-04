@@ -1,0 +1,1 @@
+{"learner": "rf_learner", "hyperparameter_tuning": true, "batch_size_percentage": 0.01, "smids_input_path": "./data/final_input.csv", "ground_truth_path": "./data/data_raw.csv", "cycles": 10, "column_to_learn": "Zscore_best_scaled", "do_scoring_function_list_prediction": false, "first_query_function": "random_query_function", "query_function": "random_query_function"}
