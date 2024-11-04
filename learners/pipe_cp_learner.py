@@ -70,37 +70,16 @@ class pipe_cp_learner(learner):
         print("trainer initialized")
         print("accelerator used:"+self.accelerator)
         print("cpu cores used:"+str(self.cpu_cores))
-    def set_query_function(self, func):
-        self.query_function = func
-    
 
-
-
-    def set_int_batch_size(self, batch_size):
-        self.batch_size = batch_size
 
     def teach(self, addition_of_dataset_x, addition_of_dataset_y):
-        if (self.dataset_x is not None) and (self.dataset_y is not None):
-            self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
-            self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
-        else:
-            self.dataset_y = addition_of_dataset_y
-            self.dataset_x = addition_of_dataset_x
+        self.append_data(addition_of_dataset_x, addition_of_dataset_y)
 
         self.train_mpnn_on_internal()
 
 
     
-    def query(self, smids_x_input, path):
-        #uses the intrinisc query function to run the inference first and then query the dataset
-        full_input_smids = pd.read_csv(path)
 
-        full_input_smids["estimation"] = self.estimate(full_input_smids.loc[:,"SMILES"])
-        self.write_estimations(full_input_smids.loc[:,["ID", "estimation"]].copy())
-        merged_and_reduced_smids =  pd.merge(smids_x_input, full_input_smids, on=["ID", "SMILES"], how='inner')
-
-        queried = self.query_function(merged_and_reduced_smids, merged_and_reduced_smids.loc[:,"estimation"], batch_size=self.batch_size)
-        return queried
 
 
     def estimate(self, x_input):
@@ -169,17 +148,7 @@ class pipe_cp_learner(learner):
         #os.rmdir("./internal_al_chache/")
         return return_val
 
-    def write_estimations(self, full_input_smids):
-        if not os.path.exists("./internal_al_chache/"):
-            os.makedirs("./internal_al_chache/")
-            full_input_smids.rename(columns={"estimation": "cycle_0"}, inplace=True)
-            full_input_smids.to_csv("./internal_al_chache/cache.csv", index=False)
-        else:
-            cachefile = pd.read_csv("./internal_al_chache/cache.csv")
-            cachefile_columns_count = str(len(cachefile.columns)-1)
-            full_input_smids.rename(columns={"estimation": "cycle_"+cachefile_columns_count}, inplace=True)
-            merged = pd.merge(cachefile, full_input_smids, on='ID', how='outer')
-            merged.to_csv("./internal_al_chache/cache.csv", index=False)
+
     
     def optimize_hyperparameters(self):
         hpopt_save_dir = Path.cwd() / "hpopt" # directory to save hyperopt results

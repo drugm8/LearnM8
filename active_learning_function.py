@@ -41,7 +41,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     
     learner.set_query_function(query_function)
 
-    print("idont")
+
 
     smids_pool = pd.read_csv(smids_input_path)
 
@@ -89,4 +89,4 @@ def active_learning_function(learner, hyperparameter_tuning= False,
         learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
         gc.collect()
 
-    return learner.get_and_remove_internal_predictions()
+    return True
