@@ -30,6 +30,11 @@ def convert_smiles_to_morgan_fingerprint(smiles):
     return np.array(fingerprint)
 
 def convert_list_of_smiles_to_morgan_fingerprints(smiles_list, n_jobs=-1):
+
+    if os.cpu_count() > 32:
+        n_jobs = 32
+    else:
+        n_jobs = os.cpu_count()
     # n_jobs=-1 nutzt alle verfügbaren Kerne
     fingerprints = Parallel(n_jobs=n_jobs)(delayed(convert_smiles_to_morgan_fingerprint)(smiles) for smiles in smiles_list)
     return np.array(fingerprints)
