@@ -37,6 +37,7 @@ WORKDIR /app
 
 # Create a new environment.yml file
 
+RUN conda init
 
 COPY environment.yml .
 # Create conda environment

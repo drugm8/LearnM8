@@ -43,10 +43,16 @@ class pipe_cp_learner(learner):
             'ffn_hidden_dim': 2200,
             'ffn_num_layers': 2,
             'message_hidden_dim': 400}
+        
+        
 
 
         if max_out_system:
-            self.cpu_cores = os.cpu_count()
+            if os.cpu_count() > 32:
+                self.cpu_cores = 32
+            else:
+                self.cpu_cores = os.cpu_count()
+
             self.cuda_available = torch.cuda.is_available()
             if self.cuda_available:
                 self.accelerator = "gpu"
@@ -62,7 +68,7 @@ class pipe_cp_learner(learner):
         enable_progress_bar=False,
         accelerator=self.accelerator,
         devices=1,
-        max_epochs=1,  # Increase epochs for better training
+        max_epochs=100,  # Increase epochs for better training
         gradient_clip_val=0.5, #dunno 
         accumulate_grad_batches=4, #about 
         precision=16 #these values
@@ -91,7 +97,7 @@ class pipe_cp_learner(learner):
             inference_trainer = pl.Trainer(
                 enable_checkpointing=True,
                 enable_progress_bar=False,
-                accelerator="gpu",
+                accelerator="auto",
                 devices=1
             )
         predictions = inference_trainer.predict(self.mpnn, test_loader)
@@ -151,6 +157,7 @@ class pipe_cp_learner(learner):
 
     
     def optimize_hyperparameters(self):
+        
         hpopt_save_dir = Path.cwd() / "hpopt" # directory to save hyperopt results
         hpopt_save_dir.mkdir(exist_ok=True)
         all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, self.dataset_y.reshape(-1, 1))]
@@ -162,7 +169,7 @@ class pipe_cp_learner(learner):
         scaler = train_dset.normalize_targets()
 
         def train_model(config, train_dset, num_workers, scaler):
-
+            
             # config is a dictionary containing hyperparameters used for the trial
             depth = int(config["depth"])
             ffn_hidden_dim = int(config["ffn_hidden_dim"])
