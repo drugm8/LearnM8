@@ -97,7 +97,7 @@ for combo in combinations:
 
     active_learning_function(**combo)
 
-    os.rename("./internal_al_chache/", path+experiment_hash+"_internal_al_chache.csv")
+    os.rename("./internal_al_cache/", path+experiment_hash+"_internal_al_cache.csv")
 
     os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
     gc.collect()

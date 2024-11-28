@@ -147,11 +147,11 @@ class pipe_cp_learner(learner):
         gc.collect()
 
     def get_and_remove_internal_predictions(self):
-        if not os.path.exists("./internal_al_chache/"):
+        if not os.path.exists("./internal_al_cache/"):
             raise Exception("No internal cache found")
-        return_val = pd.read_csv("./internal_al_chache/cache.csv")
-        #os.remove("./internal_al_chache/cache.csv")
-        #os.rmdir("./internal_al_chache/")
+        return_val = pd.read_csv("./internal_al_cache/cache.csv")
+        #os.remove("./internal_al_cache/cache.csv")
+        #os.rmdir("./internal_al_cache/")
         return return_val
 
 
