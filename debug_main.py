@@ -49,7 +49,7 @@ param_combinations = {
     'cycles': [10, -1], #-1 is flag for one batch
     'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
     'do_scoring_function_list_prediction': [False, True],
-    'first_query_function': ["random_query_function", "cluster_query_function"], 
+    'first_query_function': ["random_query_function"], 
     'query_function': ["greedy_query_function", "random_query_function"], 
     'statistical' : [0,1,2,3,]
 }
