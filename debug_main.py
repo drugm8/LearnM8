@@ -99,5 +99,8 @@ for combo in combinations:
 
     os.rename("./internal_al_cache/", path+experiment_hash+"_internal_al_cache.csv")
 
-    os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
+    try:
+        os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
+    except:
+        pass
     gc.collect()
