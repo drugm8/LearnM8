@@ -16,6 +16,8 @@ from learners.sklearn_learner import sklearn_learner
 
 class rf_learner(sklearn_learner):
     def __init__(self,  max_out_system = True):
+        self.dataset_x = None
+        self.dataset_y = None
         n_jobs = -1 if max_out_system else 1
         if n_jobs == -1:
             n_jobs = os.cpu_count()

@@ -47,7 +47,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
         percentage = batch_size_percentage/100
-        actual_batch_size = math.floor(smids_pool.shape[0]*percentage*cycles)
+        actual_batch_size = math.floor(smids_pool.shape[0]*percentage*10) # 10 hardcoded here to adjust to cycles:
         learner.set_int_batch_size(batch_size = actual_batch_size)
         cycles = 1
     else:
