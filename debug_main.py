@@ -4,14 +4,26 @@ import gc
 import json
 import time
 import os
+import random
 import pandas as pd
-
+import argparse
 from helpers.helpers import hash_params
 from helpers.query_functions import greedy_query_function, random_query_function, cluster_query_function
 from learners.pipe_cp_learner import pipe_cp_learner as ler
 from learners.rf_learner import rf_learner as rf_learner
 from learners.gp_learner import gp_learner as gp_learner
 
+parser = argparse.ArgumentParser(description='Description of your program')
+    
+# Add argument with both short and long form
+parser.add_argument('-m', '--mode', 
+                        help='Description of the argument',
+                        required=False,  # Make it optional
+                        type=str)  # Specify type (str, int, etc.)
+
+args = parser.parse_args()
+
+mode = args.mode
 learner="learner"
 SMIDS='./data/final_input.csv'
 GTP="./data/data_raw.csv"
@@ -39,20 +51,52 @@ def get_query_function_from_string(query_function_string):
         return cluster_query_function
     #mcdm py 
 
-param_combinations = {
-    "path_id": [0], #index in list of dataset paths
-    'learner': ["cp_learner", "rf_learner"],
-    'hyperparameter_tuning': [True, False],
-    'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-    'smids_input_path': [None], #!stay
-    'ground_truth_path': [None], #!stay 
-    'cycles': [10, -1], #-1 is flag for one batch
-    'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-    'do_scoring_function_list_prediction': [False], #todo!!
-    'first_query_function': ["random_query_function"], 
-    'query_function': ["greedy_query_function", "random_query_function"], 
-    'statistical' : [0,1,2,3,]
-}
+if mode == "cpu":
+    param_combinations = {
+        "path_id": [0], #index in list of dataset paths
+        'learner': ["rf_learner"],
+        'hyperparameter_tuning': [True, False],
+        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'smids_input_path': [None], #!stay
+        'ground_truth_path': [None], #!stay 
+        'cycles': [10, -1], #-1 is flag for one batch
+        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
+        'do_scoring_function_list_prediction': [False], #todo!!
+        'first_query_function': ["random_query_function"], 
+        'query_function': ["greedy_query_function", "random_query_function"], 
+        'statistical' : [0,1,2,3,]
+    }
+
+elif mode == "gpu":
+    param_combinations = {
+        "path_id": [0], #index in list of dataset paths
+        'learner': ["cp_learner"],
+        'hyperparameter_tuning': [True, False],
+        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'smids_input_path': [None], #!stay
+        'ground_truth_path': [None], #!stay 
+        'cycles': [10, -1], #-1 is flag for one batch
+        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
+        'do_scoring_function_list_prediction': [False], #todo!!
+        'first_query_function': ["random_query_function"], 
+        'query_function': ["greedy_query_function", "random_query_function"], 
+        'statistical' : [0,1,2,3,]
+    }
+else:
+    param_combinations = {
+        "path_id": [0], #index in list of dataset paths
+        'learner': ["cp_learner","rf_learner"],
+        'hyperparameter_tuning': [True, False],
+        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'smids_input_path': [None], #!stay
+        'ground_truth_path': [None], #!stay 
+        'cycles': [10, -1], #-1 is flag for one batch
+        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
+        'do_scoring_function_list_prediction': [False], #todo!!
+        'first_query_function': ["random_query_function"], 
+        'query_function': ["greedy_query_function", "random_query_function"], 
+        'statistical' : [0,1,2,3,]
+    }
 
 #todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
 
@@ -60,7 +104,7 @@ param_combinations = {
 keys, values = zip(*param_combinations.items())
 combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-
+random.shuffle(combinations)
 # Call the function with each combination
 for combo in combinations:
     statistical = combo.pop("statistical")
@@ -89,15 +133,14 @@ for combo in combinations:
     
 
     path ="./results/"+str(experiment_hash)+"/"+str(statistical)+"/"
-    if not os.path.exists(path):
+    try:
         os.mkdir(path)
-    else: 
-        print("skipping"+experiment_hash+" because it already exists")
+    except FileExistsError:
+        print("skipping"+experiment_hash+"since it exists")
         continue
-
+    combo['learner'].set_path(path)
     active_learning_function(**combo)
 
-    os.rename("./internal_al_cache/", path+experiment_hash+"_internal_al_cache.csv")
 
     try:
         os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
