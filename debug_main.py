@@ -107,6 +107,11 @@ combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 random.shuffle(combinations)
 # Call the function with each combination
 for combo in combinations:
+    if combo["do_scoring_function_list_prediction"]:
+        if combo['learner'] != "cp_learner":
+            continue
+
+
     statistical = combo.pop("statistical")
     path_id=combo.pop("path_id")#paths are only a valid combo if the are to the same two parts of a dataset
     combo['smids_input_path'] = path_tuples[path_id][0]

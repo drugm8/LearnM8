@@ -67,7 +67,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
         raise ValueError("Invalid column to learn")
 
     if do_scoring_function_list_prediction:
-       print("im not happy")
+       all_scoring_functions = [["CNN-Score","GenScore-scoring","ConvexPLR","KORP-PL"]]
        return
 
     learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
