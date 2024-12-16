@@ -68,9 +68,9 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     if do_scoring_function_list_prediction:
        all_scoring_functions = [["CNN-Score","GenScore-scoring","ConvexPLR","KORP-PL"]]
-       return
-
-    learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
+       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,all_scoring_functions])
+    else:
+      learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
 
 
 
@@ -85,7 +85,11 @@ def active_learning_function(learner, hyperparameter_tuning= False,
         smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
         docked_smids_queried = dock(ground_truth_path, smids_queried)
         consens_queried = consensus(docked_smids_queried, column_to_learn)
-        learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
+        if do_scoring_function_list_prediction:
+           all_scoring_functions = [["CNN-Score","GenScore-scoring","ConvexPLR","KORP-PL"]]
+           learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,all_scoring_functions])
+        else:
+          learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
         gc.collect()
 
     return True
