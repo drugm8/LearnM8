@@ -33,21 +33,21 @@ class learner(ABC):
 
     def set_int_batch_size(self, batch_size):
         self.batch_size = batch_size
-    
+    def set_path(self, path):
+        self.path=path
 
 
 
     def write_estimations(self, full_input_smids):
-        if not os.path.exists("./internal_al_cache/"):
-            os.makedirs("./internal_al_cache/")
+        if not os.path.exists(self.path+"cache.csv"):
             full_input_smids.rename(columns={"estimation": "cycle_0"}, inplace=True)
-            full_input_smids.to_csv("./internal_al_cache/cache.csv", index=False)
+            full_input_smids.to_csv(self.path+"cache.csv", index=False)
         else:
-            cachefile = pd.read_csv("./internal_al_cache/cache.csv")
+            cachefile = pd.read_csv(self.path+"cache.csv")
             cachefile_columns_count = str(len(cachefile.columns)-1)
             full_input_smids.rename(columns={"estimation": "cycle_"+cachefile_columns_count}, inplace=True)
             merged = pd.merge(cachefile, full_input_smids, on='ID', how='outer')
-            merged.to_csv("./internal_al_cache/cache.csv", index=False)
+            merged.to_csv(self.path+"cache.csv", index=False)
 
 
     def append_data(self, addition_of_dataset_x, addition_of_dataset_y):

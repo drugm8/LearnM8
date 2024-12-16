@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import os
 
+from helpers.helpers import convert_list_of_smiles_to_morgan_fingerprints
 from sklearn.model_selection import RandomizedSearchCV
 from learners.learner_abc import learner
 import pandas as pd
@@ -34,14 +35,13 @@ class rf_learner(sklearn_learner):
             'max_depth': [5, 10, 20, 30, 40],
             'min_samples_split': [2, 5, 10],
             'min_samples_leaf': [1, 2, 4],
-            'max_features': ['auto', 'sqrt', 'log2'],
+            'max_features': ['sqrt', 'log2'],
             'bootstrap': [True, False],
-            'criterion': ['mse', 'mae'],
+            'criterion': ['poisson', 'absolute_error', 'friedman_mse', 'squared_error'],
             'max_leaf_nodes': [None, 30, 50, 70, 90],
             'min_impurity_decrease': [0.0, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-            'min_impurity_split': [None, 0.0, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
         }
         gridsearch = RandomizedSearchCV(self.model, param_distributions=param_grid, n_iter=10, cv=5, verbose=1, random_state=42)
-        self.model = gridsearch.fit(self.dataset_x, self.dataset_y).best_estimator_
+        self.model = gridsearch.fit( convert_list_of_smiles_to_morgan_fingerprints(self.dataset_x),self.dataset_y).best_estimator_
         return
         

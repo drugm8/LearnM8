@@ -38,9 +38,8 @@ def active_learning_function(learner, hyperparameter_tuning= False,
                                   first_query_function=None,
                                   query_function=None,
                                   ):
-    
     learner.set_query_function(query_function)
-
+    
 
 
     smids_pool = pd.read_csv(smids_input_path)
