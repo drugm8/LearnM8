@@ -71,16 +71,16 @@ elif mode == "gpu":
     param_combinations = {
         "path_id": [0], #index in list of dataset paths
         'learner': ["cp_learner"],
-        'hyperparameter_tuning': [True, False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'hyperparameter_tuning': [True],
+        'batch_size_percentage': [1],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-        'do_scoring_function_list_prediction': [False], #todo!!
+        'cycles': [10], #-1 is flag for one batch
+        'column_to_learn': ['Zscore_best_scaled'],
+        'do_scoring_function_list_prediction': [True], #todo!!
         'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3,]
+        'query_function': ["greedy_query_function"], 
+        'statistical' : [0]
     }
 else:
     param_combinations = {
@@ -137,7 +137,7 @@ for combo in combinations:
 
     
 
-    path ="./results/"+str(experiment_hash)+"/"+str(statistical)+"/"
+    path ="./results/tryme/"
     try:
         os.mkdir(path)
     except FileExistsError:
