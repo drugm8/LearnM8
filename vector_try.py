@@ -138,11 +138,7 @@ for combo in combinations:
     
 
     path ="./results/tryme/"
-    try:
-        os.mkdir(path)
-    except FileExistsError:
-        print("skipping"+experiment_hash+"since it exists")
-        continue
+
     combo['learner'].set_path(path)
     active_learning_function(**combo)
 
