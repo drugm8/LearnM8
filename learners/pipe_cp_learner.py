@@ -35,6 +35,7 @@ class pipe_cp_learner(learner):
         self.mpnn = None
         self.dataset_x = None
         self.dataset_y = None
+        
 
    
 
@@ -107,8 +108,14 @@ class pipe_cp_learner(learner):
     
     def train_mpnn_on_internal(self):
         print("training...")
-        yss = self.dataset_y.reshape(-1, 1)
-        print("traing dimensions:", yss.shape)
+        print("traing dimensions:", self.dataset_y.shape[1])
+        yss = self.dataset_y
+        if self.dataset_y.shape[1] != 1:
+            yss = yss.iloc[1:]
+            yss=yss.values.tolist()
+        else:
+            yss.reshape(-1, 1) 
+
         all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
 
         # Use a more advanced featurizer if available
