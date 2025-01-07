@@ -7,6 +7,7 @@ from helpers.dock import dock
 from helpers.helpers import remove_right_df_from_left_df
 from helpers.query_functions import random_query_function
 from scripts.consensus.consensus_wrapper import new_consensus_wrapper as consensus
+from helpers.normalization import normalize_scores
 
 
 valid_scoring_functions = [
