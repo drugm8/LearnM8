@@ -28,13 +28,13 @@ learner="learner"
 SMIDS='./data/final_input.csv'
 GTP="./data/data_raw.csv"
 scoring_files = [
-    ['ALDH1_4x4l_scoring_and_consensus_maxAL.csv', 'ALDH1_4x4l_scoring_and_consensus_maxAL.csv'],
-    ['FEN1_5fv7_scoring_and_consensus_maxAL.csv', 'FEN1_5fv7_scoring_and_consensus_maxAL.csv'],
-    ['GBA_2v3e_scoring_and_consensus_maxAL.csv', 'GBA_2v3e_scoring_and_consensus_maxAL.csv'],
-    ['KAT2A_5h84_scoring_and_consensus_maxAL.csv', 'KAT2A_5h84_scoring_and_consensus_maxAL.csv'],
-    ['MAPK1_2ojg_scoring_and_consensus_maxAL.csv', 'MAPK1_2ojg_scoring_and_consensus_maxAL.csv'],
-    ['PKM2_3gr4_scoring_and_consensus_maxAL.csv', 'PKM2_3gr4_scoring_and_consensus_maxAL.csv'],
-    ['VDR_3a2j_scoring_and_consensus_maxAL.csv', 'VDR_3a2j_scoring_and_consensus_maxAL.csv']
+    ['./data/ALDH1_4x4l_scoring_and_consensus_maxAL.csv', './data/ALDH1_4x4l_scoring_and_consensus_maxAL.csv'],
+    ['./data/FEN1_5fv7_scoring_and_consensus_maxAL.csv', './data/FEN1_5fv7_scoring_and_consensus_maxAL.csv'],
+    ['./data/GBA_2v3e_scoring_and_consensus_maxAL.csv', './data/GBA_2v3e_scoring_and_consensus_maxAL.csv'],
+    ['./data/KAT2A_5h84_scoring_and_consensus_maxAL.csv', './data/KAT2A_5h84_scoring_and_consensus_maxAL.csv'],
+    ['./data/MAPK1_2ojg_scoring_and_consensus_maxAL.csv', './data/MAPK1_2ojg_scoring_and_consensus_maxAL.csv'],
+    ['./data/PKM2_3gr4_scoring_and_consensus_maxAL.csv', './data/PKM2_3gr4_scoring_and_consensus_maxAL.csv'],
+    ['./data/VDR_3a2j_scoring_and_consensus_maxAL.csv', './data/VDR_3a2j_scoring_and_consensus_maxAL.csv']
 ]
 
 
