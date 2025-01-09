@@ -27,10 +27,19 @@ mode = args.mode
 learner="learner"
 SMIDS='./data/final_input.csv'
 GTP="./data/data_raw.csv"
-
+scoring_files = [
+    ['ALDH1_4x4l_scoring_and_consensus_maxAL.csv', 'ALDH1_4x4l_scoring_and_consensus_maxAL.csv'],
+    ['FEN1_5fv7_scoring_and_consensus_maxAL.csv', 'FEN1_5fv7_scoring_and_consensus_maxAL.csv'],
+    ['GBA_2v3e_scoring_and_consensus_maxAL.csv', 'GBA_2v3e_scoring_and_consensus_maxAL.csv'],
+    ['KAT2A_5h84_scoring_and_consensus_maxAL.csv', 'KAT2A_5h84_scoring_and_consensus_maxAL.csv'],
+    ['MAPK1_2ojg_scoring_and_consensus_maxAL.csv', 'MAPK1_2ojg_scoring_and_consensus_maxAL.csv'],
+    ['PKM2_3gr4_scoring_and_consensus_maxAL.csv', 'PKM2_3gr4_scoring_and_consensus_maxAL.csv'],
+    ['VDR_3a2j_scoring_and_consensus_maxAL.csv', 'VDR_3a2j_scoring_and_consensus_maxAL.csv']
+]
 
 
 path_tuples = [[SMIDS,GTP]]
+path_tuples = scoring_files
 
 def get_learner_from_string(learner_string):
     if learner_string == "cp_learner":
@@ -53,34 +62,34 @@ def get_query_function_from_string(query_function_string):
 
 if mode == "cpu":
     param_combinations = {
-        "path_id": [0], #index in list of dataset paths
+        "path_id": [0,1,2,3,4,5,6,7], #index in list of dataset paths
         'learner': ["rf_learner"],
         'hyperparameter_tuning': [True, False],
         'batch_size_percentage': [1, 0.5, 0.1, 0.01],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
         'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-        'do_scoring_function_list_prediction': [False], #todo!!
+        'column_to_learn': ["Consensus_SoftRbV"],
+        'do_scoring_function_list_prediction': [False], #todo or take care!!
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3,]
+        'statistical' : [0,1,2,3]
     }
 
 elif mode == "gpu":
     param_combinations = {
-        "path_id": [0], #index in list of dataset paths
+        "path_id": [0,1,2,3,4,5,6,7], #index in list of dataset paths
         'learner': ["cp_learner"],
         'hyperparameter_tuning': [True, False],
         'batch_size_percentage': [1, 0.5, 0.1, 0.01],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
         'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-        'do_scoring_function_list_prediction': [False], #todo!!
+        'column_to_learn': ["Consensus_SoftRbV"],
+        'do_scoring_function_list_prediction': [False,True], 
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3,]
+        'statistical' : [0,1,2,3]
     }
 else:
     param_combinations = {
