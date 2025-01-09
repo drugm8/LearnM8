@@ -6,8 +6,13 @@ import math
 from helpers.dock import dock
 from helpers.helpers import remove_right_df_from_left_df
 from helpers.query_functions import random_query_function
-from scripts.consensus.consensus_wrapper import new_consensus_wrapper as consensus
-from helpers.normalization import normalize_scores
+from scripts.consensus.consensus_wrapper import final_consensus_wrapper as consensus
+from helpers.normalization import normalize_wrapper
+from helpers.normalization import RESCORING_FUNCTIONS
+
+_used_scoring_functions = [
+  "KORP-PL", "RFScoreVS", "Vinardo", "CHEMPLP", "CNN-Affinity"
+]
 
 
 valid_scoring_functions = [
@@ -17,6 +22,7 @@ valid_scoring_functions = [
     "KORP-PL"
 ]
 valid_consensus_methods =[
+   "Consensus_SoftRbV",
     "ECR_avg_scaled",
     "ECR_best_scaled",
     "RbR_avg_scaled",
@@ -44,6 +50,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
 
     smids_pool = pd.read_csv(smids_input_path)
+    smids_pool = smids_pool.loc[:,["ID","SMILES"]]
 
     if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
         percentage = batch_size_percentage/100
@@ -60,21 +67,28 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     smids_pool = remove_right_df_from_left_df(smids_pool, initial_sample)
     docked_inital_sample = dock(ground_truth_path, initial_sample)
 
-    if column_to_learn in valid_consensus_methods:
-      consensus_res = consensus(docked_inital_sample, column_to_learn)#get a dataframe with scoring functions and consensus
-    elif column_to_learn in valid_scoring_functions:
-      consensus_res = docked_inital_sample#dunno
-    else:
-        raise ValueError("Invalid column to learn")
+
+    print("docked_inital sample", docked_inital_sample)
+    normalized_scores = normalize_wrapper(docked_inital_sample)
+    print("nromaasdlfalsjd", normalized_scores)
+    consensus_res = consensus(normalized_scores, column_to_learn, _used_scoring_functions )#get a dataframe with scoring functions and consensus
+    consensus_res= consensus_res.merge(docked_inital_sample, on=["ID"], how="inner")
+    print("joined consesns", consensus_res)
+
+    # if column_to_learn in valid_consensus_methods:
+    #   #todo normalize
+    #   print(consensus_res)
+    #   consensus_res = consensus_res.merge(ini)
+    # elif column_to_learn in valid_scoring_functions:
+    #   consensus_res = docked_inital_sample#dunno
+    # else:
+    #     raise ValueError("Invalid column to learn")
 
     if do_scoring_function_list_prediction:
-       consensus_res= consensus_res.merge(docked_inital_sample, on=["ID","SMILES"], how="inner")
-       
-       all_scoring_functions = ["CNN-Score","GenScore-scoring","ConvexPLR","KORP-PL"]
-       print(consensus_res)
-       print(consensus_res.columns.tolist())
-       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,all_scoring_functions])
+       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,_used_scoring_functions])
     else:
+      print("\n\n\n\n\n\n\n")
+      print(consensus_res)
       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
 
 
@@ -82,18 +96,28 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     print("know")
 
     for i in range(cycles):
+        print("loopey1")
         if hyperparameter_tuning and i ==1:
            learner.optimize_hyperparameters() #!time penalty
-        smids_queried = learner.query(smids_pool, smids_input_path)#
-        print(smids_queried.columns)
-        print(smids_pool)
+        print("loopey2")
+        smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction)#
+        print("loopey3")
         smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
+        print("loopey4")
         docked_smids_queried = dock(ground_truth_path, smids_queried)
-        consens_queried = consensus(docked_smids_queried, column_to_learn)
+        print("loopey5")
+        normalized_scores = normalize_wrapper(docked_smids_queried)
+        print("loopey6")
+
+        consens_queried = consensus(normalized_scores, column_to_learn, _used_scoring_functions)
+        print("loopey7")
+        consens_queried = consens_queried.merge(docked_smids_queried, on=["ID"], how="inner")
+        print("loopey8")
         if do_scoring_function_list_prediction:
-           all_scoring_functions = [["CNN-Score","GenScore-scoring","ConvexPLR","KORP-PL"]]
-           learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,all_scoring_functions])
+           print("sf list predictionse")
+           learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,_used_scoring_functions])
         else:
+          print("consensus predictionse")
           learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
         gc.collect()
 

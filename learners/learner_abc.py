@@ -2,6 +2,11 @@ from abc import ABC, abstractmethod
 import os
 import pandas as pd
 import numpy as np
+from scripts.consensus.consensus_wrapper import final_consensus_wrapper as consensus
+from scripts.consensus.consensus_wrapper import _used_scoring_functions
+
+from helpers.normalization import normalize_wrapper
+
 class learner(ABC):
 
     @abstractmethod
@@ -58,11 +63,24 @@ class learner(ABC):
             self.dataset_y = addition_of_dataset_y
             self.dataset_x = addition_of_dataset_x
 
-    def query(self, smids_x_input, path):
+    def query(self, smids_x_input, path, do_consensing=False):
+        print("querying...")
         #uses the intrinisc query function to run the inference first and then query the dataset
         full_input_smids = pd.read_csv(path)
+        if do_consensing:
+            scoring_function_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
 
-        full_input_smids["estimation"] = self.estimate(full_input_smids.loc[:,"SMILES"])
+            scoring_function_estimations_df = pd.DataFrame(scoring_function_estimations, columns=_used_scoring_functions)
+            scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
+            normalized_predictions = normalize_wrapper(scoring_function_estimations_df)
+
+            consensus_res = consensus(normalized_predictions, "Consensus_SoftRbV")
+            consensus_estimations = consensus_res.loc[:,"Consensus_SoftRbV"]
+        else:
+            consensus_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
+
+        full_input_smids["estimation"] = consensus_estimations
+
         self.write_estimations(full_input_smids.loc[:,["ID", "estimation"]].copy())
         merged_and_reduced_smids =  pd.merge(smids_x_input, full_input_smids, on=["ID", "SMILES"], how='inner')
 

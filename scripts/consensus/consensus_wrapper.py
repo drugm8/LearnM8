@@ -10,8 +10,17 @@ import pandas as pd
 #     print("done consensing...")
 #     return(df)
 
-def final_consensus_wrapper(dataset, col_to_learn, scoring_functions): 
-    return(apply_consensus_scoring(dataset, col_to_learn, scoring_functions))
+_used_scoring_functions = [
+  "KORP-PL", "RFScoreVS", "Vinardo", "CHEMPLP", "CNN-Affinity"
+]
+
+
+def final_consensus_wrapper(dataset, col_to_learn, scoring_functions=_used_scoring_functions):
+    if col_to_learn == "Consensus_SoftRbV":
+        col_to_learn = "soft_rbv"
+        result = apply_consensus_scoring(dataset, col_to_learn, scoring_functions)
+        result = result.rename(columns={"SoftRbV": "Consensus_SoftRbV"})
+    return(result)
     
 
 def new_consensus_wrapper(dataset, col_to_learn): #currently used
