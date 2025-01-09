@@ -25,8 +25,8 @@ args = parser.parse_args()
 
 mode = args.mode
 learner="learner"
-SMIDS='./data/final_input.csv'
-GTP="./data/data_raw.csv"
+SMIDS='./data/ALDH1_4x4l_scoring_and_consensus_maxAL.csv'
+GTP="./data/ALDH1_4x4l_scoring_and_consensus_maxAL.csv"
 
 
 
@@ -52,51 +52,25 @@ def get_query_function_from_string(query_function_string):
     #mcdm py 
 
 if mode == "cpu":
-    param_combinations = {
-        "path_id": [0], #index in list of dataset paths
-        'learner': ["rf_learner"],
-        'hyperparameter_tuning': [True, False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-        'smids_input_path': [None], #!stay
-        'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-        'do_scoring_function_list_prediction': [False], #todo!!
-        'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3,]
-    }
+    exit(1)
 
 elif mode == "gpu":
     param_combinations = {
         "path_id": [0], #index in list of dataset paths
         'learner': ["cp_learner"],
-        'hyperparameter_tuning': [True],
+        'hyperparameter_tuning': [False],
         'batch_size_percentage': [1],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
-        'cycles': [10], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled'],
+        'cycles': [5], #-1 is flag for one batch
+        'column_to_learn': ['Consensus_SoftRbV'],
         'do_scoring_function_list_prediction': [True], #todo!!
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function"], 
         'statistical' : [0]
     }
 else:
-    param_combinations = {
-        "path_id": [0], #index in list of dataset paths
-        'learner': ["cp_learner","rf_learner"],
-        'hyperparameter_tuning': [True, False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-        'smids_input_path': [None], #!stay
-        'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ['Zscore_best_scaled', 'ECR_avg_scaled'],
-        'do_scoring_function_list_prediction': [False], #todo!!
-        'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3,]
-    }
+    exit(1)
 
 #todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
 

@@ -36,6 +36,7 @@ class pipe_cp_learner(learner):
         self.dataset_x = None
         self.dataset_y = None
         
+        
 
    
 
@@ -90,6 +91,7 @@ class pipe_cp_learner(learner):
 
 
     def estimate(self, x_input):
+        #print("xiputputputputputputputputput", x_input)
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
@@ -102,19 +104,24 @@ class pipe_cp_learner(learner):
                 devices=1
             )
         predictions = inference_trainer.predict(self.mpnn, test_loader)
-
+        #print("predictions", predictions)
+        #print("predictions")
         gc.collect()
         return np.concatenate(predictions, axis=0)
     
     def train_mpnn_on_internal(self):
         print("training...")
-        print("traing dimensions:", self.dataset_y.shape[1])
+        print("traing dimensions:", )
+
+
         yss = self.dataset_y
-        if self.dataset_y.shape[1] != 1:
+        try:
+            a = type(self.dataset_y[0])==np.float64
+            yss = yss.reshape(-1, 1)
+        except KeyError:
             yss = yss.iloc[1:]
+            print("yss", yss)
             yss=yss.values.tolist()
-        else:
-            yss.reshape(-1, 1) 
 
         all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
 

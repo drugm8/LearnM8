@@ -25,13 +25,13 @@ RESCORING_FUNCTIONS = {
     "Vinardo": {"column_name": "Vinardo", "best_value": "min", "score_range": (200, -20)}
 }
 
-scoring_data = pd.DataFrame() #!! this is empty thats why errors are produced
-
-scoring_function = "KORP-PL"
-
-scores = scoring_data[scoring_function]
-
-scoring_info = RESCORING_FUNCTIONS[scoring_function]
+#scoring_data = pd.DataFrame() #!! this is empty thats why errors are produced
+#
+#scoring_function = "KORP-PL"
+#
+#scores = scoring_data[scoring_function]
+#
+#scoring_info = RESCORING_FUNCTIONS[scoring_function]
 
 def normalize_scores(scores: np.ndarray, scoring_info: dict) -> np.ndarray:
     """
@@ -62,4 +62,19 @@ def normalize_scores(scores: np.ndarray, scoring_info: dict) -> np.ndarray:
 
 #"gedockte daten aufklambüsern, dann for i in column normailze und dann wieder zusammenfügen"
 
-normalized_scores = normalize_scores(scores, scoring_info)
+#normalized_scores = normalize_scores(scores, scoring_info)
+
+def normalize_wrapper(full_df):
+    for column in full_df.columns:
+        print(column)
+        print(column in RESCORING_FUNCTIONS)
+        if column in RESCORING_FUNCTIONS:
+            scores = full_df[column]
+            print(scores)
+            scoring_info = RESCORING_FUNCTIONS[column]
+            print(scoring_info)
+            normalized_scores = normalize_scores(scores, scoring_info)
+            print(normalized_scores)
+            full_df[column] = normalized_scores
+    
+    return(full_df)
