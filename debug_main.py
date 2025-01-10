@@ -62,7 +62,7 @@ def get_query_function_from_string(query_function_string):
 
 if mode == "cpu":
     param_combinations = {
-        "path_id": [0,1,2,3,4,5,6,7], #index in list of dataset paths
+        "path_id": [0,1,2,3,4,5,6], #index in list of dataset paths
         'learner': ["rf_learner"],
         'hyperparameter_tuning': [True, False],
         'batch_size_percentage': [1, 0.5, 0.1, 0.01],
