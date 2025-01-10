@@ -18,13 +18,14 @@ from .methods.zscore import zscore_consensus
 from .methods.rbv_tiebreaker import rbv_consensus
 from .methods.soft_rbv import soft_rbv_consensus
 # Update method dictionary with new lowercase names
+
 _METHODS = {
-    "ecr": ecr_consensus,
-    "rbr": rbr_consensus,
-    "rbv": rbv_consensus,
-    "zscore": zscore_consensus,
+    "Consensus_ECR": ecr_consensus,
+    "Consensus_RbR": rbr_consensus,
+    "Consensus_RbV": rbv_consensus,
+    "zsConsensus_Zscorecore": zscore_consensus,
     #"pareto": pareto_consensus,
-    "soft_rbv": soft_rbv_consensus
+    "Consensus_SoftRbV": soft_rbv_consensus
 }
 
 def load_and_validate_data(

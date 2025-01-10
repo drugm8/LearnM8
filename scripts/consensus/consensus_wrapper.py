@@ -1,4 +1,4 @@
-from scripts.consensus.consensus import apply_consensus_methods
+#from scripts.consensus.consensus import apply_consensus_methods
 from consensus.consensus import apply_consensus_scoring
 import pandas as pd
 
@@ -16,20 +16,20 @@ _used_scoring_functions = [
 
 
 def final_consensus_wrapper(dataset, col_to_learn, scoring_functions=_used_scoring_functions):
-    if col_to_learn == "Consensus_SoftRbV":
-        col_to_learn = "soft_rbv"
-        result = apply_consensus_scoring(dataset, col_to_learn, scoring_functions)
-        result = result.rename(columns={"SoftRbV": "Consensus_SoftRbV"})
+    result= apply_consensus_scoring(dataset, col_to_learn, scoring_functions)
+    result.rename(columns={ result.columns[1]: col_to_learn }, inplace = True)
+    print(result)
+
     return(result)
     
 
-def new_consensus_wrapper(dataset, col_to_learn): #currently used
-    print("consensing...")
-    method= col_to_learn.rpartition('_')[0]
-    result = apply_consensus_methods(dataset, method, "scaled",False)
-    df =result[0].rename(columns={method: col_to_learn})
-    print("done consensing...")
-    return(df)
+#def new_consensus_wrapper(dataset, col_to_learn): #currently used
+    # print("consensing...")
+    # method= col_to_learn.rpartition('_')[0]
+    # result = apply_consensus_methods(dataset, method, "scaled",False)
+    # df =result[0].rename(columns={method: col_to_learn})
+    # print("done consensing...")
+    # return(df)
 
 
 # def merge_consensus(dataset, metric):
