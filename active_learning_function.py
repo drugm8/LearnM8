@@ -22,6 +22,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     learner.set_query_function(query_function)
     scoring_functions = []
     
+    #print(learner.name)
 
 
 
@@ -30,10 +31,10 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     for col in smids_pool.columns:
 
         if col in RESCORING_FUNCTIONS.keys():
-            print("added ", col, "to scoring functions")
+            #print("added ", col, "to scoring functions")
             scoring_functions.append(col)
         elif col in CONSENSUS_METHODS.keys():
-            print("added ", col, "to consensus methods")
+            #print("added ", col, "to consensus methods")
             column_to_learn = col
 
     smids_pool = smids_pool.loc[:,["ID","SMILES"]]
@@ -54,16 +55,16 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     docked_inital_sample = dock(ground_truth_path, initial_sample, scoring_functions)
 
 
-    print("docked_inital sample", docked_inital_sample)
+    #print("docked_inital sample", docked_inital_sample)
     normalized_scores = normalize_wrapper(docked_inital_sample)
-    print("nromaasdlfalsjd", normalized_scores)
+    #print("nromaasdlfalsjd", normalized_scores)
     consensus_res = consensus(normalized_scores, column_to_learn, scoring_functions )#get a dataframe with scoring functions and consensus
     consensus_res= consensus_res.merge(docked_inital_sample, on=["ID"], how="inner")
-    print("joined consesns", consensus_res)
+    #print("joined consesns", consensus_res)
 
     # if column_to_learn in valid_consensus_methods:
     #   #todo normalize
-    #   print(consensus_res)
+    #   #print(consensus_res)
     #   consensus_res = consensus_res.merge(ini)
     # elif column_to_learn in valid_scoring_functions:
     #   consensus_res = docked_inital_sample#dunno
@@ -73,20 +74,20 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     if do_scoring_function_list_prediction:
        learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,scoring_functions])
     else:
-      print("\n\n\n\n\n\n\n")
-      print(consensus_res)
+      #print("\n\n\n\n\n\n\n")
+      #print(consensus_res)
       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
 
 
 
-    print("know")
+    #print("know")
 
     for i in range(cycles):
-        print("loopey1")
+        print("loopey1----",i)
         if hyperparameter_tuning and i ==1:
            learner.optimize_hyperparameters() #!time penalty
         print("loopey2")
-        smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction)#
+        smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction, scoring_functions)#
         print("loopey3")
         smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
         print("loopey4")
@@ -99,11 +100,12 @@ def active_learning_function(learner, hyperparameter_tuning= False,
         print("loopey7")
         consens_queried = consens_queried.merge(docked_smids_queried, on=["ID"], how="inner")
         print("loopey8")
+        print(consens_queried)
         if do_scoring_function_list_prediction:
-           print("sf list predictionse")
+           #print("sf list predictionse")
            learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,scoring_functions])
         else:
-          print("consensus predictionse")
+          #print("consensus predictionse")
           learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
         gc.collect()
 
