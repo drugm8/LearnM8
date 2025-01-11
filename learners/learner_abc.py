@@ -57,14 +57,20 @@ class learner(ABC):
 
     def append_data(self, addition_of_dataset_x, addition_of_dataset_y):
         if (self.dataset_x is not None) and (self.dataset_y is not None):
-            self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
-            self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
+            if isinstance(addition_of_dataset_y, pd.DataFrame):
+                self.dataset_y=pd.concat([self.dataset_y, addition_of_dataset_y], axis=0, ignore_index=True)
+            else:
+                self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
+            if isinstance(addition_of_dataset_x, pd.DataFrame):
+                self.dataset_x=pd.concat([self.dataset_x, addition_of_dataset_x], axis=0, ignore_index=True)
+            else:
+                self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
         else:
             self.dataset_y = addition_of_dataset_y
             self.dataset_x = addition_of_dataset_x
 
-    def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None):
-        print("querying...")
+    def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None, column_to_learn=None):
+        #print("querying...")
         #uses the intrinisc query function to run the inference first and then query the dataset
         full_input_smids = pd.read_csv(path)
         if do_consensing:
@@ -74,8 +80,8 @@ class learner(ABC):
             scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
             normalized_predictions = normalize_wrapper(scoring_function_estimations_df)
 
-            consensus_res = consensus(normalized_predictions, "Consensus_SoftRbV")
-            consensus_estimations = consensus_res.loc[:,"Consensus_SoftRbV"]
+            consensus_res = consensus(normalized_predictions, column_to_learn, scoring_functions)
+            consensus_estimations = consensus_res.loc[:,column_to_learn]
         else:
             consensus_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
 

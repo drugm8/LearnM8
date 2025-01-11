@@ -41,6 +41,8 @@ class sklearn_learner(learner):
         model = self.model
         
         fingerprints_array = convert_list_of_smiles_to_morgan_fingerprints(self.dataset_x)
+        print(fingerprints_array)
+        print(self.dataset_y)
         model.fit(fingerprints_array, self.dataset_y)
         return model
 

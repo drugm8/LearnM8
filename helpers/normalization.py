@@ -64,17 +64,18 @@ def normalize_scores(scores: np.ndarray, scoring_info: dict) -> np.ndarray:
 
 #normalized_scores = normalize_scores(scores, scoring_info)
 
-def normalize_wrapper(full_df):
+def normalize_wrapper(input):
+    full_df = input.copy()
     for column in full_df.columns:
-        print(column)
-        print(column in RESCORING_FUNCTIONS)
+        #print(column)
+        #print(column in RESCORING_FUNCTIONS)
         if column in RESCORING_FUNCTIONS:
             scores = full_df[column]
-            print(scores)
+            #print(scores)
             scoring_info = RESCORING_FUNCTIONS[column]
-            print(scoring_info)
+            #print(scoring_info)
             normalized_scores = normalize_scores(scores, scoring_info)
-            print(normalized_scores)
+            #print(normalized_scores)
             full_df[column] = normalized_scores
     
     return(full_df)

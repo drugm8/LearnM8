@@ -75,9 +75,9 @@ class pipe_cp_learner(learner):
         accumulate_grad_batches=4, #about 
         precision=16 #these values
         )
-        print("trainer initialized")
-        print("accelerator used:"+self.accelerator)
-        print("cpu cores used:"+str(self.cpu_cores))
+        #print("trainer initialized")
+        #print("accelerator used:"+self.accelerator)
+        #print("cpu cores used:"+str(self.cpu_cores))
 
 
     def teach(self, addition_of_dataset_x, addition_of_dataset_y):
@@ -104,61 +104,63 @@ class pipe_cp_learner(learner):
                 devices=1
             )
         predictions = inference_trainer.predict(self.mpnn, test_loader)
-        #print("predictions", predictions)
-        #print("predictions")
+        ##print("predictions", predictions)
+        ##print("predictions")
         gc.collect()
+        #print("predictions", np.concatenate(predictions, axis=0))
         return np.concatenate(predictions, axis=0)
     
-    def train_mpnn_on_internal(self):
-        print("training...")
-        print("traing dimensions:", )
+    # def train_mpnn_on_internal(self):
+    #     #print("training...")
+    #     #print("traing dimensions:", )
 
 
-        yss = self.dataset_y
-        try:
-            a = type(self.dataset_y[0])==np.float64
-            yss = yss.reshape(-1, 1)
-        except KeyError:
-            yss = yss.iloc[1:]
-            print("yss", yss)
-            yss=yss.values.tolist()
+    #     yss = self.dataset_y
+    #     try:
+    #         a = type(self.dataset_y[0])==np.float64
+    #         yss = yss.reshape(-1, 1)
+    #     except KeyError:
+    #         yss = yss.iloc[1:]
+    #         #print("yss", yss)
+    #         yss=yss.values.tolist()
 
-        all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
+    #     #print("yss", yss)
+    #     all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
 
-        # Use a more advanced featurizer if available
-        featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
+    #     # Use a more advanced featurizer if available
+    #     featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
 
-        # Create dataset and normalize targets
-        train_dset = data.MoleculeDataset(all_data, featurizer)
-        scaler = train_dset.normalize_targets()
+    #     # Create dataset and normalize targets
+    #     train_dset = data.MoleculeDataset(all_data, featurizer)
+    #     scaler = train_dset.normalize_targets()
 
-        # Use a larger batch size for GPU
-        batch_size = 256  #for training set sizes of 1000 - 10000 something between 64 and 512 should be ok
-        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)
+    #     # Use a larger batch size for GPU
+    #     batch_size = 256  #for training set sizes of 1000 - 10000 something between 64 and 512 should be ok
+    #     train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)
 
-        # Define model components
-        mp = nn.BondMessagePassing()
-        agg = nn.MeanAggregation()
-        output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
-        ffn = nn.RegressionFFN(output_transform=output_transform)
+    #     # Define model components
+    #     mp = nn.BondMessagePassing()
+    #     agg = nn.MeanAggregation()
+    #     output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
+    #     ffn = nn.RegressionFFN(output_transform=output_transform)
 
-        # Use batch normalization
-        batch_norm = True
+    #     # Use batch normalization
+    #     batch_norm = True
 
-        # Define metrics
-        metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()] #
+    #     # Define metrics
+    #     metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()] #
 
-        # Create MPNN model
-        mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
+    #     # Create MPNN model
+    #     mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
-        # Train the model
-        print("fitting...")
-        self.trainer.fit(mpnn, train_loader)
+    #     # Train the model
+    #     #print("fitting...")
+    #     self.trainer.fit(mpnn, train_loader)
 
 
-        self.mpnn = mpnn
-        print("done training...")
-        gc.collect()
+    #     self.mpnn = mpnn
+    #     #print("done training...")
+    #     gc.collect()
 
     def get_and_remove_internal_predictions(self):
         if not os.path.exists("./internal_al_cache/"):
@@ -168,6 +170,61 @@ class pipe_cp_learner(learner):
         #os.rmdir("./internal_al_cache/")
         return return_val
 
+    def train_mpnn_on_internal(self):
+        #print("training...")
+
+        yss = self.dataset_y
+        # Handle different output shapes
+        #!start panic fix
+        ndim = 1
+        if isinstance(yss, np.ndarray):
+            #print(f"Training output ndarray")
+            if len(yss.shape) == 1:
+                yss = yss.reshape(-1, 1)
+        elif isinstance(yss, pd.Series) or isinstance(yss, pd.DataFrame):
+            #print(f"Training output frame")
+            if isinstance(yss, pd.Series):
+                yss = yss.to_frame()
+            yss = yss.values
+            ndim = yss.shape[1]
+            #print("dims", ndim)
+
+
+        #print(f"Training output shape: {yss.shape}")
+        #print(yss)
+        #!end panic fix
+        # Create MoleculeDatapoint objects with multi-dimensional targets
+        all_data = []
+        for smi, y in zip(self.dataset_x, yss):
+            # Ensure y is a list/array even for single outputs
+            y_list = y.tolist() if isinstance(y, np.ndarray) else [y]
+            datapoint = data.MoleculeDatapoint.from_smi(smi, y_list)
+            all_data.append(datapoint)
+
+        featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
+        train_dset = data.MoleculeDataset(all_data, featurizer)
+        scaler = train_dset.normalize_targets()
+
+        batch_size = 256
+        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)
+
+        # Define model components
+        mp = nn.BondMessagePassing()
+        agg = nn.MeanAggregation()
+        output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
+        ffn = nn.RegressionFFN(output_transform=output_transform, n_tasks=ndim) #!panic fix
+
+
+
+        batch_norm = True
+        metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
+        mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
+
+        #print("fitting...")
+        self.trainer.fit(mpnn, train_loader)
+        self.mpnn = mpnn
+        #print("done training...")
+        gc.collect()
 
     
     def optimize_hyperparameters(self):
@@ -203,7 +260,7 @@ class pipe_cp_learner(learner):
             trainer = pl.Trainer(
                 accelerator="auto",
                 devices=1,
-                max_epochs=20, # number of epochs to train for
+                max_epochs=100, # number of epochs to train for
                 # below are needed for Ray and Lightning integration
                 strategy=RayDDPStrategy(),
                 callbacks=[RayTrainReportCallback()],
