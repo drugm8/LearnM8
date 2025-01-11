@@ -231,8 +231,28 @@ class pipe_cp_learner(learner):
         
         hpopt_save_dir = Path.cwd() / "hpopt" # directory to save hyperopt results
         hpopt_save_dir.mkdir(exist_ok=True)
-        all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, self.dataset_y.reshape(-1, 1))]
-        mols = [d.mol for d in all_data]  # RDkit Mol objects are use for structure based splits
+
+        yss = self.dataset_y
+        ndim = 1
+        if isinstance(yss, np.ndarray):
+            #print(f"Training output ndarray")
+            if len(yss.shape) == 1:
+                yss = yss.reshape(-1, 1)
+        elif isinstance(yss, pd.Series) or isinstance(yss, pd.DataFrame):
+            #print(f"Training output frame")
+            if isinstance(yss, pd.Series):
+                yss = yss.to_frame()
+            yss = yss.values
+            ndim = yss.shape[1]
+            #print("dims", ndim)
+
+
+        all_data = []
+        for smi, y in zip(self.dataset_x, yss):
+            # Ensure y is a list/array even for single outputs
+            y_list = y.tolist() if isinstance(y, np.ndarray) else [y]
+            datapoint = data.MoleculeDatapoint.from_smi(smi, y_list)
+            all_data.append(datapoint)
 
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
 
@@ -252,7 +272,7 @@ class pipe_cp_learner(learner):
             mp = nn.BondMessagePassing(d_h=message_hidden_dim, depth=depth)
             agg = nn.MeanAggregation()
             output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
-            ffn = nn.RegressionFFN(output_transform=output_transform, input_dim=message_hidden_dim, hidden_dim=ffn_hidden_dim, n_layers=ffn_num_layers)
+            ffn = nn.RegressionFFN(output_transform=output_transform, input_dim=message_hidden_dim, hidden_dim=ffn_hidden_dim, n_layers=ffn_num_layers, n_tasks=ndim)
             batch_norm = True
             metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
             model = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
