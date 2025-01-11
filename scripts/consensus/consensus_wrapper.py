@@ -18,7 +18,7 @@ _used_scoring_functions = [
 def final_consensus_wrapper(dataset, col_to_learn, scoring_functions=_used_scoring_functions):
     result= apply_consensus_scoring(dataset, col_to_learn, scoring_functions)
     result.rename(columns={ result.columns[1]: col_to_learn }, inplace = True)
-    print(result)
+    #print(result)
 
     return(result)
     
