@@ -23,7 +23,7 @@ _METHODS = {
     "Consensus_ECR": ecr_consensus,
     "Consensus_RbR": rbr_consensus,
     "Consensus_RbV": rbv_consensus,
-    "zsConsensus_Zscorecore": zscore_consensus,
+    "Consensus_Zscore": zscore_consensus,
     #"pareto": pareto_consensus,
     "Consensus_SoftRbV": soft_rbv_consensus
 }

@@ -57,17 +57,23 @@ class learner(ABC):
 
     def append_data(self, addition_of_dataset_x, addition_of_dataset_y):
         if (self.dataset_x is not None) and (self.dataset_y is not None):
+            #print("appending ", addition_of_dataset_x)
+            #print("to", self.dataset_x)
+            #print("appending ", addition_of_dataset_y)
+            #print("to", self.dataset_y)
             if isinstance(addition_of_dataset_y, pd.DataFrame):
                 self.dataset_y=pd.concat([self.dataset_y, addition_of_dataset_y], axis=0, ignore_index=True)
             else:
-                self.dataset_y=np.append(addition_of_dataset_y, self.dataset_y)
+                self.dataset_y=np.append(self.dataset_y, addition_of_dataset_y)
             if isinstance(addition_of_dataset_x, pd.DataFrame):
                 self.dataset_x=pd.concat([self.dataset_x, addition_of_dataset_x], axis=0, ignore_index=True)
             else:
-                self.dataset_x=np.append(addition_of_dataset_x, self.dataset_x)
+                self.dataset_x=np.append(self.dataset_x, addition_of_dataset_x)
         else:
             self.dataset_y = addition_of_dataset_y
             self.dataset_x = addition_of_dataset_x
+        #print("done appendign x",self.dataset_x)
+        #print("done appendign y", self.dataset_y)
 
     def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None, column_to_learn=None):
         #print("querying...")
@@ -84,6 +90,7 @@ class learner(ABC):
             consensus_estimations = consensus_res.loc[:,column_to_learn]
         else:
             consensus_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
+            #print("query estimations:", consensus_estimations)
 
         full_input_smids["estimation"] = consensus_estimations
 
