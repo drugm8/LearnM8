@@ -28,6 +28,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     smids_pool = pd.read_csv(smids_input_path)
 
+
     for col in smids_pool.columns:
 
         if col in RESCORING_FUNCTIONS.keys():
@@ -36,6 +37,8 @@ def active_learning_function(learner, hyperparameter_tuning= False,
         elif col in CONSENSUS_METHODS.keys():
             ##print("added ", col, "to consensus methods")
             column_to_learn = col
+        else:
+           print("column ", col, " is not a scoring function or a consensus method")
 
     smids_pool = smids_pool.loc[:,["ID","SMILES"]]
 
@@ -60,12 +63,12 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     docked_inital_sample = dock(ground_truth_path, initial_sample, scoring_functions)
 
 
-    ##print("docked_inital sample", docked_inital_sample)
+    print("docked_inital sample:", docked_inital_sample)
     normalized_scores = normalize_wrapper(docked_inital_sample)
-    ##print("nromaasdlfalsjd", normalized_scores)
+    print("nromalized scores:", normalized_scores)
     consensus_res = consensus(normalized_scores, column_to_learn, scoring_functions )#get a dataframe with scoring functions and consensus
     consensus_res= consensus_res.merge(docked_inital_sample, on=["ID"], how="inner")
-    ##print("joined consesns", consensus_res)
+    print("joined consesns", consensus_res)
 
     # if column_to_learn in valid_consensus_methods:
     #   #todo normalize
@@ -81,7 +84,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
        #print(pd.DataFrame(consensus_res.loc[:,scoring_functions]))
     else:
       ##print("\n\n\n\n\n\n\n")
-      ##print(consensus_res)
+      print("teaching the learner the following df:",consensus_res)
       learner.teach(consensus_res.loc[:,"SMILES"].values, consensus_res.loc[:,column_to_learn].values)
 
 
