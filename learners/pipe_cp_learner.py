@@ -102,9 +102,8 @@ class pipe_cp_learner(learner):
                 accelerator="auto",
                 devices=1
             )
-        predictions = inference_trainer.predict(self.mpnn, test_loader)
-        ##print("predictions", predictions)
-        ##print("predictions")
+            predictions = inference_trainer.predict(self.mpnn, test_loader)
+
         gc.collect()
         #print("predictions", np.concatenate(predictions, axis=0))
         return np.concatenate(predictions, axis=0)

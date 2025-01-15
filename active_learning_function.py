@@ -56,7 +56,8 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
 
 
-    initial_sample = first_query_function(smids_pool, None, actual_batch_size)
+    initial_sample = first_query_function(smids_pool, actual_batch_size)
+    print("asdf",initial_sample)
 
 
 
@@ -72,71 +73,28 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     print("normalized scores:", normalized_scores)
 
 
-    #print("nromalized scores:", normalized_scores)
-    #consensus_res = consensus(normalized_scores, column_to_learn, scoring_functions )#get a dataframe with scoring functions and consensus
-    #consensus_res= consensus_res.merge(docked_inital_sample, on=["ID"], how="inner")
-    #print("joined consesns", consensus_res)
-
-    # if column_to_learn in valid_consensus_methods:
-    #   #todo normalize
-    #   ##print(consensus_res)
-    #   consensus_res = consensus_res.merge(ini)
-    # elif column_to_learn in valid_scoring_functions:
-    #   consensus_res = docked_inital_sample#dunno
-    # else:
-    #     raise ValueError("Invalid column to learn")
+    
 
     learner.teach(normalized_scores)
-    #if do_scoring_function_list_prediction:
-       #print(pd.DataFrame(consensus_res.loc[:,scoring_functions]))
-    #else:
-      ##print("\n\n\n\n\n\n\n")
-
-     # learner.teach(normalized_scores.loc[:,"SMILES"].values, normalized_scores)
-
-
-
-    ##print("know")
 
     for i in range(cycles+1):
-        #print("loopey1----",i)
         if hyperparameter_tuning and i ==1:
            learner.optimize_hyperparameters() #!time penalty
-        #print("loopey2")
+
         smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction, scoring_functions, column_to_learn)#
-        #print("loopey3")
         
         if i == cycles:
            continue
       
 
-        #print(smids_queried)
         smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
-        #print("loopey4")
-        #print(smids_pool)
+
         docked_smids_queried = dock(ground_truth_path, smids_queried, scoring_functions)
-        #print("loopey5")
-        #print(docked_smids_queried)
+
         normalized_scores = normalize_wrapper(docked_smids_queried)
 
         learner.teach(normalized_scores)
 
-
-        #print("loopey6")
-        #print(normalized_scores)
-        #consens_queried = consensus(normalized_scores, column_to_learn, scoring_functions)
-        #print("loopey7")
-        #print(consens_queried)
-        #consens_queried = consens_queried.merge(docked_smids_queried, on=["ID"], how="inner")
-        #print("loopey8")
-        #print(consens_queried)
-        #if do_scoring_function_list_prediction:
-           #print("sf list predictionse")
-           #print(pd.DataFrame(consens_queried.loc[:,scoring_functions]))
-       #    learner.teach(consens_queried.loc[:,"SMILES"].values, pd.DataFrame(consens_queried.loc[:,scoring_functions]))
-        #else:
-          ##print("consensus predictionse")
-        #  learner.teach(consens_queried.loc[:,"SMILES"].values, consens_queried.loc[:,column_to_learn].values)
         gc.collect()
 
     return True
