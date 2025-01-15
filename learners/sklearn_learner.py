@@ -20,8 +20,8 @@ class sklearn_learner(learner):
 
 
 
-    def teach(self, addition_of_dataset_x, addition_of_dataset_y):
-        self.append_data(addition_of_dataset_x, addition_of_dataset_y)
+    def teach(self, addition):
+        self.append_data(addition)
         self.model = self.train_new_model()
 
 

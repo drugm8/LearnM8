@@ -40,7 +40,7 @@ def convert_list_of_smiles_to_morgan_fingerprints(smiles_list, n_jobs=-1):
     return np.array(fingerprints)
 
 def remove_right_df_from_left_df(left_df, right_df):
-        return left_df[~left_df['SMILES'].isin(right_df['SMILES'])]
+        return left_df[~left_df['ID'].isin(right_df['ID'])]
 
 def log_and_save(message,log_file):
     log_file.write(time.strftime("%Y-%m-%d %H:%M:%S") + " " + message + "\n")
