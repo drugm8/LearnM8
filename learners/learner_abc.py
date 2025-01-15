@@ -8,6 +8,11 @@ from scripts.consensus.consensus_wrapper import final_consensus_wrapper as conse
 from helpers.normalization import normalize_wrapper
 
 class learner(ABC):
+    dataset = None
+    do_scoring_function_list_prediction = None
+    column_to_learn = None
+    scoring_functions = None
+
 
     @abstractmethod
     def __init__(self, query_function, initial_x, initial_y):
@@ -51,29 +56,54 @@ class learner(ABC):
             cachefile = pd.read_csv(self.path+"cache.csv")
             cachefile_columns_count = str(len(cachefile.columns)-1)
             full_input_smids.rename(columns={"estimation": "cycle_"+cachefile_columns_count}, inplace=True)
-            merged = pd.merge(cachefile, full_input_smids, on='ID', how='outer')
+            merged = pd.merge(cachefile, full_input_smids, on='ID', how='outer')#unschüon aber sollte passe n
             merged.to_csv(self.path+"cache.csv", index=False)
 
 
-    def append_data(self, addition_of_dataset_x, addition_of_dataset_y):
-        if (self.dataset_x is not None) and (self.dataset_y is not None):
-            #print("appending ", addition_of_dataset_x)
-            #print("to", self.dataset_x)
-            #print("appending ", addition_of_dataset_y)
-            #print("to", self.dataset_y)
-            if isinstance(addition_of_dataset_y, pd.DataFrame):
-                self.dataset_y=pd.concat([self.dataset_y, addition_of_dataset_y], axis=0, ignore_index=True)
-            else:
-                self.dataset_y=np.append(self.dataset_y, addition_of_dataset_y)
-            if isinstance(addition_of_dataset_x, pd.DataFrame):
-                self.dataset_x=pd.concat([self.dataset_x, addition_of_dataset_x], axis=0, ignore_index=True)
-            else:
-                self.dataset_x=np.append(self.dataset_x, addition_of_dataset_x)
-        else:
-            self.dataset_y = addition_of_dataset_y
-            self.dataset_x = addition_of_dataset_x
+    # def append_data(self, addition_of_dataset_x, addition_of_dataset_y):
+    #     Exception("append_data is deprecated, use append_data instead")
+    #     if (self.dataset_x is not None) and (self.dataset_y is not None):
+    #         if isinstance(addition_of_dataset_y, pd.DataFrame):
+    #             self.dataset_y=pd.concat([self.dataset_y, addition_of_dataset_y], axis=0, ignore_index=True)
+    #         else:
+    #             self.dataset_y=np.append(self.dataset_y, addition_of_dataset_y)
+    #         if isinstance(addition_of_dataset_x, pd.DataFrame):
+    #             self.dataset_x=pd.concat([self.dataset_x, addition_of_dataset_x], axis=0, ignore_index=True)
+    #         else:
+    #             self.dataset_x=np.append(self.dataset_x, addition_of_dataset_x)
+    #     else:
+    #         self.dataset_y = addition_of_dataset_y
+    #         self.dataset_x = addition_of_dataset_x
+        
+    #     self.consensus_before_learning()
         #print("done appendign x",self.dataset_x)
         #print("done appendign y", self.dataset_y)
+
+    def consensus_before_learning(self):
+        #print("consensus before learning")
+        #print(self.dataset)
+        #print("consensed")
+        consensed = self.dataset.merge(consensus(self.dataset, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
+        #print(consensed)
+        self.dataset_x = consensed.loc[:,"SMILES"].values
+        if self.do_scoring_function_list_prediction:
+
+            self.dataset_y = consensed.loc[:,self.scoring_functions]
+            print(self.dataset_y)
+        else:
+            self.dataset_y = consensed.loc[:,self.column_to_learn]
+
+        #print(self.dataset_x)
+        #print(self.dataset_y)
+        return 
+    
+    def append_data(self, addition):
+        if self.dataset is not None:
+            self.dataset = pd.concat([self.dataset, addition], axis=0, ignore_index=True)
+        else:
+            self.dataset = addition
+        
+        self.consensus_before_learning()
 
     def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None, column_to_learn=None):
         #print("querying...")
@@ -99,3 +129,10 @@ class learner(ABC):
 
         queried = self.query_function(merged_and_reduced_smids, merged_and_reduced_smids.loc[:,"estimation"], batch_size=self.batch_size)
         return queried
+
+    def set_column_to_learn(self, column_to_learn):
+        self.column_to_learn = column_to_learn
+    def set_scoring_functions(self, scoring_functions):
+        self.scoring_functions = scoring_functions
+    def set_do_scoring_function_list_prediction(self, do_scoring_function_list_prediction):
+        self.do_scoring_function_list_prediction = do_scoring_function_list_prediction

@@ -8,7 +8,7 @@ def dock(ground_truth_df_path, dataset,scoring_functions):
     ground_trouth_df = pd.read_csv(ground_truth_df_path)
     #print (ground_trouth_df)
     #print (dataset)
-    merged_df = pd.merge(dataset.loc[:,["ID"]], ground_trouth_df,left_on=["ID"], right_on = ["ID"])
+    merged_df = pd.merge(dataset.loc[:,["ID"]], ground_trouth_df,left_on=["ID"], right_on = ["ID"], how="inner")
     #print (merged_df)
     col_list = ["ID", "SMILES"]+scoring_functions
 

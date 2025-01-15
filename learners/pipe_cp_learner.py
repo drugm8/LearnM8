@@ -80,9 +80,8 @@ class pipe_cp_learner(learner):
         #print("cpu cores used:"+str(self.cpu_cores))
 
 
-    def teach(self, addition_of_dataset_x, addition_of_dataset_y):
-        self.append_data(addition_of_dataset_x, addition_of_dataset_y)
-
+    def teach(self, addition):
+        self.append_data(addition)
         self.train_mpnn_on_internal()
 
 
