@@ -109,6 +109,8 @@ class learner(ABC):
         #print("querying...")
         #uses the intrinisc query function to run the inference first and then query the dataset
         full_input_smids = pd.read_csv(path)
+
+
         if do_consensing:
             scoring_function_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
 
@@ -125,9 +127,10 @@ class learner(ABC):
         full_input_smids["estimation"] = consensus_estimations
 
         self.write_estimations(full_input_smids.loc[:,["ID", "estimation"]].copy())
+
         merged_and_reduced_smids =  pd.merge(smids_x_input, full_input_smids, on=["ID", "SMILES"], how='inner')
 
-        queried = self.query_function(merged_and_reduced_smids, merged_and_reduced_smids.loc[:,"estimation"], batch_size=self.batch_size)
+        queried = self.query_function(merged_and_reduced_smids, batch_size=self.batch_size)
         return queried
 
     def set_column_to_learn(self, column_to_learn):
