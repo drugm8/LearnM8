@@ -69,13 +69,13 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
 
     print("docked_inital sample:", docked_inital_sample)
-    normalized_scores = normalize_wrapper(docked_inital_sample)
-    print("normalized scores:", normalized_scores)
+    #normalized_scores = normalize_wrapper(docked_inital_sample)
+    #print("normalized scores:", normalized_scores)
 
 
     
 
-    learner.teach(normalized_scores)
+    learner.teach(docked_inital_sample)
 
     for i in range(cycles+1):
         if hyperparameter_tuning and i ==1:
@@ -91,9 +91,9 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
         docked_smids_queried = dock(ground_truth_path, smids_queried, scoring_functions)
 
-        normalized_scores = normalize_wrapper(docked_smids_queried)
+        #normalized_scores = normalize_wrapper(docked_smids_queried)
 
-        learner.teach(normalized_scores)
+        learner.teach(docked_smids_queried)
 
         gc.collect()
 
