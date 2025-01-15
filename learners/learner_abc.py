@@ -3,9 +3,12 @@ import os
 import pandas as pd
 import numpy as np
 from scripts.consensus.consensus_wrapper import final_consensus_wrapper as consensus
+from helpers.normalization import normalize_wrapper
 
 
 from helpers.normalization import normalize_wrapper
+
+from sklearn.metrics import mean_squared_error
 
 class learner(ABC):
     dataset = None
@@ -83,13 +86,14 @@ class learner(ABC):
         #print("consensus before learning")
         #print(self.dataset)
         #print("consensed")
-        consensed = self.dataset.merge(consensus(self.dataset, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
+        normalized = normalize_wrapper(self.dataset)
+        consensed = self.dataset.merge(consensus(normalized, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
         #print(consensed)
         self.dataset_x = consensed.loc[:,"SMILES"].values
+        
         if self.do_scoring_function_list_prediction:
-
-            self.dataset_y = consensed.loc[:,self.scoring_functions]
-            print(self.dataset_y)
+            self.dataset_y = self.dataset.loc[:,self.scoring_functions]
+            #print(self.dataset_y)
         else:
             self.dataset_y = consensed.loc[:,self.column_to_learn]
 
@@ -113,7 +117,7 @@ class learner(ABC):
 
         if do_consensing:
             scoring_function_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
-
+            print(scoring_function_estimations)
             scoring_function_estimations_df = pd.DataFrame(scoring_function_estimations, columns=scoring_functions)
             scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
             normalized_predictions = normalize_wrapper(scoring_function_estimations_df)
@@ -125,6 +129,9 @@ class learner(ABC):
             #print("query estimations:", consensus_estimations)
 
         full_input_smids["estimation"] = consensus_estimations
+        mse = mean_squared_error(full_input_smids.loc[:,"estimation"], full_input_smids.loc[:,column_to_learn])
+
+        print(mse)
 
         self.write_estimations(full_input_smids.loc[:,["ID", "estimation"]].copy())
 
