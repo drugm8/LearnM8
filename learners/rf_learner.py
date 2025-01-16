@@ -41,7 +41,8 @@ class rf_learner(sklearn_learner):
             'max_leaf_nodes': [None, 30, 50, 70, 90],
             'min_impurity_decrease': [0.0, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
         }
-        gridsearch = RandomizedSearchCV(self.model, param_distributions=param_grid, n_iter=10, cv=5, verbose=1, random_state=42)
+        gridsearch = RandomizedSearchCV(self.model, param_distributions=param_grid, n_iter=1000, cv=5, verbose=1, random_state=42)
+        self.config = gridsearch.fit( convert_list_of_smiles_to_morgan_fingerprints(self.dataset_x),self.dataset_y).best_params_
         self.model = gridsearch.fit( convert_list_of_smiles_to_morgan_fingerprints(self.dataset_x),self.dataset_y).best_estimator_
         return
         

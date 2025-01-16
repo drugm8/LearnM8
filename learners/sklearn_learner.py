@@ -17,11 +17,13 @@ class sklearn_learner(learner):
         #!NO smids here, just plain values, need to check if reihenfolge is kept
         self.model = model
         self.name = model.__class__.__name__
+        self.config = None
 
 
 
     def teach(self, addition):
         self.append_data(addition)
+
         self.model = self.train_new_model()
 
 
@@ -46,7 +48,8 @@ class sklearn_learner(learner):
         model.fit(fingerprints_array, self.dataset_y)
         return model
 
-        
+
+
 
     def print_inner_data(self):
         print("data_x", self.dataset_x)
