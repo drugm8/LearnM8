@@ -65,22 +65,25 @@ class pipe_cp_learner(learner):
             self.cuda_available = False
             self.accelerator = "cpu"
 
-        self.trainer = pl.Trainer(
-        enable_checkpointing=True,
-        enable_progress_bar=False,
-        accelerator=self.accelerator,
-        devices=1,
-        max_epochs=100,  # Increase epochs for better training
-        gradient_clip_val=0.5, #dunno 
-        accumulate_grad_batches=4, #about 
-        precision=16 #these values
-        )
-        #print("trainer initialized")
-        #print("accelerator used:"+self.accelerator)
-        #print("cpu cores used:"+str(self.cpu_cores))
+        # self.trainer = pl.Trainer(
+        # enable_checkpointing=True,
+        # enable_progress_bar=False,
+        # accelerator=self.accelerator,
+        # devices=1,
+        # max_epochs=100,  # Increase epochs for better training
+        # gradient_clip_val=0.5, #dunno 
+        # accumulate_grad_batches=4, #about 
+        # precision=16 #these values
+        # )
+        ##print("trainer initialized")
+        ##print("accelerator used:"+self.accelerator)
+        ##print("cpu cores used:"+str(self.cpu_cores))
+
 
 
     def teach(self, addition):
+        #print("teaching additon:")
+        #print(addition)
         self.append_data(addition)
         self.train_mpnn_on_internal()
 
@@ -90,7 +93,7 @@ class pipe_cp_learner(learner):
 
 
     def estimate(self, x_input):
-        #print("xiputputputputputputputputput", x_input)
+        ##print("xiputputputputputputputputput", x_input)
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
@@ -105,12 +108,12 @@ class pipe_cp_learner(learner):
             predictions = inference_trainer.predict(self.mpnn, test_loader)
 
         gc.collect()
-        #print("predictions", np.concatenate(predictions, axis=0))
+        ##print("predictions", np.concatenate(predictions, axis=0))
         return np.concatenate(predictions, axis=0)
     
     # def train_mpnn_on_internal(self):
-    #     #print("training...")
-    #     #print("traing dimensions:", )
+    #     ##print("training...")
+    #     ##print("traing dimensions:", )
 
 
     #     yss = self.dataset_y
@@ -119,10 +122,10 @@ class pipe_cp_learner(learner):
     #         yss = yss.reshape(-1, 1)
     #     except KeyError:
     #         yss = yss.iloc[1:]
-    #         #print("yss", yss)
+    #         ##print("yss", yss)
     #         yss=yss.values.tolist()
 
-    #     #print("yss", yss)
+    #     ##print("yss", yss)
     #     all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
 
     #     # Use a more advanced featurizer if available
@@ -152,12 +155,12 @@ class pipe_cp_learner(learner):
     #     mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
     #     # Train the model
-    #     #print("fitting...")
+    #     ##print("fitting...")
     #     self.trainer.fit(mpnn, train_loader)
 
 
     #     self.mpnn = mpnn
-    #     #print("done training...")
+    #     ##print("done training...")
     #     gc.collect()
 
     def get_and_remove_internal_predictions(self):
@@ -169,34 +172,43 @@ class pipe_cp_learner(learner):
         return return_val
 
     def train_mpnn_on_internal(self):
+        ##print("training...")
         #print("training...")
-
+        #print("dataset_y:")
+        #print(self.dataset_y)
         yss = self.dataset_y
         # Handle different output shapes
         #!start panic fix
         ndim = 1
         if isinstance(yss, np.ndarray):
-            #print(f"Training output ndarray")
+            #print("Training output ndarray")
             if len(yss.shape) == 1:
                 yss = yss.reshape(-1, 1)
         elif isinstance(yss, pd.Series) or isinstance(yss, pd.DataFrame):
-            #print(f"Training output frame")
+            #print("Training output frame")
             if isinstance(yss, pd.Series):
+                #print("yss is a series")
                 yss = yss.to_frame()
             yss = yss.values
+            #print("yss:")
+            #print(yss)
             ndim = yss.shape[1]
             #print("dims", ndim)
+            ##print("dims", ndim)
 
 
-        #print(f"Training output shape: {yss.shape}")
-        #print(yss)
-        #!end panic fix
-        # Create MoleculeDatapoint objects with multi-dimensional targets
         all_data = []
         for smi, y in zip(self.dataset_x, yss):
+            #print("smi, y:")
+            #print(smi)
+            #print(y)
             # Ensure y is a list/array even for single outputs
             y_list = y.tolist() if isinstance(y, np.ndarray) else [y]
+            #print("y_list:")
+            #print(y_list)
+            #print(f"smi, y: {smi}, {y}")
             datapoint = data.MoleculeDatapoint.from_smi(smi, y_list)
+            #print(f"datapoint: {datapoint}")
             all_data.append(datapoint)
 
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
@@ -204,24 +216,36 @@ class pipe_cp_learner(learner):
         scaler = train_dset.normalize_targets()
 
         batch_size = 256
-        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)
+        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)#shuffleis mir egal weil das datenset is ja komplett
 
         # Define model components
         mp = nn.BondMessagePassing()
         agg = nn.MeanAggregation()
         output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
         ffn = nn.RegressionFFN(output_transform=output_transform, n_tasks=ndim) #!panic fix
-
+        #ffn = nn.RegressionFFN(n_tasks=ndim) #!panic fix2
 
 
         batch_norm = True
         metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
         mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
-        #print("fitting...")
-        self.trainer.fit(mpnn, train_loader)
+        ##print("fitting...")
+        trainer= pl.Trainer(
+        enable_checkpointing=True,
+        enable_progress_bar=False,
+        accelerator=self.accelerator,
+        devices=1,
+        max_epochs=100,  # Increase epochs for better training
+        gradient_clip_val=0.5, #dunno 
+        accumulate_grad_batches=4, #about 
+        precision=16, #these values
+        deterministic=True
+        )
+
+        trainer.fit(mpnn, train_loader)
         self.mpnn = mpnn
-        #print("done training...")
+        ##print("done training...")
         gc.collect()
 
     
@@ -233,16 +257,16 @@ class pipe_cp_learner(learner):
         yss = self.dataset_y
         ndim = 1
         if isinstance(yss, np.ndarray):
-            #print(f"Training output ndarray")
+            ##print(f"Training output ndarray")
             if len(yss.shape) == 1:
                 yss = yss.reshape(-1, 1)
         elif isinstance(yss, pd.Series) or isinstance(yss, pd.DataFrame):
-            #print(f"Training output frame")
+            ##print(f"Training output frame")
             if isinstance(yss, pd.Series):
                 yss = yss.to_frame()
             yss = yss.values
             ndim = yss.shape[1]
-            #print("dims", ndim)
+            ##print("dims", ndim)
 
 
         all_data = []
@@ -362,6 +386,8 @@ class pipe_cp_learner(learner):
         best_result = results.get_best_result()
         best_config = best_result.config
         self.config=best_config['train_loop_config']
+        print("best config", best_config)
+        print("slef.config", self.config)
         best_checkpoint_path = Path(best_result.checkpoint.path) / "checkpoint.ckpt"
         mpnn_from_checkpoint = torch.load(best_checkpoint_path)#like this way up here
         ray.shutdown()

@@ -51,13 +51,10 @@ def get_query_function_from_string(query_function_string):
         return cluster_query_function
     #mcdm py 
 
-if mode == "cpu":
-    exit(1)
 
-elif mode == "gpu":
-    param_combinations = {
+param_combinations = {
         "path_id": [0], #index in list of dataset paths
-        'learner': ["cp_learner"],
+        'learner': ["rf_learner"],
         'hyperparameter_tuning': [False],
         'batch_size_percentage': [1],
         'smids_input_path': [None], #!stay
@@ -69,8 +66,7 @@ elif mode == "gpu":
         'query_function': ["greedy_query_function"], 
         'statistical' : [0]
     }
-else:
-    exit(1)
+
 
 #todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
 
@@ -78,12 +74,11 @@ else:
 keys, values = zip(*param_combinations.items())
 combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
+print(combinations)
 random.shuffle(combinations)
 # Call the function with each combination
 for combo in combinations:
-    if combo["do_scoring_function_list_prediction"]:
-        if combo['learner'] != "cp_learner":
-            continue
+
 
 
     statistical = combo.pop("statistical")
@@ -104,6 +99,7 @@ for combo in combinations:
         with open("./results/"+experiment_hash+"/combination.txt", 'w') as convert_file: 
             convert_file.write(json.dumps(combo))
 
+    print(combo["learner"])
     combo['learner'] = get_learner_from_string(combo['learner'])(max_out_system=True)#instantiate learner
     combo['first_query_function'] = get_query_function_from_string(combo.pop("first_query_function"))
     combo['query_function'] = get_query_function_from_string(combo.pop("query_function"))
@@ -114,6 +110,7 @@ for combo in combinations:
     path ="./results/tryme/"
 
     combo['learner'].set_path(path)
+    print("calling function")
     active_learning_function(**combo)
 
 

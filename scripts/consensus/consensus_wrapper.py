@@ -17,8 +17,13 @@ _used_scoring_functions = [
 
 def final_consensus_wrapper(dataset, col_to_learn, scoring_functions=_used_scoring_functions):
     result= apply_consensus_scoring(dataset, col_to_learn, scoring_functions, normalize=False)
+
+    # with pd.option_context('display.max_rows', None, 
+    #                   'display.max_columns', None,
+    #                   'display.width', None,
+    #                   'display.max_colwidth', None):
+    #   print(result)
     result.rename(columns={ result.columns[1]: col_to_learn }, inplace = True)
-    #print(result)
 
     return(result)
     

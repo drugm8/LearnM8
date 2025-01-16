@@ -62,40 +62,40 @@ def get_query_function_from_string(query_function_string):
 
 if mode == "cpu":
     param_combinations = {
-        "path_id": [0,1,2,3,4,5,6], #index in list of dataset paths
+        "path_id": [2], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [True, False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'hyperparameter_tuning': [False],
+        'batch_size_percentage': [0.1],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ["Consensus_SoftRbV"],
+        'cycles': [10], #-1 is flag for one batch
+        'column_to_learn': [""],
         'do_scoring_function_list_prediction': [False], #todo or take care!!
         'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3]
+        'query_function': ["greedy_query_function"], 
+        'statistical' : [0]
     }
 
 elif mode == "gpu":
     param_combinations = {
-        "path_id": [0,1,2,3,4,5,6,7], #index in list of dataset paths
+        "path_id": [2], #index in list of dataset paths
         'learner': ["cp_learner"],
-        'hyperparameter_tuning': [True, False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'hyperparameter_tuning': [False],
+        'batch_size_percentage': [1],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ["Consensus_SoftRbV"],
-        'do_scoring_function_list_prediction': [False,True], 
+        'cycles': [10], #-1 is flag for one batch
+        'column_to_learn': [""],
+        'do_scoring_function_list_prediction': [False], 
         'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2,3]
+        'query_function': ["greedy_query_function"], 
+        'statistical' : [0,1,2,3,4,5,6,7,8,9,10]
     }
 else:
     param_combinations = {
         "path_id": [0], #index in list of dataset paths
         'learner': ["cp_learner","rf_learner"],
-        'hyperparameter_tuning': [True, False],
+        'hyperparameter_tuning': [False],
         'batch_size_percentage': [1, 0.5, 0.1, 0.01],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
@@ -114,8 +114,10 @@ keys, values = zip(*param_combinations.items())
 combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
 random.shuffle(combinations)
+
 # Call the function with each combination
 for combo in combinations:
+    print("combo", combo)
     if combo["do_scoring_function_list_prediction"]:
         if combo['learner'] != "cp_learner":
             continue
@@ -156,6 +158,7 @@ for combo in combinations:
     active_learning_function(**combo)
 
 
+    
     try:
         os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
     except:

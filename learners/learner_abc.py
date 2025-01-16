@@ -88,9 +88,9 @@ class learner(ABC):
         #print("consensed")
         normalized = normalize_wrapper(self.dataset)
         consensed = self.dataset.merge(consensus(normalized, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
-        #print(consensed)
+        #print("cons\n", consensed)
         self.dataset_x = consensed.loc[:,"SMILES"].values
-        
+
         if self.do_scoring_function_list_prediction:
             self.dataset_y = self.dataset.loc[:,self.scoring_functions]
             #print(self.dataset_y)
@@ -109,6 +109,17 @@ class learner(ABC):
         
         self.consensus_before_learning()
 
+    def also_save_scoring_function_estimations(self, df):
+        counter = 0
+        while counter < 100:
+            filename = f"{self.path}/cycle{counter}.csv"
+            try:
+                df.to_csv(filename, index=True)
+                return
+            except FileExistsError:
+                counter += 1
+
+
     def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None, column_to_learn=None):
         #print("querying...")
         #uses the intrinisc query function to run the inference first and then query the dataset
@@ -120,6 +131,9 @@ class learner(ABC):
             print(scoring_function_estimations)
             scoring_function_estimations_df = pd.DataFrame(scoring_function_estimations, columns=scoring_functions)
             scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
+
+            self.also_save_scoring_function_estimations(scoring_function_estimations_df)
+
             normalized_predictions = normalize_wrapper(scoring_function_estimations_df)
 
             consensus_res = consensus(normalized_predictions, column_to_learn, scoring_functions)
