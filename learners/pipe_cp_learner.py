@@ -41,10 +41,10 @@ class pipe_cp_learner(learner):
    
 
         self.accelerator = None
-        self.config = {'depth': 2, #todo update to default
-            'ffn_hidden_dim': 2200,
-            'ffn_num_layers': 2,
-            'message_hidden_dim': 400}
+        self.config = {'depth': 3, 
+            'ffn_hidden_dim': 300,
+            'ffn_num_layers': 1,
+            'message_hidden_dim': 300}
         
         
 
@@ -65,19 +65,7 @@ class pipe_cp_learner(learner):
             self.cuda_available = False
             self.accelerator = "cpu"
 
-        # self.trainer = pl.Trainer(
-        # enable_checkpointing=True,
-        # enable_progress_bar=False,
-        # accelerator=self.accelerator,
-        # devices=1,
-        # max_epochs=100,  # Increase epochs for better training
-        # gradient_clip_val=0.5, #dunno 
-        # accumulate_grad_batches=4, #about 
-        # precision=16 #these values
-        # )
-        ##print("trainer initialized")
-        ##print("accelerator used:"+self.accelerator)
-        ##print("cpu cores used:"+str(self.cpu_cores))
+
 
 
 
@@ -111,57 +99,7 @@ class pipe_cp_learner(learner):
         ##print("predictions", np.concatenate(predictions, axis=0))
         return np.concatenate(predictions, axis=0)
     
-    # def train_mpnn_on_internal(self):
-    #     ##print("training...")
-    #     ##print("traing dimensions:", )
 
-
-    #     yss = self.dataset_y
-    #     try:
-    #         a = type(self.dataset_y[0])==np.float64
-    #         yss = yss.reshape(-1, 1)
-    #     except KeyError:
-    #         yss = yss.iloc[1:]
-    #         ##print("yss", yss)
-    #         yss=yss.values.tolist()
-
-    #     ##print("yss", yss)
-    #     all_data = [data.MoleculeDatapoint.from_smi(smi, y) for smi, y in zip(self.dataset_x, yss)]
-
-    #     # Use a more advanced featurizer if available
-    #     featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
-
-    #     # Create dataset and normalize targets
-    #     train_dset = data.MoleculeDataset(all_data, featurizer)
-    #     scaler = train_dset.normalize_targets()
-
-    #     # Use a larger batch size for GPU
-    #     batch_size = 256  #for training set sizes of 1000 - 10000 something between 64 and 512 should be ok
-    #     train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)
-
-    #     # Define model components
-    #     mp = nn.BondMessagePassing()
-    #     agg = nn.MeanAggregation()
-    #     output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
-    #     ffn = nn.RegressionFFN(output_transform=output_transform)
-
-    #     # Use batch normalization
-    #     batch_norm = True
-
-    #     # Define metrics
-    #     metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()] #
-
-    #     # Create MPNN model
-    #     mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
-
-    #     # Train the model
-    #     ##print("fitting...")
-    #     self.trainer.fit(mpnn, train_loader)
-
-
-    #     self.mpnn = mpnn
-    #     ##print("done training...")
-    #     gc.collect()
 
     def get_and_remove_internal_predictions(self):
         if not os.path.exists("./internal_al_cache/"):
@@ -172,12 +110,7 @@ class pipe_cp_learner(learner):
         return return_val
 
     def train_mpnn_on_internal(self):
-        ##print("training...")
-        #print("training...")
-        #print("dataset_y:")
-        #print(self.dataset_y)
         yss = self.dataset_y
-        # Handle different output shapes
         #!start panic fix
         ndim = 1
         if isinstance(yss, np.ndarray):
@@ -216,18 +149,35 @@ class pipe_cp_learner(learner):
         scaler = train_dset.normalize_targets()
 
         batch_size = 256
-        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)#shuffleis mir egal weil das datenset is ja komplett
+
+        #train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)#shuffleis mir egal weil das datenset is ja komplett
 
         # Define model components
-        mp = nn.BondMessagePassing()
-        agg = nn.MeanAggregation()
-        output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
-        ffn = nn.RegressionFFN(output_transform=output_transform, n_tasks=ndim) #!panic fix
+        #mp = nn.BondMessagePassing()
+        ##agg = nn.MeanAggregation()
+        #output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
+        #ffn = nn.RegressionFFN(output_transform=output_transform, n_tasks=ndim) #!panic fix
         #ffn = nn.RegressionFFN(n_tasks=ndim) #!panic fix2
 
 
+        #batch_norm = True
+        #metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
+
+                    # config is a dictionary containing hyperparameters used for the trial
+        depth = int(self.config["depth"])
+        ffn_hidden_dim = int(self.config["ffn_hidden_dim"])
+        ffn_num_layers = int(self.config["ffn_num_layers"])
+        message_hidden_dim = int(self.config["message_hidden_dim"])
+
+        train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)#shuffleis mir egal weil das datenset is ja komplett
+        mp = nn.BondMessagePassing(d_h=message_hidden_dim, depth=depth)
+        agg = nn.MeanAggregation()
+        output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
+        ffn = nn.RegressionFFN(output_transform=output_transform, input_dim=message_hidden_dim, hidden_dim=ffn_hidden_dim, n_layers=ffn_num_layers, n_tasks=ndim)
         batch_norm = True
         metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
+
+        
         mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
         ##print("fitting...")
@@ -239,7 +189,7 @@ class pipe_cp_learner(learner):
         max_epochs=100,  # Increase epochs for better training
         gradient_clip_val=0.5, #dunno 
         accumulate_grad_batches=4, #about 
-        precision=16, #these values
+        precision="16-mixed", #these values
         deterministic=True
         )
 
@@ -386,8 +336,7 @@ class pipe_cp_learner(learner):
         best_result = results.get_best_result()
         best_config = best_result.config
         self.config=best_config['train_loop_config']
-        print("best config", best_config)
-        print("slef.config", self.config)
+
         best_checkpoint_path = Path(best_result.checkpoint.path) / "checkpoint.ckpt"
         mpnn_from_checkpoint = torch.load(best_checkpoint_path)#like this way up here
         ray.shutdown()
