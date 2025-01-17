@@ -18,4 +18,4 @@ request_memory = 128G
 requirements = UidDomain == "cs.uni-saarland.de" 
 getenv = HOME
 +WantGPUHomeMounted = true
-queue 7
+queue 10
