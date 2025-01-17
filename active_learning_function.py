@@ -46,6 +46,8 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     percentage = batch_size_percentage/100
     actual_batch_size = math.floor(smids_pool.shape[0]*percentage) 
+    
+    initial_sample = first_query_function(smids_pool, actual_batch_size)
 
     if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
         actual_batch_size *= 10
@@ -56,7 +58,6 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
 
 
-    initial_sample = first_query_function(smids_pool, actual_batch_size)
     print("asdf",initial_sample)
 
 
