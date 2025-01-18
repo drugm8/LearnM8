@@ -79,8 +79,11 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     learner.teach(docked_inital_sample)
 
     for i in range(cycles+1):
-        if hyperparameter_tuning and i ==1:
-           learner.optimize_hyperparameters() #!time penalty
+        if hyperparameter_tuning and i == 0 and cycles == 1:
+            #fall hyp and -1
+            learner.optimize_hyperparameters() 
+        if hyperparameter_tuning and i == 1 and cycles != 1:
+           learner.optimize_hyperparameters()
 
         smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction, scoring_functions, column_to_learn)#
         
