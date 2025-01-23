@@ -6,12 +6,14 @@ import time
 import os
 import random
 import pandas as pd
+import numpy as np
 import argparse
 from helpers.helpers import hash_params
 from helpers.query_functions import greedy_query_function, random_query_function, cluster_query_function
 from learners.pipe_cp_learner import pipe_cp_learner as ler
 from learners.rf_learner import rf_learner as rf_learner
 from learners.gp_learner import gp_learner as gp_learner
+import random
 
 parser = argparse.ArgumentParser(description='Description of your program')
     
@@ -62,9 +64,9 @@ def get_query_function_from_string(query_function_string):
 
 if mode == "cpu":
     param_combinations = {
-        "path_id": [2], #index in list of dataset paths
+        "path_id": [0,1,2,3,4,5,6], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [False,True],
+        'hyperparameter_tuning': [False],
         'batch_size_percentage': [1, 0.5, 0.1, 0.01],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
@@ -72,24 +74,24 @@ if mode == "cpu":
         'column_to_learn': [""],
         'do_scoring_function_list_prediction': [False], #todo or take care!!
         'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2]
+        'query_function': ["greedy_query_function","random_query_function"],
+        'statistical' : [7,8,9]
     }
 
 elif mode == "gpu":
     param_combinations = {
         "path_id": [2], #index in list of dataset paths
         'learner': ["cp_learner"],
-        'hyperparameter_tuning': [False,True],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'hyperparameter_tuning': [False],
+        'batch_size_percentage': [1,0.5,0.1, 0.01],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay 
-        'cycles': [10, -1], #-1 is flag for one batch
+        'cycles': [10,-1], #-1 is flag for one batch
         'column_to_learn': [""],
         'do_scoring_function_list_prediction': [False,True], 
         'first_query_function': ["random_query_function"], 
-        'query_function': ["greedy_query_function", "random_query_function"], 
-        'statistical' : [0,1,2]
+        'query_function': ["greedy_query_function","random_query_function"],
+        'statistical' : [7,8,9]
     }
 else:
     param_combinations = {
@@ -155,7 +157,16 @@ for combo in combinations:
         print("skipping"+experiment_hash+"since it exists")
         continue
     combo['learner'].set_path(path)
-    active_learning_function(**combo)
+
+    seed=42
+    if statistical ==0 or statistical ==1 or statistical ==2:
+        seed=42
+    else: seed=statistical
+
+    random.seed(seed)
+    np.random.seed(seed)
+
+    active_learning_function(**combo, seed=seed)
 
 
     #try:
