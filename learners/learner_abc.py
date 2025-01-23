@@ -9,8 +9,7 @@ from helpers.normalization import normalize_wrapper
 from helpers.normalization import RESCORING_FUNCTIONS
 
 from sklearn.metrics import mean_squared_error
-#TODO convex plr and cnn !!!!change the pipeline so it runs on a single scoring function namely both of them here for gba
-NORMALIZE_SINGLE_SCORING_FUNCTIONS = True
+
 class learner(ABC):
     dataset = None
     do_scoring_function_list_prediction = None
@@ -66,14 +65,9 @@ class learner(ABC):
 
     def preprocess_learnable_data(self):
         if self.column_to_learn in RESCORING_FUNCTIONS.keys(): #preprocess learnable data in case of single scoring function
-                print("right case")
                 self.dataset_x = self.dataset.loc[:,"SMILES"].values
                 self.dataset_y = self.dataset.loc[:,self.column_to_learn]
-                if NORMALIZE_SINGLE_SCORING_FUNCTIONS:
-                    self.dataset_y = normalize_wrapper(pd.DataFrame(self.dataset.loc[:,self.column_to_learn])).values.ravel()
-                return
-        #todo append only normalized addition
-        
+                return        
         normalized = normalize_wrapper(self.dataset)
         consensed = self.dataset.merge(consensus(normalized, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
         self.dataset_x = consensed.loc[:,"SMILES"].values
