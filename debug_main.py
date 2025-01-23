@@ -88,7 +88,7 @@ elif mode == "gpu":
         'ground_truth_path': [None], #!stay 
         'cycles': [10,-1], #-1 is flag for one batch
         'column_to_learn': [""],
-        'do_scoring_function_list_prediction': [False,True], 
+        'do_scoring_function_list_prediction': [False], 
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function","random_query_function"],
         'statistical' : [7,8,9]
