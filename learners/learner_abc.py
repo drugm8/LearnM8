@@ -15,7 +15,7 @@ class learner(ABC):
     do_scoring_function_list_prediction = None
     column_to_learn = None
     scoring_functions = None
-
+    seed = None
 
     @abstractmethod
     def __init__(self, query_function, initial_x, initial_y):
@@ -48,9 +48,10 @@ class learner(ABC):
         self.batch_size = batch_size
     def set_path(self, path):
         self.path=path
-
-
-
+    def set_seed(self, seed):
+        self.seed = seed
+    def get_seed(self):
+        return self.seed
     def write_estimations(self, full_input_smids):
         if not os.path.exists(self.path+"cache.csv"):
             full_input_smids.rename(columns={"estimation": "cycle_0"}, inplace=True)
@@ -85,15 +86,13 @@ class learner(ABC):
 
         self.preprocess_learnable_data()
 
+
     def also_save_scoring_function_estimations(self, df):
-        counter = 0
-        while counter < 100:
+        for counter in range(100):
             filename = f"{self.path}/cycle{counter}.csv"
-            try:
+            if not os.path.exists(filename):
                 df.to_csv(filename, index=True)
                 return
-            except FileExistsError:
-                counter += 1
 
 
     def query(self, smids_x_input, path, do_consensing=False, scoring_functions=None, column_to_learn=None):
@@ -104,7 +103,7 @@ class learner(ABC):
 
         if do_consensing:
             scoring_function_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
-            print(scoring_function_estimations)
+            #print(scoring_function_estimations)
             scoring_function_estimations_df = pd.DataFrame(scoring_function_estimations, columns=scoring_functions)
             scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
 
@@ -121,7 +120,7 @@ class learner(ABC):
         full_input_smids["estimation"] = consensus_estimations
         mse = mean_squared_error(full_input_smids.loc[:,"estimation"], full_input_smids.loc[:,column_to_learn])
 
-        print(mse)
+        print("mse",mse)
 
         self.write_estimations(full_input_smids.loc[:,["ID", "estimation"]].copy())
 

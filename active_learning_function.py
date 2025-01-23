@@ -18,7 +18,9 @@ def active_learning_function(learner, hyperparameter_tuning= False,
                                  do_scoring_function_list_prediction=False, 
                                   first_query_function=None,
                                   query_function=None,
+                                  seed=None
                                   ):
+    learner.set_seed(seed)
     learner.set_query_function(query_function)
     scoring_functions = []
     
@@ -49,7 +51,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     percentage = batch_size_percentage/100
     actual_batch_size = math.floor(smids_pool.shape[0]*percentage) 
     
-    initial_sample = first_query_function(smids_pool, actual_batch_size)
+    initial_sample = first_query_function(smids_pool, actual_batch_size, seed)
 
     if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
         actual_batch_size *= 10
@@ -57,13 +59,6 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     learner.set_int_batch_size(batch_size = actual_batch_size)
     learner.set_scoring_functions(scoring_functions)
-
-
-
-    print("asdf",initial_sample)
-
-
-
     
 
     smids_pool = remove_right_df_from_left_df(smids_pool, initial_sample)
@@ -71,7 +66,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     #!happy
 
 
-    print("docked_inital sample:", docked_inital_sample)
+    #print("docked_inital sample:", docked_inital_sample)
     #normalized_scores = normalize_wrapper(docked_inital_sample)
     #print("normalized scores:", normalized_scores)
 

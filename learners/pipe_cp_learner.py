@@ -6,7 +6,7 @@ import torch
 import os
 import gc
 
-from lightning import pytorch as pl
+from lightning.pytorch import Trainer, seed_everything
 
 from chemprop import data, featurizers, models, nn
 
@@ -35,6 +35,7 @@ class pipe_cp_learner(learner):
         self.mpnn = None
         self.dataset_x = None
         self.dataset_y = None
+
         
         
 
@@ -76,7 +77,11 @@ class pipe_cp_learner(learner):
         self.train_mpnn_on_internal()
 
 
-    
+    def set_seed(self, seed):
+        self.seed = seed
+        torch.use_deterministic_algorithms(mode=True)
+        torch.manual_seed(seed)
+        seed_everything(seed, workers=True)
 
 
 
