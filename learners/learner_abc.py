@@ -6,10 +6,11 @@ from scripts.consensus.consensus_wrapper import final_consensus_wrapper as conse
 from helpers.normalization import normalize_wrapper
 
 
-from helpers.normalization import normalize_wrapper
+from helpers.normalization import RESCORING_FUNCTIONS
 
 from sklearn.metrics import mean_squared_error
-
+#TODO convex plr and cnn !!!!change the pipeline so it runs on a single scoring function namely both of them here for gba
+NORMALIZE_SINGLE_SCORING_FUNCTIONS = True
 class learner(ABC):
     dataset = None
     do_scoring_function_list_prediction = None
@@ -63,51 +64,32 @@ class learner(ABC):
             merged.to_csv(self.path+"cache.csv", index=False)
 
 
-    # def append_data(self, addition_of_dataset_x, addition_of_dataset_y):
-    #     Exception("append_data is deprecated, use append_data instead")
-    #     if (self.dataset_x is not None) and (self.dataset_y is not None):
-    #         if isinstance(addition_of_dataset_y, pd.DataFrame):
-    #             self.dataset_y=pd.concat([self.dataset_y, addition_of_dataset_y], axis=0, ignore_index=True)
-    #         else:
-    #             self.dataset_y=np.append(self.dataset_y, addition_of_dataset_y)
-    #         if isinstance(addition_of_dataset_x, pd.DataFrame):
-    #             self.dataset_x=pd.concat([self.dataset_x, addition_of_dataset_x], axis=0, ignore_index=True)
-    #         else:
-    #             self.dataset_x=np.append(self.dataset_x, addition_of_dataset_x)
-    #     else:
-    #         self.dataset_y = addition_of_dataset_y
-    #         self.dataset_x = addition_of_dataset_x
+    def preprocess_learnable_data(self):
+        if self.column_to_learn in RESCORING_FUNCTIONS.keys(): #preprocess learnable data in case of single scoring function
+                print("right case")
+                self.dataset_x = self.dataset.loc[:,"SMILES"].values
+                self.dataset_y = self.dataset.loc[:,self.column_to_learn]
+                if NORMALIZE_SINGLE_SCORING_FUNCTIONS:
+                    self.dataset_y = normalize_wrapper(pd.DataFrame(self.dataset.loc[:,self.column_to_learn])).values.ravel()
+                return
+        #todo append only normalized addition
         
-    #     self.consensus_before_learning()
-        #print("done appendign x",self.dataset_x)
-        #print("done appendign y", self.dataset_y)
-
-    def consensus_before_learning(self):
-        #print("consensus before learning")
-        #print(self.dataset)
-        #print("consensed")
         normalized = normalize_wrapper(self.dataset)
         consensed = self.dataset.merge(consensus(normalized, self.column_to_learn, self.scoring_functions), on="ID", how="inner")
-        #print("cons\n", consensed)
         self.dataset_x = consensed.loc[:,"SMILES"].values
-
         if self.do_scoring_function_list_prediction:
             self.dataset_y = self.dataset.loc[:,self.scoring_functions]
-            #print(self.dataset_y)
         else:
             self.dataset_y = consensed.loc[:,self.column_to_learn]
-
-        #print(self.dataset_x)
-        #print(self.dataset_y)
         return 
     
     def append_data(self, addition):
-        if self.dataset is not None:
+        if self.dataset is not None: #append data to existing dataset
             self.dataset = pd.concat([self.dataset, addition], axis=0, ignore_index=True)
-        else:
+        else: #create write full data to learner
             self.dataset = addition
-        
-        self.consensus_before_learning()
+
+        self.preprocess_learnable_data()
 
     def also_save_scoring_function_estimations(self, df):
         counter = 0

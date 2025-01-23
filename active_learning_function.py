@@ -36,7 +36,9 @@ def active_learning_function(learner, hyperparameter_tuning= False,
             scoring_functions.append(col)
         elif col in CONSENSUS_METHODS.keys():
             ##print("added ", col, "to consensus methods")
-            column_to_learn = col
+            if column_to_learn =="":
+                column_to_learn = col
+            
         else:
            print("column ", col, " is not a scoring function or a consensus method")
 

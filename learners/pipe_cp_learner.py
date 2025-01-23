@@ -276,7 +276,7 @@ class pipe_cp_learner(learner):
         # Scaling config controls the resources used by Ray
         if self.cuda_available:
             scaling_config = ScalingConfig(
-                num_workers=self.cpu_cores-1,
+                num_workers=1,
                 use_gpu=True, # change to True if you want to use GPU
             )
         else:
