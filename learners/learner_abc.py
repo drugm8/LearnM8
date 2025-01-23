@@ -126,7 +126,7 @@ class learner(ABC):
 
         merged_and_reduced_smids =  pd.merge(smids_x_input, full_input_smids, on=["ID", "SMILES"], how='inner')
 
-        queried = self.query_function(merged_and_reduced_smids, batch_size=self.batch_size)
+        queried = self.query_function(merged_and_reduced_smids, batch_size=self.batch_size, seed=self.seed)
         return queried
 
     def set_column_to_learn(self, column_to_learn):

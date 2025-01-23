@@ -10,7 +10,7 @@ from itertools import combinations
 import numpy as np
 from functools import partial
 
-def greedy_query_function(x_i, batch_size):
+def greedy_query_function(x_i, batch_size, seed):
     x_input = x_i.copy()
 
     sorted_df = x_input.sort_values(by='estimation', ascending=False)
