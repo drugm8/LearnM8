@@ -572,12 +572,23 @@ def eftable():
     single_ef_table_column(5)
         
      
- 
-
+def find_kat2a():
+    for hash in os.listdir(FOLDER_PATH):
+        combination_path = FOLDER_PATH+ hash + '/combination.txt'
+        if not os.path.exists(combination_path):
+            #print("no combination for hash", hash)
+            continue
+        combinations = {}
+        with open(FOLDER_PATH+ hash + '/combination.txt', 'r') as file:
+            combinations = json.loads(file.read())
+        if combinations["ground_truth_path"] == "./data/KAT2A_5h84_scoring_and_consensus_maxAL.csv":
+            print(hash)
+            break
 def main():
     #cross_target_avg_rf_gredy_vs_random()
     #cross_target_batch_size_comparison_greedy()
     #tenvstwo()
     #extensiveGBA()
-    eftable()
+    #eftable()
+    find_kat2a()
 main()
