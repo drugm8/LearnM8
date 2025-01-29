@@ -1,4 +1,0 @@
-2024-09-29 19:44:19 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:TOPSIS_best_scaled;
-2024-09-29 21:18:13 [29.62, 18.42, 21.12, 27.04, 30.36, 34.36, 38.84, 42.58, 46.2, 48.74, 51.800000000000004, ]
-2024-09-29 21:21:29 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:WeightedSumModel_best_scaled;
-2024-09-29 22:57:42 [27.66, 18.4, 23.18, 28.54, 33.98, 35.339999999999996, 40.12, 43.64, 46.82, 49.26, 52.26, ]

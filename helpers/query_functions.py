@@ -20,7 +20,7 @@ def greedy_query_function(x_i, batch_size, seed):
 
 
 def random_query_function(x_input, batch_size, seed):
-    dataset = x_input.sample(frac=1, random_state=seed)
+    dataset = x_input.sample(frac=1, random_state=42)#!CHANGE ME  BACK
 
     return dataset.head(batch_size)
 

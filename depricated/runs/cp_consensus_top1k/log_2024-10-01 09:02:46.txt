@@ -1,3 +1,0 @@
-2024-10-01 09:04:36 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:ECR_best_scaled;
-2024-10-01 10:38:49 [12.64, 10.639999999999999, 13.86, 14.979999999999999, 19.040000000000003, 19.939999999999998, 22.66, 24.6, 26.179999999999996, 27.92, 29.439999999999998, ]
-2024-10-01 10:42:22 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:RbR_best_scaled;

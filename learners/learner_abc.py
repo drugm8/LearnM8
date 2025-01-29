@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import os
 import pandas as pd
 import numpy as np
-from scripts.consensus.consensus_wrapper import final_consensus_wrapper as consensus
+from helpers.consensus_wrapper import final_consensus_wrapper as consensus
 from helpers.normalization import normalize_wrapper
 
 
