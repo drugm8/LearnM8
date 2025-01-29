@@ -79,9 +79,10 @@ def enrichmentfactor(activity_path, cycle_protocol, threshold_percent):
         active_count = activity[activity['ID'].isin(top_ids)]['Activity'].sum()
 
         ef = (active_count/threshold) * (all_compounds/all_actives)
-        ef_list.append(ef)
+        #print(ef[0])
+        ef_list.append(ef[0])
 
-    
+    #print("end")
     return ef_list
 
 
@@ -103,7 +104,7 @@ def enrichmentfactor_GT(activity_path, ground, threshold_percent):
 
 
     
-    return ef
+    return ef[0]
 
 def is_dict_in_list(target_dict, dict_list):
     #checks whether a dictionary is in a list of dictionaries
@@ -209,7 +210,7 @@ def avg_combinatorial_space_no_wiskers(combinations_to_avg):
     
     
 
-def single_experiment_with_wiskers(combination):
+def single_experiment_with_wiskers_topx(combination):
     cycles=combination["cycles"]
     tuplist = ""
     if cycles == 10:
@@ -269,7 +270,7 @@ def single_experiment_with_wiskers(combination):
             #ret.append(thistuple)
         return tuplist
 
-def frame():
+def findbroken():
     for hash in os.listdir(FOLDER_PATH):
         combination_path = FOLDER_PATH+ hash + '/combination.txt'
         if not os.path.exists(combination_path):
@@ -343,7 +344,7 @@ def cross_target_avg_rf_gredy_vs_random():
     for i in range(len(path_list)):
         _avg_of_all_greedy = {'learner': ['rf_learner'], 
                                  'hyperparameter_tuning': [False], 
-                                 'batch_size_percentage': [1,0.5,0.1], 
+                                 'batch_size_percentage': [1,0.5,0.1,0.01], 
                                  'smids_input_path': [path_list[i]], 
                                  'ground_truth_path': [path_list[i]], 
                                  'cycles': [10], #!ONLY ONE
@@ -363,7 +364,7 @@ def cross_target_avg_rf_gredy_vs_random():
     for i in range(len(path_list)):
         _avg_of_all_random = {'learner': ['rf_learner'], 
                                  'hyperparameter_tuning': [False], 
-                                 'batch_size_percentage': [1,0.5,0.1], 
+                                 'batch_size_percentage': [1,0.5,0.1,0.01], 
                                  'smids_input_path': [path_list[i]], 
                                  'ground_truth_path': [path_list[i]], 
                                  'cycles': [10], #!ONLY ONE
@@ -394,13 +395,13 @@ def cross_target_batch_size_comparison_greedy():
                                  'query_function': 'greedy_query_function'}
 
             print("batch_size_comparison:-----"+str(bs)+"----"+str(path_list[i]))
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
     print("\n")
     #for i in len(path_list):
 
 
 #comb= {"learner": "rf_learner", "hyperparameter_tuning": False, "batch_size_percentage": 1, "smids_input_path": "./data/GBA_2v3e_scoring_and_consensus_maxAL.csv", "ground_truth_path": "./data/GBA_2v3e_scoring_and_consensus_maxAL.csv", "cycles": 10, "column_to_learn": "ConvexPLR", "do_scoring_function_list_prediction": False, "first_query_function": "random_query_function", "query_function": "greedy_query_function"}
-#print(single_experiment_with_wiskers(comb))
+#print(single_experiment_with_wiskers_topx(comb))
 
 def tenvstwo():
     for i in range(len(path_list)):
@@ -417,7 +418,7 @@ def tenvstwo():
                                  'query_function': 'greedy_query_function'}
 
             print("tenvstwo: cycle10 batch_size_comparison:-----"+str(bs)+"----"+str(path_list[i]))
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
             print("\n")
             _avg_of_all_greedy = {'learner': 'rf_learner', 
                                  'hyperparameter_tuning': False, 
@@ -431,7 +432,7 @@ def tenvstwo():
                                  'query_function': 'greedy_query_function'}
 
             print("tenvstwo: cycle-1 batch_size_comparison:-----"+str(bs)+"----"+str(path_list[i]))
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
 
 def extensiveGBA():
     for bs in [1,0.5,0.1, 0.01]:
@@ -448,7 +449,7 @@ def extensiveGBA():
                                  'query_function': 'greedy_query_function'}
 
             print(str("%")+"GBA-----"+str(bs)+"----"+str(cy)+"----rf_NOT_tuned")
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
             print("\n")
             _avg_of_all_greedy = {'learner': 'rf_learner', 
                                  'hyperparameter_tuning': True, 
@@ -462,7 +463,7 @@ def extensiveGBA():
                                  'query_function': 'greedy_query_function'}
 
             print(str("%")+"GBA-----"+str(bs)+"----"+str(cy)+"----rf_TUNED")
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
             _avg_of_all_greedy = {'learner': 'cp_learner', 
                                  'hyperparameter_tuning': False, 
                                  'batch_size_percentage': bs, 
@@ -475,10 +476,10 @@ def extensiveGBA():
                                  'query_function': 'greedy_query_function'}
 
             print(str("%")+"GBA-----"+str(bs)+"----"+str(cy)+"----chemprop")
-            print(single_experiment_with_wiskers(_avg_of_all_greedy))
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
 
 
-def avg_ef_per_combo(combo,threshold):
+def ef_list_per_combo(combo,threshold):
     for hash in os.listdir(FOLDER_PATH):
         combination_path = FOLDER_PATH+ hash + '/combination.txt'
         if not os.path.exists(combination_path):
@@ -506,16 +507,17 @@ def avg_ef_per_combo(combo,threshold):
             
             cycle_protocol = pd.read_csv(FOLDER_PATH+ hash + '/' + stat+"/cache.csv")
 
-
+            cycle_list = []
             if (cycle_protocol.shape[1]==3 and combinations["cycles"]== -1) | (cycle_protocol.shape[1]==12 and combinations["cycles"]==10):
                 ef = enrichmentfactor(activity_path, cycle_protocol, threshold)
                 res.append(ef)
             else:
                 print(hash + " ------ " + stat + " is invalid with the config:")
                 print(combinations)
+            
 
      
-    return average_lists(res)
+    return res
 
 def single_ef_table_column(pathlistid):
         combo = {'learner': 'rf_learner', 
@@ -529,9 +531,10 @@ def single_ef_table_column(pathlistid):
                                  'first_query_function': 'random_query_function', 
                                  'query_function': 'greedy_query_function'}
 
-        ef_activity_10 = avg_ef_per_combo(combo,10)
-        ef_activity_1 = avg_ef_per_combo(combo,1)
-        ef_activity_01 = avg_ef_per_combo(combo,0.1)
+        ef_activity_10 = average_lists(ef_list_per_combo(combo,10))
+        ef_activity_1 = average_lists(ef_list_per_combo(combo,1))
+        ef_activity_01 = average_lists(ef_list_per_combo(combo,0.1))
+
 
         ef_gt_10 = enrichmentfactor_GT(activity_file_mapping[path_list[pathlistid]], pd.read_csv(path_list[pathlistid]), 10)
         ef_gt_1 = enrichmentfactor_GT(activity_file_mapping[path_list[pathlistid]], pd.read_csv(path_list[pathlistid]), 1)
@@ -545,9 +548,9 @@ def single_ef_table_column(pathlistid):
         \SI{{{ef_activity_1[-1]}}}{{\percent}} & 
         \SI{{{ef_activity_01[-1]}}}{{\percent}} \end{{tabular}}  &
         \\begin{{tabular}}{{c|c|c}} 
-        \SI{{{ef_gt_10[-1]}}}{{\percent}} &
-        \SI{{{ef_gt_1[-1]}}}{{\percent}} &
-        \SI{{{ef_gt_01[-1]}}}{{\percent}} \end{{tabular}} \\\\""")
+        \SI{{{ef_gt_10}}}{{\percent}} &
+        \SI{{{ef_gt_1}}}{{\percent}} &
+        \SI{{{ef_gt_01}}}{{\percent}} \end{{tabular}} \\\\""")
 
 def eftable():
 
@@ -579,16 +582,283 @@ def find_kat2a():
             #print("no combination for hash", hash)
             continue
         combinations = {}
+        comb={'learner': 'rf_learner', 
+                                 'hyperparameter_tuning': False, 
+                                 'batch_size_percentage': 1, 
+                                 'smids_input_path': "./data/KAT2A_5h84_scoring_and_consensus_maxAL.csv", 
+                                 'ground_truth_path': "./data/KAT2A_5h84_scoring_and_consensus_maxAL.csv", 
+                                 'cycles': 10, #!ONLY ONE
+                                 'column_to_learn': '', 
+                                 'do_scoring_function_list_prediction': False, 
+                                 'first_query_function': 'random_query_function', 
+                                 'query_function': 'greedy_query_function'}
+
         with open(FOLDER_PATH+ hash + '/combination.txt', 'r') as file:
             combinations = json.loads(file.read())
-        if combinations["ground_truth_path"] == "./data/KAT2A_5h84_scoring_and_consensus_maxAL.csv":
+        if comb == combinations:
             print(hash)
-            break
+
+
+def single_experiment_with_wiskers_ef(combination):
+    cycles=combination["cycles"]
+    tuplist = ""
+    if cycles == 10:
+        res_num = 11
+    else:
+        res_num= 2
+
+    for hash in os.listdir(FOLDER_PATH):
+        combination_path = FOLDER_PATH+ hash + '/combination.txt'
+        if not os.path.exists(combination_path):
+            #print("no combination for hash", hash)
+            continue
+
+
+
+        combinations = {}
+        with open(FOLDER_PATH+ hash + '/combination.txt', 'r') as file:
+            combinations = json.loads(file.read())
+
+        #selection logic
+
+        if combination != combinations:
+            continue
+        #print(hash)
+
+        data_path = combinations["ground_truth_path"]
+        res = []
+        for stat in os.listdir(FOLDER_PATH+ hash):
+            if (stat == "combination.txt") | ( not os.path.exists(FOLDER_PATH+ hash + '/' + stat + "/cache.csv")):
+                continue
+            if stat == "7" or stat == "8" or stat == "9":
+                continue
+            cycle_protocol = pd.read_csv(FOLDER_PATH+ hash + '/' + stat+"/cache.csv")
+
+
+            if (cycle_protocol.shape[1]==3 and combinations["cycles"]== -1) | (cycle_protocol.shape[1]==12 and combinations["cycles"]==10):
+                res.append(enrichmentfactor(activity_file_mapping[data_path], cycle_protocol, 0.1))
+            else:
+                print(hash + " ------ " + stat + " is invalid with the config:")
+                print(combinations)
+
+        #print(res)
+        #print(hash)
+        assert len(res)==3
+        print(res)
+        for i in range(0,res_num):
+
+            mid = statistics.mean([res[0][i],res[1][i],res[2][i]])
+            top = get_largest(res[0][i],res[1][i],res[2][i])
+            bot = get_smallest(res[0][i],res[1][i],res[2][i])        
+
+            tuplist+= str((i,mid)) +"+= (0,"+str(abs(mid-top))+")"
+            tuplist+= "\n"
+            tuplist+= str((i,mid)) +"-= (0,"+str(abs(mid-bot))+")"
+            tuplist+= "\n"
+            #thistuple = (get_smallest(res[0][i],res[1][i],res[2][i]), get_middle(res[0][i],res[1][i],res[2][i]), get_largest(res[0][i],res[1][i],res[2][i]))
+            #ret.append(thistuple)
+        return tuplist
+            
+def ef_top_consensus_ssf():
+    for sf in ["","ConvexPLR"]:
+        for bs in [1,0.5,0.1, 0.01]:
+            _avg_of_all_greedy = {'learner': 'rf_learner', 
+                                 'hyperparameter_tuning': False, 
+                                 'batch_size_percentage': bs, 
+                                 'smids_input_path': path_list[1], 
+                                 'ground_truth_path': path_list[1], 
+                                 'cycles': 10, #!ONLY ONE
+                                 'column_to_learn': sf, 
+                                 'do_scoring_function_list_prediction': False, 
+                                 'first_query_function': 'random_query_function', 
+                                 'query_function': 'greedy_query_function'}
+
+            print(str("%")+"GBA-----"+str(bs)+"----"+str(sf)+"----topx")
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
+            print("\n")
+    for sf in ["","ConvexPLR"]:
+        for bs in [1,0.5,0.1, 0.01]:
+            _avg_of_all_greedy = {'learner': 'rf_learner', 
+                                 'hyperparameter_tuning': False, 
+                                 'batch_size_percentage': bs, 
+                                 'smids_input_path': path_list[1], 
+                                 'ground_truth_path': path_list[1], 
+                                 'cycles': 10, #!ONLY ONE
+                                 'column_to_learn': sf, 
+                                 'do_scoring_function_list_prediction': False, 
+                                 'first_query_function': 'random_query_function', 
+                                 'query_function': 'greedy_query_function'}
+
+            print(str("%")+"GBA-----"+str(bs)+"----"+str(sf)+"----enrichment")
+            print(single_experiment_with_wiskers_ef(_avg_of_all_greedy))
+            print("\n")
+    
+
+
+
+
+def predict_tup():
+    for lis_pred in [True,False]:
+        for bs in [1,0.5,0.1, 0.01]:
+            _avg_of_all_greedy = {'learner': 'cp_learner', 
+                                 'hyperparameter_tuning': False, 
+                                 'batch_size_percentage': bs, 
+                                 'smids_input_path': path_list[1], 
+                                 'ground_truth_path': path_list[1], 
+                                 'cycles': 10, #!ONLY ONE
+                                 'column_to_learn': "", 
+                                 'do_scoring_function_list_prediction': lis_pred, 
+                                 'first_query_function': 'random_query_function', 
+                                 'query_function': 'greedy_query_function'}
+            print(str("%")+"GBA-----"+str(bs)+"----prdict_list"+str(lis_pred)+"----rf")
+            print(single_experiment_with_wiskers_topx(_avg_of_all_greedy))
+
+
+def calculate_stats(numbers):
+    if len(numbers) < 4:
+        raise ValueError("Need at least 4 numbers for meaningful statistics")
+        
+    sorted_nums = sorted(numbers)
+    n = len(sorted_nums)
+    
+    # Calculate quartiles using linear interpolation
+    def get_quartile(p):
+        k = p * (n - 1)
+        f = int(k)
+        c = math.ceil(k)
+        if f == c:
+            return sorted_nums[f]
+        return sorted_nums[f] * (c - k) + sorted_nums[c] * (k - f)
+    
+    lower_quartile = get_quartile(0.25)
+    median = get_quartile(0.5)
+    upper_quartile = get_quartile(0.75)
+    
+    iqr = upper_quartile - lower_quartile
+    lower_whisker = max(min(sorted_nums), lower_quartile - 1.5 * iqr)
+    upper_whisker = min(max(sorted_nums), upper_quartile + 1.5 * iqr)
+    average = sum(sorted_nums) / n
+    
+    print({
+        'lower_whisker': lower_whisker,
+        'lower_quartile': lower_quartile,
+        'median': median,
+        'upper_quartile': upper_quartile,
+        'upper_whisker': upper_whisker,
+        'average': average
+    })
+
+def boxplot_greedy_vs_random():
+    print("greedy:")
+    greedylist = []
+    for i in range(len(path_list)):
+        _avg_of_all_greedy = {'learner': ['rf_learner'], 
+                                 'hyperparameter_tuning': [False], 
+                                 'batch_size_percentage': [1,0.5,0.1], 
+                                 'smids_input_path': [path_list[i]], 
+                                 'ground_truth_path': [path_list[i]], 
+                                 'cycles': [10], #!ONLY ONE
+                                 'column_to_learn': [''], 
+                                 'do_scoring_function_list_prediction': [False], 
+                                 'first_query_function': ['random_query_function'], 
+                                 'query_function': ['greedy_query_function']}
+
+        keys, values = zip(*_avg_of_all_greedy.items())
+        avg_of_all_greedy = [dict(zip(keys, v)) for v in itertools.product(*values)]
+        #print("lastiter:"+str(path_list[i]))
+        greedylist.append(avg_combinatorial_space_no_wiskers(avg_of_all_greedy)[-1])
+    calculate_stats(greedylist)
+    print("random:")
+    randomlist = []
+    for i in range(len(path_list)):
+        _avg_of_all_greedy = {'learner': ['rf_learner'], 
+                                 'hyperparameter_tuning': [False], 
+                                 'batch_size_percentage': [1,0.5,0.1], 
+                                 'smids_input_path': [path_list[i]], 
+                                 'ground_truth_path': [path_list[i]], 
+                                 'cycles': [10], #!ONLY ONE
+                                 'column_to_learn': [''], 
+                                 'do_scoring_function_list_prediction': [False], 
+                                 'first_query_function': ['random_query_function'], 
+                                 'query_function': ['random_query_function']}
+
+        keys, values = zip(*_avg_of_all_greedy.items())
+        avg_of_all_greedy = [dict(zip(keys, v)) for v in itertools.product(*values)]
+        #print("lastiter:"+str(path_list[i]))
+        randomlist.append(avg_combinatorial_space_no_wiskers(avg_of_all_greedy)[-1])
+    calculate_stats(randomlist)
+
+def boxplot_batch_size():
+    print("greedy:")
+    for bs in [1,0.5,0.1, 0.01]:
+        print(bs)
+        bslist = []
+        for i in range(len(path_list)):
+            _avg_of_all_greedy = {'learner': ['rf_learner'], 
+                                 'hyperparameter_tuning': [False], 
+                                 'batch_size_percentage': [bs], 
+                                 'smids_input_path': [path_list[i]], 
+                                 'ground_truth_path': [path_list[i]], 
+                                 'cycles': [10], #!ONLY ONE
+                                 'column_to_learn': [''], 
+                                 'do_scoring_function_list_prediction': [False], 
+                                 'first_query_function': ['random_query_function'], 
+                                 'query_function': ['greedy_query_function']}
+
+            keys, values = zip(*_avg_of_all_greedy.items())
+            avg_of_all_greedy = [dict(zip(keys, v)) for v in itertools.product(*values)]
+
+            bslist.append(avg_combinatorial_space_no_wiskers(avg_of_all_greedy)[-1])
+        calculate_stats(bslist)
+
+def boxplot_tenvstwo():
+    print("tenvstwo: cycle10 batch_size_comparison:-----")
+    for cy in [10,-1]:
+        print(cy)
+        cylist = []
+        for bs in [1,0.1]:
+            for i in range(len(path_list)):
+                _avg_of_all_greedy = {'learner': ['rf_learner'], 
+                                 'hyperparameter_tuning': [False], 
+                                 'batch_size_percentage': [bs], 
+                                 'smids_input_path': [path_list[i]], 
+                                 'ground_truth_path': [path_list[i]], 
+                                 'cycles': [cy], #!ONLY ONE
+                                 'column_to_learn': [''], 
+                                 'do_scoring_function_list_prediction': [False], 
+                                 'first_query_function': ['random_query_function'], 
+                                 'query_function': ['greedy_query_function']}
+
+                keys, values = zip(*_avg_of_all_greedy.items())
+                avg_of_all_greedy = [dict(zip(keys, v)) for v in itertools.product(*values)]
+                cylist.append(avg_combinatorial_space_no_wiskers(avg_of_all_greedy)[-1])
+        calculate_stats(cylist)
+
 def main():
-    #cross_target_avg_rf_gredy_vs_random()
-    #cross_target_batch_size_comparison_greedy()
-    #tenvstwo()
-    #extensiveGBA()
-    #eftable()
-    find_kat2a()
+    print("findbroken:")
+    findbroken()
+    print("cross_target_avg_rf_gredy_vs_random:")
+    cross_target_avg_rf_gredy_vs_random()
+    print("boxplot_greedy_vs_random:")
+    boxplot_greedy_vs_random()
+    print("cross_target_batch_size_comparison_greedy:")
+    cross_target_batch_size_comparison_greedy()
+    print("boxplot_batch_size:")
+    boxplot_batch_size()
+    print("tenvstwo:")
+    tenvstwo()
+    print("boxplot_tenvstwo:")
+    boxplot_tenvstwo()
+    print("extensiveGBA:")
+    extensiveGBA()
+    print("eftable:")
+    eftable()
+    print("ef_top_consensus_ssf:")
+    ef_top_consensus_ssf()
+    print("predict_tup:")
+    predict_tup()
+    #boxplot
+    
+    #find_kat2a()
+    pass
 main()

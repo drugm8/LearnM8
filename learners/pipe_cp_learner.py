@@ -79,10 +79,10 @@ class pipe_cp_learner(learner):
 
     def set_seed(self, seed):
         self.seed = seed
-        torch.use_deterministic_algorithms(mode=True)
-        torch.manual_seed(seed)
-        seed_everything(seed, workers=True)
-
+        #torch.use_deterministic_algorithms(mode=True)
+        #torch.manual_seed(seed)
+        #seed_everything(seed, workers=True)
+#
 
 
     def estimate(self, x_input):

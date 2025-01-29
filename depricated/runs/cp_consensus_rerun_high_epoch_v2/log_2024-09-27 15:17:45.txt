@@ -1,1 +1,0 @@
-2024-09-27 15:19:27 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:Zscore_avg_scaled;

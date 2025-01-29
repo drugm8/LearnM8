@@ -1,2 +1,0 @@
-2024-09-30 16:48:24 Batch size: 1000; active learning cycles: 10; top X of X percentage score: 5000; Machine learning architecture:chemprop_gpu_high epoch; Consensus Method:WeightedSumModel_best_scaled;
-2024-09-30 17:57:03 [16.919999999999998, 17.740000000000002, 18.16, 20.36, 19.74, 20.24, 18.2, 19.32, 19.84, 20.44, 18.44, ]
