@@ -8,7 +8,7 @@ import statistics
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-FOLDER_PATH = "./new/results/"
+FOLDER_PATH = "./results/"
 TOPXPERCENTAGE_AS_FLOAT = 0.01
 
 path_list= [ 
