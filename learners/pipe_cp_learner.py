@@ -71,8 +71,6 @@ class pipe_cp_learner(learner):
 
 
     def teach(self, addition):
-        #print("teaching additon:")
-        #print(addition)
         self.append_data(addition)
         self.train_mpnn_on_internal()
 
@@ -86,11 +84,10 @@ class pipe_cp_learner(learner):
 
 
     def estimate(self, x_input):
-        ##print("xiputputputputputputputputput", x_input)
         test_data = [data.MoleculeDatapoint.from_smi(smi) for smi in x_input]
         featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
         test_dset = data.MoleculeDataset(test_data, featurizer)
-        test_loader = data.build_dataloader(test_dset, num_workers=8, batch_size=256, shuffle=False) #!!!! ohmygod shuffle
+        test_loader = data.build_dataloader(test_dset, num_workers=8, batch_size=256, shuffle=False) #!!!! shuffle is wrong in docu, we have to explicitly set it to false
         with torch.inference_mode():
             inference_trainer = pl.Trainer(
                 enable_checkpointing=True,
@@ -98,10 +95,10 @@ class pipe_cp_learner(learner):
                 accelerator="auto",
                 devices=1
             )
-            predictions = inference_trainer.predict(self.mpnn, test_loader)
+            predictions = inference_trainer.predict(self.mpnn, test_loader) #main line
 
         gc.collect()
-        ##print("predictions", np.concatenate(predictions, axis=0))
+
         return np.concatenate(predictions, axis=0)
     
 
@@ -116,7 +113,6 @@ class pipe_cp_learner(learner):
 
     def train_mpnn_on_internal(self):
         yss = self.dataset_y
-        #!start panic fix
         ndim = 1
         if isinstance(yss, np.ndarray):
             #print("Training output ndarray")
@@ -155,20 +151,7 @@ class pipe_cp_learner(learner):
 
         batch_size = 256
 
-        #train_loader = data.build_dataloader(train_dset, batch_size=batch_size, num_workers=self.cpu_cores)#shuffleis mir egal weil das datenset is ja komplett
 
-        # Define model components
-        #mp = nn.BondMessagePassing()
-        ##agg = nn.MeanAggregation()
-        #output_transform = nn.UnscaleTransform.from_standard_scaler(scaler)
-        #ffn = nn.RegressionFFN(output_transform=output_transform, n_tasks=ndim) #!panic fix
-        #ffn = nn.RegressionFFN(n_tasks=ndim) #!panic fix2
-
-
-        #batch_norm = True
-        #metric_list = [nn.metrics.RMSEMetric(), nn.metrics.MAEMetric()]
-
-                    # config is a dictionary containing hyperparameters used for the trial
         depth = int(self.config["depth"])
         ffn_hidden_dim = int(self.config["ffn_hidden_dim"])
         ffn_num_layers = int(self.config["ffn_num_layers"])
@@ -185,7 +168,6 @@ class pipe_cp_learner(learner):
         
         mpnn = models.MPNN(mp, agg, ffn, batch_norm, metric_list)
 
-        ##print("fitting...")
         trainer= pl.Trainer(
         enable_checkpointing=True,
         enable_progress_bar=False,

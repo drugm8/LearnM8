@@ -101,9 +101,8 @@ class learner(ABC):
         full_input_smids = pd.read_csv(path)
 
 
-        if do_consensing:
+        if do_consensing: #normal case where we do consensus and everything
             scoring_function_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
-            #print(scoring_function_estimations)
             scoring_function_estimations_df = pd.DataFrame(scoring_function_estimations, columns=scoring_functions)
             scoring_function_estimations_df["ID"] = full_input_smids.loc[:,"ID"]
 
@@ -113,9 +112,9 @@ class learner(ABC):
 
             consensus_res = consensus(normalized_predictions, column_to_learn, scoring_functions)
             consensus_estimations = consensus_res.loc[:,column_to_learn]
-        else:
+        else: #case where we just estimate all the scoring funcitons
             consensus_estimations = self.estimate(full_input_smids.loc[:,"SMILES"])
-            #print("query estimations:", consensus_estimations)
+
 
         full_input_smids["estimation"] = consensus_estimations
         mse = mean_squared_error(full_input_smids.loc[:,"estimation"], full_input_smids.loc[:,column_to_learn])

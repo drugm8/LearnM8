@@ -11,10 +11,19 @@ import numpy as np
 from functools import partial
 
 def greedy_query_function(x_i, batch_size, seed):
+    """
+    Greedy query function that selects the top `batch_size` compounds based on their estimated values.
+    Args:
+        x_i (pd.DataFrame): Input DataFrame containing compounds with an 'estimation' column.
+        batch_size (int): Number of compounds to select.
+        seed (int): Random seed for reproducibility.
+    Returns:
+        pd.DataFrame: DataFrame containing the top `batch_size` compounds sorted by their 'estimation' values.
+    """
     x_input = x_i.copy()
 
     sorted_df = x_input.sort_values(by='estimation', ascending=False)
-    #print(sorted_df)
+
     queried_df = sorted_df.head(batch_size)
     return queried_df
 
@@ -27,7 +36,7 @@ def random_query_function(x_input, batch_size, seed):
 #def cluster_query_function(x_input,estimation, batch_size):
 
 
-def cluster_query_function(x_input,estimation, batch_size):
+def cluster_query_function(x_input,estimation, batch_size): #unused
 
     ##!RAM CONSTRAINT
     _len = len(x_input["SMILES"].values)
@@ -98,7 +107,7 @@ def cluster_query_function(x_input,estimation, batch_size):
     #print("# Selected molecules:", len(selected_molecules))
     return selected_molecules
 
-def tanimoto_distance_matrix(fp_list):
+def tanimoto_distance_matrix(fp_list): #unused
     """Calculate distance matrix for fingerprint list"""
     dissimilarity_matrix = []
     # Notice how we are deliberately skipping the first and last items in the list
@@ -110,7 +119,7 @@ def tanimoto_distance_matrix(fp_list):
         dissimilarity_matrix.extend([1 - x for x in similarities])
     return dissimilarity_matrix
 
-def cluster_fingerprints(fingerprints, cutoff=0.4):#TODO cutoff has high impact on cluster variance
+def cluster_fingerprints(fingerprints, cutoff=0.4):#unused
     """Cluster fingerprints
     Parameters:
         fingerprints

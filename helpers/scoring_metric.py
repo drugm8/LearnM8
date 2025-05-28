@@ -2,6 +2,16 @@ import pandas as pd
 
 
 def top_x_of_x_percentage(ground_truth_df_path, estimation_df, x, metric):
+    """
+    Calculates the percentage of IDs in the top x of the estimation_df that are also in the top x of the ground_truth_df.
+    Args:
+        ground_truth_df_path (str): Path to the ground truth DataFrame CSV file.
+        estimation_df (pd.DataFrame): DataFrame containing the estimated values with an 'ID' column.
+        x (int): The number of top entries to consider.
+        metric (str): The column name in the ground truth DataFrame to compare against.
+    Returns:
+        float: The percentage of IDs in the top x of the estimation_df that are also in the top x of the ground_truth_df.
+    """
 
     ground_truth_df = pd.read_csv(ground_truth_df_path)
     inner_joined_df = pd.merge(ground_truth_df, estimation_df, left_on=["ID"], right_on = ["ID"])
@@ -24,39 +34,3 @@ def top_x_of_x_percentage(ground_truth_df_path, estimation_df, x, metric):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-    # #!assertion, datatype in colum 0 and values/estimation in column 1
-
-
-    # ground_truth_df = ground_truth_df.sort_values(by=ground_truth_df.columns[metric], ascending=False)
-
-
-
-
-
-    # x_input = ground_truth_df.loc[:, ground_truth_df.columns[0]]
-
-
-
-    # result_df = pd.DataFrame(x_input, columns=['smiles'])
-    # result_df['estimation'] = estimation_df
-    # sorted_df = result_df.sort_values(by='estimation', ascending=False)
-
-    # ground_truth_df_head = ground_truth_df.head(x)
-    # sorted_df_head = estimation_df.head(x)
-    
-    # count = 0
-    # for i in ground_truth_df_head.index:
-    #     if i in sorted_df_head.index:
-    #         count += 1
-    # return (count/x)*100
