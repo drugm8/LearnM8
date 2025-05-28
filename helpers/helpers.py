@@ -8,30 +8,30 @@ import os
 import json
 import hashlib
 
-# def convert_list_of_smiles_to_morgan_fingerprints(smiles_list):
-#         # Convert SMILES to RDKit molecules
-#         molecules = [Chem.MolFromSmiles(smiles) for smiles in smiles_list]
-    
-#         # Create a Morgan fingerprint generator
-#         morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
-    
-#         # Generate Morgan fingerprints
-#         fingerprints = [morgan_gen.GetFingerprint(mol) for mol in molecules]
-    
-#         # Convert fingerprints to a NumPy array of bit vectors
-#         fingerprints_array = np.array([np.array(fp) for fp in fingerprints])
-        
-#         return fingerprints_array
 
 def convert_smiles_to_morgan_fingerprint(smiles):
+    """
+    Converts a SMILES string to a Morgan fingerprint.
+    Args:
+        smiles (str): The SMILES string of the molecule.
+    Returns:
+        np.ndarray: The Morgan fingerprint of the molecule. 
+    """
     molecule = Chem.MolFromSmiles(smiles)
     morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     fingerprint = morgan_gen.GetFingerprint(molecule)
     return np.array(fingerprint)
 
 def convert_list_of_smiles_to_morgan_fingerprints(smiles_list, n_jobs=-1):
-
-    if os.cpu_count() > 32:
+    """
+    Converts a list of SMILES strings to Morgan fingerprints using parallel processing.
+    Args:
+        smiles_list (list): A list of SMILES strings.
+        n_jobs (int): The number of jobs to run in parallel. Default is -1, which uses all available cores.
+    Returns:
+        np.ndarray: An array of Morgan fingerprints corresponding to the input SMILES strings.
+    """
+    if os.cpu_count() > 32: #safeguard for hpc cluster
         n_jobs = 32
     else:
         n_jobs = os.cpu_count()

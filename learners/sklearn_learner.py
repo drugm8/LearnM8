@@ -14,7 +14,7 @@ class sklearn_learner(learner):
     #my implementation of a learner has the most up to date training set always stored internally
 
     def __init__(self,model):
-        #!NO smids here, just plain values, need to check if reihenfolge is kept
+        #!NO smids here, just plain values, need to check if order is kept
         self.model = model
         self.name = model.__class__.__name__
         self.config = None
@@ -40,7 +40,7 @@ class sklearn_learner(learner):
         return self.model.predict(fingerprints_array)
 
     def train_new_model(self):
-        model = self.model
+        model = self.model #by default rf does train a completely new model if the fit meethod is called
         
         fingerprints_array = convert_list_of_smiles_to_morgan_fingerprints(self.dataset_x)
         print(fingerprints_array)

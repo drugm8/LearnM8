@@ -23,21 +23,16 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     learner.set_seed(seed)
     learner.set_query_function(query_function)
     scoring_functions = []
-    
-    ##print(learner.name)
 
 
-
-    smids_pool = pd.read_csv(smids_input_path)
+    smids_pool = pd.read_csv(smids_input_path) #whole pool of SMILES
 
 
     for col in smids_pool.columns:
 
         if col in RESCORING_FUNCTIONS.keys():
-            ##print("added ", col, "to scoring functions")
-            scoring_functions.append(col)
-        elif col in CONSENSUS_METHODS.keys():
-            ##print("added ", col, "to consensus methods")
+            scoring_functions.append(col) #get a list of all scoring functions
+        elif col in CONSENSUS_METHODS.keys(): #get a list of all consensus methods
             if column_to_learn =="":
                 column_to_learn = col
             
@@ -51,7 +46,7 @@ def active_learning_function(learner, hyperparameter_tuning= False,
     percentage = batch_size_percentage/100
     actual_batch_size = math.floor(smids_pool.shape[0]*percentage) 
     
-    initial_sample = first_query_function(smids_pool, actual_batch_size, seed)
+    initial_sample = first_query_function(smids_pool, actual_batch_size, seed) #get the first sample of SMILES to start with
 
     if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
         actual_batch_size *= 10
@@ -63,39 +58,33 @@ def active_learning_function(learner, hyperparameter_tuning= False,
 
     smids_pool = remove_right_df_from_left_df(smids_pool, initial_sample)
     docked_inital_sample = dock(ground_truth_path, initial_sample, scoring_functions)
-    #!happy
-
-
-    #print("docked_inital sample:", docked_inital_sample)
-    #normalized_scores = normalize_wrapper(docked_inital_sample)
-    #print("normalized scores:", normalized_scores)
-
-
-    
 
     learner.teach(docked_inital_sample)
 
-    for i in range(cycles+1):
+    for i in range(cycles+1): #main AL loop
+        #check for hyperparameter tuning
         if hyperparameter_tuning and i == 0 and cycles == 1:
             #fall hyp and -1
             learner.optimize_hyperparameters() 
         if hyperparameter_tuning and i == 1 and cycles != 1:
            learner.optimize_hyperparameters()
 
+        #query the next batch of SMILES
         smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction, scoring_functions, column_to_learn)#
         
+
+        #we need to save the predictions of the last cycle so we still have the result for the last trained learner
         if i == cycles:
            continue
       
-
+        #remove the queried SMILES from the pool so they are not able to be queried again
         smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
 
+        #somehow get new ground truth data for the queried SMILES
         docked_smids_queried = dock(ground_truth_path, smids_queried, scoring_functions)
-
-        #normalized_scores = normalize_wrapper(docked_smids_queried)
 
         learner.teach(docked_smids_queried)
 
-        gc.collect()
+        gc.collect()#very important!! some library doesnt release memory properly, so we need to do it manually
 
     return True

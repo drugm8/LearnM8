@@ -147,7 +147,6 @@ else:
         'statistical' : [0,1,2]
     }
 
-#todo ECFP <=> butina clustering (based on scaffold) <=> [murcko scaffold]
 
 # Generate all combinations
 keys, values = zip(*param_combinations.items())
@@ -207,8 +206,5 @@ for combo in combinations:
     active_learning_function(**combo, seed=seed)
 
 
-    #try:
-    #    os.rename("./hpopt/", path+experiment_hash+"_hpopt.csv")
-    #except:
-    #    pass
+
     gc.collect()
