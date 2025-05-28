@@ -134,17 +134,17 @@ elif mode == "ssf2":
 else:
     param_combinations = {
         "path_id": [2], #index in list of dataset paths
-        'learner': ["cp_learner"],
-        'hyperparameter_tuning': [False,True],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
+        'learner': ["rf_learner"],
+        'hyperparameter_tuning': [False],
+        'batch_size_percentage': [1],
         'smids_input_path': [None], #!stay
         'ground_truth_path': [None], #!stay
-        'cycles': [10, -1], #-1 is flag for one batch
+        'cycles': [10], #-1 is flag for one batch
         'column_to_learn': [""],
-        'do_scoring_function_list_prediction': [False,True],
+        'do_scoring_function_list_prediction': [False],
         'first_query_function': ["random_query_function"],
-        'query_function': ["greedy_query_function", "random_query_function"],
-        'statistical' : [0,1,2]
+        'query_function': ["greedy_query_function"],
+        'statistical' : [0]
     }
 
 
