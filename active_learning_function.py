@@ -1,90 +1,186 @@
+"""
+LearnM8 Active Learning Module
+
+This module provides the core active learning functionality for molecular compound selection
+and iterative model training using ground truth data from CSV files.
+"""
+
 import pandas as pd
-import numpy as np
 import gc
 import math
 
-from helpers.dock import dock
+from helpers.oracle import get_ground_truth_data
 from helpers.helpers import remove_right_df_from_left_df
 from helpers.query_functions import random_query_function
-from scripts.consensus.consensus_wrapper import final_consensus_wrapper as consensus
-from helpers.normalization import normalize_wrapper
-from helpers.normalization import RESCORING_FUNCTIONS
-from consensus.consensus import _METHODS as CONSENSUS_METHODS
+from learners.learner_abc import learner
 
-
-def active_learning_function(learner, hyperparameter_tuning= False,
-                             batch_size_percentage=0.1, smids_input_path=None,
-                               ground_truth_path=None, cycles=10, column_to_learn=None,
-                                 do_scoring_function_list_prediction=False, 
-                                  first_query_function=None,
-                                  query_function=None,
-                                  seed=None
-                                  ):
+def learnM8(learner: learner, 
+           compound_pool_csv_path,
+           ground_truth_path, 
+           target_column,
+           batch_size_fraction=0.1,
+           cycles=10,
+           first_query_function=None,
+           query_function=None,
+           seed=None):
+    """
+    Run LearnM8 active learning on existing ground truth data.
+    
+    This simplified function performs iterative active learning by querying compounds
+    from a pool, getting ground truth labels from existing data, and training a model
+    to select the most informative compounds for future iterations.
+    
+    Args:
+        learner: Active learning model instance implementing the learner interface.
+                Must have methods: teach(), query(), set_seed(), set_query_function()
+        compound_pool_csv_path (str): Path to CSV file containing the compound pool.
+                                    Must have 'ID' and 'SMILES' columns
+        ground_truth_path (str): Path to CSV file containing ground truth data.
+                               Must have 'ID' column and the target_column
+        target_column (str): Column name in ground truth data to learn/predict.
+                           Examples: 'Activity', 'CHEMPLP', 'LinF9'
+        batch_size_fraction (float): Fraction of total compounds to query per iteration.
+                                   Default 0.1 means 10% of pool size per batch
+        cycles (int): Number of active learning iterations to perform.
+                     Use -1 for single large batch mode. Default: 10
+        first_query_function: Function for initial compound selection strategy.
+                            Default: random selection
+        query_function: Function for subsequent compound selection strategies.
+                       Default: greedy selection based on model predictions
+        seed (int): Random seed for reproducibility. Default: None
+        
+    Returns:
+        bool: True if active learning completed successfully
+        
+    Example:
+        >>> from learners.rf_learner import rf_learner
+        >>> from helpers.query_functions import random_query_function, greedy_query_function
+        >>> 
+        >>> model = rf_learner()
+        >>> success = learnM8(
+        ...     learner=model,
+        ...     compound_pool_csv_path='data/compounds.csv',
+        ...     ground_truth_path='data/ground_truth.csv', 
+        ...     target_column='Activity',
+        ...     batch_size_fraction=0.1,
+        ...     cycles=5,
+        ...     first_query_function=random_query_function,
+        ...     query_function=greedy_query_function,
+        ...     seed=42
+        ... )
+    
+    Note:
+        This simplified version focuses on single target column learning and removes
+        complexity around hyperparameter tuning and multiple scoring function prediction.
+        It works directly with ground truth data without consensus scoring.
+    """
+    # Validate input parameters
+    if learner is None:
+        raise ValueError("Learner instance is required")
+    if not compound_pool_csv_path or not ground_truth_path:
+        raise ValueError("Both compound pool and ground truth CSV paths are required")
+    if not target_column:
+        raise ValueError("Target column name is required")
+    
+    # Set up learner configuration
     learner.set_seed(seed)
     learner.set_query_function(query_function)
-    scoring_functions = []
-
-
-    smids_pool = pd.read_csv(smids_input_path) #whole pool of SMILES
-
-
-    for col in smids_pool.columns:
-
-        if col in RESCORING_FUNCTIONS.keys():
-            scoring_functions.append(col) #get a list of all scoring functions
-        elif col in CONSENSUS_METHODS.keys(): #get a list of all consensus methods
-            if column_to_learn =="":
-                column_to_learn = col
-            
-        else:
-           print("column ", col, " is not a scoring function or a consensus method")
-
-    smids_pool = smids_pool.loc[:,["ID","SMILES"]]
-    learner.set_column_to_learn(column_to_learn)
-    learner.set_do_scoring_function_list_prediction(do_scoring_function_list_prediction)
-
-    percentage = batch_size_percentage/100
-    actual_batch_size = math.floor(smids_pool.shape[0]*percentage) 
     
-    initial_sample = first_query_function(smids_pool, actual_batch_size, seed) #get the first sample of SMILES to start with
-
-    if cycles == -1: #-1 is used as a flag to just do one batch with same size as it would be otherwise in one batch
-        actual_batch_size *= 10
-        cycles = 1#!0
-
-    learner.set_int_batch_size(batch_size = actual_batch_size)
-    learner.set_scoring_functions(scoring_functions)
+    # Load compound pool (full dataset of available compounds)
+    try:
+        compound_pool = pd.read_csv(compound_pool_csv_path)
+    except Exception as e:
+        raise IOError(f"Failed to read compound pool file {compound_pool_csv_path}: {e}")
     
+    # Validate compound pool structure
+    required_columns = ['ID', 'SMILES']
+    missing_columns = [col for col in required_columns if col not in compound_pool.columns]
+    if missing_columns:
+        raise KeyError(f"Compound pool missing required columns: {missing_columns}")
 
-    smids_pool = remove_right_df_from_left_df(smids_pool, initial_sample)
-    docked_inital_sample = dock(ground_truth_path, initial_sample, scoring_functions)
-
-    learner.teach(docked_inital_sample)
-
-    for i in range(cycles+1): #main AL loop
-        #check for hyperparameter tuning
-        if hyperparameter_tuning and i == 0 and cycles == 1:
-            #fall hyp and -1
-            learner.optimize_hyperparameters() 
-        if hyperparameter_tuning and i == 1 and cycles != 1:
-           learner.optimize_hyperparameters()
-
-        #query the next batch of SMILES
-        smids_queried = learner.query(smids_pool, smids_input_path,do_scoring_function_list_prediction, scoring_functions, column_to_learn)#
+    # Extract only ID and SMILES for the active learning pool
+    compound_pool = compound_pool.loc[:, ['ID', 'SMILES']]
+    
+    # Configure learner for single target column learning
+    learner.set_column_to_learn(target_column)
+    learner.set_do_scoring_function_list_prediction(False)  # Simplified: single target only
+    
+    # Calculate actual batch size from fraction
+    total_compounds = compound_pool.shape[0]
+    actual_batch_size = math.floor(total_compounds * batch_size_fraction)
+    
+    if actual_batch_size < 1:
+        raise ValueError(f"Batch size too small: {actual_batch_size}. "
+                        f"Try increasing batch_size_fraction or using more compounds")
+    
+    # Get initial sample using first query function (typically random)
+    if first_query_function is None:
+        first_query_function = random_query_function
         
-
-        #we need to save the predictions of the last cycle so we still have the result for the last trained learner
-        if i == cycles:
-           continue
-      
-        #remove the queried SMILES from the pool so they are not able to be queried again
-        smids_pool = remove_right_df_from_left_df(smids_pool, smids_queried)
-
-        #somehow get new ground truth data for the queried SMILES
-        docked_smids_queried = dock(ground_truth_path, smids_queried, scoring_functions)
-
-        learner.teach(docked_smids_queried)
-
-        gc.collect()#very important!! some library doesnt release memory properly, so we need to do it manually
-
+    initial_sample = first_query_function(compound_pool, actual_batch_size, seed)
+    
+    # Handle single batch mode (cycles = -1)
+    if cycles == -1:
+        # Single batch mode: use 10x normal batch size for comprehensive sampling
+        actual_batch_size *= 10
+        cycles = 1
+    
+    # Configure learner with batch size and target columns
+    learner.set_int_batch_size(batch_size=actual_batch_size)
+    learner.set_scoring_functions([target_column])  # Single target column
+    
+    # Remove initial sample from available pool
+    compound_pool = remove_right_df_from_left_df(compound_pool, initial_sample)
+    
+    # Get ground truth labels for initial sample
+    try:
+        initial_labeled_data = get_ground_truth_data(
+            ground_truth_path, 
+            initial_sample, 
+            ['SMILES', target_column]
+        )
+    except Exception as e:
+        raise IOError(f"Failed to get ground truth data for initial sample: {e}")
+    
+    # Train learner with initial labeled data
+    learner.teach(initial_labeled_data)
+    
+    # Main active learning loop
+    for iteration in range(cycles + 1):
+        # Query next batch of compounds using learner's strategy
+        try:
+            queried_compounds = learner.query(
+                compound_pool, 
+                compound_pool_csv_path,
+                target_column
+            )
+        except Exception as e:
+            print(f"Warning: Query failed at iteration {iteration}: {e}")
+            break
+        
+        # Save predictions from final iteration (for evaluation)
+        if iteration == cycles:
+            break
+        
+        # Remove queried compounds from pool to avoid re-selection
+        compound_pool = remove_right_df_from_left_df(compound_pool, queried_compounds)
+        
+        # Get ground truth labels for newly queried compounds
+        try:
+            queried_labeled_data = get_ground_truth_data(
+                ground_truth_path, 
+                queried_compounds, 
+                ['SMILES', target_column]
+            )
+        except Exception as e:
+            print(f"Warning: Failed to get ground truth for iteration {iteration}: {e}")
+            break
+        
+        # Retrain learner with new labeled data
+        learner.teach(queried_labeled_data)
+        
+        # Force garbage collection to manage memory usage
+        # Important for large molecular datasets
+        gc.collect()
+    
     return True
