@@ -1,4 +1,4 @@
-from active_learning_function import active_learning_function
+from active_learning_function import learnM8
 import itertools
 import gc
 import json
@@ -10,9 +10,7 @@ import numpy as np
 import argparse
 from helpers.helpers import hash_params
 from helpers.query_functions import greedy_query_function, random_query_function, cluster_query_function
-from learners.pipe_cp_learner import pipe_cp_learner as ler
 from learners.rf_learner import rf_learner as rf_learner
-from learners.gp_learner import gp_learner as gp_learner
 import random
 
 parser = argparse.ArgumentParser(description='Description of your program')
@@ -51,14 +49,9 @@ path_tuples = [[SMIDS,GTP]]
 path_tuples = scoring_files
 
 def get_learner_from_string(learner_string):
-    if learner_string == "cp_learner":
-        return ler
-    elif learner_string == "rf_learner":
+    if learner_string == "rf_learner":
         return rf_learner
-    elif learner_string == "gp_learner":
-        return gp_learner
-    else:
-        raise ValueError("Invalid learner string")
+
 
 def get_query_function_from_string(query_function_string):
     if query_function_string == "greedy_query_function":
@@ -73,13 +66,11 @@ if mode == "cpu":
     param_combinations = {
         "path_id": [0,1,2,3,4,5,6], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [False,True],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-        'smids_input_path': [None], #!stay
+        'batch_size_fraction': [0.01, 0.005, 0.001, 0.0001],  # Renamed from batch_size_percentage
+        'compound_pool_csv_path': [None], #!stay - renamed from smids_input_path
         'ground_truth_path': [None], #!stay 
         'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': [""],
-        'do_scoring_function_list_prediction': [False], #todo or take care!!
+        'target_column': [""],  # Renamed from column_to_learn
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function","random_query_function"],
         'statistical' : [7,8,9]
@@ -89,13 +80,11 @@ elif mode == "gpu":
     param_combinations = {
         "path_id": [2], #index in list of dataset paths
         'learner': ["cp_learner"],
-        'hyperparameter_tuning': [False],
-        'batch_size_percentage': [1,0.5,0.1, 0.01],
-        'smids_input_path': [None], #!stay
+        'batch_size_fraction': [0.01, 0.005, 0.001, 0.0001],  # Renamed and converted to fractions
+        'compound_pool_csv_path': [None], #!stay - renamed from smids_input_path
         'ground_truth_path': [None], #!stay 
         'cycles': [10,-1], #-1 is flag for one batch
-        'column_to_learn': [""],
-        'do_scoring_function_list_prediction': [False], 
+        'target_column': [""],  # Renamed from column_to_learn
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function","random_query_function"],
         'statistical' : [7,8,9]
@@ -104,13 +93,11 @@ elif mode == "ssf1":
         param_combinations = {
         "path_id": [0,1,3,4,5,7,8,10,11,12], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-        'smids_input_path': [None], #!stay
+        'batch_size_fraction': [0.01, 0.005, 0.001, 0.0001],  # Renamed and converted to fractions
+        'compound_pool_csv_path': [None], #!stay - renamed from smids_input_path
         'ground_truth_path': [None], #!stay 
         'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ["CHEMPLP"],
-        'do_scoring_function_list_prediction': [False], #todo or take care!!
+        'target_column': ["CHEMPLP"],  # Renamed from column_to_learn
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function"],
         'statistical' : [7,8,9]
@@ -119,13 +106,11 @@ elif mode == "ssf2":
         param_combinations = {
         "path_id": [2,6,9,13], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [False],
-        'batch_size_percentage': [1, 0.5, 0.1, 0.01],
-        'smids_input_path': [None], #!stay
+        'batch_size_fraction': [0.01, 0.005, 0.001, 0.0001],  # Renamed and converted to fractions
+        'compound_pool_csv_path': [None], #!stay - renamed from smids_input_path
         'ground_truth_path': [None], #!stay 
         'cycles': [10, -1], #-1 is flag for one batch
-        'column_to_learn': ["ConvexPLR"],
-        'do_scoring_function_list_prediction': [False], #todo or take care!!
+        'target_column': ["ConvexPLR"],  # Renamed from column_to_learn
         'first_query_function': ["random_query_function"], 
         'query_function': ["greedy_query_function"],
         'statistical' : [7,8,9]
@@ -135,13 +120,11 @@ else:
     param_combinations = {
         "path_id": [2], #index in list of dataset paths
         'learner': ["rf_learner"],
-        'hyperparameter_tuning': [False],
-        'batch_size_percentage': [1],
-        'smids_input_path': [None], #!stay
+        'batch_size_fraction': [0.01],  # Renamed and converted to fraction
+        'compound_pool_csv_path': [None], #!stay - renamed from smids_input_path
         'ground_truth_path': [None], #!stay
         'cycles': [10], #-1 is flag for one batch
-        'column_to_learn': [""],
-        'do_scoring_function_list_prediction': [False],
+        'target_column': [""],  # Renamed from column_to_learn
         'first_query_function': ["random_query_function"],
         'query_function': ["greedy_query_function"],
         'statistical' : [0]
@@ -157,14 +140,9 @@ random.shuffle(combinations)
 # Call the function with each combination
 for combo in combinations:
     print("combo", combo)
-    if combo["do_scoring_function_list_prediction"]:
-        if combo['learner'] != "cp_learner":
-            continue
-
-
     statistical = combo.pop("statistical")
     path_id=combo.pop("path_id")#paths are only a valid combo if the are to the same two parts of a dataset
-    combo['smids_input_path'] = path_tuples[path_id][0]
+    combo['compound_pool_csv_path'] = path_tuples[path_id][0]  # Renamed from smids_input_path
     combo['ground_truth_path'] = path_tuples[path_id][1]
 
     ##DONT TOUCH, NEEDS TO BE LIKE THIS FOR WEBINTERFACE
@@ -203,7 +181,7 @@ for combo in combinations:
     random.seed(seed)
     np.random.seed(seed)
 
-    active_learning_function(**combo, seed=seed)
+    learnM8(**combo, seed=seed)
 
 
 
