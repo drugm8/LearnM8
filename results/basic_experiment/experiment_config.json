@@ -1,0 +1,17 @@
+{
+  "compound_pool_path": "/home/tony/LearnM8/ESSENCE_benchmark_input/ADA.csv",
+  "ground_truth_path": "/home/tony/LearnM8/ESSENCE_benchmark_input/ADA.csv",
+  "target_column": "Activity",
+  "n_cycles": 10,
+  "batch_size_fraction": 0.1,
+  "selection_strategy": "greedy",
+  "initial_strategy": "random",
+  "score_direction": "higher",
+  "learner_type": "random_forest",
+  "random_state": 42,
+  "monitoring": {
+    "top_k": 100,
+    "enrichment_percentile": 1.0
+  },
+  "timestamp": "2025-07-24T18:00:51.402069"
+}
