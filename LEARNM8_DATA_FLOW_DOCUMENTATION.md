@@ -9,69 +9,68 @@ LearnM8 is an active learning framework designed for molecular screening applica
 The LearnM8 system is organized into several modular components:
 
 ```
-learnm8/
-├── cli/                 # Command-line interface
-├── core/               # Core active learning logic and interfaces
-├── evaluation/         # Metrics and monitoring
-├── experiments/        # Experiment orchestration
-├── learners/           # Machine learning models
-├── oracles/            # Data sources/ground truth providers
-├── strategies/         # Compound selection strategies
-└── utils/              # Utility functions
+.
+├── learnm8/                # Main package directory
+│   ├── cli/                # Command-line interface
+│   ├── core/               # Core active learning logic and interfaces
+│   ├── evaluation/         # Metrics and monitoring
+│   ├── experiments/        # Experiment orchestration
+│   ├── learners/           # Machine learning models
+│   ├── oracles/            # Data sources/ground truth providers
+│   ├── strategies/         # Compound selection strategies
+│   └── utils/              # Utility functions
+├── data/                   # CSV data for various molecular targets
+├── examples/               # Example scripts
+├── benchmark_results/      # Contains results from benchmarking runs
+├── setup.py                # Package setup and installation script
+└── README.md               # Project README
 ```
 
 ## Complete Data Flow Walkthrough
 
 ### Phase 1: Initialization and Setup
 
-#### 1.1 Command Line Entry Point (`cli/main.py`)
+#### 1.1. Command Line Entry Point (`learnm8/cli/main.py`)
 
 **Input Data:**
-- `compound_pool`: CSV file with columns `['ID', 'SMILES']`
-- `ground_truth`: CSV file with columns `['ID', target_column, ...]`
-- `target_column`: String name of the property to learn
-- Various configuration parameters (cycles, batch size, strategy, etc.)
+- `compound_pool`: Path to a CSV file containing compound information, requiring `['ID', 'SMILES']` columns.
+- `ground_truth`: Path to a CSV file with ground truth values, requiring `['ID', target_column]` columns.
+- `target_column`: The name of the column in the ground truth file to be used as the learning target.
+- Additional parameters controlling the experiment, such as the number of cycles, batch size, selection strategy, and more.
 
 **Data Processing Steps:**
 
-1. **Argument Parsing**
-   ```python
-   # Raw command line arguments are parsed into structured config
-   args = parser.parse_args()
-   ```
+1.  **Argument Parsing**: The system parses command-line arguments to create a structured configuration for the experiment.
+    ```python
+    # Raw command line arguments are parsed into structured config
+    args = parser.parse_args()
+    ```
 
-2. **File Validation**
-   ```python
-   # File existence checks
-   compound_pool_path = Path(args.compound_pool)
-   ground_truth_path = Path(args.ground_truth)
-   # Raises SystemExit if files don't exist
-   ```
+2.  **File Validation**: It verifies that the provided `compound_pool` and `ground_truth` files exist.
+    ```python
+    # File existence checks
+    compound_pool_path = Path(args.compound_pool)
+    ground_truth_path = Path(args.ground_truth)
+    # Raises SystemExit if files don't exist
+    ```
 
-3. **Score Direction Auto-Detection**
-   ```python
-   # Analyzes target column name and data patterns
-   if score_direction == 'auto':
-       score_direction = detect_score_direction(str(ground_truth_path), args.target_column)
-   ```
-   
-   **Detection Logic:**
-   - Checks column name patterns:
-     - `'lower'`: dock, binding_energy, energy, rmsd, error, loss, distance
-     - `'higher'`: activity, affinity, score, rank, similarity, accuracy
-   - Falls back to data analysis: if >70% of values are negative → 'lower'
-   - Default: 'higher'
+3.  **Score Direction Auto-Detection**: The system determines whether a higher or lower score is better by analyzing the `target_column` name and data patterns.
+    ```python
+    # Analyzes target column name and data patterns
+    if score_direction == 'auto':
+        score_direction = detect_score_direction(str(ground_truth_path), args.target_column)
+    ```
 
-4. **Output Directory Creation**
-   ```python
-   # Creates timestamped output directory
-   timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-   output_dir = Path(f"learnm8_results_{timestamp}")
-   ```
+4.  **Output Directory Creation**: A timestamped directory is created to store the results of the experiment.
+    ```python
+    # Creates timestamped output directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(f"learnm8_results_{timestamp}")
+    ```
 
-#### 1.2 Experiment Configuration (`experiments/runner.py`)
+#### 1.2. Experiment Configuration (`learnm8/experiments/config.py`)
 
-**Data Transformation:**
+**Data Transformation**: A configuration dictionary is created to hold all experiment parameters.
 ```python
 config = create_experiment_config(
     compound_pool_path=str(compound_pool_path),
@@ -81,7 +80,7 @@ config = create_experiment_config(
 )
 ```
 
-**Configuration Dictionary Structure:**
+**Configuration Dictionary Structure**:
 ```python
 {
     'compound_pool_path': str,
