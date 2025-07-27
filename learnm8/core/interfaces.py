@@ -1,6 +1,7 @@
 """Abstract interfaces for LearnM8 components."""
 
 from abc import ABC, abstractmethod
+from typing import Tuple, Optional
 import pandas as pd
 import numpy as np
 
@@ -32,8 +33,15 @@ class Learner(ABC):
         pass
     
     @abstractmethod
-    def predict(self, compounds: pd.DataFrame) -> np.ndarray:
-        """Predict scores for unlabeled compounds."""
+    def predict(self, compounds: pd.DataFrame) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """
+        Predict scores for unlabeled compounds.
+        
+        Returns:
+            Tuple of (predictions, uncertainty) where:
+            - predictions: Array of predicted scores
+            - uncertainty: Array of uncertainty estimates or None if not supported
+        """
         pass
     
     @abstractmethod
