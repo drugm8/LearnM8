@@ -40,15 +40,15 @@ def select_diverse(compounds: pd.DataFrame, n_select: int,
     if len(working_compounds) > max_compounds:
         working_compounds = working_compounds.sample(n=max_compounds, random_state=random_state)
     
-    # Generate fingerprints
-    rdkit_gen = rdFingerprintGenerator.GetRDKitFPGenerator(maxPath=5)
+    # Generate Morgan fingerprints (consistent with ML models)
+    morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     fingerprints = []
     
     for smiles in working_compounds['SMILES']:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             continue
-        fp = rdkit_gen.GetFingerprint(mol)
+        fp = morgan_gen.GetFingerprint(mol)
         fingerprints.append(fp)
     
     # Calculate distances and cluster
