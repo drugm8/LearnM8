@@ -2,7 +2,7 @@
 
 import pandas as pd
 from pathlib import Path
-from core.interfaces import Oracle
+from learnm8.core.interfaces import Oracle
 
 
 class CSVOracle(Oracle):
