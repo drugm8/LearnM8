@@ -2,10 +2,83 @@
 
 import logging
 import sys
-from typing import Optional
+from pathlib import Path
+from typing import Optional, List
 
 from rich.console import Console
 from rich.logging import RichHandler
+
+
+def is_running_in_jupyter() -> bool:
+    """Detect if code is running in Jupyter notebook/lab."""
+    try:
+        from IPython import get_ipython
+        ipython = get_ipython()
+        if ipython is None:
+            return False
+        # Check for Jupyter notebook/lab environments
+        return ipython.__class__.__name__ == 'ZMQInteractiveShell'
+    except ImportError:
+        return False
+
+
+def setup_logging_for_environment(
+    logger: logging.Logger,
+    output_dir: Optional[Path] = None,
+    level: str = "INFO",
+    show_time: bool = True
+) -> List[logging.Handler]:
+    """
+    Set up logging that works optimally in both CLI and Jupyter environments.
+    
+    Args:
+        logger: Logger instance to configure
+        output_dir: Directory for log files (optional)
+        level: Logging level (DEBUG, INFO, WARNING, ERROR)
+        show_time: Whether to show timestamps
+        
+    Returns:
+        List of handlers added to the logger
+    """
+    handlers = []
+    log_level = getattr(logging, level.upper())
+    
+    # Always add file handler if output directory provided
+    if output_dir:
+        log_file = output_dir / "experiment.log"
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(log_level)
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+        handlers.append(file_handler)
+    
+    # Add appropriate console handler based on environment
+    if is_running_in_jupyter():
+        # Use simple StreamHandler for Jupyter notebooks
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setLevel(log_level)
+        # Simpler format for notebook cells
+        jupyter_formatter = logging.Formatter('%(message)s')
+        stream_handler.setFormatter(jupyter_formatter)
+        logger.addHandler(stream_handler)
+        handlers.append(stream_handler)
+    else:
+        # Use Rich handler for CLI environments
+        console = Console()
+        rich_handler = RichHandler(
+            console=console,
+            show_time=show_time,
+            show_path=False,
+            markup=True,
+            rich_tracebacks=True
+        )
+        rich_handler.setLevel(log_level)
+        logger.addHandler(rich_handler)
+        handlers.append(rich_handler)
+    
+    logger.setLevel(log_level)
+    return handlers
 
 
 def setup_logging(
@@ -54,38 +127,6 @@ def get_logger(name: str = "learnm8") -> logging.Logger:
     """Get a logger instance for the given name."""
     return logging.getLogger(name)
 
-
-def log_experiment_start(logger: logging.Logger, config: dict) -> None:
-    """Log experiment initialization with key parameters."""
-    logger.info(f"[bold blue]Starting experiment:[/bold blue] {config.get('target_column', 'unknown')}")
-    logger.info(f"Compounds: {config.get('n_compounds', 'unknown')} | "
-                f"Cycles: {config.get('n_cycles', 'unknown')} | "
-                f"Strategy: {config.get('selection_strategy', 'unknown')}")
-
-
-def log_cycle_start(logger: logging.Logger, cycle: int, total_cycles: int) -> None:
-    """Log cycle start with progress indication."""
-    logger.info(f"[yellow]Cycle {cycle + 1}/{total_cycles}[/yellow]")
-
-
-def log_selection(logger: logging.Logger, count: int, strategy: str) -> None:
-    """Log compound selection results."""
-    logger.info(f"Selected [bold]{count}[/bold] compounds using [cyan]{strategy}[/cyan]")
-
-
-def log_metrics(logger: logging.Logger, metrics: dict) -> None:
-    """Log performance metrics in a compact format."""
-    if 'rmse' in metrics:
-        rmse = metrics['rmse']
-        logger.info(f"RMSE: [bold]{rmse:.4f}[/bold]")
-    
-    if 'top_k_overlap' in metrics:
-        overlap = metrics['top_k_overlap']
-        logger.info(f"Top-K Overlap: [bold]{overlap:.2f}%[/bold]")
-    
-    if 'enrichment_factor' in metrics:
-        ef = metrics['enrichment_factor']
-        logger.info(f"Enrichment Factor: [bold]{ef:.2f}[/bold]")
 
 
 def log_error_to_stderr(message: str) -> None:

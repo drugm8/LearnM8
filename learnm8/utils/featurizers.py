@@ -110,25 +110,56 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
     # Create calculator
     calc = Calculator(descriptors, ignore_3D=True)
     
-    # Convert SMILES to molecules
+    # Convert SMILES to molecules, keeping track of valid indices
     mols = []
-    for smiles in smiles_list:
+    valid_indices = []
+    
+    for i, smiles in enumerate(smiles_list):
         try:
             mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                mols.append(None)
-            else:
+            if mol is not None:
                 mols.append(mol)
+                valid_indices.append(i)
         except Exception:
-            mols.append(None)
+            # Skip invalid molecules
+            continue
     
-    # Calculate descriptors
+    if not mols:
+        # No valid molecules, return empty dataframe with correct structure
+        # Calculate descriptors for a dummy molecule to get column structure
+        dummy_mol = Chem.MolFromSmiles('C')
+        dummy_df = calc.pandas([dummy_mol])
+        empty_df = pd.DataFrame(columns=dummy_df.columns)
+        # Add rows filled with zeros for all input molecules
+        for _ in range(len(smiles_list)):
+            empty_df.loc[len(empty_df)] = 0
+        return empty_df
+    
+    # Calculate descriptors for valid molecules
     descriptors_df = calc.pandas(mols)
     
-    # Fill NaN values for invalid molecules
+    # Fill NaN values for molecules that couldn't be processed
     descriptors_df = descriptors_df.fillna(0)
     
-    return descriptors_df
+    # Create final dataframe with all input molecules
+    if len(valid_indices) == len(smiles_list):
+        # All molecules were valid
+        return descriptors_df
+    else:
+        # Some molecules were invalid, need to insert zero rows
+        final_df = pd.DataFrame(columns=descriptors_df.columns)
+        valid_idx = 0
+        
+        for i in range(len(smiles_list)):
+            if i in valid_indices:
+                # Use computed descriptors
+                final_df.loc[len(final_df)] = descriptors_df.iloc[valid_idx]
+                valid_idx += 1
+            else:
+                # Fill with zeros for invalid molecules
+                final_df.loc[len(final_df)] = 0
+        
+        return final_df
 
 
 def _get_representation_file(results_dir: Path, featurizer_type: str) -> Path:
