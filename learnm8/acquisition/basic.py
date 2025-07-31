@@ -5,10 +5,14 @@ based on model predictions and random sampling for baseline comparisons.
 """
 
 import logging
+from typing import Optional, TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
 from .base import AcquisitionFunction
+
+if TYPE_CHECKING:
+    from ..core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +25,16 @@ class GreedyAcquisition(AcquisitionFunction):
     baseline for comparison with more sophisticated acquisition functions.
     """
     
-    def __init__(self, score_direction: str = 'higher'):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 score_direction: str = 'higher', **kwargs):
         """Initialize greedy acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by GreedyAcquisition)
             score_direction: Direction of score optimization ('higher' or 'lower' is better)
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if score_direction not in ['higher', 'lower']:
             raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
         self.score_direction = score_direction
@@ -78,12 +86,16 @@ class RandomAcquisition(AcquisitionFunction):
     sophisticated acquisition strategies.
     """
     
-    def __init__(self, random_state: int = 42):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 random_state: int = 42, **kwargs):
         """Initialize random acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by RandomAcquisition)
             random_state: Random seed for reproducible selection
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         self.random_state = random_state
         self._rng = np.random.RandomState(random_state)
     
@@ -140,13 +152,17 @@ class TopKAcquisition(AcquisitionFunction):
     to select from different parts of the prediction distribution.
     """
     
-    def __init__(self, k_fraction: float = 0.1, score_direction: str = 'higher'):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 k_fraction: float = 0.1, score_direction: str = 'higher', **kwargs):
         """Initialize Top-K acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by TopKAcquisition)
             k_fraction: Fraction of compounds to consider from the top/bottom
             score_direction: Direction of score optimization ('higher' or 'lower' is better)
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if not 0.0 < k_fraction <= 1.0:
             raise ValueError("k_fraction must be between 0 and 1")
         if score_direction not in ['higher', 'lower']:

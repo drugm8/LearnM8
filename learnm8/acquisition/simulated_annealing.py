@@ -9,9 +9,12 @@ exploration and gradually cools down to become more greedy/exploitative.
 import logging
 import numpy as np
 import pandas as pd
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from .base import AcquisitionFunction
+
+if TYPE_CHECKING:
+    from ..core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,25 +35,30 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
     """
     
     def __init__(self, 
+                 data_manager: Optional['DataManager'] = None,
                  initial_temp: float = 1.0,
                  final_temp: float = 0.01,
                  max_iterations: int = 1000,
                  cooling_schedule: str = 'exponential',
                  score_direction: str = 'higher',
-                 random_state: int = 42):
+                 random_state: int = 42,
+                 **kwargs):
         """Initialize simulated annealing acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by SimulatedAnnealingAcquisition)
             initial_temp: Starting temperature for annealing process
             final_temp: Final temperature for annealing process
             max_iterations: Maximum number of annealing iterations
             cooling_schedule: Cooling schedule ('exponential' or 'linear')
             score_direction: Direction of score optimization ('higher' or 'lower')
             random_state: Random seed for reproducible selection
+            **kwargs: Additional parameters for compatibility
             
         Raises:
             ValueError: If parameters are invalid
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         # Validate parameters
         if initial_temp <= 0:
             raise ValueError("initial_temp must be positive")

@@ -6,7 +6,7 @@ implementation is extracted from the astartes library for integration with Learn
 """
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 
@@ -16,9 +16,14 @@ from learnm8.acquisition.astartes_utils import (
     get_molecular_features,
     validate_acquisition_input
 )
-from learnm8.core.data_manager import DataManager
+
+if TYPE_CHECKING:
+    from learnm8.core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
+
+# O(n²) complexity protection constant
+MAX_COMPOUNDS = 10000
 
 
 def sphere_exclusion_clustering(distance_matrix: np.ndarray, 
@@ -110,14 +115,28 @@ class SphereExclusionAcquisition(AcquisitionFunction):
     """
     
     def __init__(self,
-                 data_manager: DataManager,
+                 data_manager: Optional['DataManager'] = None,
                  distance_cutoff: float = 0.25,
                  featurizer_type: str = 'morgan',
-                 random_state: Optional[int] = 42):
+                 random_state: Optional[int] = 42,
+                 **kwargs):
+        """Initialize Sphere Exclusion acquisition function.
+        
+        Args:
+            data_manager: DataManager instance for feature extraction and caching
+            distance_cutoff: Maximum distance for clustering (0.0-1.0, default: 0.25)
+            featurizer_type: Type of molecular features ('morgan', 'maccs', 'ecfp6')
+            random_state: Random seed for reproducible clustering
+            **kwargs: Additional parameters for compatibility
+        """
+        super().__init__(data_manager=data_manager, **kwargs)
+        
+        if data_manager is None:
+            raise ValueError("SphereExclusionAcquisition requires a DataManager for feature extraction")
+        
         if not 0.0 <= distance_cutoff <= 1.0:
             raise ValueError(f"distance_cutoff must be between 0.0 and 1.0, got {distance_cutoff}")
         
-        self.data_manager = data_manager
         self.distance_cutoff = distance_cutoff
         self.featurizer_type = featurizer_type
         self.random_state = random_state
@@ -143,6 +162,12 @@ class SphereExclusionAcquisition(AcquisitionFunction):
         # Validate inputs
         self.validate_input(compounds, n_select)
         validate_acquisition_input(compounds, n_select)
+        
+        # Check dataset size for O(n²) complexity protection
+        if len(compounds) > MAX_COMPOUNDS:
+            raise ValueError(f"Too many compounds ({len(compounds)}) for {self.__class__.__name__}. "
+                           f"Maximum allowed: {MAX_COMPOUNDS}. "
+                           f"Consider using a different acquisition method or reducing dataset size.")
         
         logger.info(f"Starting sphere exclusion selection of {n_select} compounds "
                    f"from {len(compounds)} candidates using {self.featurizer_type} features "
@@ -278,7 +303,7 @@ class SphereExclusionAcquisition(AcquisitionFunction):
         return f"SphereExclusion({self.featurizer_type}, cutoff={self.distance_cutoff})"
 
 
-def create_sphere_exclusion_acquisition(data_manager: DataManager,
+def create_sphere_exclusion_acquisition(data_manager: 'DataManager',
                                         distance_cutoff: float = 0.25,
                                         featurizer_type: str = 'morgan',
                                         random_state: Optional[int] = 42) -> SphereExclusionAcquisition:
