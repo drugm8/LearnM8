@@ -9,61 +9,8 @@ from rdkit.Chem import rdFingerprintGenerator
 from rdkit import DataStructs
 
 
-def calculate_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Calculate Root Mean Squared Error.
-    
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-        
-    Returns:
-        RMSE value
-    """
-    return np.sqrt(mean_squared_error(y_true, y_pred))
-
-
-def calculate_mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Calculate Mean Absolute Error.
-    
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-        
-    Returns:
-        MAE value
-    """
-    return mean_absolute_error(y_true, y_pred)
-
-
-def calculate_mse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Calculate Mean Squared Error.
-    
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-        
-    Returns:
-        MSE value
-    """
-    return mean_squared_error(y_true, y_pred)
-
-
-def calculate_r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Calculate R² (coefficient of determination).
-    
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-        
-    Returns:
-        R² value
-    """
-    return r2_score(y_true, y_pred)
-
+# Removed trivial sklearn wrapper functions (calculate_rmse, calculate_mae, calculate_mse, calculate_r2)
+# These are now called directly from sklearn in __init__.py for better maintainability
 
 def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
@@ -118,9 +65,17 @@ def calculate_average_score(scores: np.ndarray) -> float:
         scores: Array of scores
         
     Returns:
-        Average score
+        Average score, or None if empty/invalid array
     """
-    return np.mean(scores)
+    if len(scores) == 0:
+        return None
+    
+    # Filter out NaN values
+    valid_scores = scores[~pd.isna(scores)]
+    if len(valid_scores) == 0:
+        return None
+        
+    return np.mean(valid_scores)
 
 
 def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray, 
@@ -183,11 +138,22 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
     # Merge predictions with ground truth
     merged = pd.merge(predictions_df, ground_truth_df[['ID', target_column]], on='ID')
     
+    # Handle empty data case
+    if len(merged) == 0:
+        return 0.0
+    
     if len(merged) < k:
         from learnm8.utils.logging import get_logger, log_warning
         logger = get_logger()
         log_warning(logger, f"Only {len(merged)} compounds available, using all for top-k calculation")
         k = len(merged)
+    
+    # Ensure prediction column is numeric
+    if merged['prediction'].dtype == 'object':
+        merged['prediction'] = pd.to_numeric(merged['prediction'], errors='coerce')
+        merged = merged.dropna(subset=['prediction'])
+        if len(merged) == 0:
+            return 0.0
     
     # Sort by scores
     ascending = (score_direction == 'lower')
@@ -221,7 +187,7 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
         score_direction: 'higher' or 'lower' for score interpretation
         
     Returns:
-        Dictionary with keys: top_100_overlap, top_1000_overlap, top_0_1_percent_overlap, top_1_percent_overlap
+        Dictionary with keys: top_100_overlap, top_1000_overlap, top_0_1_percent_overlap, top_1_percent_overlap, top_10_percent_overlap
     """
     # Merge predictions with ground truth
     merged = pd.merge(predictions_df, ground_truth_df[['ID', target_column]], on='ID')
@@ -232,15 +198,31 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
             'top_100_overlap': 0.0,
             'top_1000_overlap': 0.0,
             'top_0_1_percent_overlap': 0.0,
-            'top_1_percent_overlap': 0.0
+            'top_1_percent_overlap': 0.0,
+            'top_10_percent_overlap': 0.0
         }
+    
+    # Ensure prediction column is numeric
+    if merged['prediction'].dtype == 'object':
+        merged['prediction'] = pd.to_numeric(merged['prediction'], errors='coerce')
+        merged = merged.dropna(subset=['prediction'])
+        n_total = len(merged)
+        if n_total == 0:
+            return {
+                'top_100_overlap': 0.0,
+                'top_1000_overlap': 0.0,
+                'top_0_1_percent_overlap': 0.0,
+                'top_1_percent_overlap': 0.0,
+                'top_10_percent_overlap': 0.0
+            }
     
     # Define K values: fixed numbers and percentages
     k_values = {
         'top_100_overlap': min(100, n_total),
         'top_1000_overlap': min(1000, n_total),
         'top_0_1_percent_overlap': max(1, int(n_total * 0.001)),  # 0.1%
-        'top_1_percent_overlap': max(1, int(n_total * 0.01))      # 1%
+        'top_1_percent_overlap': max(1, int(n_total * 0.01)),     # 1%
+        'top_10_percent_overlap': max(1, int(n_total * 0.10))     # 10%
     }
     
     results = {}
@@ -451,14 +433,14 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
         score_direction: 'higher' or 'lower' for score interpretation
         
     Returns:
-        Dictionary with keys: ground_truth_ef_5, ground_truth_ef_1, ground_truth_ef_0_5, ground_truth_ef_0_1
+        Dictionary with keys: ground_truth_ef_5_0, ground_truth_ef_1_0, ground_truth_ef_0_5, ground_truth_ef_0_1
     """
     # Check if Activity column exists for binary labels
     if 'Activity' not in ground_truth_df.columns:
         # Return empty dict with None values if no Activity column
         return {
-            'ground_truth_ef_5': None,
-            'ground_truth_ef_1': None, 
+            'ground_truth_ef_5_0': None,
+            'ground_truth_ef_1_0': None, 
             'ground_truth_ef_0_5': None,
             'ground_truth_ef_0_1': None
         }
@@ -468,8 +450,8 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
     
     if len(valid_data) == 0:
         return {
-            'ground_truth_ef_5': None,
-            'ground_truth_ef_1': None,
+            'ground_truth_ef_5_0': None,
+            'ground_truth_ef_1_0': None,
             'ground_truth_ef_0_5': None, 
             'ground_truth_ef_0_1': None
         }
@@ -485,7 +467,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
     for p in percentiles:
         try:
             ef_value = calculate_enrichment_factor(scores, labels, p, score_direction)
-            # Create key name with ground_truth prefix
+            # Create key name with ground_truth prefix - use consistent naming with other EF functions
             key = f"ground_truth_ef_{str(p).replace('.', '_')}"
             results[key] = ef_value
         except Exception as e:
