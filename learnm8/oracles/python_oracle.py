@@ -11,17 +11,26 @@ from learnm8.core.interfaces import Oracle
 class PythonOracle(Oracle):
     """Oracle that executes user-defined Python functions."""
     
-    def __init__(self, oracle_path: str, function_name: str = None):
+    def __init__(self, module_path: str = None, oracle_path: str = None, function_name: str = None, **kwargs):
         """
         Initialize the Python oracle.
         
         Args:
-            oracle_path: Path to Python file containing oracle function
+            module_path: Path to Python file containing oracle function (new parameter name)
+            oracle_path: Path to Python file (legacy parameter for backward compatibility)
             function_name: Name of oracle function (if None, auto-detect)
+            **kwargs: Additional parameters for compatibility
         """
-        self.oracle_path = Path(oracle_path)
+        # Handle both new and legacy parameter names
+        if module_path is not None:
+            self.oracle_path = Path(module_path)
+        elif oracle_path is not None:
+            self.oracle_path = Path(oracle_path)
+        else:
+            raise ValueError("Either module_path or oracle_path must be provided")
+        
         if not self.oracle_path.exists():
-            raise FileNotFoundError(f"Oracle file not found: {oracle_path}")
+            raise FileNotFoundError(f"Oracle file not found: {self.oracle_path}")
         
         # Load the oracle function
         self.oracle_function = self._load_oracle_function(function_name)
