@@ -196,4 +196,11 @@ dependencies:
   - hyperopt
   - flask
   - flask_cors
+  - h5py
+  - pip
+  - pip:
+    - umap-learn>=0.5.0
+    - hdbscan>=0.8.0
+    # Note: BitBIRCH must be installed separately via:
+    # pip install git+https://github.com/mqcomplab/bitbirch.git
 prefix: /home/max/miniconda3/envs/threetwelve
