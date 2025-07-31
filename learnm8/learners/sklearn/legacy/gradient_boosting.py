@@ -2,7 +2,7 @@
 
 import os
 from xgboost import XGBRegressor
-from learnm8.learners.base import SklearnLearner
+from ...base import SklearnLearner
 from pathlib import Path
 
 

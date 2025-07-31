@@ -1,0 +1,389 @@
+"""Ensemble learner implementations for the LearnM8 framework.
+
+This module provides composition-based ensemble methods that combine multiple
+learners to improve prediction accuracy and provide uncertainty estimates
+through model diversity.
+"""
+
+import logging
+import time
+from typing import List, Tuple, Optional, Dict, Any, Union, TYPE_CHECKING
+import numpy as np
+import pandas as pd
+
+# Core imports
+from ...core.interfaces import Learner
+
+if TYPE_CHECKING:
+    from ...core.data_manager import DataManager
+
+# Optional imports for statistical functions
+try:
+    from scipy import stats
+    SCIPY_AVAILABLE = True
+except ImportError:
+    stats = None
+    SCIPY_AVAILABLE = False
+
+
+logger = logging.getLogger(__name__)
+
+
+class EnsembleLearner(Learner):
+    """Meta-learner that combines multiple models through composition.
+    
+    This learner implements ensemble methods by combining predictions from
+    multiple base learners. It provides uncertainty estimation through
+    model diversity and supports various aggregation strategies.
+    """
+    
+    def __init__(self, 
+                 learners: List[Learner], 
+                 aggregation_method: str = 'mean',
+                 uncertainty_method: str = 'std',
+                 weights: Optional[List[float]] = None,
+                 enable_parallel_training: bool = False):
+        """Initialize ensemble learner with composition pattern.
+        
+        Args:
+            learners: List of base learners to ensemble
+            aggregation_method: Method for combining predictions ('mean', 'median', 'weighted')
+            uncertainty_method: Method for uncertainty estimation ('std', 'mad', 'quantile')
+            weights: Optional weights for weighted aggregation (must sum to 1)
+            enable_parallel_training: Whether to train learners in parallel (not implemented)
+        """
+        if not learners:
+            raise ValueError("At least one learner must be provided")
+        
+        self.learners = learners
+        self.aggregation_method = aggregation_method
+        self.uncertainty_method = uncertainty_method
+        self.weights = weights
+        self.enable_parallel_training = enable_parallel_training
+        self.is_trained = False
+        
+        # Validate weights if provided
+        if weights is not None:
+            if len(weights) != len(learners):
+                raise ValueError("Number of weights must match number of learners")
+            if not np.isclose(sum(weights), 1.0):
+                raise ValueError("Weights must sum to 1.0")
+            self.weights = np.array(weights)
+        
+        # Check learner consistency
+        self._validate_learners()
+        
+        logger.info(f"Initialized EnsembleLearner with {len(learners)} base learners")
+    
+    def _validate_learners(self) -> None:
+        """Validate that all learners are compatible."""
+        if not all(isinstance(learner, Learner) for learner in self.learners):
+            raise ValueError("All ensemble members must be Learner instances")
+        
+        # Check for featurizer consistency (if learners have this attribute)
+        featurizer_types = []
+        for learner in self.learners:
+            if hasattr(learner, 'featurizer_type'):
+                featurizer_types.append(learner.featurizer_type)
+        
+        if featurizer_types and len(set(featurizer_types)) > 1:
+            logger.warning(f"Mixed featurizer types in ensemble: {set(featurizer_types)}")
+    
+    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: 'DataManager') -> None:
+        """Train all ensemble learners.
+        
+        Args:
+            compounds: DataFrame with 'ID', 'SMILES', and target columns
+            target_column: Name of the target property column  
+            data_manager: Central data manager for feature extraction and caching
+            
+        Raises:
+            ValueError: If compounds DataFrame is malformed or target_column missing
+            RuntimeError: If training fails for any learner
+        """
+        start_time = time.time()
+        
+        # Validate input
+        required_cols = ['ID', 'SMILES', target_column]
+        missing_cols = set(required_cols) - set(compounds.columns)
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+        
+        if compounds.empty:
+            raise ValueError("compounds DataFrame is empty")
+        
+        logger.info(f"Training ensemble of {len(self.learners)} learners on {len(compounds)} compounds")
+        
+        # Train each learner
+        failed_learners = []
+        
+        for i, learner in enumerate(self.learners):
+            try:
+                logger.debug(f"Training ensemble member {i+1}/{len(self.learners)}: {learner.get_name()}")
+                learner.train(compounds, target_column, data_manager)
+            except Exception as e:
+                logger.error(f"Failed to train learner {learner.get_name()}: {e}")
+                failed_learners.append((i, learner.get_name(), str(e)))
+        
+        if failed_learners:
+            # Remove failed learners from ensemble
+            failed_indices = [idx for idx, _, _ in failed_learners]
+            self.learners = [learner for i, learner in enumerate(self.learners) if i not in failed_indices]
+            
+            # Adjust weights if necessary
+            if self.weights is not None:
+                self.weights = np.array([self.weights[i] for i in range(len(self.weights)) if i not in failed_indices])
+                self.weights = self.weights / self.weights.sum()  # Renormalize
+            
+            logger.warning(f"Removed {len(failed_learners)} failed learners from ensemble. "
+                          f"Remaining learners: {len(self.learners)}")
+            
+            if not self.learners:
+                raise RuntimeError("All ensemble learners failed to train")
+        
+        self.is_trained = True
+        train_time = time.time() - start_time
+        logger.info(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
+    
+    def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
+        """Predict with ensemble uncertainty.
+        
+        Args:
+            compounds: DataFrame with 'ID' and 'SMILES' columns
+            data_manager: Central data manager for feature extraction
+            
+        Returns:
+            Tuple of (predictions, uncertainties) where uncertainties are estimated
+            from ensemble variance.
+            
+        Raises:
+            ValueError: If compounds DataFrame is malformed
+            RuntimeError: If ensemble is not trained or prediction fails
+        """
+        if not self.is_trained:
+            raise RuntimeError("Ensemble must be trained before prediction")
+        
+        start_time = time.time()
+        
+        try:
+            # Collect predictions from all learners
+            predictions_list = []
+            failed_predictions = []
+            
+            for i, learner in enumerate(self.learners):
+                try:
+                    pred, _ = learner.predict(compounds, data_manager)  # Ignore individual uncertainties
+                    predictions_list.append(pred)
+                except Exception as e:
+                    logger.warning(f"Learner {learner.get_name()} failed to predict: {e}")
+                    failed_predictions.append(i)
+            
+            if not predictions_list:
+                raise RuntimeError("All ensemble learners failed to predict")
+            
+            if failed_predictions:
+                logger.warning(f"{len(failed_predictions)} learners failed to predict")
+            
+            # Convert to array for easier manipulation
+            predictions_array = np.array(predictions_list)
+            
+            # Apply aggregation method
+            ensemble_predictions = self._aggregate_predictions(predictions_array)
+            
+            # Calculate uncertainty
+            uncertainties = self._calculate_uncertainty(predictions_array)
+            
+            pred_time = time.time() - start_time
+            logger.debug(f"Predicted {len(ensemble_predictions)} compounds with {self.get_name()} "
+                        f"using {len(predictions_list)} learners in {pred_time:.2f}s")
+            
+            return ensemble_predictions, uncertainties
+            
+        except Exception as e:
+            logger.error(f"Failed to predict with {self.get_name()}: {e}")
+            raise RuntimeError(f"Ensemble prediction failed: {e}") from e
+    
+    def _aggregate_predictions(self, predictions_array: np.ndarray) -> np.ndarray:
+        """Aggregate predictions from ensemble members.
+        
+        Args:
+            predictions_array: Array of shape (n_learners, n_compounds)
+            
+        Returns:
+            Aggregated predictions
+        """
+        if self.aggregation_method == 'mean':
+            if self.weights is not None:
+                # Weighted average
+                valid_weights = self.weights[:len(predictions_array)]
+                valid_weights = valid_weights / valid_weights.sum()  # Renormalize
+                return np.average(predictions_array, axis=0, weights=valid_weights)
+            else:
+                # Simple average
+                return np.mean(predictions_array, axis=0)
+        
+        elif self.aggregation_method == 'median':
+            return np.median(predictions_array, axis=0)
+        
+        else:
+            logger.warning(f"Unknown aggregation method '{self.aggregation_method}', using mean")
+            return np.mean(predictions_array, axis=0)
+    
+    def _calculate_uncertainty(self, predictions_array: np.ndarray) -> np.ndarray:
+        """Calculate uncertainty from ensemble variance.
+        
+        Args:
+            predictions_array: Array of shape (n_learners, n_compounds)
+            
+        Returns:
+            Uncertainty estimates
+        """
+        if self.uncertainty_method == 'std':
+            # Standard deviation across models
+            return np.std(predictions_array, axis=0)
+        
+        elif self.uncertainty_method == 'mad':
+            # Median absolute deviation (more robust to outliers)
+            median_pred = np.median(predictions_array, axis=0)
+            return np.median(np.abs(predictions_array - median_pred), axis=0)
+        
+        elif self.uncertainty_method == 'quantile':
+            # Interquartile range as uncertainty measure
+            q75, q25 = np.percentile(predictions_array, [75, 25], axis=0)
+            return (q75 - q25) / 2.0  # Half of IQR
+        
+        else:
+            logger.warning(f"Unknown uncertainty method '{self.uncertainty_method}', using std")
+            return np.std(predictions_array, axis=0)
+    
+    def supports_uncertainty(self) -> bool:
+        """Return True since ensemble provides uncertainty through model diversity."""
+        return True
+    
+    def get_name(self) -> str:
+        """Return a descriptive name for this learner."""
+        learner_names = [learner.get_name() for learner in self.learners]
+        
+        # Truncate name if too long
+        if len(learner_names) <= 3:
+            names_str = '+'.join(learner_names)
+        else:
+            names_str = '+'.join(learner_names[:3]) + f'+{len(learner_names)-3}more'
+        
+        return f"Ensemble({names_str},{self.aggregation_method})"
+    
+    def get_ensemble_statistics(self) -> Dict[str, Any]:
+        """Get statistics about the ensemble composition and performance.
+        
+        Returns:
+            Dictionary containing ensemble statistics
+        """
+        stats = {
+            'n_learners': len(self.learners),
+            'aggregation_method': self.aggregation_method,
+            'uncertainty_method': self.uncertainty_method,
+            'weighted': self.weights is not None,
+            'learner_names': [learner.get_name() for learner in self.learners],
+            'is_trained': self.is_trained
+        }
+        
+        if self.weights is not None:
+            stats['weights'] = self.weights.tolist()
+        
+        # Check uncertainty support of individual learners
+        uncertainty_support = [learner.supports_uncertainty() for learner in self.learners]
+        stats['learners_with_uncertainty'] = sum(uncertainty_support)
+        stats['fraction_with_uncertainty'] = np.mean(uncertainty_support)
+        
+        return stats
+    
+    def get_individual_predictions(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Dict[str, np.ndarray]:
+        """Get predictions from individual ensemble members.
+        
+        Args:
+            compounds: DataFrame with 'ID' and 'SMILES' columns
+            data_manager: Central data manager for feature extraction
+            
+        Returns:
+            Dictionary mapping learner names to their predictions
+            
+        Raises:
+            RuntimeError: If ensemble is not trained
+        """
+        if not self.is_trained:
+            raise RuntimeError("Ensemble must be trained before prediction")
+        
+        individual_predictions = {}
+        
+        for learner in self.learners:
+            try:
+                pred, _ = learner.predict(compounds, data_manager)
+                individual_predictions[learner.get_name()] = pred
+            except Exception as e:
+                logger.warning(f"Failed to get predictions from {learner.get_name()}: {e}")
+                individual_predictions[learner.get_name()] = None
+        
+        return individual_predictions
+    
+    def add_learner(self, learner: Learner, weight: Optional[float] = None) -> None:
+        """Add a new learner to the ensemble.
+        
+        Args:
+            learner: Learner to add to the ensemble
+            weight: Optional weight for the new learner
+            
+        Raises:
+            ValueError: If learner is invalid or weights are inconsistent
+        """
+        if not isinstance(learner, Learner):
+            raise ValueError("learner must be a Learner instance")
+        
+        self.learners.append(learner)
+        
+        # Handle weights
+        if weight is not None:
+            if self.weights is None:
+                # Initialize weights for all learners
+                n_learners = len(self.learners)
+                equal_weight = (1.0 - weight) / (n_learners - 1)
+                self.weights = np.full(n_learners - 1, equal_weight)
+                self.weights = np.append(self.weights, weight)
+            else:
+                # Scale existing weights and add new weight
+                scale_factor = (1.0 - weight)
+                self.weights = self.weights * scale_factor
+                self.weights = np.append(self.weights, weight)
+        
+        # Invalidate training state
+        self.is_trained = False
+        
+        logger.info(f"Added learner {learner.get_name()} to ensemble. "
+                   f"Total learners: {len(self.learners)}")
+    
+    def remove_learner(self, index: int) -> None:
+        """Remove a learner from the ensemble.
+        
+        Args:
+            index: Index of learner to remove
+            
+        Raises:
+            ValueError: If index is invalid
+        """
+        if not 0 <= index < len(self.learners):
+            raise ValueError(f"Invalid learner index: {index}")
+        
+        removed_learner = self.learners.pop(index)
+        
+        # Adjust weights if necessary
+        if self.weights is not None:
+            removed_weight = self.weights[index]
+            self.weights = np.delete(self.weights, index)
+            if len(self.weights) > 0:
+                # Redistribute removed weight proportionally
+                self.weights = self.weights / self.weights.sum()
+        
+        # Invalidate training state
+        self.is_trained = False
+        
+        logger.info(f"Removed learner {removed_learner.get_name()} from ensemble. "
+                   f"Remaining learners: {len(self.learners)}")
