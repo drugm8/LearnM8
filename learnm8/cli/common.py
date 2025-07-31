@@ -24,14 +24,14 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     
     parser.add_argument(
         '-s', '--strategy',
-        choices=['greedy', 'random', 'diverse'],
+        choices=['greedy', 'random'],
         default='greedy',
         help='Selection strategy'
     )
     
     parser.add_argument(
         '-i', '--initial-strategy',
-        choices=['greedy', 'random', 'diverse'],
+        choices=['greedy', 'random'],
         default='random',
         help='Initial selection strategy'
     )
