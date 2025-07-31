@@ -181,5 +181,13 @@ tests/test_representations/.representations/descriptors.pkl
 tests/test_representations/.representations/morgan.pkl
 essencedock_bench.py
 parameter_sweep.py
-LEARNM8_DATA_FLOW_DOCUMENTATION.md
+*_parameter_sweep*/
+HPC/debug_main.py
+HPC/dock.py
+HPC/LearnM8_HPC.sh
+plots_*/
+GRAPHS_TO_PRODUCE.txt
+HPC_WORKFLOW_DOCUMENTATION.md
+LEARNM8_ARCHITECTURE.md
+learnm8_basic_test.ipynb
 LEARNM8_DATA_FLOW_DOCUMENTATION.md
