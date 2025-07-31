@@ -58,7 +58,7 @@ def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     )
     
     # Monitoring parameters
-    # (Top-K overlap now calculated automatically for K = 100, 1000, 0.1%, 1%)
+    # (Top-K overlap now calculated automatically for K = 100, 1000, 0.1%, 1%, 10%)
     
     
     # General parameters
