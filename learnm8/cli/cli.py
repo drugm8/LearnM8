@@ -170,7 +170,7 @@ def main():
                 ('pca_dbscan', 0.01),  # Fast diversity
                 ('umap_dbscan', 0.01), # High-quality diversity
                 ('greedy', 0.005),     # Exploitation
-                ('diverse', 0.01),     # Traditional diversity
+                ('umap_kmeans', 0.01), # Alternative diversity method
                 ('greedy', 0.005),     # Final exploitation
             ]
     
