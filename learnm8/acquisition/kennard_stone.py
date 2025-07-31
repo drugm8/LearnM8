@@ -6,7 +6,7 @@ extracted and optimized from the astartes library for integration with LearnM8.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 
@@ -17,9 +17,14 @@ from learnm8.acquisition.astartes_utils import (
     validate_acquisition_input,
     fast_kennard_stone
 )
-from learnm8.core.data_manager import DataManager
+
+if TYPE_CHECKING:
+    from learnm8.core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
+
+# O(n²) complexity protection constant
+MAX_COMPOUNDS = 10000
 
 
 class KennardStoneAcquisition(AcquisitionFunction):
@@ -40,10 +45,23 @@ class KennardStoneAcquisition(AcquisitionFunction):
     """
     
     def __init__(self, 
-                 data_manager: DataManager,
+                 data_manager: Optional['DataManager'] = None,
                  featurizer_type: str = 'morgan',
-                 random_state: Optional[int] = None):
-        self.data_manager = data_manager
+                 random_state: Optional[int] = None,
+                 **kwargs):
+        """Initialize Kennard-Stone acquisition function.
+        
+        Args:
+            data_manager: DataManager instance for feature extraction and caching
+            featurizer_type: Type of molecular features ('morgan', 'maccs', 'ecfp6')
+            random_state: Random seed for reproducibility (though algorithm is deterministic)
+            **kwargs: Additional parameters for compatibility
+        """
+        super().__init__(data_manager=data_manager, **kwargs)
+        
+        if data_manager is None:
+            raise ValueError("KennardStoneAcquisition requires a DataManager for feature extraction")
+        
         self.featurizer_type = featurizer_type
         self.random_state = random_state
         
@@ -70,6 +88,12 @@ class KennardStoneAcquisition(AcquisitionFunction):
         
         # Additional validation for our specific needs
         validate_acquisition_input(compounds, n_select)
+        
+        # Check dataset size for O(n²) complexity protection
+        if len(compounds) > MAX_COMPOUNDS:
+            raise ValueError(f"Too many compounds ({len(compounds)}) for {self.__class__.__name__}. "
+                           f"Maximum allowed: {MAX_COMPOUNDS}. "
+                           f"Consider using a different acquisition method or reducing dataset size.")
         
         logger.info(f"Starting Kennard-Stone selection of {n_select} compounds "
                    f"from {len(compounds)} candidates using {self.featurizer_type} features")
@@ -127,7 +151,7 @@ class KennardStoneAcquisition(AcquisitionFunction):
         return f"Kennard-Stone({self.featurizer_type})"
 
 
-def create_kennard_stone_acquisition(data_manager: DataManager,
+def create_kennard_stone_acquisition(data_manager: 'DataManager',
                                      featurizer_type: str = 'morgan',
                                      random_state: Optional[int] = None) -> KennardStoneAcquisition:
     """Factory function for creating KennardStoneAcquisition instances.

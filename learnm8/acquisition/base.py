@@ -6,9 +6,12 @@ following the new architecture design with clean interfaces and dependency injec
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 import pandas as pd
 import numpy as np
+
+if TYPE_CHECKING:
+    from ..core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,20 @@ class AcquisitionFunction(ABC):
     Acquisition functions determine which compounds to select for labeling
     in each active learning cycle based on model predictions and optionally
     uncertainty estimates.
+    
+    Args:
+        data_manager: Optional DataManager for feature extraction and caching.
+                     Some acquisition methods require this for fingerprint access.
     """
+    
+    def __init__(self, data_manager: Optional['DataManager'] = None, **kwargs):
+        """Initialize acquisition function with optional DataManager.
+        
+        Args:
+            data_manager: Optional DataManager instance for feature extraction
+            **kwargs: Additional parameters for specific acquisition methods
+        """
+        self.data_manager = data_manager
     
     @abstractmethod
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:

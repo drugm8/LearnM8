@@ -6,7 +6,7 @@ from the astartes library for integration with LearnM8.
 """
 
 import logging
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 from collections import defaultdict
@@ -14,8 +14,12 @@ from collections import defaultdict
 from learnm8.acquisition.base import AcquisitionFunction
 from learnm8.acquisition.astartes_utils import validate_acquisition_input
 
+if TYPE_CHECKING:
+    from learnm8.core.data_manager import DataManager
+
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing as mp
+from functools import partial
 
 # RDKit imports with graceful failure handling
 try:
@@ -28,6 +32,31 @@ except ImportError:
     MurckoScaffold = None
 
 logger = logging.getLogger(__name__)
+
+
+def _generate_single_scaffold(smiles: str, include_chirality: bool = False) -> Optional[str]:
+	"""Generate scaffold for a single SMILES string.
+	
+	Args:
+		smiles: SMILES string
+		include_chirality: Whether to consider chirality in scaffold generation
+		
+	Returns:
+		Scaffold SMILES string or None if generation fails
+	"""
+	try:
+		mol = Chem.MolFromSmiles(smiles)
+		if mol is None:
+			return None
+		
+		scaffold_mol = MurckoScaffold.GetScaffoldForMol(mol)
+		if scaffold_mol is None:
+			return None
+		
+		return Chem.MolToSmiles(scaffold_mol, isomericSmiles=include_chirality)
+		
+	except Exception:
+		return None
 
 
 def generate_scaffolds(smiles_list: List[str], 
@@ -50,32 +79,17 @@ def generate_scaffolds(smiles_list: List[str],
 		raise ImportError("RDKit is required for scaffold-based acquisition. "
 						 "Please install RDKit: conda install -c conda-forge rdkit")
 	
-	
-	def _generate_single_scaffold(smiles: str) -> Optional[str]:
-		"""Generate scaffold for a single SMILES string."""
-		try:
-			mol = Chem.MolFromSmiles(smiles)
-			if mol is None:
-				return None
-			
-			scaffold_mol = MurckoScaffold.GetScaffoldForMol(mol)
-			if scaffold_mol is None:
-				return None
-			
-			return Chem.MolToSmiles(scaffold_mol, isomericSmiles=include_chirality)
-			
-		except Exception:
-			return None
-	
 	# Determine number of workers
 	n_cores = mp.cpu_count() if n_jobs == -1 else min(n_jobs, mp.cpu_count())
 	
 	# Use threading for small datasets, multiprocessing for large ones
 	if len(smiles_list) < 100:
-		scaffolds = [_generate_single_scaffold(smiles) for smiles in smiles_list]
+		scaffolds = [_generate_single_scaffold(smiles, include_chirality) for smiles in smiles_list]
 	else:
+		# Create partial function with fixed include_chirality parameter
+		scaffold_func = partial(_generate_single_scaffold, include_chirality=include_chirality)
 		with ProcessPoolExecutor(max_workers=n_cores) as executor:
-			scaffolds = list(executor.map(_generate_single_scaffold, smiles_list))
+			scaffolds = list(executor.map(scaffold_func, smiles_list))
 	
 	# Log warnings for failed scaffolds
 	failed_count = scaffolds.count(None)
@@ -121,13 +135,25 @@ class ScaffoldAcquisition(AcquisitionFunction):
     methods by focusing on core structural frameworks rather than detailed features.
     
     Args:
+        data_manager: Optional DataManager for feature extraction (not used by ScaffoldAcquisition)
         include_chirality: Whether to consider chirality in scaffold generation
         random_state: Random seed for reproducible selection
     """
     
     def __init__(self,
+                 data_manager: Optional['DataManager'] = None,
                  include_chirality: bool = False,
-                 random_state: Optional[int] = 42):
+                 random_state: Optional[int] = 42,
+                 **kwargs):
+        """Initialize Scaffold acquisition function.
+        
+        Args:
+            data_manager: Optional DataManager for feature extraction (not used by ScaffoldAcquisition)
+            include_chirality: Whether to consider chirality in scaffold generation
+            random_state: Random seed for reproducible selection
+            **kwargs: Additional parameters for compatibility
+        """
+        super().__init__(data_manager=data_manager, **kwargs)
         self.include_chirality = include_chirality
         self.random_state = random_state
         

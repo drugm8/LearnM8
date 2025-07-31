@@ -8,12 +8,15 @@ Reference: Butina, D. JCICS 39, 747-750 (1999)
 """
 
 import logging
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 
 from learnm8.acquisition.base import AcquisitionFunction
+
+if TYPE_CHECKING:
+    from ..core.data_manager import DataManager
 
 # RDKit imports with graceful failure handling
 try:
@@ -30,6 +33,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# O(n²) complexity protection constant
+MAX_COMPOUNDS = 10000
+
 
 class ButinaClusteringAcquisition(AcquisitionFunction):
     """Acquisition function using Butina clustering for diverse molecular selection.
@@ -44,24 +50,29 @@ class ButinaClusteringAcquisition(AcquisitionFunction):
     """
     
     def __init__(self, 
+                 data_manager: Optional['DataManager'] = None,
                  threshold: float = 0.4,
                  featurizer_type: str = 'morgan',
                  fp_radius: int = 2,
                  fp_size: int = 1024,
-                 max_compounds: int = 2000,
-                 random_state: Optional[int] = None):
+                 max_compounds: int = MAX_COMPOUNDS,
+                 random_state: Optional[int] = None,
+                 **kwargs):
         """Initialize Butina clustering acquisition.
         
         Args:
+            data_manager: Optional DataManager for feature extraction
             threshold: Distance threshold for clustering (0.2-0.5).
                       Lower values create tighter clusters.
                       Default 0.4 corresponds to 60% similarity cutoff.
             featurizer_type: Type of molecular fingerprint ('morgan', 'maccs')
             fp_radius: Morgan fingerprint radius (default 2)
             fp_size: Fingerprint bit size (default 1024)
-            max_compounds: Maximum compounds to process (memory protection)
+            max_compounds: Maximum compounds to process (O(n²) complexity protection)
             random_state: Random seed for reproducible selection within clusters
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if not RDKIT_AVAILABLE:
             raise ImportError("RDKit is required for Butina clustering acquisition. "
                             "Please install RDKit: conda install -c conda-forge rdkit")
@@ -83,11 +94,11 @@ class ButinaClusteringAcquisition(AcquisitionFunction):
         """Return descriptive name for logging and identification."""
         return f"butina_t{self.threshold}"
     
-    def _generate_fingerprints(self, smiles_list: List[str]) -> List[np.ndarray]:
-        """Generate molecular fingerprints from SMILES strings.
+    def _generate_fingerprints(self, compounds: pd.DataFrame) -> List[np.ndarray]:
+        """Generate molecular fingerprints, using DataManager when available.
         
         Args:
-            smiles_list: List of SMILES strings
+            compounds: DataFrame with ID and SMILES columns
             
         Returns:
             List of fingerprint bit vectors
@@ -95,7 +106,35 @@ class ButinaClusteringAcquisition(AcquisitionFunction):
         Raises:
             ValueError: If any SMILES is invalid
         """
+        # Use DataManager fingerprints if available
+        if self.data_manager is not None:
+            try:
+                # Get features from DataManager using consistent featurizer settings
+                compound_ids = compounds['ID'].tolist()
+                features = self.data_manager.get_features(compound_ids, self.featurizer_type)
+                
+                # Convert numpy array to list of RDKit fingerprint objects for Butina compatibility
+                fingerprints = []
+                for i in range(features.shape[0]):
+                    # Create RDKit fingerprint object from features
+                    fp = DataStructs.ExplicitBitVect(features.shape[1])
+                    for j in range(features.shape[1]):
+                        if features[i, j] > 0:  # Set bits that are on
+                            fp.SetBit(j)
+                    fingerprints.append(fp)
+                
+                logger.info(f"Used DataManager {self.featurizer_type} fingerprints "
+                           f"({features.shape[1]} bits) for {len(compound_ids)} compounds")
+                return fingerprints
+                
+            except Exception as e:
+                logger.warning(f"Failed to use DataManager fingerprints: {e}. "
+                              f"Falling back to direct generation.")
+        
+        # Fallback: generate fingerprints directly from SMILES
+        logger.info(f"Generating {self.featurizer_type} fingerprints directly from SMILES")
         fingerprints = []
+        smiles_list = compounds['SMILES'].tolist()
         
         for i, smiles in enumerate(smiles_list):
             mol = Chem.MolFromSmiles(smiles)
@@ -238,11 +277,11 @@ class ButinaClusteringAcquisition(AcquisitionFunction):
         # Input validation
         self.validate_input(compounds, n_select)
         
-        # Check dataset size for memory protection
+        # Check dataset size for O(n²) complexity protection
         if len(compounds) > self.max_compounds:
-            logger.warning(f"Dataset size {len(compounds)} exceeds maximum {self.max_compounds}. "
-                          f"Consider using a different clustering method or reducing dataset size.")
-            raise ValueError(f"Dataset too large for Butina clustering: {len(compounds)} > {self.max_compounds}")
+            raise ValueError(f"Too many compounds ({len(compounds)}) for {self.__class__.__name__}. "
+                           f"Maximum allowed: {self.max_compounds}. "
+                           f"Consider using a different acquisition method or reducing dataset size.")
         
         # Handle edge case: select all compounds
         if n_select >= len(compounds):
@@ -252,8 +291,7 @@ class ButinaClusteringAcquisition(AcquisitionFunction):
         
         try:
             # Generate molecular fingerprints
-            smiles_list = compounds['SMILES'].tolist()
-            fingerprints = self._generate_fingerprints(smiles_list)
+            fingerprints = self._generate_fingerprints(compounds)
             
             # Calculate distance matrix
             distance_matrix = self._calculate_distance_matrix(fingerprints)

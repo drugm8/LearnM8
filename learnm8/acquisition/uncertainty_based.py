@@ -5,10 +5,14 @@ uncertainty estimates for exploration-exploitation balance in active learning.
 """
 
 import logging
+from typing import Optional, TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
+
+if TYPE_CHECKING:
+    from ..core.data_manager import DataManager
 
 # Optional imports for statistical functions
 try:
@@ -29,13 +33,17 @@ class UCBAcquisition(AcquisitionFunction):
     prediction + beta * uncertainty.
     """
     
-    def __init__(self, beta: float = 2.0):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 beta: float = 2.0, **kwargs):
         """Initialize UCB acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by UCBAcquisition)
             beta: Confidence parameter controlling exploration vs exploitation.
                   Higher values favor exploration.
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if beta < 0:
             raise ValueError("beta must be non-negative")
         
@@ -88,14 +96,18 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     providing a principled way to balance exploration and exploitation.
     """
     
-    def __init__(self, xi: float = 0.01, minimize: bool = False):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 xi: float = 0.01, minimize: bool = False, **kwargs):
         """Initialize Expected Improvement acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by ExpectedImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: If True, seek improvement towards lower values;
                      if False, seek improvement towards higher values.
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
         
@@ -175,14 +187,18 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     the current best observed value.
     """
     
-    def __init__(self, xi: float = 0.01, minimize: bool = False):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 xi: float = 0.01, minimize: bool = False, **kwargs):
         """Initialize Probability of Improvement acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by ProbabilityImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: If True, seek improvement towards lower values;
                      if False, seek improvement towards higher values.
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
         
@@ -261,12 +277,16 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
     stochastic exploration strategy.
     """
     
-    def __init__(self, random_state: int = 42):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 random_state: int = 42, **kwargs):
         """Initialize Thompson Sampling acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by ThompsonSamplingAcquisition)
             random_state: Random seed for reproducible sampling
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         self.random_state = random_state
         self._rng = np.random.RandomState(random_state)
     
@@ -319,12 +339,16 @@ class EntropyAcquisition(AcquisitionFunction):
     the most information, measured by prediction entropy or uncertainty.
     """
     
-    def __init__(self, entropy_type: str = 'uncertainty'):
+    def __init__(self, data_manager: Optional['DataManager'] = None, 
+                 entropy_type: str = 'uncertainty', **kwargs):
         """Initialize Entropy acquisition function.
         
         Args:
+            data_manager: Optional DataManager for feature extraction (not used by EntropyAcquisition)
             entropy_type: Type of entropy measure ('uncertainty', 'variance')
+            **kwargs: Additional parameters for compatibility
         """
+        super().__init__(data_manager=data_manager, **kwargs)
         if entropy_type not in ['uncertainty', 'variance']:
             raise ValueError("entropy_type must be 'uncertainty' or 'variance'")
         

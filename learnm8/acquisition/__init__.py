@@ -15,7 +15,6 @@ from .uncertainty_based import (
     ThompsonSamplingAcquisition,
     EntropyAcquisition
 )
-from .diversity import DiverseAcquisition
 from .simulated_annealing import SimulatedAnnealingAcquisition
 
 # Simplified clustering-based acquisition functions
@@ -69,8 +68,6 @@ __all__ = [
     'ThompsonSamplingAcquisition',
     'EntropyAcquisition',
     
-    # Traditional diversity-based acquisition functions
-    'DiverseAcquisition',
     
     # Optimization-based acquisition functions
     'SimulatedAnnealingAcquisition',
@@ -115,8 +112,6 @@ ACQUISITION_REGISTRY = {
     'thompson': ThompsonSamplingAcquisition,
     'entropy': EntropyAcquisition,
     
-    # Traditional diversity
-    'diverse': DiverseAcquisition,
     
     # Optimization-based methods
     'simulated_annealing': SimulatedAnnealingAcquisition,
