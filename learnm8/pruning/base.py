@@ -27,12 +27,12 @@ class DesignSpacePruner(ABC):
               predictions: np.ndarray, 
               uncertainties: Optional[np.ndarray] = None) -> pd.DataFrame:
         """
-        Prune the compound pool based on predictions and uncertainties.
+        Prune the compound pool based on predictions.
         
         Args:
             compounds: DataFrame with 'ID', 'SMILES' columns
             predictions: Model predictions for each compound
-            uncertainties: Model uncertainties (optional, strategy-dependent)
+            uncertainties: Model uncertainties (optional, not used by score-based pruning)
             
         Returns:
             Pruned DataFrame subset with promising compounds

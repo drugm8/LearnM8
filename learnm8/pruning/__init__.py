@@ -1,27 +1,18 @@
-"""Design space pruning for the LearnM8 active learning framework.
+"""Simple score-based pruning for the LearnM8 active learning framework.
 
-This package provides various strategies for reducing the size of the unlabeled
-compound pool by removing compounds that are unlikely to be valuable, based on
-model predictions and uncertainty estimates.
+This package provides a single, straightforward pruning strategy that removes
+compounds based on their predicted scores, making it easy to focus the search
+on the most promising regions of chemical space.
 
-New Architecture (v0.3.0):
-- Object-oriented pruning strategies with consistent interfaces
-- Statistical analysis and validation
-- Adaptive and performance-based pruning
-- Comprehensive utility functions
+Simplified Architecture (v0.6.0):
+- Single score-based pruning strategy
+- No uncertainty dependencies
+- Simple fraction-based removal
+- Score direction awareness
 """
 
 from .base import DesignSpacePruner, PruningError
-from .probabilistic import (
-    ProbabilisticPruner,
-    UncertaintyThresholdPruner,
-    PredictionThresholdPruner,
-    ConfidenceIntervalPruner
-)
-from .adaptive import (
-    CycleBudgetPruner,
-    PerformanceBasedPruner
-)
+from .score_based import ScoreBasedPruner
 from .utils import (
     validate_pruning_parameters,
     create_pruning_strategy,
@@ -32,21 +23,10 @@ __all__ = [
     'DesignSpacePruner',
     'PruningError',
     
-    # Probabilistic pruning strategies
-    'ProbabilisticPruner',
-    'UncertaintyThresholdPruner', 
-    'PredictionThresholdPruner',
-    'ConfidenceIntervalPruner',
-    
-    # Adaptive pruning strategies
-    'CycleBudgetPruner',
-    'PerformanceBasedPruner',
+    # Score-based pruning strategy
+    'ScoreBasedPruner',
     
     # Utility functions
-    'analyze_pruning_effectiveness',
-    'estimate_pruning_impact',
-    'recommend_pruning_strategy',
     'validate_pruning_parameters',
     'create_pruning_strategy',
-    'compare_pruning_strategies'
 ]
