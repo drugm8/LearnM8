@@ -73,12 +73,13 @@ def main():
                        help='Number of parallel workers (default: auto)')
     
     # Pruning configuration
+    parser.add_argument('--pruning-fraction', type=float,
+                       help='Fraction of compounds to prune each cycle (0.0-0.9, default: None - no pruning)')
     parser.add_argument('--pruning-strategy', type=str,
-                       choices=['probabilistic', 'uncertainty_threshold', 'prediction_threshold', 
-                               'confidence_interval', 'cycle_budget', 'performance_based'],
-                       help='Pruning strategy to reduce compound pool size (default: None - no pruning)')
+                       choices=['score_based'],
+                       help='Pruning strategy (only score_based available, automatically set when --pruning-fraction is used)')
     parser.add_argument('--pruning-params', type=str,
-                       help='JSON string of pruning strategy parameters (e.g., \'{"threshold": 0.1}\')')
+                       help='JSON string of pruning strategy parameters (deprecated - use --pruning-fraction instead)')
     
     # Evaluation configuration
     parser.add_argument('--disable-evaluation', action='store_true',
@@ -174,14 +175,37 @@ def main():
                 ('greedy', 0.005),     # Final exploitation
             ]
     
+    # Handle score direction auto-detection first
+    if args.score_direction == 'auto':
+        # Default to 'higher' for now (auto-detection can be added later)
+        score_direction = 'higher'
+        console.print("[yellow]Auto-detecting score direction: defaulting to 'higher' (better scores are higher)[/yellow]")
+    else:
+        score_direction = args.score_direction
+    
     # Parse pruning parameters
+    pruning_strategy = None
     pruning_params = None
-    if args.pruning_params:
-        try:
-            pruning_params = json.loads(args.pruning_params)
-        except json.JSONDecodeError as e:
-            console.print(f"[red]Invalid JSON in --pruning-params: {e}[/red]")
+    
+    # Handle simplified pruning interface
+    if args.pruning_fraction is not None:
+        if not 0.0 <= args.pruning_fraction <= 0.9:
+            console.print(f"[red]--pruning-fraction must be between 0.0 and 0.9, got {args.pruning_fraction}[/red]")
             sys.exit(1)
+        
+        pruning_strategy = 'score_based'
+        pruning_params = {
+            'pruning_fraction': args.pruning_fraction,
+            'score_direction': score_direction
+        }
+    elif args.pruning_strategy:
+        pruning_strategy = args.pruning_strategy
+        if args.pruning_params:
+            try:
+                pruning_params = json.loads(args.pruning_params)
+            except json.JSONDecodeError as e:
+                console.print(f"[red]Invalid JSON in --pruning-params: {e}[/red]")
+                sys.exit(1)
     
     # Parse acquisition parameters
     acquisition_params = None
@@ -192,14 +216,6 @@ def main():
             console.print(f"[red]Invalid JSON in --acquisition-params: {e}[/red]")
             sys.exit(1)
     
-    # Handle score direction auto-detection
-    if args.score_direction == 'auto':
-        # Default to 'higher' for now (auto-detection can be added later)
-        score_direction = 'higher'
-        console.print("[yellow]Auto-detecting score direction: defaulting to 'higher' (better scores are higher)[/yellow]")
-    else:
-        score_direction = args.score_direction
-    
     # Display experiment info
     console.print(f"[blue]Data:[/blue] {args.compound_pool}")
     console.print(f"[blue]Oracle:[/blue] {args.oracle}")
@@ -207,8 +223,11 @@ def main():
     console.print(f"[blue]Score Direction:[/blue] {score_direction}")
     console.print(f"[blue]Learner:[/blue] {args.learner}")
     
-    if args.pruning_strategy:
-        console.print(f"[blue]Pruning Strategy:[/blue] {args.pruning_strategy}")
+    if pruning_strategy:
+        if args.pruning_fraction is not None:
+            console.print(f"[blue]Pruning:[/blue] {args.pruning_fraction:.1%} of worst compounds per cycle")
+        else:
+            console.print(f"[blue]Pruning Strategy:[/blue] {pruning_strategy}")
         if pruning_params:
             console.print(f"[blue]Pruning Params:[/blue] {pruning_params}")
     else:
@@ -267,7 +286,7 @@ def main():
             'random_state': args.random_state,
             'score_direction': score_direction,
             # Pruning parameters
-            'pruning_strategy': args.pruning_strategy,
+            'pruning_strategy': pruning_strategy,
             'pruning_params': pruning_params,
             # Acquisition parameters
             'default_acquisition': args.acquisition,
