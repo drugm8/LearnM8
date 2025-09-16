@@ -113,9 +113,8 @@ def run_active_learning(
         score_direction: Direction of score optimization ('higher' or 'lower' is better)
         
         # Pruning parameters:
-        pruning_strategy: Pruning strategy name (None, 'probabilistic', 'uncertainty_threshold', 
-                         'prediction_threshold', 'confidence_interval', 'cycle_budget', 'performance_based')
-        pruning_params: Dictionary of strategy-specific parameters (default: None)
+        pruning_strategy: Pruning strategy name (None or 'score_based')
+        pruning_params: Dictionary of strategy-specific parameters (pruning_fraction, score_direction)
         
         # Acquisition parameters:
         default_acquisition: Default acquisition method override (optional, supports all methods in acquisition registry)
@@ -489,7 +488,8 @@ def execute_run_mode_cycle(
                 predictions=predictions,
                 uncertainties=uncertainties,
                 strategy=pruning_strategy,
-                params=pruning_params or {}
+                params=pruning_params or {},
+                score_direction=score_direction
             )
             pruning_stats.update(pruning_info)
             logger.info(f"Cycle {cycle}: Pruning removed {pruning_stats['pruned_count']} compounds "
@@ -772,7 +772,8 @@ def execute_benchmark_mode_cycle(
                 predictions=unlabeled_predictions,
                 uncertainties=unlabeled_uncertainties,
                 strategy=pruning_strategy,
-                params=pruning_params or {}
+                params=pruning_params or {},
+                score_direction=score_direction
             )
             pruning_stats.update(pruning_info)
             logger.info(f"Cycle {cycle}: Pruning removed {pruning_stats['pruned_count']} compounds "
@@ -1100,7 +1101,8 @@ def apply_pruning_strategy(
     predictions: Optional[pd.DataFrame],
     uncertainties: Optional[pd.DataFrame],
     strategy: str,
-    params: Dict[str, Any]
+    params: Dict[str, Any],
+    score_direction: str = 'higher'
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Apply pruning strategy to reduce compound pool size.
     
@@ -1110,6 +1112,7 @@ def apply_pruning_strategy(
         uncertainties: Model uncertainties on pool (optional)
         strategy: Pruning strategy name
         params: Strategy-specific parameters
+        score_direction: Direction of score optimization ('higher' or 'lower')
         
     Returns:
         Tuple of (pruned_pool, pruning_info_dict)
@@ -1121,15 +1124,16 @@ def apply_pruning_strategy(
     
     # Map CLI-friendly names to class names
     strategy_mapping = {
-        'probabilistic': 'ProbabilisticPruner',
-        'uncertainty_threshold': 'UncertaintyThresholdPruner',
-        'prediction_threshold': 'PredictionThresholdPruner',
-        'confidence_interval': 'ConfidenceIntervalPruner',
-        'cycle_budget': 'CycleBudgetPruner',
-        'performance_based': 'PerformanceBasedPruner'
+        'score_based': 'ScoreBasedPruner'
     }
     
     strategy_class_name = strategy_mapping.get(strategy, strategy)
+    
+    # Ensure score_direction is in params for score-based pruning
+    if strategy in ['score_based', 'ScoreBasedPruner']:
+        params = params.copy()
+        if 'score_direction' not in params:
+            params['score_direction'] = score_direction
     
     # Create pruner instance
     try:
@@ -1141,8 +1145,15 @@ def apply_pruning_strategy(
     original_size = len(pool)
     
     # Convert predictions and uncertainties to numpy arrays if they're DataFrames
-    pred_array = predictions.values if hasattr(predictions, 'values') else predictions
-    unc_array = uncertainties.values if uncertainties is not None and hasattr(uncertainties, 'values') else uncertainties
+    if hasattr(predictions, 'values'):
+        pred_array = predictions.values.flatten() if predictions.values.ndim > 1 else predictions.values
+    else:
+        pred_array = predictions
+    
+    if uncertainties is not None and hasattr(uncertainties, 'values'):
+        unc_array = uncertainties.values.flatten() if uncertainties.values.ndim > 1 else uncertainties.values
+    else:
+        unc_array = uncertainties
     
     pruned_pool = pruner.prune(
         compounds=pool,
