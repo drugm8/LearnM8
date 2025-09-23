@@ -12,7 +12,7 @@ from .core import (
     export_metrics_csv
 )
 
-# Import specialized metric functions from metrics module
+# Import specialized metric functions from modular metrics package
 from .metrics import (
     calculate_spearman_correlation,
     calculate_average_score,

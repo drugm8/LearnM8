@@ -12,13 +12,17 @@ import numpy as np
 # Direct sklearn imports for basic metrics
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
-# Import specialized metric functions
-from .metrics import (
-	calculate_spearman_correlation, calculate_average_score,
+# Import specialized metric functions from modular metrics package
+from .metrics.performance import (
+	calculate_spearman_correlation, calculate_average_score, calculate_mape
+)
+from .metrics.enrichment import (
 	calculate_top_k_overlap, calculate_multiple_top_k_overlaps,
 	calculate_enrichment_factor, calculate_multiple_enrichment_factors,
-	calculate_molecular_similarity_metrics, calculate_mape,
 	calculate_ground_truth_enrichment_factors
+)
+from .metrics.similarity import (
+	calculate_molecular_similarity_metrics
 )
 
 logger = logging.getLogger(__name__)
