@@ -153,6 +153,7 @@ dependencies:
   - python_abi
   - pytorch
   - pytorch-lightning
+  - pytest
   - pytz
   - pyyaml
   - rdkit
