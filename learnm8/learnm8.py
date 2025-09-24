@@ -1003,9 +1003,9 @@ def select_compounds_by_strategy(
             # Try to convert to array
             compound_data['prediction'] = np.array(predictions)
     else:
-        # Use random predictions if none available
-        compound_data['prediction'] = np.random.uniform(0, 1, len(pool))
-        logger.warning(f"No predictions available for {strategy} selection, using random predictions")
+        # Fail if predictions are missing - never generate random data
+        raise ValueError(f"No predictions available for '{strategy}' selection strategy. "
+                        f"Model must provide predictions for compound selection.")
     
     # Add uncertainties to compound data if available
     if uncertainties is not None:
@@ -1019,14 +1019,19 @@ def select_compounds_by_strategy(
             # Try to convert to array
             compound_data['uncertainty'] = np.array(uncertainties)
     else:
-        # Use random uncertainties if none available
-        compound_data['uncertainty'] = np.random.uniform(0.1, 0.5, len(pool))
-        if strategy in ['ucb', 'ei', 'pi', 'thompson', 'entropy']:
-            logger.warning(f"No uncertainties available for {strategy} selection, using random uncertainties")
+        # Check if strategy requires uncertainties - never generate random data
+        try:
+            acquisition_class = get_acquisition_function(strategy)
+            # Create temporary instance to check uncertainty requirement
+            temp_acquisition = acquisition_class()
+            if temp_acquisition.requires_uncertainty():
+                raise ValueError(f"Strategy '{strategy}' requires uncertainty estimates, but none were provided. "
+                               f"Use a learner that supports uncertainty quantification "
+                               f"(e.g., GaussianProcessLearner, MCDropoutLearner, EnsembleLearner).")
+        except KeyError:
+            # Unknown strategy - will be handled later in the function
+            pass
     
-    # Adjust predictions based on score direction for greedy-like methods
-    if score_direction == 'lower' and strategy in ['greedy', 'topk']:
-        compound_data['prediction'] = 1.0 - compound_data['prediction']
     
     try:
         # Get acquisition function from registry
@@ -1039,7 +1044,11 @@ def select_compounds_by_strategy(
         if data_manager is None:
             logger.warning(f"DataManager not available for {strategy}, some methods may have limited functionality")
         
-        acquisition_function = acquisition_class(data_manager=data_manager, **acquisition_params)
+        acquisition_function = acquisition_class(
+            data_manager=data_manager,
+            score_direction=score_direction,
+            **acquisition_params
+        )
         
         # Perform selection
         selected = acquisition_function.select(compound_data, n_select=actual_batch_size)
@@ -1055,46 +1064,7 @@ def select_compounds_by_strategy(
     except Exception as e:
         # Fallback on any error
         logger.warning(f"Error with {strategy} acquisition: {e}. Falling back to greedy selection.")
-        return _fallback_greedy_selection(compound_data, actual_batch_size, score_direction)
-
-
-def _fallback_greedy_selection(
-    compound_data: pd.DataFrame, 
-    batch_size: int, 
-    score_direction: str
-) -> pd.DataFrame:
-    """Fallback greedy selection when advanced methods fail."""
-    if compound_data.empty:
-        return compound_data.copy()
-    
-    if 'prediction' in compound_data.columns and len(compound_data) > 0:
-        try:
-            # Ensure prediction column is numeric
-            compound_data = compound_data.copy()
-            compound_data['prediction'] = pd.to_numeric(compound_data['prediction'], errors='coerce')
-            
-            # Remove rows with NaN predictions
-            compound_data = compound_data.dropna(subset=['prediction'])
-            
-            if compound_data.empty:
-                return compound_data
-            
-            batch_size = min(batch_size, len(compound_data))
-            if score_direction == 'higher':
-                return compound_data.nlargest(batch_size, 'prediction')
-            else:
-                return compound_data.nsmallest(batch_size, 'prediction')
-        except (TypeError, ValueError):
-            # Fall back to random sampling if numeric conversion fails
-            batch_size = min(batch_size, len(compound_data))
-            return compound_data.sample(n=batch_size) if batch_size > 0 else compound_data.iloc[:0]
-    else:
-        batch_size = min(batch_size, len(compound_data))
-        return compound_data.sample(n=batch_size) if batch_size > 0 else compound_data.iloc[:0]
-
-
-# Removed select_diverse_compounds - now using acquisition module directly
-
+        raise e
 
 def apply_pruning_strategy(
     pool: pd.DataFrame,
