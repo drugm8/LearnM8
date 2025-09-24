@@ -28,14 +28,23 @@ class AcquisitionFunction(ABC):
                      Some acquisition methods require this for fingerprint access.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, **kwargs):
+    def __init__(self, data_manager: Optional['DataManager'] = None,
+                 score_direction: str = 'higher', **kwargs):
         """Initialize acquisition function with optional DataManager.
-        
+
         Args:
             data_manager: Optional DataManager instance for feature extraction
+            score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
             **kwargs: Additional parameters for specific acquisition methods
         """
         self.data_manager = data_manager
+
+        # Validate and store score direction
+        if score_direction not in ['higher', 'lower']:
+            raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+
+        self.score_direction = score_direction
+        self.maximize = score_direction == 'higher'
     
     @abstractmethod
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
