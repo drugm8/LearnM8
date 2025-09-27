@@ -5,7 +5,7 @@ in molecular property prediction tasks.
 """
 
 import logging
-from typing import Tuple
+from typing import Tuple, List
 import numpy as np
 import pandas as pd
 
@@ -34,27 +34,29 @@ class MCDropoutLearner(TorchLearner):
     an ensemble of predictions for uncertainty estimation.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  hidden_sizes: Tuple[int, ...] = (256, 128),
                  dropout_rate: float = 0.2,
                  n_dropout_samples: int = 100,
                  activation: str = 'relu',
                  batch_norm: bool = True,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Monte Carlo Dropout learner.
-        
+
         Args:
             hidden_sizes: Tuple of hidden layer sizes
             dropout_rate: Dropout rate for uncertainty estimation
             n_dropout_samples: Number of dropout samples for uncertainty
             activation: Activation function
             batch_norm: Whether to use batch normalization
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to TorchLearner
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required for MCDropoutLearner")
         
-        super().__init__(**kwargs)
+        super().__init__(featurizer_type=featurizer_type, **kwargs)
         
         self.hidden_sizes = hidden_sizes
         self.dropout_rate = dropout_rate
@@ -131,59 +133,65 @@ class MCDropoutLearner(TorchLearner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
         """Predict with Monte Carlo Dropout uncertainty.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
             Tuple of (predictions, uncertainties) where uncertainties are estimated
             using Monte Carlo Dropout sampling.
-            
+            The predictions and uncertainties align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
-        
+
         try:
-            # Use DataManager to prepare prediction data
-            X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
-            
+            # Use DataManager to prepare prediction data (filters invalid compounds)
+            valid_compounds, X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
+
+            if len(valid_compounds) == 0:
+                logger.warning("No compounds could generate valid features for prediction")
+                return np.array([]), np.array([])
+
             # Scale features using training scaler
             X_scaled = self.scaler.transform(X)
-            
+
             # Convert to tensor
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
-            
+
             # Enable dropout for uncertainty estimation
             self.model.train()
-            
+
             # Collect predictions from multiple dropout samples
             predictions_list = []
-            
+
             with torch.no_grad():
                 for _ in range(self.n_dropout_samples):
                     pred = self.model(X_tensor).cpu().numpy().squeeze()
                     predictions_list.append(pred)
-            
+
             # Calculate statistics
             predictions_array = np.array(predictions_list)
             mean_predictions = np.mean(predictions_array, axis=0)
             uncertainties = np.std(predictions_array, axis=0)
-            
+
             # Ensure outputs are always arrays, even for single predictions
             if np.isscalar(mean_predictions):
                 mean_predictions = np.array([mean_predictions])
             if np.isscalar(uncertainties):
                 uncertainties = np.array([uncertainties])
-            
+
             logger.debug(f"Predicted {len(mean_predictions)} compounds with {self.get_name()} "
                         f"using {self.n_dropout_samples} MC samples")
-            
+
             return mean_predictions, uncertainties
-            
+
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise RuntimeError(f"Prediction failed: {e}") from e

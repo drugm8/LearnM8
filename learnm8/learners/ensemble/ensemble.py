@@ -147,56 +147,66 @@ class EnsembleLearner(Learner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
         """Predict with ensemble uncertainty.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
             Tuple of (predictions, uncertainties) where uncertainties are estimated
-            from ensemble variance.
-            
+            from ensemble variance. Only compounds that ALL learners could predict are included.
+            The predictions and uncertainties align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If ensemble is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Ensemble must be trained before prediction")
-        
+
         start_time = time.time()
-        
+
         try:
-            # Collect predictions from all learners
+            # Get the valid compounds that can generate features
+            valid_compounds, _ = data_manager.prepare_prediction_data(compounds,
+                                                                     self.learners[0].featurizer_type if hasattr(self.learners[0], 'featurizer_type') else 'morgan')
+
+            if len(valid_compounds) == 0:
+                logger.warning("No compounds could generate valid features")
+                return np.array([]), np.array([])
+
+            # Collect predictions from all learners - they will all work with same valid compounds
             predictions_list = []
             failed_predictions = []
-            
+
             for i, learner in enumerate(self.learners):
                 try:
-                    pred, _ = learner.predict(compounds, data_manager)  # Ignore individual uncertainties
+                    pred, _ = learner.predict(compounds, data_manager)
                     predictions_list.append(pred)
                 except Exception as e:
                     logger.warning(f"Learner {learner.get_name()} failed to predict: {e}")
                     failed_predictions.append(i)
-            
+
             if not predictions_list:
                 raise RuntimeError("All ensemble learners failed to predict")
-            
+
             if failed_predictions:
                 logger.warning(f"{len(failed_predictions)} learners failed to predict")
-            
+
             # Convert to array for easier manipulation
             predictions_array = np.array(predictions_list)
-            
+
             # Apply aggregation method
             ensemble_predictions = self._aggregate_predictions(predictions_array)
-            
+
             # Calculate uncertainty
             uncertainties = self._calculate_uncertainty(predictions_array)
-            
+
             pred_time = time.time() - start_time
             logger.debug(f"Predicted {len(ensemble_predictions)} compounds with {self.get_name()} "
                         f"using {len(predictions_list)} learners in {pred_time:.2f}s")
-            
+
             return ensemble_predictions, uncertainties
             
         except Exception as e:
