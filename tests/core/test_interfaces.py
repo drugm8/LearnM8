@@ -7,13 +7,11 @@ Tests that all components properly implement their abstract interfaces.
 import pytest
 import numpy as np
 import pandas as pd
-from abc import ABC, abstractmethod
 
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.core.data_manager import DataManager
 from learnm8.learners.sklearn import RandomForestLearner, GaussianProcessLearner
 from learnm8.oracles.csv_oracle import CSVOracle
-from learnm8.oracles.python_oracle import PythonOracle
 
 
 class MockLearner(Learner):
@@ -107,7 +105,7 @@ class TestLearnerInterface:
         assert len(uncertainty) == len(compounds)
         
         # Test uncertainty support
-        assert learner.supports_uncertainty() == True
+        assert learner.supports_uncertainty()
     
     def test_learner_without_uncertainty(self, small_real_compounds, tmp_path):
         """Test learner that doesn't support uncertainty."""
@@ -124,7 +122,7 @@ class TestLearnerInterface:
         
         assert len(predictions) == len(compounds)
         assert uncertainty is None  # This learner doesn't support uncertainty
-        assert learner.supports_uncertainty() == False
+        assert not learner.supports_uncertainty()
     
     def test_learner_error_conditions(self, tmp_path):
         """Test learner error handling."""
@@ -156,7 +154,7 @@ class TestLearnerInterface:
         data_manager = DataManager(results_dir=tmp_path)
         
         # Test RandomForestLearner
-        rf_learner = RandomForestLearner()
+        rf_learner = RandomForestLearner(featurizer_type='morgan')
         
         assert isinstance(rf_learner, Learner)
         assert hasattr(rf_learner, 'train')
@@ -170,7 +168,7 @@ class TestLearnerInterface:
         assert isinstance(rf_learner.supports_uncertainty(), bool)
         
         # Test GaussianProcessLearner
-        gp_learner = GaussianProcessLearner()
+        gp_learner = GaussianProcessLearner(featurizer_type='morgan')
         
         assert isinstance(gp_learner, Learner)
         gp_learner.train(compounds, 'Activity', data_manager)
@@ -306,7 +304,7 @@ class TestInterfaceIntegration:
         
         # Set up real components
         data_manager = DataManager(results_dir=tmp_path)
-        learner = RandomForestLearner()
+        learner = RandomForestLearner(featurizer_type='morgan')
         oracle = CSVOracle(str(test_csv))
         
         # Split data for simulation
