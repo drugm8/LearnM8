@@ -30,7 +30,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
     performance on molecular datasets.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  n_estimators: int = 300,
                  max_depth: Optional[int] = 15,
                  min_samples_split: int = 5,
@@ -43,9 +43,10 @@ class AdvancedRandomForestLearner(SklearnLearner):
                  oob_score: bool = True,
                  random_state: int = 42,
                  n_jobs: int = -1,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Advanced Random Forest learner.
-        
+
         Args:
             n_estimators: Number of trees in the forest (increased from standard)
             max_depth: Maximum depth of trees (limited to prevent overfitting)
@@ -59,6 +60,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
             oob_score: Enable out-of-bag scoring
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
@@ -83,7 +85,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
             n_jobs=n_jobs
         )
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         self.n_estimators = n_estimators
         self.max_depth = max_depth

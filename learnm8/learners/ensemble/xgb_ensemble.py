@@ -8,25 +8,33 @@ from ..sklearn.xgboost_learner import XGBoostLearner
 class XGBEnsemble(EnsembleLearner):
     """Ensemble of 3 XGBoost learners with different learning rates."""
     
-    def __init__(self, 
+    def __init__(self,
+                 featurizer_type: str = None,
                  learning_rates: Optional[List[float]] = None,
                  random_states: Optional[List[int]] = None,
                  **kwargs):
         """Initialize XGB ensemble.
-        
+
         Args:
+            featurizer_type: Type of molecular features to use
             learning_rates: List of learning rates for diversity (default: [0.05, 0.1, 0.2])
             random_states: List of random states for diversity (default: [42, 123, 456])
             **kwargs: Additional arguments passed to EnsembleLearner
         """
+        if featurizer_type is None:
+            raise ValueError("featurizer_type is required")
         if learning_rates is None:
             learning_rates = [0.05, 0.1, 0.2]
         if random_states is None:
             random_states = [42, 123, 456]
-        
+
         learners = []
         for lr, rs in zip(learning_rates, random_states):
-            xgb = XGBoostLearner(learning_rate=lr, random_state=rs)
+            xgb = XGBoostLearner(
+                learning_rate=lr,
+                random_state=rs,
+                featurizer_type=featurizer_type
+            )
             learners.append(xgb)
         
         # Set default ensemble parameters

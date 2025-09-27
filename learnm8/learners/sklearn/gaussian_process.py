@@ -5,7 +5,7 @@ quantification for molecular property prediction tasks.
 """
 
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import numpy as np
 import pandas as pd
 
@@ -35,21 +35,23 @@ class GaussianProcessLearner(SklearnLearner):
     scenarios where uncertainty estimates are crucial.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  kernel=None,
                  alpha: float = 1e-10,
                  n_restarts_optimizer: int = 5,
                  normalize_y: bool = True,
                  random_state: int = 42,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Gaussian Process learner.
-        
+
         Args:
             kernel: GP kernel (None for RBF with learned hyperparameters)
             alpha: Noise regularization parameter
             n_restarts_optimizer: Number of optimizer restarts for hyperparameter optimization
             normalize_y: Whether to normalize target values
             random_state: Random seed for reproducibility
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
@@ -68,7 +70,7 @@ class GaussianProcessLearner(SklearnLearner):
             random_state=random_state
         )
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         # Store configuration for name generation
         self.alpha = alpha
@@ -76,32 +78,39 @@ class GaussianProcessLearner(SklearnLearner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
         """Predict with native GP uncertainty.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
-            Tuple of (predictions, uncertainties). GP naturally provides uncertainty.
-            
+            Tuple of (predictions, uncertainties).
+            GP naturally provides uncertainty.
+            The predictions and uncertainties align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
-        
+
         try:
-            # Use DataManager to prepare prediction data
-            X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
-            
+            # Use DataManager to prepare prediction data (filters invalid compounds)
+            valid_compounds, X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
+
+            if len(valid_compounds) == 0:
+                logger.warning("No compounds could generate valid features for prediction")
+                return np.array([]), np.array([])
+
             # Make predictions with uncertainty
             predictions, std = self.model.predict(X, return_std=True)
-            
+
             logger.debug(f"Predicted {len(predictions)} compounds with {self.get_name()}")
-            
+
             return predictions, std  # GP naturally provides uncertainty
-            
+
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise RuntimeError(f"Prediction failed: {e}") from e

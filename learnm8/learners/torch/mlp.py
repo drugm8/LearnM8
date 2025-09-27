@@ -32,25 +32,27 @@ class MLPLearner(TorchLearner):
     for molecular property prediction.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  hidden_sizes: Tuple[int, ...] = (512, 256, 128),
                  activation: str = 'relu',
                  dropout_rate: float = 0.2,
                  batch_norm: bool = True,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize MLP learner.
-        
+
         Args:
             hidden_sizes: Tuple of hidden layer sizes
             activation: Activation function ('relu', 'tanh', 'gelu')
             dropout_rate: Dropout rate for regularization
             batch_norm: Whether to use batch normalization
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to TorchLearner
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required for MLPLearner")
         
-        super().__init__(**kwargs)
+        super().__init__(featurizer_type=featurizer_type, **kwargs)
         
         self.hidden_sizes = hidden_sizes
         self.activation = activation

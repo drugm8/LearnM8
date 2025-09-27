@@ -30,20 +30,22 @@ class LinearRegressionLearner(SklearnLearner):
     otherwise uses standard Linear Regression with parallel processing capabilities.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  alpha: Optional[float] = None,
                  fit_intercept: bool = True,
                  n_jobs: int = -1,
                  random_state: int = 42,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Linear/Ridge Regression learner.
-        
+
         Args:
-            alpha: Regularization strength. If None, uses LinearRegression. 
+            alpha: Regularization strength. If None, uses LinearRegression.
                   If provided, uses Ridge regression with L2 regularization.
             fit_intercept: Whether to fit the intercept term
             n_jobs: Number of parallel jobs (-1 for all cores, only for LinearRegression)
             random_state: Random seed
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
@@ -65,7 +67,7 @@ class LinearRegressionLearner(SklearnLearner):
             )
             self.is_ridge = True
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         self.alpha = alpha
         self.fit_intercept = fit_intercept
