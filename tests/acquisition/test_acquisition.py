@@ -171,37 +171,72 @@ class TestUncertaintyBasedAcquisition:
     def test_ucb_acquisition_functionality(self, compounds_with_uncertainty):
         """Test UCB acquisition with real compounds."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
+
+        # Test default behavior (score_direction='higher')
         acq = UCBAcquisition(beta=1.0)
         selected = acq.select(compounds, n_select=5)
-        
+
         # Verify selection
         assert len(selected) == 5
         assert isinstance(selected, pd.DataFrame)
         assert all(col in selected.columns for col in ['ID', 'SMILES'])
-        
-        # UCB should favor high prediction + uncertainty
+
+        # UCB should favor high prediction + uncertainty for maximization
         selected_ucb_scores = (
-            selected['prediction'].values + 
+            selected['prediction'].values +
             1.0 * selected['uncertainty'].values
         )
-        
+
         # Calculate UCB for all compounds
         all_ucb_scores = (
-            compounds['prediction'].values + 
+            compounds['prediction'].values +
             1.0 * compounds['uncertainty'].values
         )
-        
+
         # Selected compounds should have high UCB scores
         sorted_all_ucb = np.sort(all_ucb_scores)[::-1]
         min_selected_ucb = np.min(selected_ucb_scores)
-        
+
         # Should be among top UCB scores
         assert min_selected_ucb >= sorted_all_ucb[4]  # At least top 5
-    
+
+    def test_ucb_score_direction_lower(self, compounds_with_uncertainty):
+        """Test UCB with score_direction='lower' (LCB behavior)."""
+        compounds = compounds_with_uncertainty.copy()
+
+        if len(compounds) == 0:
+            pytest.skip("No compounds with uncertainty available")
+
+        # Test LCB behavior for minimization
+        acq = UCBAcquisition(beta=1.0, score_direction='lower')
+        selected = acq.select(compounds, n_select=5)
+
+        # Verify selection
+        assert len(selected) == 5
+        assert isinstance(selected, pd.DataFrame)
+
+        # For LCB, we want LOWEST (prediction - beta * uncertainty) scores
+        selected_lcb_scores = (
+            selected['prediction'].values -
+            1.0 * selected['uncertainty'].values
+        )
+
+        # Calculate LCB for all compounds
+        all_lcb_scores = (
+            compounds['prediction'].values -
+            1.0 * compounds['uncertainty'].values
+        )
+
+        # Selected compounds should have the lowest LCB scores
+        sorted_all_lcb = np.sort(all_lcb_scores)  # Ascending order (lowest first)
+        max_selected_lcb = np.max(selected_lcb_scores)
+
+        # Should be among lowest LCB scores
+        assert max_selected_lcb <= sorted_all_lcb[4]  # At most the 5th lowest
+
     def test_ucb_beta_parameter_effect(self, compounds_with_uncertainty):
         """Test effect of beta parameter in UCB."""
         compounds = compounds_with_uncertainty.copy()
