@@ -12,7 +12,6 @@ import numpy as np
 
 if TYPE_CHECKING:
     from .data_manager import DataManager
-    from .experiment_state import ExperimentState
 
 
 class Oracle(ABC):
@@ -66,19 +65,21 @@ class Learner(ABC):
         """
         pass
     
-    @abstractmethod 
+    @abstractmethod
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """
         Predict scores for compounds.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
-            Tuple of (predictions, uncertainties). 
+            Tuple of (predictions, uncertainties).
             uncertainties can be None if model doesn't provide uncertainty estimates.
-            
+            The predictions and uncertainties align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
