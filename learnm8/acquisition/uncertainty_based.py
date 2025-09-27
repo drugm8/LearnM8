@@ -68,12 +68,21 @@ class UCBAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
         
-        # Calculate UCB scores
-        ucb_scores = predictions + self.beta * np.sqrt(uncertainties)
-        
-        # Select top compounds
+        # Calculate UCB scores based on score direction
+        if self.maximize:
+            # For maximization: select upper confidence bound
+            ucb_scores = predictions + self.beta * np.sqrt(uncertainties)
+        else:
+            # For minimization: select lower confidence bound
+            ucb_scores = predictions - self.beta * np.sqrt(uncertainties)
+
+        # Select top compounds (always ascending=False because we want highest UCB scores)
+        if self.maximize:
+            ascending = False
+        else:
+            ascending = True
         selected = self._safe_select_top_k(
-            compounds, ucb_scores, n_select, ascending=False
+            compounds, ucb_scores, n_select, ascending=ascending
         )
         
         logger.debug(f"UCBAcquisition selected {len(selected)} compounds with β={self.beta}")
@@ -96,23 +105,32 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     providing a principled way to balance exploration and exploitation.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, 
-                 xi: float = 0.01, minimize: bool = False, **kwargs):
+    def __init__(self, data_manager: Optional['DataManager'] = None,
+                 xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
+                 **kwargs):
         """Initialize Expected Improvement acquisition function.
-        
+
         Args:
             data_manager: Optional DataManager for feature extraction (not used by ExpectedImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
-            minimize: If True, seek improvement towards lower values;
-                     if False, seek improvement towards higher values.
+            minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
+            score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
             **kwargs: Additional parameters for compatibility
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        # Handle backward compatibility with minimize parameter
+        if minimize is not None:
+            import warnings
+            warnings.warn(
+                "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            score_direction = 'lower' if minimize else 'higher'
+
+        super().__init__(data_manager=data_manager, score_direction=score_direction, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
-        
+
         self.xi = xi
-        self.minimize = minimize
     
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
         """Select using Expected Improvement.
@@ -139,12 +157,12 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         
         # Calculate current best from the predictions
         # Note: In a full implementation, this would come from labeled data
-        if self.minimize:
-            current_best = np.min(predictions)
-            improvement = current_best - predictions - self.xi
-        else:
+        if self.maximize:
             current_best = np.max(predictions)
             improvement = predictions - current_best - self.xi
+        else:
+            current_best = np.min(predictions)
+            improvement = current_best - predictions - self.xi
         
         # Calculate standard deviations
         std_devs = np.sqrt(uncertainties)
@@ -176,7 +194,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        direction = "min" if self.minimize else "max"
+        direction = "max" if self.maximize else "min"
         return f"EI(ξ={self.xi},{direction})"
 
 
@@ -187,23 +205,32 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     the current best observed value.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, 
-                 xi: float = 0.01, minimize: bool = False, **kwargs):
+    def __init__(self, data_manager: Optional['DataManager'] = None,
+                 xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
+                 **kwargs):
         """Initialize Probability of Improvement acquisition function.
-        
+
         Args:
             data_manager: Optional DataManager for feature extraction (not used by ProbabilityImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
-            minimize: If True, seek improvement towards lower values;
-                     if False, seek improvement towards higher values.
+            minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
+            score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
             **kwargs: Additional parameters for compatibility
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        # Handle backward compatibility with minimize parameter
+        if minimize is not None:
+            import warnings
+            warnings.warn(
+                "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
+                DeprecationWarning, stacklevel=2
+            )
+            score_direction = 'lower' if minimize else 'higher'
+
+        super().__init__(data_manager=data_manager, score_direction=score_direction, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
-        
+
         self.xi = xi
-        self.minimize = minimize
     
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
         """Select using Probability of Improvement.
@@ -229,12 +256,12 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
         
         # Calculate current best from the predictions
-        if self.minimize:
-            current_best = np.min(predictions)
-            improvement = current_best - predictions - self.xi
-        else:
+        if self.maximize:
             current_best = np.max(predictions)
             improvement = predictions - current_best - self.xi
+        else:
+            current_best = np.min(predictions)
+            improvement = current_best - predictions - self.xi
         
         # Calculate standard deviations
         std_devs = np.sqrt(uncertainties)
@@ -265,7 +292,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        direction = "min" if self.minimize else "max"
+        direction = "max" if self.maximize else "min"
         return f"PI(ξ={self.xi},{direction})"
 
 
@@ -313,9 +340,9 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         std_devs = np.sqrt(uncertainties)
         thompson_samples = self._rng.normal(predictions, std_devs)
         
-        # Select top compounds based on samples
+        # Select top compounds based on samples and score direction
         selected = self._safe_select_top_k(
-            compounds, thompson_samples, n_select, ascending=False
+            compounds, thompson_samples, n_select, ascending=not self.maximize
         )
         
         logger.debug(f"ThompsonSamplingAcquisition selected {len(selected)} compounds "
