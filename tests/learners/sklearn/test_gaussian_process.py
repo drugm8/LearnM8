@@ -20,7 +20,7 @@ class TestGaussianProcessLearner:
     @pytest.fixture
     def learner(self):
         """Create GaussianProcessLearner instance for testing."""
-        return GaussianProcessLearner(random_state=42)
+        return GaussianProcessLearner(featurizer_type='morgan', random_state=42)
     
     def test_initialization(self, learner):
         """Test learner initialization."""
@@ -121,7 +121,7 @@ class TestGaussianProcessLearner:
             pytest.skip("No real molecular data available")
         
         # Test with custom alpha parameter
-        learner = GaussianProcessLearner(alpha=1e-6, random_state=42)
+        learner = GaussianProcessLearner(featurizer_type='morgan', alpha=1e-6, random_state=42)
         
         compounds = small_real_compounds.copy()
         if 'Activity' not in compounds.columns:
@@ -177,10 +177,14 @@ class TestGaussianProcessLearner:
         # Mock DataManager to test integration
         mock_dm = Mock()
         mock_dm.prepare_training_data.return_value = (
+            compounds,  # valid compounds DataFrame
             np.random.randn(len(compounds), 50),  # Smaller features for GP
             compounds['Activity'].values
         )
-        mock_dm.prepare_prediction_data.return_value = np.random.randn(len(compounds), 50)
+        mock_dm.prepare_prediction_data.return_value = (
+            compounds,  # valid compounds DataFrame
+            np.random.randn(len(compounds), 50)
+        )
         
         # Train and predict
         learner.train(compounds, 'Activity', mock_dm)

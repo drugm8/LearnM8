@@ -21,6 +21,7 @@ class TestMCDropoutLearner:
     def learner(self):
         """Create MCDropoutLearner instance for testing."""
         return MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(64, 32),
             n_dropout_samples=20,
             max_epochs=5,
@@ -91,6 +92,7 @@ class TestMCDropoutLearner:
         
         # Test with few samples
         learner_few = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(32,),
             n_dropout_samples=5,
             max_epochs=3,
@@ -102,6 +104,7 @@ class TestMCDropoutLearner:
         
         # Test with many samples
         learner_many = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(32,),
             n_dropout_samples=50,
             max_epochs=3,
@@ -151,6 +154,7 @@ class TestMCDropoutLearner:
         
         # Test deeper network
         learner = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(128, 64, 32),
             activation='gelu',
             dropout_rate=0.3,
@@ -179,6 +183,7 @@ class TestMCDropoutLearner:
         
         for dropout_rate in [0.1, 0.3, 0.5]:
             learner = MCDropoutLearner(
+                featurizer_type='morgan',
                 hidden_sizes=(32,),
                 dropout_rate=dropout_rate,
                 n_dropout_samples=10,
@@ -204,6 +209,7 @@ class TestMCDropoutLearner:
         
         # Create learner without batch normalization for single compound training
         learner = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(32,),
             batch_norm=False,  # Disable batch norm for single sample
             n_dropout_samples=5,
@@ -252,11 +258,13 @@ class TestMCDropoutLearner:
         
         # Two learners with same seed
         learner1 = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(32,),
             max_epochs=2,
             random_state=42
         )
         learner2 = MCDropoutLearner(
+            featurizer_type='morgan',
             hidden_sizes=(32,),
             max_epochs=2,
             random_state=42
@@ -285,10 +293,14 @@ class TestMCDropoutLearner:
         # Mock DataManager to test integration
         mock_dm = Mock()
         mock_dm.prepare_training_data.return_value = (
+            compounds,  # valid compounds DataFrame
             np.random.randn(len(compounds), 100),  # Mock features
             compounds['Activity'].values
         )
-        mock_dm.prepare_prediction_data.return_value = np.random.randn(len(compounds), 100)
+        mock_dm.prepare_prediction_data.return_value = (
+            compounds,  # valid compounds DataFrame
+            np.random.randn(len(compounds), 100)
+        )
         
         # Train and predict
         learner.train(compounds, 'Activity', mock_dm)

@@ -23,8 +23,8 @@ class TestEnsembleLearner:
     def base_learners(self):
         """Create base learners for ensemble testing."""
         return [
-            RandomForestLearner(n_estimators=5, random_state=42),
-            GaussianProcessLearner(random_state=42)
+            RandomForestLearner(featurizer_type='morgan', n_estimators=5, random_state=42),
+            GaussianProcessLearner(featurizer_type='morgan', random_state=42)
         ]
     
     @pytest.fixture
@@ -204,7 +204,7 @@ class TestEnsembleLearner:
         initial_count = len(ensemble.learners)
         
         # Add a new learner
-        new_learner = RandomForestLearner(n_estimators=3, random_state=123)
+        new_learner = RandomForestLearner(featurizer_type='morgan', n_estimators=3, random_state=123)
         ensemble.add_learner(new_learner)
         
         assert len(ensemble.learners) == initial_count + 1
@@ -307,10 +307,14 @@ class TestEnsembleLearner:
         # Mock DataManager to test integration
         mock_dm = Mock()
         mock_dm.prepare_training_data.return_value = (
+            compounds,  # valid compounds DataFrame
             np.random.randn(len(compounds), 100),  # Mock features
             compounds['Activity'].values
         )
-        mock_dm.prepare_prediction_data.return_value = np.random.randn(len(compounds), 100)
+        mock_dm.prepare_prediction_data.return_value = (
+            compounds,  # valid compounds DataFrame
+            np.random.randn(len(compounds), 100)
+        )
         
         # Mock individual learners
         for learner in ensemble.learners:
