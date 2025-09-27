@@ -16,14 +16,15 @@ logger = logging.getLogger(__name__)
 
 def create_learner_from_string(learner_name: str, **kwargs) -> Learner:
     """Create a learner instance from string name.
-    
+
     Args:
         learner_name: String name of the learner
         **kwargs: Additional arguments passed to learner constructor
-        
+                 featurizer_type is expected to be provided for all learners
+
     Returns:
         Learner instance
-        
+
     Raises:
         ValueError: If learner_name is not recognized
     """
@@ -60,6 +61,7 @@ def run_active_learning(
     oracle: Oracle,
     learner: Union[str, Learner],
     target_column: str,
+    featurizer: str,
     # Simple API parameters (recommended for most users)
     initial_strategy: str = 'random',
     strategy: str = 'greedy',
@@ -91,10 +93,11 @@ def run_active_learning(
     
     Args:
         compound_pool: DataFrame with all compounds (must have ID, SMILES columns)
-        oracle: Oracle instance for measuring compounds  
-        learner: Learner instance or string name ('rf', 'gp', 'xgb', 'mlp', 'mc_dropout', 
+        oracle: Oracle instance for measuring compounds
+        learner: Learner instance or string name ('rf', 'gp', 'xgb', 'mlp', 'mc_dropout',
                 'ensemble', 'rf_ensemble', 'lr_ensemble', 'xgb_ensemble', 'dt_ensemble', 'mixed_ensemble')
         target_column: Name of target property column
+        featurizer: Type of molecular features ('morgan', 'maccs', 'ecfp6', 'descriptors')
         
         # Simple interface (recommended for most users):
         initial_strategy: Strategy for first cycle (supports all acquisition methods: 'random', 'greedy', 'ucb', 'ei', 'pi', 'thompson', 'entropy', 'pca_dbscan', 'umap_dbscan', 'tsne_dbscan', 'bitbirch', etc.)
@@ -135,6 +138,11 @@ def run_active_learning(
     valid_directions = ['higher', 'lower']
     if score_direction not in valid_directions:
         raise ValueError(f"score_direction must be one of {valid_directions}, got '{score_direction}'")
+
+    # Validate featurizer
+    valid_featurizers = ['morgan', 'maccs', 'ecfp6', 'descriptors']
+    if featurizer not in valid_featurizers:
+        raise ValueError(f"featurizer must be one of {valid_featurizers}, got '{featurizer}'")
     
     # Convert simple parameters to cycles format if cycles not provided
     if cycles is None:
@@ -161,7 +169,11 @@ def run_active_learning(
     
     # Convert string learner to Learner instance if needed
     if isinstance(learner, str):
-        learner = create_learner_from_string(learner)
+        learner = create_learner_from_string(learner, featurizer_type=featurizer)
+    elif isinstance(learner, Learner):
+        # Update existing learner instance with featurizer
+        if hasattr(learner, 'featurizer_type'):
+            learner.featurizer_type = featurizer
     
     logger.info(f"Starting active learning with {len(cycles)} cycles")
     
@@ -454,37 +466,37 @@ def execute_run_mode_cycle(
     
     # Get predictions on unlabeled pool ONLY (MolPAL-style efficiency)
     predictions, uncertainties = learner.predict(unlabeled_pool, data_manager)
-    
+
+    # Get the valid compounds that could generate features (aligns with predictions)
+    valid_unlabeled_pool, _ = data_manager.prepare_prediction_data(
+        unlabeled_pool,
+        learner.featurizer_type if hasattr(learner, 'featurizer_type') else 'morgan'
+    )
+
     # Prepare CSV tracking data if export is enabled
     cycle_predictions = None
     cycle_uncertainties = None
     cycle_selections = []
-    
+
     if export_csv:
-        # Store predictions with compound info for CSV export
-        cycle_predictions = unlabeled_pool[['ID', 'SMILES']].copy()
-        if predictions is not None:
-            if isinstance(predictions, np.ndarray):
-                cycle_predictions[f'prediction_cycle_{cycle}'] = predictions
-            elif hasattr(predictions, 'iloc'):
-                cycle_predictions[f'prediction_cycle_{cycle}'] = predictions.iloc[:, 0].values
-        
-        # Store uncertainties if available
-        if uncertainties is not None:
-            cycle_uncertainties = unlabeled_pool[['ID', 'SMILES']].copy()
-            if isinstance(uncertainties, np.ndarray):
-                cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = uncertainties
-            elif hasattr(uncertainties, 'iloc'):
-                cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = uncertainties.iloc[:, 0].values
+        # Store predictions with compound info for CSV export (using valid compounds only)
+        cycle_predictions = valid_unlabeled_pool[['ID', 'SMILES']].copy()
+        if predictions is not None and len(predictions) > 0:
+            cycle_predictions[f'prediction_cycle_{cycle}'] = predictions
+
+        # Store uncertainties if available (using valid compounds only)
+        if uncertainties is not None and len(uncertainties) > 0:
+            cycle_uncertainties = valid_unlabeled_pool[['ID', 'SMILES']].copy()
+            cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = uncertainties
     
-    # Apply pruning if specified
-    pruned_pool = unlabeled_pool
+    # Apply pruning if specified - work with valid compounds that have predictions
+    pruned_pool = valid_unlabeled_pool
     pruning_stats = {'pruned_count': 0, 'original_pool_size': len(unlabeled_pool)}
-    
+
     if pruning_strategy is not None:
         try:
             pruned_pool, pruning_info = apply_pruning_strategy(
-                pool=unlabeled_pool,
+                pool=valid_unlabeled_pool,  # Use valid compounds that have predictions
                 predictions=predictions,
                 uncertainties=uncertainties,
                 strategy=pruning_strategy,
@@ -496,19 +508,19 @@ def execute_run_mode_cycle(
                        f"({pruning_stats['pruned_count']/len(unlabeled_pool)*100:.1f}% of pool)")
         except Exception as e:
             logger.warning(f"Cycle {cycle}: Pruning failed ({e}), continuing without pruning")
-            pruned_pool = unlabeled_pool
-    
+            pruned_pool = valid_unlabeled_pool
+
     # Calculate batch size based on original pool size for consistent batch sizes across cycles
     batch_size = max(1, int(original_pool_size * batch_fraction))
     batch_size = min(batch_size, len(pruned_pool))  # Don't exceed available compounds
-    
+
     logger.debug(f"Cycle {cycle}: Selecting {batch_size} compounds from {len(pruned_pool)} candidates using {strategy} strategy")
-    
-    # Select compounds using strategy (from pruned pool)
+
+    # Select compounds using strategy (from pruned pool, predictions align with valid compounds)
     selected_compounds = select_compounds_by_strategy(
         pool=pruned_pool,
-        predictions=predictions if pruned_pool is unlabeled_pool else None,  # Predictions might not align with pruned pool
-        uncertainties=uncertainties if pruned_pool is unlabeled_pool else None,
+        predictions=predictions if pruned_pool is valid_unlabeled_pool else None,
+        uncertainties=uncertainties if pruned_pool is valid_unlabeled_pool else None,
         strategy=strategy,
         batch_size=batch_size,
         score_direction=score_direction,
@@ -717,27 +729,44 @@ def execute_benchmark_mode_cycle(
     
     # Alternative 1: Predict FULL original dataset for correct EF calculation
     full_predictions, full_uncertainties = learner.predict(original_compound_pool, data_manager)
+
+    # Get the valid compounds that could generate features (aligns with predictions)
+    valid_original_pool, _ = data_manager.prepare_prediction_data(
+        original_compound_pool,
+        learner.featurizer_type if hasattr(learner, 'featurizer_type') else 'morgan'
+    )
     
-    # Extract unlabeled subset for selection logic
-    unlabeled_mask = original_compound_pool['ID'].isin(unlabeled_pool['ID'])
-    unlabeled_indices = np.where(unlabeled_mask)[0]
-    
-    # Extract predictions for unlabeled compounds only
-    if full_predictions is not None:
-        if isinstance(full_predictions, np.ndarray):
-            unlabeled_predictions = full_predictions[unlabeled_indices]
+    # Find valid unlabeled compounds (intersection of valid compounds and unlabeled pool)
+    valid_unlabeled_mask = valid_original_pool['ID'].isin(unlabeled_pool['ID'])
+    valid_unlabeled_compounds = valid_original_pool[valid_unlabeled_mask].reset_index(drop=True)
+
+    # Create mapping from valid original pool to predictions
+    valid_to_pred_mapping = {compound_id: idx for idx, compound_id in enumerate(valid_original_pool['ID'])}
+
+    # Extract predictions for valid unlabeled compounds only
+    unlabeled_prediction_indices = [valid_to_pred_mapping[compound_id]
+                                  for compound_id in valid_unlabeled_compounds['ID']
+                                  if compound_id in valid_to_pred_mapping]
+
+    # Filter valid_unlabeled_compounds to only include those with predictions
+    if len(unlabeled_prediction_indices) > 0:
+        # Keep only compounds that have corresponding predictions
+        compounds_with_predictions = [compound_id for compound_id in valid_unlabeled_compounds['ID']
+                                    if compound_id in valid_to_pred_mapping]
+        valid_unlabeled_compounds = valid_unlabeled_compounds[
+            valid_unlabeled_compounds['ID'].isin(compounds_with_predictions)
+        ].reset_index(drop=True)
+
+        unlabeled_predictions = full_predictions[unlabeled_prediction_indices]
+        if full_uncertainties is not None:
+            unlabeled_uncertainties = full_uncertainties[unlabeled_prediction_indices]
         else:
-            unlabeled_predictions = full_predictions.iloc[unlabeled_indices]
+            unlabeled_uncertainties = None
     else:
-        unlabeled_predictions = None
-    
-    if full_uncertainties is not None:
-        if isinstance(full_uncertainties, np.ndarray):
-            unlabeled_uncertainties = full_uncertainties[unlabeled_indices]
-        else:
-            unlabeled_uncertainties = full_uncertainties.iloc[unlabeled_indices]
-    else:
-        unlabeled_uncertainties = None
+        # No compounds have predictions - create empty datasets
+        valid_unlabeled_compounds = valid_unlabeled_compounds.iloc[0:0].copy()  # Empty DataFrame with same structure
+        unlabeled_predictions = np.array([])
+        unlabeled_uncertainties = np.array([]) if full_uncertainties is not None else None
     
     # Prepare CSV tracking data if export is enabled
     cycle_predictions = None
@@ -745,30 +774,24 @@ def execute_benchmark_mode_cycle(
     cycle_selections = []
     
     if export_csv:
-        # Store predictions with compound info for CSV export (unlabeled pool only for consistency)
-        cycle_predictions = unlabeled_pool[['ID', 'SMILES']].copy()
-        if unlabeled_predictions is not None:
-            if isinstance(unlabeled_predictions, np.ndarray):
-                cycle_predictions[f'prediction_cycle_{cycle}'] = unlabeled_predictions
-            elif hasattr(unlabeled_predictions, 'iloc'):
-                cycle_predictions[f'prediction_cycle_{cycle}'] = unlabeled_predictions.iloc[:, 0].values
-        
-        # Store uncertainties if available
-        if unlabeled_uncertainties is not None:
-            cycle_uncertainties = unlabeled_pool[['ID', 'SMILES']].copy()
-            if isinstance(unlabeled_uncertainties, np.ndarray):
-                cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = unlabeled_uncertainties
-            elif hasattr(unlabeled_uncertainties, 'iloc'):
-                cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = unlabeled_uncertainties.iloc[:, 0].values
-    
-    # Apply pruning if specified (to unlabeled subset)
-    pruned_pool = unlabeled_pool
+        # Store predictions with compound info for CSV export (using valid unlabeled compounds only)
+        cycle_predictions = valid_unlabeled_compounds[['ID', 'SMILES']].copy()
+        if unlabeled_predictions is not None and len(unlabeled_predictions) > 0:
+            cycle_predictions[f'prediction_cycle_{cycle}'] = unlabeled_predictions
+
+        # Store uncertainties if available (using valid unlabeled compounds only)
+        if unlabeled_uncertainties is not None and len(unlabeled_uncertainties) > 0:
+            cycle_uncertainties = valid_unlabeled_compounds[['ID', 'SMILES']].copy()
+            cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = unlabeled_uncertainties
+
+    # Apply pruning if specified (to valid unlabeled compounds that have predictions)
+    pruned_pool = valid_unlabeled_compounds
     pruning_stats = {'pruned_count': 0, 'original_pool_size': len(unlabeled_pool)}
     
     if pruning_strategy is not None:
         try:
             pruned_pool, pruning_info = apply_pruning_strategy(
-                pool=unlabeled_pool,
+                pool=valid_unlabeled_compounds,  # Use valid compounds that have predictions
                 predictions=unlabeled_predictions,
                 uncertainties=unlabeled_uncertainties,
                 strategy=pruning_strategy,
@@ -780,48 +803,19 @@ def execute_benchmark_mode_cycle(
                        f"({pruning_stats['pruned_count']/len(unlabeled_pool)*100:.1f}% of pool)")
         except Exception as e:
             logger.warning(f"Cycle {cycle}: Pruning failed ({e}), continuing without pruning")
-            pruned_pool = unlabeled_pool
-    
+            pruned_pool = valid_unlabeled_compounds
+
     # Calculate batch size based on original pool size for consistent batch sizes across cycles
     batch_size = max(1, int(original_pool_size * batch_fraction))
     batch_size = min(batch_size, len(pruned_pool))  # Don't exceed available compounds
-    
+
     logger.debug(f"Cycle {cycle}: Selecting {batch_size} compounds from {len(pruned_pool)} candidates using {strategy} strategy")
-    
-    # Select compounds using strategy (from pruned pool)
-    # Need to align predictions with pruned pool if pruning was applied
-    if pruned_pool is unlabeled_pool:
-        # No pruning - use unlabeled predictions directly
-        selection_predictions = unlabeled_predictions
-        selection_uncertainties = unlabeled_uncertainties
-    else:
-        # Pruning was applied - need to extract relevant subset
-        pruned_ids = set(pruned_pool['ID'])
-        unlabeled_ids = list(unlabeled_pool['ID'])
-        
-        # Find indices of pruned compounds in unlabeled pool
-        pruned_indices = [i for i, id_val in enumerate(unlabeled_ids) if id_val in pruned_ids]
-        
-        if unlabeled_predictions is not None:
-            if isinstance(unlabeled_predictions, np.ndarray):
-                selection_predictions = unlabeled_predictions[pruned_indices]
-            else:
-                selection_predictions = unlabeled_predictions.iloc[pruned_indices]
-        else:
-            selection_predictions = None
-            
-        if unlabeled_uncertainties is not None:
-            if isinstance(unlabeled_uncertainties, np.ndarray):
-                selection_uncertainties = unlabeled_uncertainties[pruned_indices]
-            else:
-                selection_uncertainties = unlabeled_uncertainties.iloc[pruned_indices]
-        else:
-            selection_uncertainties = None
-    
+
+    # Select compounds using strategy (predictions align with valid compounds)
     selected_compounds = select_compounds_by_strategy(
         pool=pruned_pool,
-        predictions=selection_predictions,
-        uncertainties=selection_uncertainties,
+        predictions=unlabeled_predictions if pruned_pool is valid_unlabeled_compounds else None,
+        uncertainties=unlabeled_uncertainties if pruned_pool is valid_unlabeled_compounds else None,
         strategy=strategy,
         batch_size=batch_size,
         score_direction=score_direction,
@@ -994,14 +988,23 @@ def select_compounds_by_strategy(
     # Add predictions to compound data if available
     if predictions is not None:
         if isinstance(predictions, np.ndarray):
-            compound_data['prediction'] = predictions
+            pred_array = predictions
         elif isinstance(predictions, pd.DataFrame):
             # Use first column as prediction
             pred_col = predictions.columns[0]
-            compound_data['prediction'] = predictions[pred_col].values
+            pred_array = predictions[pred_col].values
         else:
             # Try to convert to array
-            compound_data['prediction'] = np.array(predictions)
+            pred_array = np.array(predictions)
+
+        # Validate array length matches compound pool
+        if len(pred_array) != len(compound_data):
+            raise ValueError(f"Predictions array length ({len(pred_array)}) does not match "
+                           f"compound pool size ({len(compound_data)}). This may indicate "
+                           f"that compounds were filtered during prediction but the pool "
+                           f"was not updated accordingly.")
+
+        compound_data['prediction'] = pred_array
     else:
         # Fail if predictions are missing - never generate random data
         raise ValueError(f"No predictions available for '{strategy}' selection strategy. "
@@ -1010,14 +1013,23 @@ def select_compounds_by_strategy(
     # Add uncertainties to compound data if available
     if uncertainties is not None:
         if isinstance(uncertainties, np.ndarray):
-            compound_data['uncertainty'] = uncertainties
+            unc_array = uncertainties
         elif isinstance(uncertainties, pd.DataFrame):
             # Use first column as uncertainty
             unc_col = uncertainties.columns[0]
-            compound_data['uncertainty'] = uncertainties[unc_col].values
+            unc_array = uncertainties[unc_col].values
         else:
             # Try to convert to array
-            compound_data['uncertainty'] = np.array(uncertainties)
+            unc_array = np.array(uncertainties)
+
+        # Validate array length matches compound pool
+        if len(unc_array) != len(compound_data):
+            raise ValueError(f"Uncertainties array length ({len(unc_array)}) does not match "
+                           f"compound pool size ({len(compound_data)}). This may indicate "
+                           f"that compounds were filtered during prediction but the pool "
+                           f"was not updated accordingly.")
+
+        compound_data['uncertainty'] = unc_array
     else:
         # Check if strategy requires uncertainties - never generate random data
         try:
