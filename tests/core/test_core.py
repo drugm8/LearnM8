@@ -32,10 +32,10 @@ class MockLearner(Learner):
         # Get features to simulate real training
         compound_ids = compounds['ID'].tolist()
         smiles_list = compounds['SMILES'].tolist()
-        features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        
-        if features.shape[0] != len(compounds):
-            raise ValueError("Feature shape mismatch")
+        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+
+        if len(valid_ids) != len(compounds):
+            raise ValueError(f"Feature shape mismatch: expected {len(compounds)} compounds, got {len(valid_ids)} valid compounds")
         
         self._trained = True
         self._training_data = compounds.copy()
@@ -47,14 +47,14 @@ class MockLearner(Learner):
         
         compound_ids = compounds['ID'].tolist()
         smiles_list = compounds['SMILES'].tolist()
-        features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        
-        # Generate mock predictions
+        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+
+        # Generate mock predictions for valid compounds only
         np.random.seed(42)
-        predictions = np.random.uniform(0, 1, len(compounds))
+        predictions = np.random.uniform(0, 1, len(valid_ids))
         
         if self._supports_uncertainty:
-            uncertainties = np.random.uniform(0.1, 0.3, len(compounds))
+            uncertainties = np.random.uniform(0.1, 0.3, len(valid_ids))
             return predictions, uncertainties
         else:
             return predictions, None
@@ -223,8 +223,8 @@ class TestCoreSystemIntegration:
         # Verify DataManager cached features
         compound_ids = compounds['ID'].tolist()
         smiles_list = compounds['SMILES'].tolist()
-        cached_features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        assert cached_features.shape[0] == len(compounds)
+        cached_features, cached_valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+        assert cached_features.shape[0] == len(cached_valid_ids)
     
     def test_datamanager_oracle_integration(self, small_real_compounds, tmp_path):
         """Test DataManager integration with oracle."""
@@ -243,10 +243,11 @@ class TestCoreSystemIntegration:
         combined_data = compounds.merge(measurements, on='ID')
         
         # Prepare training data
-        X, y = data_manager.prepare_training_data(combined_data, 'Measured_Activity')
-        
-        assert X.shape[0] == len(compounds)
-        assert len(y) == len(compounds)
+        valid_compounds, X, y = data_manager.prepare_training_data(combined_data, 'Measured_Activity', 'morgan')
+
+        assert X.shape[0] == len(valid_compounds)
+        assert len(y) == len(valid_compounds)
+        assert len(valid_compounds) <= len(compounds)
         assert X.shape[1] > 0  # Should have molecular features
     
     def test_learner_oracle_workflow(self, diverse_real_compounds, tmp_path):
@@ -438,12 +439,12 @@ class TestCorePerformance:
         import time
         start_time = time.time()
         smiles_list = compounds['SMILES'].tolist()
-        features1 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+        features1, valid_ids1 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
         first_call_time = time.time() - start_time
-        
+
         # Second call should use cache (faster)
         start_time = time.time()
-        features2 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+        features2, valid_ids2 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
         second_call_time = time.time() - start_time
         
         # Verify caching worked
