@@ -24,6 +24,16 @@ class CSVOracle(Oracle):
         # Load the ground truth data
         self.ground_truth = pd.read_csv(self.csv_path)
 
+        # Convert numeric columns to proper data types
+        # This handles mixed data like numeric values + 'no_score' strings
+        for column in self.ground_truth.columns:
+            if column not in ['ID', id_column] and self.ground_truth[column].dtype == 'object':
+                # Try to convert to numeric, replacing invalid values with NaN
+                numeric_series = pd.to_numeric(self.ground_truth[column], errors='coerce')
+                # Only convert if we successfully converted some values to numeric
+                if not numeric_series.isna().all():
+                    self.ground_truth[column] = numeric_series
+
         # Validate the ID column exists
         if id_column not in self.ground_truth.columns:
             available = list(self.ground_truth.columns)
