@@ -6,6 +6,9 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+from learnm8.core.interfaces import Learner, Oracle
+from learnm8.core.data_manager import DataManager
+
 
 @pytest.fixture
 def sample_compounds() -> pd.DataFrame:
@@ -398,5 +401,134 @@ def molecular_property_data(small_real_compounds) -> pd.DataFrame:
     compounds['logp'] = np.random.normal(2.5, 1.5, n_compounds)
     compounds['num_rotatable_bonds'] = np.random.poisson(5, n_compounds)
     compounds['tpsa'] = 50 + np.random.exponential(50, n_compounds)
-    
+
     return compounds
+
+
+# ==============================================================================
+# Mock Classes for Testing
+# ==============================================================================
+
+class MockLearner(Learner):
+    """Mock learner implementation for testing core interfaces."""
+
+    def __init__(self, supports_uncertainty=False):
+        self._trained = False
+        self._supports_uncertainty = supports_uncertainty
+        self._training_data = None
+
+    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: DataManager) -> None:
+        """Mock training implementation."""
+        if len(compounds) == 0:
+            raise ValueError("Cannot train on empty dataset")
+
+        if target_column not in compounds.columns:
+            raise KeyError(f"Target column '{target_column}' not found")
+
+        # Get features to simulate real training
+        compound_ids = compounds['ID'].tolist()
+        smiles_list = compounds['SMILES'].tolist()
+        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+
+        if len(valid_ids) != len(compounds):
+            raise ValueError(f"Feature shape mismatch: expected {len(compounds)} compounds, got {len(valid_ids)} valid compounds")
+
+        self._trained = True
+        self._training_data = compounds.copy()
+
+    def predict(self, compounds: pd.DataFrame, data_manager: DataManager) -> tuple:
+        """Mock prediction implementation."""
+        if not self._trained:
+            raise RuntimeError("Model must be trained before prediction")
+
+        compound_ids = compounds['ID'].tolist()
+        smiles_list = compounds['SMILES'].tolist()
+        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+
+        # Generate mock predictions for valid compounds only
+        np.random.seed(42)
+        predictions = np.random.uniform(0, 1, len(valid_ids))
+
+        if self._supports_uncertainty:
+            uncertainties = np.random.uniform(0.1, 0.3, len(valid_ids))
+            return predictions, uncertainties
+        else:
+            return predictions, None
+
+    def supports_uncertainty(self) -> bool:
+        """Return whether this learner supports uncertainty estimation."""
+        return self._supports_uncertainty
+
+    def get_name(self) -> str:
+        """Return the name of this mock learner."""
+        uncertainty_suffix = "_with_uncertainty" if self._supports_uncertainty else ""
+        return f"MockLearner{uncertainty_suffix}"
+
+
+class MockOracle(Oracle):
+    """Mock oracle implementation for testing core interfaces."""
+
+    def __init__(self, noise_level=0.1):
+        self.noise_level = noise_level
+        self.call_count = 0
+
+    def measure(self, compounds: pd.DataFrame, properties: list) -> pd.DataFrame:
+        """Mock measurement implementation."""
+        self.call_count += 1
+
+        if len(compounds) == 0:
+            return pd.DataFrame(columns=['ID'] + properties)
+
+        result = compounds[['ID']].copy()
+
+        # Generate mock measurements for each property
+        for prop in properties:
+            np.random.seed(42 + hash(prop) % 1000)
+
+            if prop == 'Activity':
+                # Generate activity values based on SMILES hash for consistency
+                activities = []
+                for smiles in compounds['SMILES']:
+                    base_value = (hash(smiles) % 1000) / 1000.0
+                    noise = np.random.normal(0, self.noise_level)
+                    activities.append(base_value + noise)
+                result[prop] = activities
+            else:
+                # Generic property
+                result[prop] = np.random.uniform(0, 1, len(compounds))
+
+        return result
+
+
+# ==============================================================================
+# Mock Object Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def mock_learner():
+    """Create a MockLearner instance without uncertainty support."""
+    return MockLearner(supports_uncertainty=False)
+
+
+@pytest.fixture
+def mock_learner_with_uncertainty():
+    """Create a MockLearner instance with uncertainty support."""
+    return MockLearner(supports_uncertainty=True)
+
+
+@pytest.fixture
+def mock_oracle():
+    """Create a MockOracle instance with default noise level."""
+    return MockOracle(noise_level=0.1)
+
+
+@pytest.fixture
+def mock_oracle_low_noise():
+    """Create a MockOracle instance with low noise level."""
+    return MockOracle(noise_level=0.01)
+
+
+@pytest.fixture
+def mock_oracle_high_noise():
+    """Create a MockOracle instance with high noise level."""
+    return MockOracle(noise_level=0.5)
