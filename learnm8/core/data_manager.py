@@ -17,7 +17,8 @@ from ..utils.featurizers import (
     smiles_to_morgan_fingerprint,
     smiles_to_maccs_fingerprint, 
     smiles_to_ecfp6_fingerprint,
-    _compute_mordred_descriptors
+    _compute_mordred_descriptors,
+    smiles_to_morgan_feature_fingerprint
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,8 @@ class DataManager:
             'morgan': smiles_to_morgan_fingerprint,
             'maccs': smiles_to_maccs_fingerprint,
             'ecfp6': smiles_to_ecfp6_fingerprint,
-            'descriptors': self._compute_descriptors
+            'descriptors': self._compute_descriptors,
+            'morgan_feat': smiles_to_morgan_feature_fingerprint
         }
         
         logger.info(f"Initialized DataManager with cache: {self.cache_dir}")
@@ -81,19 +83,14 @@ class DataManager:
         """Generate hash key for SMILES string."""
         return hashlib.md5(smiles.encode()).hexdigest()
     
-    def get_features(self, 
+    def get_features(self,
                     compound_ids: List[str],
-                    smiles_list: Optional[List[str]] = None,
-                    featurizer_type: str = 'morgan') -> np.ndarray:
+                    smiles_list: Optional[List[str]],
+                    featurizer_type: str) -> Tuple[np.ndarray, List[str]]:
         """Get molecular features with HDF5 caching.
         
-        Args:
-            compound_ids: List of compound identifiers
-            smiles_list: List of SMILES strings (if None, use compound_ids as SMILES)
-            featurizer_type: Type of features ('morgan', 'maccs', 'ecfp6', 'descriptors')
-            
         Returns:
-            Array of features with shape (n_compounds, n_features)
+            Tuple of (features_array, valid_compound_ids)
         """
         if smiles_list is None:
             smiles_list = compound_ids
@@ -103,61 +100,70 @@ class DataManager:
         
         cache_file = self._get_cache_file(featurizer_type)
         features = []
+        valid_compound_ids = []
         new_features = []
         new_hashes = []
         
+        # Determine expected feature size upfront
+        if featurizer_type in ['morgan', 'ecfp6', 'morgan_feat']:
+            feature_size = 2048
+            feature_dtype = np.float32
+        elif featurizer_type == 'maccs':
+            feature_size = 167
+            feature_dtype = np.float32
+        else:  # descriptors
+            feature_size = 1242
+            feature_dtype = np.float32
+        
         try:
-            # Open HDF5 file for reading/writing
             with h5py.File(cache_file, 'a') as f:
-                # Ensure features group exists
                 if 'features' not in f:
                     f.create_group('features')
                 features_group = f['features']
                 
                 # Process each SMILES
-                for smiles in smiles_list:
+                for compound_id, smiles in zip(compound_ids, smiles_list):
                     smiles_hash = self._get_smiles_hash(smiles)
+                    feat = None
                     
                     if smiles_hash in features_group:
                         # Load from cache
-                        cached_feature = features_group[smiles_hash][:]
-                        features.append(cached_feature)
-                    else:
+                        try:
+                            cached_feature = features_group[smiles_hash][:]
+                            feat = cached_feature.astype(feature_dtype)
+                        except Exception as e:
+                            logger.warning(f"Failed to load cached feature for {smiles}: {e}")
+                    
+                    if feat is None:
                         # Compute new feature
                         try:
-                            feat = self.featurizers[featurizer_type](smiles)
-                            features.append(feat)
+                            raw_feat = self.featurizers[featurizer_type](smiles)
+                            # Ensure consistent dtype
+                            feat = np.array(raw_feat, dtype=feature_dtype)
+                            # Cache it
                             new_features.append(feat)
                             new_hashes.append(smiles_hash)
                         except Exception as e:
                             logger.warning(f"Failed to compute {featurizer_type} for {smiles}: {e}")
-                            # Use zero vector as fallback
-                            if featurizer_type in ['morgan', 'ecfp6']:
-                                feat = np.zeros(2048)
-                            elif featurizer_type == 'maccs':
-                                feat = np.zeros(167)
-                            else:  # descriptors
-                                feat = np.zeros(1242, dtype=np.float32)  # Actual numeric Mordred descriptor count
-                            features.append(feat)
+                            # Skip this compound entirely instead of using zeros
+                            continue
+                    
+                    features.append(feat)
+                    valid_compound_ids.append(compound_id)
                 
                 # Store new features in HDF5
                 for feat, hash_key in zip(new_features, new_hashes):
                     try:
-                        # Use require_dataset to handle concurrent access gracefully
                         features_group.require_dataset(
                             hash_key,
                             shape=feat.shape,
-                            dtype=feat.dtype,
+                            dtype=feature_dtype,
                             data=feat,
                             compression='gzip',
                             compression_opts=6
                         )
-                    except (ValueError, TypeError) as e:
-                        # Dataset exists with different parameters, skip caching
-                        logger.debug(f"Skipped caching for {hash_key}: dataset exists with different parameters")
                     except Exception as e:
-                        logger.warning(f"Failed to cache feature for {hash_key}: {e}")
-                        # Continue without caching this feature
+                        logger.debug(f"Skipped caching for {hash_key}: {e}")
                 
                 if new_features:
                     logger.info(f"Computed and cached {len(new_features)} new {featurizer_type} features")
@@ -166,133 +172,102 @@ class DataManager:
             logger.warning(f"HDF5 cache error: {e}. Computing features without caching.")
             # Fallback: compute all features without caching
             features = []
-            for smiles in smiles_list:
-                try:
-                    feat = self.featurizers[featurizer_type](smiles)
-                    features.append(feat)
-                except Exception as feat_error:
-                    logger.warning(f"Failed to compute {featurizer_type} for {smiles}: {feat_error}")
-                    # Use zero vector as fallback
-                    if featurizer_type in ['morgan', 'ecfp6']:
-                        feat = np.zeros(2048)
-                    elif featurizer_type == 'maccs':
-                        feat = np.zeros(167)
-                    else:  # descriptors
-                        feat = np.zeros(1242, dtype=np.float32)
-                    features.append(feat)
-        
-        return np.array(features)
-    
-    def prepare_training_data(self, 
-                             compounds: pd.DataFrame,
-                             target_column: str,
-                             featurizer_type: str = 'morgan') -> Tuple[np.ndarray, np.ndarray]:
-        """Prepare training data with feature extraction.
-        
-        Args:
-            compounds: DataFrame with 'ID', 'SMILES', and target columns
-            target_column: Name of target property column
-            featurizer_type: Type of features to extract
+            valid_compound_ids = []
             
+            for compound_id, smiles in zip(compound_ids, smiles_list):
+                try:
+                    raw_feat = self.featurizers[featurizer_type](smiles)
+                    feat = np.array(raw_feat, dtype=feature_dtype)
+                    features.append(feat)
+                    valid_compound_ids.append(compound_id)
+                except Exception as e:
+                    logger.warning(f"Failed to compute {featurizer_type} for {smiles}: {e}")
+                    # Skip this compound entirely
+                    continue
+        
+        if features:
+            # Stack into a single array with consistent dtype
+            features_array = np.stack(features).astype(feature_dtype)
+            return features_array, valid_compound_ids
+        else:
+            return np.array([], dtype=feature_dtype).reshape(0, feature_size), []
+
+    def prepare_training_data(self,
+                            compounds: pd.DataFrame,
+                            target_column: str,
+                            featurizer_type: str) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+        """Prepare training data with feature extraction.
+
         Returns:
-            Tuple of (features_array, targets_array) ready for training
+            Tuple of (valid_compounds_df, X, y) where:
+            - valid_compounds_df: DataFrame with only compounds that generated valid features
+            - X: Feature array aligned with valid_compounds_df
+            - y: Target values aligned with valid_compounds_df
         """
-        # Validate input DataFrame
         required_cols = ['ID', 'SMILES', target_column]
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
-        
+
         if compounds.empty:
             raise ValueError("compounds DataFrame is empty")
-        
-        # Extract features using HDF5 caching
-        X = self.get_features(
+
+        # Extract features and get valid compound IDs
+        X, valid_compound_ids = self.get_features(
             compound_ids=compounds['ID'].tolist(),
             smiles_list=compounds['SMILES'].tolist(),
             featurizer_type=featurizer_type
         )
-        
-        # Extract targets
-        y = compounds[target_column].values
-        
-        # Handle missing values
-        valid_mask = ~(np.isnan(X).any(axis=1) | np.isnan(y))
-        if not valid_mask.all():
-            n_invalid = (~valid_mask).sum()
-            logger.warning(f"Removing {n_invalid} compounds with missing values")
-            X = X[valid_mask]
-            y = y[valid_mask]
-        
+
+        # Filter DataFrame to match valid compounds (preserving original order of valid_compound_ids)
+        valid_compounds = compounds.set_index('ID').loc[valid_compound_ids].reset_index()
+        y = valid_compounds[target_column].values.astype(np.float32)
+
+        # Additional check for NaN in targets
+        target_valid = ~np.isnan(y)
+        if not target_valid.all():
+            n_invalid = (~target_valid).sum()
+            logger.warning(f"Removing {n_invalid} compounds with missing target values")
+            X = X[target_valid]
+            y = y[target_valid]
+            valid_compounds = valid_compounds.loc[target_valid].reset_index(drop=True)
+
         if len(X) == 0:
-            raise RuntimeError("No valid training data after removing missing values")
-        
+            raise RuntimeError("No valid training data after processing")
+
         logger.info(f"Prepared training data: {len(X)} compounds, {X.shape[1]} features")
-        return X, y
-    
-    def prepare_prediction_data(self, 
-                               compounds: pd.DataFrame,
-                               featurizer_type: str = 'morgan') -> np.ndarray:
+        return valid_compounds, X, y
+
+    def prepare_prediction_data(self,
+                            compounds: pd.DataFrame,
+                            featurizer_type: str) -> Tuple[pd.DataFrame, np.ndarray]:
         """Prepare prediction data with feature extraction.
-        
-        Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
-            featurizer_type: Type of features to extract
-            
+
         Returns:
-            Features array ready for prediction
+            Tuple of (valid_compounds_df, X) where:
+            - valid_compounds_df: DataFrame with only compounds that generated valid features
+            - X: Feature array aligned with valid_compounds_df
         """
-        # Validate input DataFrame
         required_cols = ['ID', 'SMILES']
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
-        
+
         if compounds.empty:
             raise ValueError("compounds DataFrame is empty")
-        
-        # Extract features using HDF5 caching
-        X = self.get_features(
+
+        # Extract features and get valid compound IDs
+        X, valid_compound_ids = self.get_features(
             compound_ids=compounds['ID'].tolist(),
             smiles_list=compounds['SMILES'].tolist(),
             featurizer_type=featurizer_type
         )
-        
+
+        # Filter DataFrame to match valid compounds (preserving original order of valid_compound_ids)
+        valid_compounds = compounds.set_index('ID').loc[valid_compound_ids].reset_index()
+
         logger.info(f"Prepared prediction data: {len(X)} compounds, {X.shape[1]} features")
-        return X
-    
-    def get_statistics(self) -> dict:
-        """Get basic statistics about cached features.
-        
-        Returns:
-            Dictionary with cache statistics
-        """
-        stats = {
-            'cache_dir': str(self.cache_dir),
-            'featurizer_types': list(self.featurizers.keys()),
-            'cache_files': {}
-        }
-        
-        # Count features in each cache file
-        for featurizer_type in self.featurizers.keys():
-            cache_file = self._get_cache_file(featurizer_type)
-            if cache_file.exists():
-                try:
-                    with h5py.File(cache_file, 'r') as f:
-                        if 'features' in f:
-                            n_cached = len(f['features'])
-                            file_size_mb = cache_file.stat().st_size / (1024 * 1024)
-                            stats['cache_files'][featurizer_type] = {
-                                'cached_compounds': n_cached,
-                                'file_size_mb': round(file_size_mb, 2)
-                            }
-                except Exception as e:
-                    logger.warning(f"Could not read cache stats for {featurizer_type}: {e}")
-                    stats['cache_files'][featurizer_type] = {'error': str(e)}
-            else:
-                stats['cache_files'][featurizer_type] = {'cached_compounds': 0, 'file_size_mb': 0}
-        
-        return stats
+        return valid_compounds, X
     
     def cleanup_cache(self, force: bool = False) -> None:
         """Clean up cache files.
@@ -396,7 +371,7 @@ class DataManager:
                     logger.info(f"Computing {reduction_method} embeddings for {len(smiles_list)} compounds")
                     
                     # Get molecular features
-                    features = self.get_features(
+                    features, valid_ids = self.get_features(
                         compound_ids=compound_ids,
                         smiles_list=smiles_list,
                         featurizer_type=featurizer_type
@@ -436,7 +411,7 @@ class DataManager:
         except Exception as e:
             logger.warning(f"Embedding cache error: {e}. Computing embeddings without caching.")
             # Fallback: compute embeddings without caching
-            features = self.get_features(
+            features, valid_ids = self.get_features(
                 compound_ids=compound_ids,
                 smiles_list=smiles_list,
                 featurizer_type=featurizer_type

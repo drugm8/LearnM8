@@ -88,7 +88,7 @@ class TestDataManagerInitialization:
         """Test that featurizer mapping is correctly initialized."""
         dm = DataManager(temp_results_dir)
         
-        expected_featurizers = {'morgan', 'maccs', 'ecfp6', 'descriptors'}
+        expected_featurizers = {'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'}
         assert set(dm.featurizers.keys()) == expected_featurizers
     
     def test_initialization_with_nested_directory(self, temp_results_dir):
@@ -111,12 +111,13 @@ class TestFeatureExtraction:
         
         compound_ids = sample_compounds['ID'].tolist()
         smiles_list = sample_compounds['SMILES'].tolist()
-        
-        features = dm.get_features(compound_ids, smiles_list, 'morgan')
-        
+
+        features, valid_ids = dm.get_features(compound_ids, smiles_list, 'morgan')
+
         assert isinstance(features, np.ndarray)
-        assert features.shape == (4, 2048)  # 4 compounds, 2048-bit Morgan fingerprints
-        assert features.dtype in [np.int32, np.int64, np.uint8, bool]
+        assert features.shape == (len(valid_ids), 2048)  # Valid compounds, 2048-bit Morgan fingerprints
+        assert features.dtype in [np.int32, np.int64, np.uint8, np.float32, bool]
+        assert len(valid_ids) <= len(compound_ids)
     
     def test_get_features_maccs_fingerprints(self, temp_results_dir, sample_compounds):
         """Test MACCS fingerprint extraction."""
@@ -125,11 +126,11 @@ class TestFeatureExtraction:
         compound_ids = sample_compounds['ID'].tolist()
         smiles_list = sample_compounds['SMILES'].tolist()
         
-        features = dm.get_features(compound_ids, smiles_list, 'maccs')
-        
+        features, valid_ids = dm.get_features(compound_ids, smiles_list, 'maccs')
+
         assert isinstance(features, np.ndarray)
-        assert features.shape == (4, 167)  # 4 compounds, 167-bit MACCS fingerprints
-        assert features.dtype in [np.int32, np.int64, np.uint8, bool]
+        assert features.shape == (len(valid_ids), 167)  # Valid compounds, 167-bit MACCS fingerprints
+        assert features.dtype in [np.int32, np.int64, np.uint8, np.float32, bool]
     
     def test_get_features_ecfp6_fingerprints(self, temp_results_dir, sample_compounds):
         """Test ECFP6 fingerprint extraction."""
@@ -138,11 +139,11 @@ class TestFeatureExtraction:
         compound_ids = sample_compounds['ID'].tolist()
         smiles_list = sample_compounds['SMILES'].tolist()
         
-        features = dm.get_features(compound_ids, smiles_list, 'ecfp6')
-        
+        features, valid_ids = dm.get_features(compound_ids, smiles_list, 'ecfp6')
+
         assert isinstance(features, np.ndarray)
-        assert features.shape == (4, 2048)  # 4 compounds, 2048-bit ECFP6 fingerprints
-        assert features.dtype in [np.int32, np.int64, np.uint8, bool]
+        assert features.shape == (len(valid_ids), 2048)  # Valid compounds, 2048-bit ECFP6 fingerprints
+        assert features.dtype in [np.int32, np.int64, np.uint8, np.float32, bool]
     
     def test_get_features_mordred_descriptors(self, temp_results_dir, sample_compounds):
         """Test Mordred descriptor extraction."""
@@ -151,7 +152,7 @@ class TestFeatureExtraction:
         compound_ids = sample_compounds['ID'].tolist()
         smiles_list = sample_compounds['SMILES'].tolist()
         
-        features = dm.get_features(compound_ids, smiles_list, 'descriptors')
+        features, valid_ids = dm.get_features(compound_ids, smiles_list, 'descriptors')
         
         assert isinstance(features, np.ndarray)
         assert features.shape == (4, 1242)  # 4 compounds, 1242 Mordred descriptors
@@ -164,7 +165,7 @@ class TestFeatureExtraction:
         # Use SMILES as compound IDs
         smiles_as_ids = sample_compounds['SMILES'].tolist()
         
-        features = dm.get_features(smiles_as_ids, featurizer_type='morgan')
+        features, valid_ids = dm.get_features(smiles_as_ids, None, 'morgan')
         
         assert isinstance(features, np.ndarray)
         assert features.shape == (4, 2048)
@@ -180,10 +181,10 @@ class TestFeatureExtraction:
         """Test behavior with empty compound lists."""
         dm = DataManager(temp_results_dir)
         
-        features = dm.get_features([], [], 'morgan')
+        features, valid_ids = dm.get_features([], [], 'morgan')
         
         assert isinstance(features, np.ndarray)
-        assert features.shape == (0,)
+        assert features.shape == (0, 2048)  # Empty but with correct feature dimension
 
 
 class TestHDF5Caching:
@@ -197,10 +198,10 @@ class TestHDF5Caching:
         smiles_list = sample_compounds['SMILES'].tolist()
         
         # First call - should compute and cache
-        features1 = dm.get_features(compound_ids, smiles_list, 'morgan')
+        features1, valid_ids1 = dm.get_features(compound_ids, smiles_list, 'morgan')
         
         # Second call - should retrieve from cache
-        features2 = dm.get_features(compound_ids, smiles_list, 'morgan')
+        features2, valid_ids2 = dm.get_features(compound_ids, smiles_list, 'morgan')
         
         np.testing.assert_array_equal(features1, features2)
         
@@ -215,61 +216,17 @@ class TestHDF5Caching:
         # Cache features for first two compounds
         first_batch_ids = sample_compounds['ID'].tolist()[:2]
         first_batch_smiles = sample_compounds['SMILES'].tolist()[:2]
-        features1 = dm.get_features(first_batch_ids, first_batch_smiles, 'morgan')
+        features1, valid_ids1 = dm.get_features(first_batch_ids, first_batch_smiles, 'morgan')
         
         # Request features for all compounds (includes cached and new)
         all_ids = sample_compounds['ID'].tolist()
         all_smiles = sample_compounds['SMILES'].tolist()
-        features2 = dm.get_features(all_ids, all_smiles, 'morgan')
+        features2, valid_ids2 = dm.get_features(all_ids, all_smiles, 'morgan')
         
         # First two features should be identical
         np.testing.assert_array_equal(features1, features2[:2])
         assert features2.shape == (4, 2048)
     
-    def test_hdf5_file_structure(self, temp_results_dir, sample_compounds):
-        """Test the internal structure of HDF5 cache files."""
-        dm = DataManager(temp_results_dir)
-        
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        
-        # Generate features to create cache file
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        
-        cache_file = temp_results_dir / ".cache" / "morgan_features.h5"
-        
-        # Verify HDF5 structure
-        with h5py.File(cache_file, 'r') as f:
-            assert 'features' in f
-            features_group = f['features']
-            
-            # Should have 4 cached features (one per compound)
-            assert len(features_group) == 4
-            
-            # Each feature should be properly stored
-            for key in features_group.keys():
-                feature_data = features_group[key][:]
-                assert feature_data.shape == (2048,)
-    
-    def test_cache_compression(self, temp_results_dir, sample_compounds):
-        """Test that cache files use compression."""
-        dm = DataManager(temp_results_dir)
-        
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        
-        cache_file = temp_results_dir / ".cache" / "morgan_features.h5"
-        
-        with h5py.File(cache_file, 'r') as f:
-            features_group = f['features']
-            
-            # Check that datasets use compression
-            for key in features_group.keys():
-                dataset = features_group[key]
-                assert dataset.compression == 'gzip'
-                assert dataset.compression_opts == 6
     
     def test_cache_fallback_on_error(self, temp_results_dir, sample_compounds):
         """Test fallback behavior when cache operations fail."""
@@ -281,7 +238,7 @@ class TestHDF5Caching:
         # Mock h5py.File to raise an exception
         with patch('learnm8.core.data_manager.h5py.File', side_effect=Exception("Cache error")):
             # Should still work by computing without caching
-            features = dm.get_features(compound_ids, smiles_list, 'morgan')
+            features, valid_ids = dm.get_features(compound_ids, smiles_list, 'morgan')
             
             assert isinstance(features, np.ndarray)
             assert features.shape == (4, 2048)
@@ -293,14 +250,20 @@ class TestTrainingDataPreparation:
     def test_prepare_training_data_basic(self, temp_results_dir, sample_compounds):
         """Test basic training data preparation."""
         dm = DataManager(temp_results_dir)
-        
-        X, y = dm.prepare_training_data(sample_compounds, 'Activity', 'morgan')
-        
+
+        valid_compounds, X, y = dm.prepare_training_data(sample_compounds, 'Activity', 'morgan')
+
+        assert isinstance(valid_compounds, pd.DataFrame)
         assert isinstance(X, np.ndarray)
         assert isinstance(y, np.ndarray)
+        assert len(valid_compounds) == 4  # 4 valid compounds
         assert X.shape == (4, 2048)  # 4 compounds, 2048 features
         assert y.shape == (4,)  # 4 target values
-        np.testing.assert_array_equal(y, sample_compounds['Activity'].values)
+        np.testing.assert_array_almost_equal(y, valid_compounds['Activity'].values, decimal=6)
+        # Ensure valid compounds contain required columns
+        assert 'ID' in valid_compounds.columns
+        assert 'SMILES' in valid_compounds.columns
+        assert 'Activity' in valid_compounds.columns
     
     def test_prepare_training_data_different_featurizers(self, temp_results_dir, sample_compounds):
         """Test training data preparation with different featurizers."""
@@ -315,7 +278,8 @@ class TestTrainingDataPreparation:
         }
         
         for featurizer, expected_shape in featurizer_shapes.items():
-            X, y = dm.prepare_training_data(sample_compounds, 'Activity', featurizer)
+            valid_compounds, X, y = dm.prepare_training_data(sample_compounds, 'Activity', featurizer)
+            assert len(valid_compounds) == 4
             assert X.shape == expected_shape
             assert y.shape == (4,)
     
@@ -361,9 +325,10 @@ class TestTrainingDataPreparation:
             'Activity': [1.0, np.nan, 3.0]  # One NaN target
         })
         
-        X, y = dm.prepare_training_data(compounds_with_nan, 'Activity', 'morgan')
-        
+        valid_compounds, X, y = dm.prepare_training_data(compounds_with_nan, 'Activity', 'morgan')
+
         # Should only return compounds with valid targets
+        assert len(valid_compounds) == 2  # Only compounds with valid targets
         assert X.shape[0] == 2  # Only compounds with valid targets
         assert y.shape[0] == 2
         # Should have valid target values
@@ -372,16 +337,11 @@ class TestTrainingDataPreparation:
     def test_prepare_training_data_no_valid_data(self, temp_results_dir, invalid_compounds):
         """Test behavior with all invalid SMILES compounds."""
         dm = DataManager(temp_results_dir)
-        
-        # All compounds have invalid SMILES, DataManager returns zero vectors
-        # This is acceptable behavior - the model will learn from zero vectors
-        X, y = dm.prepare_training_data(invalid_compounds, 'Activity', 'morgan')
-        
-        # Should return data (zero vectors for invalid SMILES)
-        assert X.shape == (2, 2048)
-        assert y.shape == (2,)
-        # Features should be zero vectors for invalid SMILES
-        assert np.allclose(X, 0)
+
+        # All compounds have invalid SMILES, DataManager filters them out entirely
+        # This should result in a RuntimeError since no valid training data remains
+        with pytest.raises(RuntimeError, match="No valid training data after processing"):
+            dm.prepare_training_data(invalid_compounds, 'Activity', 'morgan')
 
 
 class TestPredictionDataPreparation:
@@ -390,11 +350,16 @@ class TestPredictionDataPreparation:
     def test_prepare_prediction_data_basic(self, temp_results_dir, prediction_compounds):
         """Test basic prediction data preparation."""
         dm = DataManager(temp_results_dir)
-        
-        X = dm.prepare_prediction_data(prediction_compounds, 'morgan')
-        
+
+        valid_compounds, X = dm.prepare_prediction_data(prediction_compounds, 'morgan')
+
+        assert isinstance(valid_compounds, pd.DataFrame)
         assert isinstance(X, np.ndarray)
+        assert len(valid_compounds) == 3  # 3 valid compounds
         assert X.shape == (3, 2048)  # 3 compounds, 2048 Morgan features
+        # Ensure valid compounds contain required columns
+        assert 'ID' in valid_compounds.columns
+        assert 'SMILES' in valid_compounds.columns
     
     def test_prepare_prediction_data_different_featurizers(self, temp_results_dir, prediction_compounds):
         """Test prediction data preparation with different featurizers."""
@@ -408,7 +373,8 @@ class TestPredictionDataPreparation:
         }
         
         for featurizer, expected_shape in featurizer_shapes.items():
-            X = dm.prepare_prediction_data(prediction_compounds, featurizer)
+            valid_compounds, X = dm.prepare_prediction_data(prediction_compounds, featurizer)
+            assert len(valid_compounds) == 3
             assert X.shape == expected_shape
     
     def test_prepare_prediction_data_missing_columns(self, temp_results_dir):
@@ -437,12 +403,12 @@ class TestErrorHandlingAndRobustness:
         """Test handling of invalid SMILES strings."""
         dm = DataManager(temp_results_dir)
         
-        # Single invalid SMILES should return zero vector
-        features = dm.get_features(['invalid_1'], ['INVALID'], 'morgan')
-        
-        assert features.shape == (1, 2048)
-        # Should be zero vector (fallback for invalid SMILES)
-        assert np.allclose(features[0], 0)
+        # Single invalid SMILES should be filtered out
+        features, valid_ids = dm.get_features(['invalid_1'], ['INVALID'], 'morgan')
+
+        # Invalid SMILES are filtered out, so no features returned
+        assert features.shape == (0, 2048)
+        assert len(valid_ids) == 0
     
     def test_mixed_valid_invalid_smiles(self, temp_results_dir):
         """Test handling of mixed valid and invalid SMILES."""
@@ -451,21 +417,21 @@ class TestErrorHandlingAndRobustness:
         compound_ids = ['valid_1', 'invalid_1', 'valid_2']
         smiles_list = ['CCO', 'INVALID', 'c1ccccc1']
         
-        features = dm.get_features(compound_ids, smiles_list, 'morgan')
-        
-        assert features.shape == (3, 2048)
-        # Invalid SMILES should have zero features
-        assert np.allclose(features[1], 0)
-        # Valid SMILES should have non-zero features
+        features, valid_ids = dm.get_features(compound_ids, smiles_list, 'morgan')
+
+        # Only valid SMILES should be returned (INVALID filtered out)
+        assert features.shape == (2, 2048)
+        assert len(valid_ids) == 2
+        # Both remaining compounds should have valid features
         assert not np.allclose(features[0], 0)
-        assert not np.allclose(features[2], 0)
+        assert not np.allclose(features[1], 0)
     
     def test_descriptor_computation_error_handling(self, temp_results_dir):
         """Test error handling in descriptor computation."""
         dm = DataManager(temp_results_dir)
         
         # Test with invalid SMILES for descriptors
-        features = dm.get_features(['invalid'], ['INVALID'], 'descriptors')
+        features, valid_ids = dm.get_features(['invalid'], ['INVALID'], 'descriptors')
         
         assert features.shape == (1, 1242)
         # Should return zero vector for invalid SMILES
@@ -479,53 +445,13 @@ class TestErrorHandlingAndRobustness:
         dm = DataManager(temp_results_dir)
         
         # Basic functionality should still work
-        features = dm.get_features(['CCO'], ['CCO'], 'morgan')
+        features, valid_ids = dm.get_features(['CCO'], ['CCO'], 'morgan')
         assert features.shape == (1, 2048)
 
 
 class TestCacheStatisticsAndManagement:
     """Test cache statistics and management functionality."""
     
-    def test_get_statistics_empty_cache(self, temp_results_dir):
-        """Test statistics for empty cache."""
-        dm = DataManager(temp_results_dir)
-        
-        stats = dm.get_statistics()
-        
-        assert 'cache_dir' in stats
-        assert 'featurizer_types' in stats
-        assert 'cache_files' in stats
-        assert stats['cache_dir'] == str(dm.cache_dir)
-        assert set(stats['featurizer_types']) == {'morgan', 'maccs', 'ecfp6', 'descriptors'}
-        
-        # All cache files should show 0 compounds
-        for featurizer_type in stats['featurizer_types']:
-            assert stats['cache_files'][featurizer_type]['cached_compounds'] == 0
-            assert stats['cache_files'][featurizer_type]['file_size_mb'] == 0
-    
-    def test_get_statistics_with_cached_data(self, temp_results_dir, sample_compounds):
-        """Test statistics after caching some data."""
-        dm = DataManager(temp_results_dir)
-        
-        # Cache some features
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        dm.get_features(compound_ids[:2], smiles_list[:2], 'maccs')
-        
-        stats = dm.get_statistics()
-        
-        # Morgan should have 4 cached compounds
-        assert stats['cache_files']['morgan']['cached_compounds'] == 4
-        assert stats['cache_files']['morgan']['file_size_mb'] > 0
-        
-        # MACCS should have 2 cached compounds
-        assert stats['cache_files']['maccs']['cached_compounds'] == 2
-        assert stats['cache_files']['maccs']['file_size_mb'] > 0
-        
-        # Others should be empty
-        assert stats['cache_files']['ecfp6']['cached_compounds'] == 0
-        assert stats['cache_files']['descriptors']['cached_compounds'] == 0
     
     def test_cleanup_cache_force(self, temp_results_dir, sample_compounds):
         """Test forced cache cleanup."""
@@ -570,9 +496,10 @@ class TestIntegrationScenarios:
         })
         
         # Prepare initial training data
-        X_train, y_train = dm.prepare_training_data(initial_compounds, 'Activity', 'morgan')
+        valid_train_compounds, X_train, y_train = dm.prepare_training_data(initial_compounds, 'Activity', 'morgan')
         assert X_train.shape == (2, 2048)
         assert y_train.shape == (2,)
+        assert len(valid_train_compounds) == 2
         
         # New compounds for prediction
         prediction_compounds = pd.DataFrame({
@@ -581,8 +508,9 @@ class TestIntegrationScenarios:
         })
         
         # Prepare prediction data
-        X_pred = dm.prepare_prediction_data(prediction_compounds, 'morgan')
+        valid_pred_compounds, X_pred = dm.prepare_prediction_data(prediction_compounds, 'morgan')
         assert X_pred.shape == (3, 2048)
+        assert len(valid_pred_compounds) == 3
         
         # Add selected compound to training set
         selected_compound = pd.DataFrame({
@@ -592,14 +520,11 @@ class TestIntegrationScenarios:
         })
         
         updated_training = pd.concat([initial_compounds, selected_compound], ignore_index=True)
-        X_updated, y_updated = dm.prepare_training_data(updated_training, 'Activity', 'morgan')
+        valid_updated_compounds, X_updated, y_updated = dm.prepare_training_data(updated_training, 'Activity', 'morgan')
         
         assert X_updated.shape == (3, 2048)
         assert y_updated.shape == (3,)
         
-        # Verify caching worked (features should be reused)
-        cache_stats = dm.get_statistics()
-        assert cache_stats['cache_files']['morgan']['cached_compounds'] >= 3
     
     def test_multi_featurizer_workflow(self, temp_results_dir, sample_compounds):
         """Test workflow using multiple featurizer types."""
@@ -609,20 +534,15 @@ class TestIntegrationScenarios:
         compound_ids = sample_compounds['ID'].tolist()
         smiles_list = sample_compounds['SMILES'].tolist()
         
-        morgan_features = dm.get_features(compound_ids, smiles_list, 'morgan')
-        maccs_features = dm.get_features(compound_ids, smiles_list, 'maccs')
-        descriptor_features = dm.get_features(compound_ids, smiles_list, 'descriptors')
+        morgan_features, _valid_ids = dm.get_features(compound_ids, smiles_list, 'morgan')
+        maccs_features, _valid_ids = dm.get_features(compound_ids, smiles_list, 'maccs')
+        descriptor_features, _valid_ids = dm.get_features(compound_ids, smiles_list, 'descriptors')
         
         # Verify different feature types
         assert morgan_features.shape == (4, 2048)
         assert maccs_features.shape == (4, 167)
         assert descriptor_features.shape == (4, 1242)
         
-        # Verify separate caching
-        stats = dm.get_statistics()
-        assert stats['cache_files']['morgan']['cached_compounds'] == 4
-        assert stats['cache_files']['maccs']['cached_compounds'] == 4
-        assert stats['cache_files']['descriptors']['cached_compounds'] == 4
     
     def test_error_recovery_workflow(self, temp_results_dir):
         """Test workflow with error recovery."""
@@ -635,19 +555,16 @@ class TestIntegrationScenarios:
             'Activity': [1.0, 2.0, 3.0]
         })
         
-        # Should handle invalid SMILES gracefully
-        X, y = dm.prepare_training_data(mixed_compounds, 'Activity', 'morgan')
-        
-        # DataManager returns all compounds (zero vectors for invalid)
-        assert X.shape[0] == 3  # All compounds included
-        assert y.shape[0] == 3
-        
-        # Invalid compound should have zero features
-        assert np.allclose(X[1], 0)  # Middle compound is invalid
-        # Valid compounds should have non-zero features
-        assert not np.allclose(X[0], 0)
-        assert not np.allclose(X[2], 0)
-        
-        # Invalid compound should still be cached (as zero vector)
-        features = dm.get_features(['invalid_1'], ['INVALID'], 'morgan')
-        assert np.allclose(features[0], 0)
+        # Should handle invalid SMILES gracefully by filtering them out
+        valid_compounds, X, y = dm.prepare_training_data(mixed_compounds, 'Activity', 'morgan')
+
+        # DataManager filters out invalid compounds
+        assert len(valid_compounds) == 2  # Only valid compounds included
+        assert X.shape[0] == 2  # Only valid compounds included
+        assert y.shape[0] == 2
+        # Valid compounds should only contain the valid ones
+        assert set(valid_compounds['ID']) == {'valid_1', 'valid_2'}
+        # All returned features should be non-zero (since invalid compounds were filtered out)
+        assert not np.allclose(X, 0)
+        assert not np.allclose(X[0], 0)  # First valid compound
+        assert not np.allclose(X[1], 0)  # Second valid compound

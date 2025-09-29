@@ -28,21 +28,23 @@ class DecisionTreeLearner(SklearnLearner):
     to balance model complexity and generalization for molecular datasets.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  max_depth: Optional[int] = 10,
                  min_samples_split: int = 10,
                  min_samples_leaf: int = 5,
                  max_features: Optional[str] = None,
                  random_state: int = 42,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Decision Tree learner.
-        
+
         Args:
             max_depth: Maximum depth of the tree
             min_samples_split: Minimum samples required to split internal node
             min_samples_leaf: Minimum samples required at leaf node
             max_features: Number of features to consider at each split
             random_state: Random seed for reproducibility
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
@@ -56,7 +58,7 @@ class DecisionTreeLearner(SklearnLearner):
             random_state=random_state
         )
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split

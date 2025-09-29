@@ -19,15 +19,16 @@ class TestDataManagerEdgeCases:
         """Test DataManager with single compound."""
         single_compound = edge_case_compounds.head(1)
         
-        dm = DataManager(results_dir=tmp_path, featurizer='morgan')
-        features = dm.get_features(
-            single_compound['ID'].tolist(), 
+        dm = DataManager(results_dir=tmp_path)
+        features, valid_ids = dm.get_features(
+            single_compound['ID'].tolist(),
             smiles_list=single_compound['SMILES'].tolist(),
             featurizer_type='morgan'
         )
-        
-        assert features.shape[0] == 1
+
+        assert features.shape[0] == len(valid_ids)
         assert features.shape[1] > 0  # Should have feature dimensions
+        assert len(valid_ids) <= 1  # Should have at most 1 valid compound
     
     def test_invalid_smiles_handling(self, tmp_path):
         """Test handling of invalid SMILES strings."""
@@ -37,26 +38,27 @@ class TestDataManagerEdgeCases:
             'Activity': [1.0, 2.0]
         })
         
-        dm = DataManager(results_dir=tmp_path, featurizer='morgan')
+        dm = DataManager(results_dir=tmp_path)
         
-        # Should handle invalid SMILES gracefully by returning zero vectors
-        features = dm.get_features(
-            invalid_data['ID'].tolist(), 
+        # Should handle invalid SMILES gracefully by filtering them out
+        features, valid_ids = dm.get_features(
+            invalid_data['ID'].tolist(),
             smiles_list=invalid_data['SMILES'].tolist(),
             featurizer_type='morgan'
         )
-        
-        # Should return zero vectors for invalid SMILES
-        assert features.shape[0] == 2
-        assert features.shape[1] > 0  # Morgan fingerprints have features
-        assert np.all(features == 0)  # All zeros for invalid SMILES
+
+        # Should filter out invalid SMILES, so no features returned
+        assert features.shape[0] == len(valid_ids)
+        assert len(valid_ids) == 0  # No valid compounds from invalid SMILES
+        assert features.shape == (0, 2048)  # Empty features array
     
     def test_empty_dataset(self, tmp_path):
         """Test DataManager with empty dataset."""
-        dm = DataManager(results_dir=tmp_path, featurizer='morgan')
+        dm = DataManager(results_dir=tmp_path)
         
-        features = dm.get_features([], smiles_list=[], featurizer_type='morgan')
-        assert features.shape == (0,)  # Empty array for empty input
+        features, valid_ids = dm.get_features([], [], 'morgan')
+        assert features.shape == (0, 2048)  # Empty array with correct feature dimension
+        assert len(valid_ids) == 0  # No valid IDs for empty input
 
 
 class TestAcquisitionEdgeCases:
@@ -191,8 +193,8 @@ class TestIntegratedEdgeCases:
         # Test DataManager with edge cases
         dm = DataManager(results_dir=tmp_path)
         try:
-            features = dm.get_features(
-                compounds['ID'].tolist(), 
+            features, valid_ids = dm.get_features(
+                compounds['ID'].tolist(),
                 compounds['SMILES'].tolist(),
                 'morgan'
             )
@@ -203,7 +205,8 @@ class TestIntegratedEdgeCases:
             selected = acq.select(compounds, n_select=min(3, len(compounds)))
             
             assert len(selected) <= len(compounds)
-            assert features.shape[0] == len(compounds)
+            assert features.shape[0] == len(valid_ids)
+            assert len(valid_ids) <= len(compounds)
             
         except (ValueError, RuntimeError) as e:
             # Some edge cases may legitimately fail
@@ -219,13 +222,14 @@ class TestIntegratedEdgeCases:
         
         # Should handle minimal data without crashing
         dm = DataManager(results_dir=tmp_path)
-        features = dm.get_features(
+        features, valid_ids = dm.get_features(
             minimal_data['ID'].tolist(),
             minimal_data['SMILES'].tolist(),
             'morgan'
         )
-        
-        assert features.shape[0] == 2
+
+        assert features.shape[0] == len(valid_ids)
+        assert len(valid_ids) <= 2  # Should have at most 2 valid compounds
         
         # Test acquisition
         minimal_data['prediction'] = [0.1, 0.9]

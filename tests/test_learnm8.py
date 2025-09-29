@@ -121,6 +121,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=3,
             batch_fraction=0.1,
             initial_size=5,
@@ -168,6 +169,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=1,
             initial_batch_fraction=0.2,  # Use initial_batch_fraction for single cycle
             initial_size=3,
@@ -206,6 +208,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             cycles=cycles,
             initial_size=3,
             output_dir=str(tmp_path),
@@ -234,6 +237,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner='rf',  # String specification
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=2,
             batch_fraction=0.15,
             initial_size=3,
@@ -261,6 +265,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             score_direction='higher',
             n_cycles=1,
             batch_fraction=0.1,
@@ -275,6 +280,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             score_direction='lower',
             n_cycles=1,
             batch_fraction=0.1,
@@ -298,6 +304,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 n_cycles=1,
                 output_dir=str(tmp_path)
             )
@@ -320,6 +327,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 n_cycles=1,
                 initial_size=2,  # Small initial size to avoid sampling error
                 output_dir=str(tmp_path)
@@ -345,6 +353,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 score_direction='invalid',
                 output_dir=str(tmp_path)
             )
@@ -356,6 +365,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 n_cycles=0,
                 output_dir=str(tmp_path)
             )
@@ -367,6 +377,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 batch_fraction=1.5,  # > 1
                 output_dir=str(tmp_path)
             )
@@ -377,6 +388,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 batch_fraction=0,  # <= 0
                 output_dir=str(tmp_path)
             )
@@ -400,6 +412,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 n_cycles=1,
                 initial_size=1,
                 output_dir=str(tmp_path)
@@ -430,6 +443,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=failing_learner,
                 target_column='Activity',
+                featurizer='morgan',
                 n_cycles=1,
                 initial_size=1,
                 output_dir=str(tmp_path)
@@ -455,6 +469,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=2,
             batch_fraction=0.3,
             initial_size=1,
@@ -489,6 +504,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=1,
             batch_fraction=0.5,
             initial_size=1,
@@ -518,6 +534,7 @@ class TestRunActiveLearning:
             oracle=oracle,
             learner=learner,
             target_column='Activity',
+            featurizer='morgan',
             n_cycles=10,  # More cycles than compounds
             batch_fraction=0.5,
             initial_size=1,
@@ -552,6 +569,7 @@ class TestRunActiveLearning:
                 oracle=oracle,
                 learner=learner,
                 target_column='Activity',
+                featurizer='morgan',
                 strategy=strategy,
                 n_cycles=2,
                 batch_fraction=0.2,

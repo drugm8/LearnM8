@@ -25,8 +25,10 @@ def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
         raise ValueError("Percentile must be between 0 and 100")
 
     # Sort by scores according to direction
-    ascending = (score_direction == 'lower')
-    sorted_indices = np.argsort(scores) if ascending else np.argsort(scores)[::-1]
+    if score_direction == 'lower':
+        sorted_indices = np.argsort(scores)  # Ascending: lowest scores first
+    else:  # score_direction == 'higher'
+        sorted_indices = np.argsort(scores)[::-1]  # Descending: highest scores first
     sorted_labels = labels[sorted_indices]
 
     # Calculate selection size

@@ -27,7 +27,7 @@ class TestDataValidationErrors:
         data_manager = DataManager(results_dir=tmp_path)
         
         with pytest.raises((ValueError, IndexError)):
-            data_manager.prepare_training_data(empty_compounds, 'Activity')
+            data_manager.prepare_training_data(empty_compounds, 'Activity', 'morgan')
         
         # Acquisition functions should reject empty data
         acq = GreedyAcquisition()
@@ -47,17 +47,17 @@ class TestDataValidationErrors:
         # Missing ID column
         compounds_no_id = compounds.drop(columns=['ID'])
         with pytest.raises((KeyError, ValueError)):
-            data_manager.prepare_training_data(compounds_no_id, 'Activity')
+            data_manager.prepare_training_data(compounds_no_id, 'Activity', 'morgan')
         
         # Missing SMILES column
         compounds_no_smiles = compounds.drop(columns=['SMILES'])
         with pytest.raises((KeyError, ValueError)):
-            data_manager.prepare_training_data(compounds_no_smiles, 'Activity')
+            data_manager.prepare_training_data(compounds_no_smiles, 'Activity', 'morgan')
         
         # Missing target column
         compounds_no_target = compounds.drop(columns=['Activity'])
         with pytest.raises((KeyError, ValueError)):
-            data_manager.prepare_training_data(compounds_no_target, 'Activity')
+            data_manager.prepare_training_data(compounds_no_target, 'Activity', 'morgan')
     
     def test_invalid_smiles_handling(self, tmp_path):
         """Test handling of invalid SMILES strings."""
@@ -71,12 +71,13 @@ class TestDataValidationErrors:
         
         # Should handle invalid SMILES appropriately
         try:
-            X, y = data_manager.prepare_training_data(invalid_compounds, 'Activity')
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(invalid_compounds, 'Activity', 'morgan')
+
             # If it succeeds, should have filtered out invalid compounds
             assert X.shape[0] <= len(invalid_compounds)
             assert len(y) == X.shape[0]
-            
+            assert len(valid_compounds) == X.shape[0]
+
         except ValueError as e:
             # This is also acceptable - rejecting datasets with invalid SMILES
             assert "SMILES" in str(e) or "invalid" in str(e).lower()
@@ -312,8 +313,9 @@ class TestDataManagerErrors:
         
         # Should handle corrupted cache gracefully
         try:
-            X, y = data_manager.prepare_training_data(compounds, 'Activity')
+            valid_compounds, X, y = data_manager.prepare_training_data(compounds, 'Activity', 'morgan')
             assert X.shape[0] == 1  # Should recompute features
+            assert len(valid_compounds) == 1
         except Exception as e:
             # May fail due to cache corruption, which is acceptable
             assert "HDF5" in str(e) or "corrupt" in str(e).lower()
@@ -325,7 +327,7 @@ class TestDataManagerErrors:
         compound_ids = ['mol_1']
         
         with pytest.raises((ValueError, KeyError)):
-            data_manager.get_features(compound_ids, featurizer_type='unsupported_featurizer')
+            data_manager.get_features(compound_ids, None, 'unsupported_featurizer')
 
 
 class TestIntegrationErrors:
@@ -358,7 +360,7 @@ class TestIntegrationErrors:
         
         # Should fail because missing SMILES column
         with pytest.raises(ValueError, match="Missing required columns"):
-            data_manager.prepare_training_data(incomplete_data, 'Activity')
+            data_manager.prepare_training_data(incomplete_data, 'Activity', 'morgan')
     
     def test_mixed_valid_invalid_data(self, tmp_path):
         """Test handling of mixed valid and invalid data."""
@@ -372,12 +374,13 @@ class TestIntegrationErrors:
         
         # Should handle mixed data appropriately
         try:
-            X, y = data_manager.prepare_training_data(mixed_compounds, 'Activity')
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(mixed_compounds, 'Activity', 'morgan')
+
             # Should process valid compounds only
             assert X.shape[0] <= len(mixed_compounds)
             assert X.shape[0] >= 2  # At least the clearly valid ones
             assert len(y) == X.shape[0]
+            assert len(valid_compounds) == X.shape[0]
             
         except ValueError as e:
             # Rejecting entire dataset due to invalid data is also acceptable
@@ -395,7 +398,7 @@ class TestIntegrationErrors:
         })
         
         try:
-            data_manager.prepare_training_data(invalid_compounds, 'Activity')
+            data_manager.prepare_training_data(invalid_compounds, 'Activity', 'morgan')
         except Exception:
             pass  # Expected to fail
         
@@ -430,12 +433,13 @@ class TestErrorRecovery:
         data_manager = DataManager(results_dir=tmp_path)
         
         try:
-            X, y = data_manager.prepare_training_data(compounds, 'Activity')
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(compounds, 'Activity', 'morgan')
+
             # Should recover and process valid compounds
             assert X.shape[0] <= len(compounds)
             assert X.shape[0] >= 5  # Should have some valid compounds
             assert len(y) == X.shape[0]
+            assert len(valid_compounds) == X.shape[0]
             
         except ValueError:
             # Complete failure is also acceptable for this test
@@ -455,11 +459,12 @@ class TestErrorRecovery:
         
         # This should either succeed or fail gracefully
         try:
-            X, y = data_manager.prepare_training_data(large_compound_set, 'Activity')
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(large_compound_set, 'Activity', 'morgan')
+
             # If it succeeds, should have reasonable results
             assert X.shape[0] == 100
             assert len(y) == 100
+            assert len(valid_compounds) == 100
             
         except (OSError, MemoryError):
             # Failing due to resource constraints is acceptable

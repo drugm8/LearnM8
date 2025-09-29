@@ -24,7 +24,7 @@ class TestCreateLearnerFromString:
         ]
         
         for learner_name in valid_learners:
-            learner = create_learner_from_string(learner_name)
+            learner = create_learner_from_string(learner_name, featurizer_type='morgan')
             
             # Verify it's a Learner instance
             assert isinstance(learner, Learner)
@@ -42,7 +42,7 @@ class TestCreateLearnerFromString:
         sklearn_learners = ['rf', 'gp', 'xgb']
         
         for learner_name in sklearn_learners:
-            learner = create_learner_from_string(learner_name)
+            learner = create_learner_from_string(learner_name, featurizer_type='morgan')
             assert isinstance(learner, Learner)
             
             # Test that these can be instantiated without errors
@@ -54,7 +54,7 @@ class TestCreateLearnerFromString:
         
         for learner_name in torch_learners:
             try:
-                learner = create_learner_from_string(learner_name)
+                learner = create_learner_from_string(learner_name, featurizer_type='morgan')
                 assert isinstance(learner, Learner)
                 assert learner is not None
             except ImportError:
@@ -68,7 +68,7 @@ class TestCreateLearnerFromString:
         ]
         
         for learner_name in ensemble_learners:
-            learner = create_learner_from_string(learner_name)
+            learner = create_learner_from_string(learner_name, featurizer_type='morgan')
             assert isinstance(learner, Learner)
             
             # Ensemble learners should support uncertainty
@@ -77,11 +77,11 @@ class TestCreateLearnerFromString:
     def test_learner_creation_with_kwargs(self):
         """Test learner creation with additional keyword arguments."""
         # Test with random forest parameters
-        learner = create_learner_from_string('rf', n_estimators=50, random_state=42)
+        learner = create_learner_from_string('rf', featurizer_type='morgan', n_estimators=50, random_state=42)
         assert isinstance(learner, Learner)
         
         # Test with gaussian process parameters
-        learner = create_learner_from_string('gp', random_state=42)
+        learner = create_learner_from_string('gp', featurizer_type='morgan', random_state=42)
         assert isinstance(learner, Learner)
     
     def test_invalid_learner_name(self):
@@ -97,7 +97,7 @@ class TestCreateLearnerFromString:
         
         for invalid_name in invalid_names:
             with pytest.raises(ValueError) as exc_info:
-                create_learner_from_string(invalid_name)
+                create_learner_from_string(invalid_name, featurizer_type='morgan')
             
             # Verify error message is helpful
             error_msg = str(exc_info.value)
@@ -107,7 +107,7 @@ class TestCreateLearnerFromString:
     def test_error_message_contains_available_learners(self):
         """Test that error messages list available learners."""
         with pytest.raises(ValueError) as exc_info:
-            create_learner_from_string('nonexistent')
+            create_learner_from_string('nonexistent', featurizer_type='morgan')
         
         error_msg = str(exc_info.value)
         
@@ -120,7 +120,7 @@ class TestCreateLearnerFromString:
         """Test that learner mapping is consistent and complete."""
         # This test ensures the mapping dictionary contains expected entries
         with pytest.raises(ValueError) as exc_info:
-            create_learner_from_string('invalid')
+            create_learner_from_string('invalid', featurizer_type='morgan')
         
         error_msg = str(exc_info.value)
         available_text = error_msg.split("Available: ")[1]
@@ -134,8 +134,8 @@ class TestCreateLearnerFromString:
     
     def test_duplicate_ensemble_mapping(self):
         """Test that ensemble and mixed_ensemble create the same type."""
-        ensemble_learner = create_learner_from_string('ensemble')
-        mixed_ensemble_learner = create_learner_from_string('mixed_ensemble')
+        ensemble_learner = create_learner_from_string('ensemble', featurizer_type='morgan')
+        mixed_ensemble_learner = create_learner_from_string('mixed_ensemble', featurizer_type='morgan')
         
         # Should create the same type of learner
         assert type(ensemble_learner) == type(mixed_ensemble_learner)
@@ -147,7 +147,7 @@ class TestCreateLearnerFromString:
             # This might raise ImportError or work depending on implementation
             # We just ensure it doesn't crash unexpectedly
             try:
-                learner = create_learner_from_string('mlp')
+                learner = create_learner_from_string('mlp', featurizer_type='morgan')
                 assert isinstance(learner, Learner)
             except ImportError:
                 # This is acceptable behavior
@@ -158,7 +158,7 @@ class TestCreateLearnerFromString:
         # Test with obviously invalid parameters
         try:
             # Some learners might validate parameters, others might not
-            learner = create_learner_from_string('rf', invalid_param='invalid_value')
+            learner = create_learner_from_string('rf', featurizer_type='morgan', invalid_param='invalid_value')
             assert isinstance(learner, Learner)
         except (TypeError, ValueError):
             # This is acceptable - the underlying learner rejected invalid params
@@ -171,14 +171,14 @@ class TestCreateLearnerFromString:
         
         for invalid_case in invalid_cases:
             with pytest.raises(ValueError):
-                create_learner_from_string(invalid_case)
+                create_learner_from_string(invalid_case, featurizer_type='morgan')
     
     def test_learner_interface_compliance(self):
         """Test that created learners comply with Learner interface."""
         learner_names = ['rf', 'gp']  # Test with basic learners
         
         for learner_name in learner_names:
-            learner = create_learner_from_string(learner_name)
+            learner = create_learner_from_string(learner_name, featurizer_type='morgan')
             
             # Test interface methods exist and are callable
             assert hasattr(learner, 'train')
@@ -195,8 +195,8 @@ class TestCreateLearnerFromString:
     
     def test_learner_creation_determinism(self):
         """Test that creating the same learner twice gives consistent results."""
-        learner1 = create_learner_from_string('rf', random_state=42)
-        learner2 = create_learner_from_string('rf', random_state=42)
+        learner1 = create_learner_from_string('rf', featurizer_type='morgan', random_state=42)
+        learner2 = create_learner_from_string('rf', featurizer_type='morgan', random_state=42)
         
         # Should be the same type
         assert type(learner1) == type(learner2)
@@ -209,6 +209,7 @@ class TestCreateLearnerFromString:
         # Test random forest with multiple parameters
         learner = create_learner_from_string(
             'rf',
+            featurizer_type='morgan',
             n_estimators=100,
             max_depth=10,
             random_state=42,
@@ -219,6 +220,7 @@ class TestCreateLearnerFromString:
         # Test gaussian process with kernel parameters  
         learner = create_learner_from_string(
             'gp',
+            featurizer_type='morgan',
             random_state=42,
             normalize_y=True
         )
