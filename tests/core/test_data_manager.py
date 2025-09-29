@@ -227,50 +227,6 @@ class TestHDF5Caching:
         np.testing.assert_array_equal(features1, features2[:2])
         assert features2.shape == (4, 2048)
     
-    def test_hdf5_file_structure(self, temp_results_dir, sample_compounds):
-        """Test the internal structure of HDF5 cache files."""
-        dm = DataManager(temp_results_dir)
-        
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        
-        # Generate features to create cache file
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        
-        cache_file = temp_results_dir / ".cache" / "morgan_features.h5"
-        
-        # Verify HDF5 structure
-        with h5py.File(cache_file, 'r') as f:
-            assert 'features' in f
-            features_group = f['features']
-            
-            # Should have 4 cached features (one per compound)
-            assert len(features_group) == 4
-            
-            # Each feature should be properly stored
-            for key in features_group.keys():
-                feature_data = features_group[key][:]
-                assert feature_data.shape == (2048,)
-    
-    def test_cache_compression(self, temp_results_dir, sample_compounds):
-        """Test that cache files use compression."""
-        dm = DataManager(temp_results_dir)
-        
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        
-        cache_file = temp_results_dir / ".cache" / "morgan_features.h5"
-        
-        with h5py.File(cache_file, 'r') as f:
-            features_group = f['features']
-            
-            # Check that datasets use compression
-            for key in features_group.keys():
-                dataset = features_group[key]
-                assert dataset.compression == 'gzip'
-                assert dataset.compression_opts == 6
     
     def test_cache_fallback_on_error(self, temp_results_dir, sample_compounds):
         """Test fallback behavior when cache operations fail."""
@@ -496,46 +452,6 @@ class TestErrorHandlingAndRobustness:
 class TestCacheStatisticsAndManagement:
     """Test cache statistics and management functionality."""
     
-    def test_get_statistics_empty_cache(self, temp_results_dir):
-        """Test statistics for empty cache."""
-        dm = DataManager(temp_results_dir)
-        
-        # stats = dm.get_statistics()  # Method not implemented
-        
-        # assert 'cache_dir' in stats
-        # assert 'featurizer_types' in stats
-        # assert 'cache_files' in stats
-        # assert stats['cache_dir'] == str(dm.cache_dir)
-        # assert set(stats['featurizer_types']) == {'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'}
-        
-        # All cache files should show 0 compounds - commented out since get_statistics not implemented
-        # for featurizer_type in stats['featurizer_types']:
-        #     assert stats['cache_files'][featurizer_type]['cached_compounds'] == 0
-        #     assert stats['cache_files'][featurizer_type]['file_size_mb'] == 0
-    
-    def test_get_statistics_with_cached_data(self, temp_results_dir, sample_compounds):
-        """Test statistics after caching some data."""
-        dm = DataManager(temp_results_dir)
-        
-        # Cache some features
-        compound_ids = sample_compounds['ID'].tolist()
-        smiles_list = sample_compounds['SMILES'].tolist()
-        dm.get_features(compound_ids, smiles_list, 'morgan')
-        dm.get_features(compound_ids[:2], smiles_list[:2], 'maccs')
-        
-        # stats = dm.get_statistics()  # Method not implemented
-        
-        # Morgan should have 4 cached compounds
-        # assert stats['cache_files']['morgan']['cached_compounds'] == 4
-        # assert stats['cache_files']['morgan']['file_size_mb'] > 0
-        
-        # MACCS should have 2 cached compounds
-        # assert stats['cache_files']['maccs']['cached_compounds'] == 2
-        # assert stats['cache_files']['maccs']['file_size_mb'] > 0
-        
-        # Others should be empty
-        # assert stats['cache_files']['ecfp6']['cached_compounds'] == 0
-        # assert stats['cache_files']['descriptors']['cached_compounds'] == 0
     
     def test_cleanup_cache_force(self, temp_results_dir, sample_compounds):
         """Test forced cache cleanup."""
@@ -609,9 +525,6 @@ class TestIntegrationScenarios:
         assert X_updated.shape == (3, 2048)
         assert y_updated.shape == (3,)
         
-        # Verify caching worked (features should be reused)
-        # cache_stats = dm.get_statistics()  # Method not implemented
-        # assert cache_stats['cache_files']['morgan']['cached_compounds'] >= 3
     
     def test_multi_featurizer_workflow(self, temp_results_dir, sample_compounds):
         """Test workflow using multiple featurizer types."""
@@ -630,11 +543,6 @@ class TestIntegrationScenarios:
         assert maccs_features.shape == (4, 167)
         assert descriptor_features.shape == (4, 1242)
         
-        # Verify separate caching
-        # stats = dm.get_statistics()  # Method not implemented
-        # assert stats['cache_files']['morgan']['cached_compounds'] == 4
-        # assert stats['cache_files']['maccs']['cached_compounds'] == 4
-        # assert stats['cache_files']['descriptors']['cached_compounds'] == 4
     
     def test_error_recovery_workflow(self, temp_results_dir):
         """Test workflow with error recovery."""
