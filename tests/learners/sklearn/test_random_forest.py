@@ -20,7 +20,7 @@ class TestRandomForestLearner:
     @pytest.fixture
     def learner(self):
         """Create RandomForestLearner instance for testing."""
-        return RandomForestLearner(n_estimators=10, random_state=42)
+        return RandomForestLearner(featurizer_type='morgan', n_estimators=10, random_state=42)
     
     def test_initialization(self, learner):
         """Test learner initialization."""
@@ -124,6 +124,7 @@ class TestRandomForestLearner:
             compounds['Activity'] = np.random.beta(2, 5, len(compounds))
         
         learner = RandomForestLearner(
+            featurizer_type='morgan',
             n_estimators=5,
             max_depth=3,
             min_samples_split=5,
@@ -162,10 +163,14 @@ class TestRandomForestLearner:
         # Mock DataManager to test integration
         mock_dm = Mock()
         mock_dm.prepare_training_data.return_value = (
+            compounds,  # valid compounds DataFrame
             np.random.randn(len(compounds), 100),  # Mock features
             compounds['Activity'].values
         )
-        mock_dm.prepare_prediction_data.return_value = np.random.randn(len(compounds), 100)
+        mock_dm.prepare_prediction_data.return_value = (
+            compounds,  # valid compounds DataFrame
+            np.random.randn(len(compounds), 100)
+        )
         
         # Train and predict
         learner.train(compounds, 'Activity', mock_dm)

@@ -31,7 +31,7 @@ class XGBoostLearner(SklearnLearner):
     handling of different data distributions.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  n_estimators: int = 100,
                  learning_rate: float = 0.1,
                  max_depth: int = 6,
@@ -42,9 +42,10 @@ class XGBoostLearner(SklearnLearner):
                  reg_lambda: float = 1.0,
                  random_state: int = 42,
                  n_jobs: int = -1,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize XGBoost learner.
-        
+
         Args:
             n_estimators: Number of boosting rounds
             learning_rate: Learning rate (step size shrinkage)
@@ -56,6 +57,7 @@ class XGBoostLearner(SklearnLearner):
             reg_lambda: L2 regularization term
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not XGBOOST_AVAILABLE:
@@ -78,7 +80,7 @@ class XGBoostLearner(SklearnLearner):
             tree_method='hist'  # Use histogram-based algorithm for speed
         )
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators

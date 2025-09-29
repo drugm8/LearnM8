@@ -11,10 +11,10 @@ conda activate base
 pip install -e .
 
 # Basic usage
-learnm8 compounds.csv compounds.csv Activity -l gp -c 10
+learnm8 compounds.csv compounds.csv Activity -l gp --featurizer morgan -c 10
 
 # Advanced cycle specification
-learnm8 compounds.csv oracle.py:calculate_score target -l ensemble --cycles-spec "random:0.01 greedy:0.005*5 diverse:0.01"
+learnm8 compounds.csv oracle.py:calculate_score target -l ensemble --featurizer morgan --cycles-spec "random:0.01 greedy:0.005*5 diverse:0.01"
 ```
 
 ## 📋 Table of Contents
@@ -211,13 +211,13 @@ Design space pruning reduces computational costs by removing unpromising compoun
 
 ```bash
 # Benchmark mode (CSV oracle)
-learnm8 data.csv data.csv Activity -l gp -c 10
+learnm8 data.csv data.csv Activity -l gp --featurizer morgan -c 10
 
-# Custom oracle mode  
-learnm8 compounds.csv oracle.py:calculate_score target -l ensemble
+# Custom oracle mode
+learnm8 compounds.csv oracle.py:calculate_score target -l ensemble --featurizer morgan
 
 # Ensemble learning
-learnm8 data.csv data.csv Activity -l mixed_ensemble --cycles-spec "random:0.01 greedy:0.005*10"
+learnm8 data.csv data.csv Activity -l mixed_ensemble --featurizer morgan --cycles-spec "random:0.01 greedy:0.005*10"
 ```
 
 ### Advanced Configuration
@@ -232,7 +232,7 @@ learnm8 compounds.csv oracle.py:score target \
   --pruning-params '{"threshold": 0.1}'
 
 # Predefined schedules
-learnm8 data.csv data.csv Activity -l gp --schedule intensive
+learnm8 data.csv data.csv Activity -l gp --featurizer morgan --schedule intensive
 
 # Diversity-focused screening
 learnm8 compounds.csv oracle.py:score target \
@@ -258,7 +258,7 @@ learnm8 compounds.csv oracle.py:score target \
 - `-b/--batch-fraction`: Batch fraction (legacy mode)
 
 #### Configuration
-- `--featurizer`: Molecular features (`morgan`, `descriptors`, `maccs`, `ecfp6`)
+- `--featurizer`: **Required** - Molecular features (`morgan`, `descriptors`, `maccs`, `ecfp6`)
 - `--pruning-strategy`: Pruning method
 - `--random-state`: Random seed
 - `-o/--output`: Output directory
@@ -276,20 +276,22 @@ results = run_active_learning(
     oracle=oracle_instance,
     learner=learner_instance,
     target_column='Activity',
+    featurizer='morgan',  # Required parameter
     strategy='greedy',
     n_cycles=10,
     batch_fraction=0.01
 )
 
-# Advanced cycle specification  
+# Advanced cycle specification
 results = run_active_learning(
     compound_pool=df,
     oracle=oracle_instance,
     learner=learner_instance,
     target_column='Activity',
+    featurizer='morgan',  # Required parameter
     cycles=[
         ('random', 0.01),     # Initial random sampling
-        ('greedy', 0.005),    # Greedy exploitation  
+        ('greedy', 0.005),    # Greedy exploitation
         ('diverse', 0.01)     # Final diverse exploration
     ]
 )
@@ -300,8 +302,8 @@ results = run_active_learning(
 ```python
 # Learners
 from learnm8.learners import GaussianProcessLearner, EnsembleLearner
-learner = GaussianProcessLearner(kernel='rbf')
-ensemble = EnsembleLearner(models=['rf', 'gp', 'xgb'])
+learner = GaussianProcessLearner(featurizer_type='morgan', kernel='rbf')
+ensemble = EnsembleLearner(featurizer_type='morgan', models=['rf', 'gp', 'xgb'])
 
 # Oracles
 from learnm8.oracles import CSVOracle, PythonOracle
@@ -310,7 +312,7 @@ custom_oracle = PythonOracle('my_module.py', 'scoring_function')
 
 # Data Management
 from learnm8.core.data_manager import DataManager
-dm = DataManager(featurizer='morgan', cache_dir='./cache')
+dm = DataManager(results_dir='./cache')
 ```
 
 ### Acquisition Strategy Usage
@@ -379,15 +381,15 @@ pytest -m "not slow"     # Skip slow tests
 
 ```bash
 # Compare multiple models on benchmark dataset
-learnm8 ESSENCE_benchmark_input/ADA.csv ESSENCE_benchmark_input/ADA.csv Activity -l gp -c 15
-learnm8 ESSENCE_benchmark_input/ADA.csv ESSENCE_benchmark_input/ADA.csv Activity -l ensemble -c 15
+learnm8 ESSENCE_benchmark_input/ADA.csv ESSENCE_benchmark_input/ADA.csv Activity -l gp --featurizer morgan -c 15
+learnm8 ESSENCE_benchmark_input/ADA.csv ESSENCE_benchmark_input/ADA.csv Activity -l ensemble --featurizer morgan -c 15
 ```
 
 ### 2. Custom Oracle Deployment
 
 ```bash
 # Use custom scoring function
-learnm8 compound_library.csv scoring_module.py:calculate_affinity binding_score -l mc_dropout -c 20
+learnm8 compound_library.csv scoring_module.py:calculate_affinity binding_score -l mc_dropout --featurizer morgan -c 20
 ```
 
 ### 3. Diversity-Focused Screening
@@ -406,6 +408,7 @@ learnm8 compounds.csv oracle.py:score target \
 learnm8 large_library.csv oracle.py:score target \
   --cycles-spec "random:0.005 ucb:0.003*8 thompson:0.005*2" \
   -l gp \
+  --featurizer morgan \
   --pruning-strategy uncertainty_threshold \
   --pruning-params '{"threshold": 0.2}'
 ```

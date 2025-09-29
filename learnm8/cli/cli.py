@@ -61,9 +61,9 @@ def main():
                        help='Initial training set size (default: 1%% of pool)')
     
     # Data configuration  
-    parser.add_argument('--featurizer', default='morgan',
+    parser.add_argument('--featurizer', required=True,
                        choices=['morgan', 'descriptors', 'maccs', 'ecfp6'],
-                       help='Molecular featurizer type')
+                       help='Molecular featurizer type (required)')
     parser.add_argument('--score-direction', default='auto',
                        choices=['higher', 'lower', 'auto'],
                        help='Score optimization direction (auto-detect, higher, or lower is better)')
@@ -281,6 +281,7 @@ def main():
             'oracle': oracle_instance,
             'target_column': args.target_column,
             'learner': args.learner,
+            'featurizer': args.featurizer,
             'initial_size': args.initial_size,
             'output_dir': args.output,
             'random_state': args.random_state,

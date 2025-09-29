@@ -70,20 +70,47 @@ class TestUCBAcquisition:
     def test_ucb_uncertainty_weighting(self, small_real_compounds):
         """Test UCB properly weights uncertainty."""
         compounds = small_real_compounds.head(10).copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
-        # Create scenario with varying uncertainty
+
+        # Create scenario with varying uncertainty - use default 'higher' score direction
         compounds['prediction'] = np.random.uniform(0.3, 0.7, len(compounds))
         compounds['uncertainty'] = [0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5]
-        
-        acq = UCBAcquisition(data_manager=None, beta=1.0)
+
+        acq = UCBAcquisition(data_manager=None, beta=1.0)  # Default is 'higher'
         selected = acq.select(compounds, n_select=3)
-        
-        # Should prefer compounds with higher uncertainty (exploration)
+
+        # For maximization UCB, should prefer compounds with higher uncertainty (exploration)
         selected_uncertainties = selected['uncertainty'].values
         assert np.mean(selected_uncertainties) > np.mean(compounds['uncertainty'])
+
+    def test_ucb_score_direction_lower(self, small_real_compounds):
+        """Test UCB with score_direction='lower' for minimization problems."""
+        compounds = small_real_compounds.head(10).copy()
+
+        if len(compounds) == 0:
+            pytest.skip("No real molecular data available")
+
+        # Create test scenario for LCB (minimization)
+        compounds['prediction'] = np.array([2.0, 1.0, 3.0, 1.5, 2.5, 0.5, 3.5, 1.2, 2.2, 0.8])
+        compounds['uncertainty'] = np.array([0.1, 0.3, 0.2, 0.4, 0.1, 0.2, 0.3, 0.5, 0.1, 0.4])
+
+        # Test LCB behavior (score_direction='lower')
+        acq = UCBAcquisition(data_manager=None, beta=1.0, score_direction='lower')
+        selected = acq.select(compounds, n_select=3)
+
+        assert len(selected) == 3
+
+        # Calculate expected LCB scores manually
+        manual_lcb = compounds['prediction'] - 1.0 * compounds['uncertainty']
+        expected_top3_indices = np.argsort(manual_lcb)[:3]  # Lowest 3 LCB scores
+
+        # Get selected compound indices from the original dataframe
+        selected_indices = compounds.index[compounds['ID'].isin(selected['ID'])].tolist()
+
+        # Verify we selected the compounds with lowest LCB scores
+        assert set(selected_indices) == set(expected_top3_indices)
 
 
 class TestExpectedImprovementAcquisition:

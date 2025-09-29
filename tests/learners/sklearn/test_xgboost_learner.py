@@ -20,7 +20,7 @@ class TestXGBoostLearner:
     @pytest.fixture
     def learner(self):
         """Create XGBoostLearner instance for testing."""
-        return XGBoostLearner(n_estimators=10, random_state=42)
+        return XGBoostLearner(featurizer_type='morgan', n_estimators=10, random_state=42)
     
     def test_initialization(self, learner):
         """Test learner initialization."""
@@ -129,6 +129,7 @@ class TestXGBoostLearner:
             compounds['Activity'] = np.random.beta(2, 5, len(compounds))
         
         learner = XGBoostLearner(
+            featurizer_type='morgan',
             n_estimators=5,
             learning_rate=0.2,
             max_depth=3,
@@ -198,6 +199,7 @@ class TestXGBoostLearner:
             compounds['Activity'] = np.random.beta(2, 5, len(compounds))
         
         learner = XGBoostLearner(
+            featurizer_type='morgan',
             n_estimators=10,
             reg_alpha=0.1,
             reg_lambda=0.5,
@@ -222,10 +224,14 @@ class TestXGBoostLearner:
         # Mock DataManager to test integration
         mock_dm = Mock()
         mock_dm.prepare_training_data.return_value = (
+            compounds,  # valid compounds DataFrame
             np.random.randn(len(compounds), 100),  # Mock features
             compounds['Activity'].values
         )
-        mock_dm.prepare_prediction_data.return_value = np.random.randn(len(compounds), 100)
+        mock_dm.prepare_prediction_data.return_value = (
+            compounds,  # valid compounds DataFrame
+            np.random.randn(len(compounds), 100)
+        )
         
         # Train and predict
         learner.train(compounds, 'Activity', mock_dm)

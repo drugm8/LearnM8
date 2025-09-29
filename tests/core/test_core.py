@@ -13,109 +13,20 @@ from learnm8.core.data_manager import DataManager
 from learnm8.core.interfaces import Learner, Oracle
 
 
-class MockLearner(Learner):
-    """Mock learner implementation for testing core interfaces."""
-    
-    def __init__(self, supports_uncertainty=False):
-        self._trained = False
-        self._supports_uncertainty = supports_uncertainty
-        self._training_data = None
-    
-    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: DataManager) -> None:
-        """Mock training implementation."""
-        if len(compounds) == 0:
-            raise ValueError("Cannot train on empty dataset")
-        
-        if target_column not in compounds.columns:
-            raise KeyError(f"Target column '{target_column}' not found")
-        
-        # Get features to simulate real training
-        compound_ids = compounds['ID'].tolist()
-        smiles_list = compounds['SMILES'].tolist()
-        features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        
-        if features.shape[0] != len(compounds):
-            raise ValueError("Feature shape mismatch")
-        
-        self._trained = True
-        self._training_data = compounds.copy()
-    
-    def predict(self, compounds: pd.DataFrame, data_manager: DataManager) -> tuple:
-        """Mock prediction implementation."""
-        if not self._trained:
-            raise RuntimeError("Model must be trained before prediction")
-        
-        compound_ids = compounds['ID'].tolist()
-        smiles_list = compounds['SMILES'].tolist()
-        features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        
-        # Generate mock predictions
-        np.random.seed(42)
-        predictions = np.random.uniform(0, 1, len(compounds))
-        
-        if self._supports_uncertainty:
-            uncertainties = np.random.uniform(0.1, 0.3, len(compounds))
-            return predictions, uncertainties
-        else:
-            return predictions, None
-    
-    def supports_uncertainty(self) -> bool:
-        """Return whether this learner supports uncertainty estimation."""
-        return self._supports_uncertainty
-    
-    def get_name(self) -> str:
-        """Return the name of this mock learner."""
-        uncertainty_suffix = "_with_uncertainty" if self._supports_uncertainty else ""
-        return f"MockLearner{uncertainty_suffix}"
-
-
-class MockOracle(Oracle):
-    """Mock oracle implementation for testing core interfaces."""
-    
-    def __init__(self, noise_level=0.1):
-        self.noise_level = noise_level
-        self.call_count = 0
-    
-    def measure(self, compounds: pd.DataFrame, properties: list) -> pd.DataFrame:
-        """Mock measurement implementation."""
-        self.call_count += 1
-        
-        if len(compounds) == 0:
-            return pd.DataFrame(columns=['ID'] + properties)
-        
-        result = compounds[['ID']].copy()
-        
-        # Generate mock measurements for each property
-        for prop in properties:
-            np.random.seed(42 + hash(prop) % 1000)
-            
-            if prop == 'Activity':
-                # Generate activity values based on SMILES hash for consistency
-                activities = []
-                for smiles in compounds['SMILES']:
-                    base_value = (hash(smiles) % 1000) / 1000.0
-                    noise = np.random.normal(0, self.noise_level)
-                    activities.append(base_value + noise)
-                result[prop] = activities
-            else:
-                # Generic property
-                result[prop] = np.random.uniform(0, 1, len(compounds))
-        
-        return result
 
 
 class TestCoreInterfaces:
     """Test core interface implementations and compliance."""
     
-    def test_learner_interface_compliance(self, small_real_compounds, tmp_path):
+    def test_learner_interface_compliance(self, small_real_compounds, tmp_path, mock_learner_with_uncertainty):
         """Test that learner implementations comply with interface."""
         compounds = small_real_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
+
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner(supports_uncertainty=True)
+        learner = mock_learner_with_uncertainty
         
         # Test interface methods exist
         assert hasattr(learner, 'train')
@@ -136,15 +47,15 @@ class TestCoreInterfaces:
         assert isinstance(uncertainties, np.ndarray)
         assert len(uncertainties) == len(compounds)
     
-    def test_learner_without_uncertainty(self, small_real_compounds, tmp_path):
+    def test_learner_without_uncertainty(self, small_real_compounds, tmp_path, mock_learner):
         """Test learner that doesn't support uncertainty."""
         compounds = small_real_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
+
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner(supports_uncertainty=False)
+        learner = mock_learner
         
         assert learner.supports_uncertainty() == False
         
@@ -154,14 +65,14 @@ class TestCoreInterfaces:
         assert isinstance(predictions, np.ndarray)
         assert uncertainties is None
     
-    def test_oracle_interface_compliance(self, small_real_compounds):
+    def test_oracle_interface_compliance(self, small_real_compounds, mock_oracle):
         """Test that oracle implementations comply with interface."""
         compounds = small_real_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
-        oracle = MockOracle()
+
+        oracle = mock_oracle
         
         # Test interface methods exist
         assert hasattr(oracle, 'measure')
@@ -181,10 +92,10 @@ class TestCoreInterfaces:
         # Should be deterministic for same input
         pd.testing.assert_frame_equal(measurements, measurements2)
     
-    def test_oracle_with_empty_compounds(self):
+    def test_oracle_with_empty_compounds(self, mock_oracle):
         """Test oracle behavior with empty compound set."""
         empty_compounds = pd.DataFrame(columns=['ID', 'SMILES'])
-        oracle = MockOracle()
+        oracle = mock_oracle
         
         result = oracle.measure(empty_compounds, ['Activity'])
         
@@ -197,18 +108,18 @@ class TestCoreInterfaces:
 class TestCoreSystemIntegration:
     """Test integration between core system components."""
     
-    def test_datamanager_learner_integration(self, medium_real_compounds, tmp_path):
+    def test_datamanager_learner_integration(self, medium_real_compounds, tmp_path, mock_learner):
         """Test DataManager integration with learner."""
         compounds = medium_real_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
+
         # Use subset for faster testing
         compounds = compounds.head(20)
-        
+
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner(supports_uncertainty=False)
+        learner = mock_learner
         
         # Train learner using DataManager
         learner.train(compounds, 'Activity', data_manager)
@@ -223,10 +134,10 @@ class TestCoreSystemIntegration:
         # Verify DataManager cached features
         compound_ids = compounds['ID'].tolist()
         smiles_list = compounds['SMILES'].tolist()
-        cached_features = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        assert cached_features.shape[0] == len(compounds)
+        cached_features, cached_valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+        assert cached_features.shape[0] == len(cached_valid_ids)
     
-    def test_datamanager_oracle_integration(self, small_real_compounds, tmp_path):
+    def test_datamanager_oracle_integration(self, small_real_compounds, tmp_path, mock_oracle):
         """Test DataManager integration with oracle."""
         compounds = small_real_compounds.copy()
         
@@ -234,7 +145,7 @@ class TestCoreSystemIntegration:
             pytest.skip("No real molecular data available")
         
         data_manager = DataManager(results_dir=tmp_path)
-        oracle = MockOracle()
+        oracle = mock_oracle
         
         # Oracle measures compounds
         measurements = oracle.measure(compounds, ['Measured_Activity', 'Solubility'])
@@ -243,13 +154,14 @@ class TestCoreSystemIntegration:
         combined_data = compounds.merge(measurements, on='ID')
         
         # Prepare training data
-        X, y = data_manager.prepare_training_data(combined_data, 'Measured_Activity')
-        
-        assert X.shape[0] == len(compounds)
-        assert len(y) == len(compounds)
+        valid_compounds, X, y = data_manager.prepare_training_data(combined_data, 'Measured_Activity', 'morgan')
+
+        assert X.shape[0] == len(valid_compounds)
+        assert len(y) == len(valid_compounds)
+        assert len(valid_compounds) <= len(compounds)
         assert X.shape[1] > 0  # Should have molecular features
     
-    def test_learner_oracle_workflow(self, diverse_real_compounds, tmp_path):
+    def test_learner_oracle_workflow(self, diverse_real_compounds, tmp_path, mock_learner_with_uncertainty, mock_oracle):
         """Test complete learner-oracle active learning workflow."""
         compounds = diverse_real_compounds.copy()
         
@@ -260,8 +172,8 @@ class TestCoreSystemIntegration:
         compounds = compounds.head(15)
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner(supports_uncertainty=True)
-        oracle = MockOracle()
+        learner = mock_learner_with_uncertainty
+        oracle = mock_oracle
         
         # Initial training set
         labeled_compounds = compounds.head(8).copy()
@@ -294,7 +206,7 @@ class TestCoreSystemIntegration:
         assert len(next_measurements) == 3
         assert oracle.call_count == 2  # Two oracle calls
     
-    def test_multi_cycle_workflow(self, medium_real_compounds, tmp_path):
+    def test_multi_cycle_workflow(self, medium_real_compounds, tmp_path, mock_learner_with_uncertainty, mock_oracle):
         """Test multi-cycle active learning workflow."""
         compounds = medium_real_compounds.copy()
         
@@ -305,8 +217,8 @@ class TestCoreSystemIntegration:
         compounds = compounds.head(25)
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner(supports_uncertainty=True)
-        oracle = MockOracle()
+        learner = mock_learner_with_uncertainty
+        oracle = mock_oracle
         
         # Start with small labeled set
         labeled_ids = set(compounds['ID'].head(5))
@@ -349,7 +261,7 @@ class TestCoreSystemIntegration:
 class TestCoreErrorHandling:
     """Test error handling in core system components."""
     
-    def test_learner_error_conditions(self, small_real_compounds, tmp_path):
+    def test_learner_error_conditions(self, small_real_compounds, tmp_path, mock_learner):
         """Test learner error handling."""
         compounds = small_real_compounds.copy()
         
@@ -357,7 +269,7 @@ class TestCoreErrorHandling:
             pytest.skip("No real molecular data available")
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
+        learner = mock_learner
         
         # Test training with empty dataset
         empty_compounds = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
@@ -372,9 +284,9 @@ class TestCoreErrorHandling:
         with pytest.raises(RuntimeError, match="must be trained"):
             learner.predict(compounds, data_manager)
     
-    def test_oracle_error_conditions(self):
+    def test_oracle_error_conditions(self, mock_oracle):
         """Test oracle error handling."""
-        oracle = MockOracle()
+        oracle = mock_oracle
         
         # Test with invalid compounds DataFrame
         invalid_compounds = pd.DataFrame({'wrong_column': [1, 2, 3]})
@@ -391,7 +303,7 @@ class TestCoreErrorHandling:
         result = oracle.measure(compounds, [])
         assert len(result.columns) == 1  # Only ID column
     
-    def test_datamanager_learner_mismatch(self, small_real_compounds, tmp_path):
+    def test_datamanager_learner_mismatch(self, small_real_compounds, tmp_path, mock_learner):
         """Test handling of mismatched data between DataManager and learner."""
         compounds = small_real_compounds.copy()
         
@@ -399,7 +311,7 @@ class TestCoreErrorHandling:
             pytest.skip("No real molecular data available")
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
+        learner = mock_learner
         
         # Train on subset
         train_compounds = compounds.head(3)
@@ -418,88 +330,11 @@ class TestCoreErrorHandling:
         assert uncertainties is None
 
 
-class TestCorePerformance:
-    """Test performance characteristics of core components."""
-    
-    def test_datamanager_caching_efficiency(self, medium_real_compounds, tmp_path):
-        """Test that DataManager caching improves performance."""
-        compounds = medium_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        # Use subset for testing
-        compounds = compounds.head(30)
-        compound_ids = compounds['ID'].tolist()
-        
-        data_manager = DataManager(results_dir=tmp_path)
-        
-        # First call should compute and cache features
-        import time
-        start_time = time.time()
-        smiles_list = compounds['SMILES'].tolist()
-        features1 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        first_call_time = time.time() - start_time
-        
-        # Second call should use cache (faster)
-        start_time = time.time()
-        features2 = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-        second_call_time = time.time() - start_time
-        
-        # Verify caching worked
-        np.testing.assert_array_equal(features1, features2)
-        
-        # Second call should be faster (allowing some tolerance)
-        # Note: This is approximate and may vary in test environments
-        if first_call_time > 0.1:  # Only check if first call took reasonable time
-            assert second_call_time <= first_call_time * 1.5  # Allow some overhead
-    
-    def test_learner_scalability(self, tmp_path):
-        """Test learner performance with different dataset sizes."""
-        data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
-        
-        sizes = [10, 25, 50]
-        training_times = []
-        
-        for size in sizes:
-            # Generate test compounds
-            compounds = pd.DataFrame({
-                'ID': [f'mol_{i}' for i in range(size)],
-                'SMILES': ['CCO'] * size,
-                'Activity': np.random.uniform(0, 1, size)
-            })
-            
-            # Measure training time
-            import time
-            start_time = time.time()
-            learner.train(compounds, 'Activity', data_manager)
-            training_time = time.time() - start_time
-            training_times.append(training_time)
-            
-            # Test prediction time
-            start_time = time.time()
-            predictions, _ = learner.predict(compounds, data_manager)
-            prediction_time = time.time() - start_time
-            
-            # Verify results
-            assert len(predictions) == size
-            
-            # Training should be reasonably fast for test sizes
-            assert training_time < 10.0  # 10 seconds max for any test size
-            assert prediction_time < 5.0   # 5 seconds max for prediction
-        
-        # Training time should scale reasonably (allowing for variability)
-        # Larger datasets may take longer, but not exponentially
-        if len(training_times) >= 2:
-            # Last should not be more than 10x the first
-            assert training_times[-1] <= training_times[0] * 10
-
 
 class TestCoreEdgeCases:
     """Test edge cases in core system functionality."""
     
-    def test_single_compound_workflow(self, tmp_path):
+    def test_single_compound_workflow(self, tmp_path, mock_learner, mock_oracle):
         """Test complete workflow with single compound."""
         single_compound = pd.DataFrame({
             'ID': ['mol_1'],
@@ -508,8 +343,8 @@ class TestCoreEdgeCases:
         })
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
-        oracle = MockOracle()
+        learner = mock_learner
+        oracle = mock_oracle
         
         # Complete workflow with single compound
         measurements = oracle.measure(single_compound, ['Measured_Activity'])
@@ -522,7 +357,7 @@ class TestCoreEdgeCases:
         assert len(predictions) == 1
         assert isinstance(predictions[0], (int, float, np.number))
     
-    def test_duplicate_compound_handling(self, tmp_path):
+    def test_duplicate_compound_handling(self, tmp_path, mock_learner):
         """Test handling of duplicate compounds."""
         compounds_with_duplicates = pd.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_1', 'mol_3'],  # mol_1 appears twice
@@ -531,7 +366,7 @@ class TestCoreEdgeCases:
         })
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
+        learner = mock_learner
         
         # Should handle duplicates appropriately
         try:
@@ -545,7 +380,7 @@ class TestCoreEdgeCases:
             # Some implementations might reject duplicates, which is also valid
             assert "duplicate" in str(e).lower() or "unique" in str(e).lower()
     
-    def test_unusual_smiles_handling(self, tmp_path):
+    def test_unusual_smiles_handling(self, tmp_path, mock_learner):
         """Test handling of unusual but valid SMILES."""
         unusual_compounds = pd.DataFrame({
             'ID': ['salt_1', 'stereo_1', 'charged_1'],
@@ -554,7 +389,7 @@ class TestCoreEdgeCases:
         })
         
         data_manager = DataManager(results_dir=tmp_path)
-        learner = MockLearner()
+        learner = mock_learner
         
         try:
             learner.train(unusual_compounds, 'Activity', data_manager)

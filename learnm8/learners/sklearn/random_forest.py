@@ -31,7 +31,7 @@ class RandomForestLearner(SklearnLearner):
     across different molecular datasets.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  n_estimators: int = 100,
                  max_depth: Optional[int] = None,
                  min_samples_split: int = 2,
@@ -39,9 +39,10 @@ class RandomForestLearner(SklearnLearner):
                  max_features: str = 'sqrt',
                  random_state: int = 42,
                  n_jobs: int = -1,
+                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Random Forest learner.
-        
+
         Args:
             n_estimators: Number of trees in the forest
             max_depth: Maximum depth of trees (None for unlimited)
@@ -50,6 +51,7 @@ class RandomForestLearner(SklearnLearner):
             max_features: Number of features to consider at each split
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
+            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
@@ -68,7 +70,7 @@ class RandomForestLearner(SklearnLearner):
             oob_score=True  # Enable out-of-bag scoring for additional validation
         )
         
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
         
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators

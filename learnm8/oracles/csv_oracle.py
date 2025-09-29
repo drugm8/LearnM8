@@ -7,33 +7,44 @@ from learnm8.core.interfaces import Oracle
 
 class CSVOracle(Oracle):
     """Oracle that retrieves compound properties from a CSV file."""
-    
-    def __init__(self, data_path: str = None, csv_path: str = None, **kwargs):
+
+    def __init__(self, data_path: str, id_column: str = 'ID'):
         """
         Initialize the CSV oracle.
-        
+
         Args:
-            data_path: Path to CSV file containing ground truth data (new parameter name)
-            csv_path: Path to CSV file (legacy parameter for backward compatibility)
-            **kwargs: Additional parameters for compatibility
+            data_path: Path to CSV file containing ground truth data
+            id_column: Name of the column to rename to 'ID' (default: 'ID')
         """
-        # Handle both new and legacy parameter names
-        if data_path is not None:
-            self.csv_path = Path(data_path)
-        elif csv_path is not None:
-            self.csv_path = Path(csv_path)
-        else:
-            raise ValueError("Either data_path or csv_path must be provided")
-        
+        self.csv_path = Path(data_path)
+
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
-        
+
         # Load the ground truth data
         self.ground_truth = pd.read_csv(self.csv_path)
-        
-        # Validate required columns
-        if 'ID' not in self.ground_truth.columns:
-            raise ValueError("CSV must contain an 'ID' column")
+
+        # Convert numeric columns to proper data types
+        # This handles mixed data like numeric values + 'no_score' strings
+        for column in self.ground_truth.columns:
+            if column not in ['ID', id_column] and self.ground_truth[column].dtype == 'object':
+                # Try to convert to numeric, replacing invalid values with NaN
+                numeric_series = pd.to_numeric(self.ground_truth[column], errors='coerce')
+                # Only convert if we successfully converted some values to numeric
+                if not numeric_series.isna().all():
+                    self.ground_truth[column] = numeric_series
+
+        # Validate the ID column exists
+        if id_column not in self.ground_truth.columns:
+            available = list(self.ground_truth.columns)
+            raise ValueError(f"ID column '{id_column}' not found. Available columns: {available}")
+
+        # Rename the specified column to 'ID' if it's not already 'ID'
+        if id_column != 'ID':
+            # If there's already an 'ID' column, drop it first to avoid duplicates
+            if 'ID' in self.ground_truth.columns:
+                self.ground_truth = self.ground_truth.drop(columns=['ID'])
+            self.ground_truth = self.ground_truth.rename(columns={id_column: 'ID'})
     
     def measure(self, compounds: pd.DataFrame, properties: list[str]) -> pd.DataFrame:
         """

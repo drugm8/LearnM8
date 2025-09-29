@@ -8,7 +8,7 @@ architecture design.
 import time
 import logging
 from abc import abstractmethod
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -47,17 +47,19 @@ class SklearnLearner(Learner):
     clean separation of concerns and testability.
     """
     
-    def __init__(self, 
+    def __init__(self,
                  model: BaseEstimator,
-                 featurizer_type: str = 'morgan',
+                 featurizer_type: str = None,
                  random_state: int = 42):
         """Initialize sklearn learner with dependency injection pattern.
-        
+
         Args:
             model: Scikit-learn compatible model instance
             featurizer_type: Type of molecular features to use
             random_state: Random seed for reproducibility
         """
+        if featurizer_type is None:
+            raise ValueError("featurizer_type is required")
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for SklearnLearner")
         
@@ -97,18 +99,18 @@ class SklearnLearner(Learner):
         
         try:
             # Use DataManager to prepare training data
-            X, y = data_manager.prepare_training_data(compounds, target_column, self.featurizer_type)
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(compounds, target_column, self.featurizer_type)
+
             # Train the model
             self.model.fit(X, y)
-            
+
             # Store training data reference for potential retraining
             self.training_data = compounds.copy()
             self.target_column = target_column
             self.is_trained = True
-            
+
             train_time = time.time() - start_time
-            logger.info(f"Trained {self.get_name()} on {len(compounds)} compounds in {train_time:.2f}s")
+            logger.info(f"Trained {self.get_name()} on {len(valid_compounds)} compounds in {train_time:.2f}s")
             
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
@@ -116,35 +118,42 @@ class SklearnLearner(Learner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict using sklearn model.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
-            Tuple of (predictions, uncertainties). Base sklearn models return None for uncertainties.
-            
+            Tuple of (predictions, uncertainties).
+            Base sklearn models return None for uncertainties.
+            The predictions align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
-        
+
         start_time = time.time()
-        
+
         try:
-            # Use DataManager to prepare prediction data
-            X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
-            
+            # Use DataManager to prepare prediction data (filters invalid compounds)
+            valid_compounds, X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
+
+            if len(valid_compounds) == 0:
+                logger.warning("No compounds could generate valid features for prediction")
+                return np.array([]), None
+
             # Make predictions
             predictions = self.model.predict(X)
-            
+
             pred_time = time.time() - start_time
             logger.debug(f"Predicted {len(predictions)} compounds with {self.get_name()} in {pred_time:.2f}s")
-            
+
             return predictions, None  # Base sklearn models don't provide uncertainty
-            
+
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise RuntimeError(f"Prediction failed: {e}") from e
@@ -168,24 +177,26 @@ class TorchLearner(Learner):
     """
     
     def __init__(self,
+                 featurizer_type: str = None,
                  device: str = 'auto',
                  batch_size: int = 1024,
                  max_epochs: int = 100,
                  learning_rate: float = 0.001,
                  early_stopping_patience: int = 10,
-                 featurizer_type: str = 'morgan',
                  random_state: int = 42):
         """Initialize PyTorch learner with dependency injection pattern.
-        
+
         Args:
+            featurizer_type: Type of molecular features to use
             device: Device for computation ('auto', 'cpu', 'cuda')
             batch_size: Batch size for training and prediction
             max_epochs: Maximum training epochs
             learning_rate: Learning rate for optimizer
             early_stopping_patience: Patience for early stopping
-            featurizer_type: Type of molecular features to use
             random_state: Random seed for reproducibility
         """
+        if featurizer_type is None:
+            raise ValueError("featurizer_type is required")
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required for TorchLearner")
         
@@ -341,61 +352,61 @@ class TorchLearner(Learner):
         
         try:
             # Use DataManager to prepare training data
-            X, y = data_manager.prepare_training_data(compounds, target_column, self.featurizer_type)
-            
+            valid_compounds, X, y = data_manager.prepare_training_data(compounds, target_column, self.featurizer_type)
+
             # Initialize model if needed
             if self.model is None:
                 self.model = self._create_model(X.shape[1]).to(self.device)
                 self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-            
+
             # Feature normalization
             if StandardScaler is None:
                 raise ImportError("scikit-learn is required for feature scaling")
-            
+
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(X)
-            
+
             # Split into train/validation
             X_train, X_val, y_train, y_val = self._split_validation(X_scaled, y)
-            
+
             # Training loop with early stopping
             best_val_loss = float('inf')
             patience_counter = 0
             self.training_history = []
-            
+
             logger.info(f"Training {self.get_name()} for up to {self.max_epochs} epochs")
-            
+
             for epoch in range(self.max_epochs):
                 # Train for one epoch
                 train_loss = self._train_epoch(X_train, y_train)
-                
+
                 # Validate
                 val_loss = self._validate(X_val, y_val)
-                
+
                 # Track history
                 self.training_history.append({
                     'epoch': epoch,
                     'train_loss': train_loss,
                     'val_loss': val_loss
                 })
-                
+
                 # Early stopping check
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     patience_counter = 0
                 else:
                     patience_counter += 1
-                
+
                 if patience_counter >= self.early_stopping_patience:
                     logger.info(f"Early stopping triggered at epoch {epoch}")
                     break
-                
+
                 if epoch % 10 == 0:
                     logger.debug(f"Epoch {epoch}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
-            
+
             self.is_trained = True
             train_time = time.time() - start_time
-            logger.info(f"Trained {self.get_name()} on {len(compounds)} compounds in {train_time:.2f}s")
+            logger.info(f"Trained {self.get_name()} on {len(valid_compounds)} compounds in {train_time:.2f}s")
             
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
@@ -403,49 +414,56 @@ class TorchLearner(Learner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict using PyTorch model.
-        
+
         Args:
             compounds: DataFrame with 'ID' and 'SMILES' columns
             data_manager: Central data manager for feature extraction
-            
+
         Returns:
-            Tuple of (predictions, uncertainties). Base PyTorch models return None for uncertainties.
-            
+            Tuple of (predictions, uncertainties).
+            Base PyTorch models return None for uncertainties.
+            The predictions align with the valid compounds returned
+            by data_manager.prepare_prediction_data().
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
-        
+
         start_time = time.time()
-        
+
         try:
-            # Use DataManager to prepare prediction data
-            X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
-            
+            # Use DataManager to prepare prediction data (filters invalid compounds)
+            valid_compounds, X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
+
+            if len(valid_compounds) == 0:
+                logger.warning("No compounds could generate valid features for prediction")
+                return np.array([]), None
+
             # Scale features using training scaler
             X_scaled = self.scaler.transform(X)
-            
+
             # Convert to tensor
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
-            
+
             # Make predictions
             self.model.eval()
             with torch.no_grad():
                 predictions = self.model(X_tensor).cpu().numpy().squeeze()
-            
+
             # Ensure predictions is always an array, even for single predictions
             if np.isscalar(predictions):
                 predictions = np.array([predictions])
             elif predictions.ndim == 0:  # Handle 0-dimensional arrays
                 predictions = np.array([predictions.item()])
-            
+
             pred_time = time.time() - start_time
             logger.debug(f"Predicted {len(predictions)} compounds with {self.get_name()} in {pred_time:.2f}s")
-            
+
             return predictions, None  # Base PyTorch models don't provide uncertainty
-            
+
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise RuntimeError(f"Prediction failed: {e}") from e

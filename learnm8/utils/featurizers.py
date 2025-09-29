@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import pickle
 import logging
 from rdkit import Chem
-from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors
+from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors, AllChem
 from joblib import Parallel, delayed
 
 
@@ -32,6 +32,24 @@ def smiles_to_morgan_fingerprint(smiles: str) -> np.ndarray:
     morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     fp = morgan_gen.GetFingerprint(mol)
     return np.array(fp)
+
+def smiles_to_morgan_feature_fingerprint(smiles: str) -> np.ndarray:
+    """
+    Convert a single SMILES string to Morgan fingerprint.
+    
+    Args:
+        smiles: SMILES string representation of molecule
+        
+    Returns:
+        Morgan fingerprint as numpy array
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES: {smiles}")
+
+    fp = AllChem.GetMorganFingerprint(mol, radius=2, fpSize=2048, useFeatures=True)
+    return np.array(fp)
+
 
 
 def smiles_to_maccs_fingerprint(smiles: str) -> np.ndarray:
