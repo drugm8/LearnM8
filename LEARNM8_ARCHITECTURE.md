@@ -288,26 +288,38 @@ class DataManager:
         self.enable_cache = enable_cache
         self.featurizers = {}  # Lazy-loaded featurizers
         
-    def get_features(self, 
+    def get_features(self,
                     compound_ids: List[str],
-                    featurizer_type: str = 'morgan') -> np.ndarray:
+                    smiles_list: Optional[List[str]],
+                    featurizer_type: str) -> Tuple[np.ndarray, List[str]]:
         """
         Get molecular features with automatic HDF5 caching.
         This is the single entry point for all feature extraction.
+
+        Returns:
+            Tuple of (features_array, valid_compound_ids)
         """
         pass
-    
-    def prepare_training_data(self, 
+
+    def prepare_training_data(self,
                              compounds: pd.DataFrame,
                              target_column: str,
-                             featurizer_type: str = 'morgan') -> Tuple[np.ndarray, np.ndarray]:
-        """Prepare optimized training data with feature extraction."""
+                             featurizer_type: str) -> Tuple[np.ndarray, np.ndarray]:
+        """Prepare optimized training data with feature extraction.
+
+        Returns:
+            Tuple of (X, y) arrays
+        """
         pass
-    
-    def prepare_prediction_data(self, 
+
+    def prepare_prediction_data(self,
                                compounds: pd.DataFrame,
-                               featurizer_type: str = 'morgan') -> np.ndarray:
-        """Prepare prediction data with feature extraction."""
+                               featurizer_type: str) -> Tuple[np.ndarray, List[str]]:
+        """Prepare prediction data with feature extraction.
+
+        Returns:
+            Tuple of (features_array, valid_compound_ids)
+        """
         pass
 ```
 
@@ -361,9 +373,9 @@ class SklearnLearner(Learner):
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
         
-        X = data_manager.get_features(compounds['ID'].tolist(), self.featurizer_type)
+        X, valid_compound_ids = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
         predictions = self.model.predict(X)
-        
+
         return predictions, None  # Base sklearn models don't provide uncertainty
 ```
 
@@ -413,9 +425,9 @@ class GaussianProcessLearner(SklearnLearner):
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
         
-        X = data_manager.get_features(compounds['ID'].tolist(), self.featurizer_type)
+        X, valid_compound_ids = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
         predictions, std = self.model.predict(X, return_std=True)
-        
+
         return predictions, std  # GP naturally provides uncertainty
     
     def supports_uncertainty(self) -> bool:
@@ -524,7 +536,7 @@ class MCDropoutLearner(TorchLearner):
     
     def predict(self, compounds: pd.DataFrame, data_manager: DataManager) -> Tuple[np.ndarray, np.ndarray]:
         """Predict with Monte Carlo Dropout uncertainty."""
-        X = data_manager.get_features(compounds['ID'].tolist(), self.featurizer_type)
+        X, valid_compound_ids = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
         X_scaled = self.scaler.transform(X)
         X_tensor = torch.FloatTensor(X_scaled).to(self.device)
         
@@ -627,36 +639,53 @@ class DataManager:
             'descriptors': self.cache_dir / 'descriptors_features.h5'
         }
     
-    def get_features(self, 
+    def get_features(self,
                     compound_ids: List[str],
-                    featurizer_type: str = 'morgan') -> np.ndarray:
+                    smiles_list: Optional[List[str]],
+                    featurizer_type: str) -> Tuple[np.ndarray, List[str]]:
         """
         Get molecular features with automatic HDF5 caching.
+
+        Returns:
+            Tuple of (features_array, valid_compound_ids)
         """
-        if not self.enable_cache:
-            return self._compute_features_direct(compound_ids, featurizer_type)
-        
-        cache_file = self.cache_files.get(featurizer_type)
-        if cache_file is None:
+        if smiles_list is None:
+            smiles_list = compound_ids
+
+        if featurizer_type not in self.featurizers:
             raise ValueError(f"Unknown featurizer type: {featurizer_type}")
-        
-        # Try to load from cache first
-        features = self._load_from_cache(compound_ids, cache_file)
-        
-        # Compute missing features
-        missing_indices = [i for i, feat in enumerate(features) if feat is None]
-        if missing_indices:
-            missing_ids = [compound_ids[i] for i in missing_indices]
-            missing_features = self._compute_features_direct(missing_ids, featurizer_type)
-            
-            # Store in cache
-            self._store_in_cache(missing_ids, missing_features, cache_file)
-            
-            # Update features array
-            for i, feat in zip(missing_indices, missing_features):
-                features[i] = feat
-        
-        return np.array(features)
+
+        cache_file = self._get_cache_file(featurizer_type)
+        features = []
+        valid_compound_ids = []
+
+        try:
+            with h5py.File(cache_file, 'a') as f:
+                # Process each SMILES, skipping invalid ones
+                for compound_id, smiles in zip(compound_ids, smiles_list):
+                    try:
+                        feat = self._get_or_compute_feature(f, smiles, featurizer_type)
+                        if feat is not None:
+                            features.append(feat)
+                            valid_compound_ids.append(compound_id)
+                    except Exception as e:
+                        logger.warning(f"Skipping invalid SMILES {smiles}: {e}")
+                        continue
+        except Exception as e:
+            logger.warning(f"HDF5 cache error: {e}. Computing without caching.")
+            # Fallback without caching
+            for compound_id, smiles in zip(compound_ids, smiles_list):
+                try:
+                    feat = self.featurizers[featurizer_type](smiles)
+                    features.append(feat)
+                    valid_compound_ids.append(compound_id)
+                except Exception:
+                    continue
+
+        if features:
+            return np.stack(features), valid_compound_ids
+        else:
+            return np.array([]).reshape(0, -1), []
 ```
 
 **Key Features:**
@@ -664,7 +693,9 @@ class DataManager:
 - **Compression**: gzip compression reduces storage requirements for large libraries
 - **Partial loading**: Load individual compounds without reading entire cache
 - **Persistent caching**: Survives across experiment runs
-- **Graceful fallbacks**: Handles corrupted cache or invalid SMILES gracefully
+- **Enhanced error handling**: Skips invalid SMILES entirely instead of using placeholder values
+- **Data integrity**: Returns valid compound IDs to maintain data consistency
+- **Graceful fallbacks**: Handles corrupted cache with automatic fallback to direct computation
 - **Large-scale support**: Efficient handling of 1M+ molecule libraries
 
 ### Molecular Featurization
@@ -672,17 +703,17 @@ class DataManager:
 The featurization system supports multiple molecular representations:
 
 ```python
-# Morgan Fingerprints (default)
-features = data_manager.get_features(compound_ids, 'morgan')
+# Morgan Fingerprints (default) - returns features and valid compound IDs
+features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
 
 # MACCS Keys
-features = data_manager.get_features(compound_ids, 'maccs') 
+features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'maccs')
 
 # Extended Connectivity Fingerprints (ECFP6)
-features = data_manager.get_features(compound_ids, 'ecfp6')
+features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'ecfp6')
 
 # Mordred Descriptors
-features = data_manager.get_features(compound_ids, 'descriptors')
+features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'descriptors')
 ```
 
 ---
