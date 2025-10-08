@@ -516,6 +516,19 @@ def execute_run_mode_cycle(
 
     logger.debug(f"Cycle {cycle}: Selecting {batch_size} compounds from {len(pruned_pool)} candidates using {strategy} strategy")
 
+    # Calculate current_best from labeled data and add to acquisition_params
+    if not labeled_data.empty:
+        if acquisition_params is None:
+            acquisition_params = {}
+        else:
+            acquisition_params = acquisition_params.copy()  # Don't modify original
+
+        # Calculate based on score direction
+        if score_direction == 'higher':
+            acquisition_params['current_best'] = float(labeled_data[target_column].max())
+        else:
+            acquisition_params['current_best'] = float(labeled_data[target_column].min())
+
     # Select compounds using strategy (from pruned pool, predictions align with valid compounds)
     selected_compounds = select_compounds_by_strategy(
         pool=pruned_pool,
@@ -647,7 +660,7 @@ def execute_run_mode_cycle(
         except Exception as e:
             logger.warning(f"Evaluation failed for cycle {cycle}: {e}")
             # Continue without evaluation metrics
-    
+
     if export_csv:
         return new_labeled_data, new_unlabeled_pool, cycle_metrics, cycle_predictions, cycle_uncertainties, cycle_selections
     else:
@@ -707,6 +720,7 @@ def execute_benchmark_mode_cycle(
     """
     
     # Train model if we have labeled data
+    logger.info(f"Cycle {cycle}: Training model with {len(labeled_data)} labeled compounds")
     if not labeled_data.empty:
         learner.train(labeled_data, target_column, data_manager)
     else:
@@ -726,7 +740,7 @@ def execute_benchmark_mode_cycle(
             return labeled_data, unlabeled_pool, empty_metrics, None, None, []
         else:
             return labeled_data, unlabeled_pool, empty_metrics
-    
+    logger.info(f"Cycle {cycle}: Predicting on full original compound pool of {len(original_compound_pool)} compounds")
     # Alternative 1: Predict FULL original dataset for correct EF calculation
     full_predictions, full_uncertainties = learner.predict(original_compound_pool, data_manager)
 
@@ -772,7 +786,7 @@ def execute_benchmark_mode_cycle(
     cycle_predictions = None
     cycle_uncertainties = None
     cycle_selections = []
-    
+
     if export_csv:
         # Store predictions with compound info for CSV export (using valid unlabeled compounds only)
         cycle_predictions = valid_unlabeled_compounds[['ID', 'SMILES']].copy()
@@ -783,12 +797,13 @@ def execute_benchmark_mode_cycle(
         if unlabeled_uncertainties is not None and len(unlabeled_uncertainties) > 0:
             cycle_uncertainties = valid_unlabeled_compounds[['ID', 'SMILES']].copy()
             cycle_uncertainties[f'uncertainty_cycle_{cycle}'] = unlabeled_uncertainties
-
+            
     # Apply pruning if specified (to valid unlabeled compounds that have predictions)
     pruned_pool = valid_unlabeled_compounds
     pruning_stats = {'pruned_count': 0, 'original_pool_size': len(unlabeled_pool)}
     
     if pruning_strategy is not None:
+        logger.info(f"Cycle {cycle}: Applying pruning strategy '{pruning_strategy}'")
         try:
             pruned_pool, pruning_info = apply_pruning_strategy(
                 pool=valid_unlabeled_compounds,  # Use valid compounds that have predictions
@@ -809,7 +824,20 @@ def execute_benchmark_mode_cycle(
     batch_size = max(1, int(original_pool_size * batch_fraction))
     batch_size = min(batch_size, len(pruned_pool))  # Don't exceed available compounds
 
-    logger.debug(f"Cycle {cycle}: Selecting {batch_size} compounds from {len(pruned_pool)} candidates using {strategy} strategy")
+    logger.info(f"Cycle {cycle}: Selecting {batch_size} compounds from {len(pruned_pool)} candidates using {strategy} strategy")
+
+    # Calculate current_best from labeled data and add to acquisition_params
+    if not labeled_data.empty:
+        if acquisition_params is None:
+            acquisition_params = {}
+        else:
+            acquisition_params = acquisition_params.copy()  # Don't modify original
+
+        # Calculate based on score direction
+        if score_direction == 'higher':
+            acquisition_params['current_best'] = float(labeled_data[target_column].max())
+        else:
+            acquisition_params['current_best'] = float(labeled_data[target_column].min())
 
     # Select compounds using strategy (predictions align with valid compounds)
     selected_compounds = select_compounds_by_strategy(
@@ -822,7 +850,7 @@ def execute_benchmark_mode_cycle(
         data_manager=data_manager,
         acquisition_params=acquisition_params
     )
-    
+    logger.info(f"Cycle {cycle}: Selected {len(selected_compounds)} compounds for measurement")
     # Measure selected compounds
     measured_compounds = oracle.measure(selected_compounds[['ID', 'SMILES']], [target_column])
     
@@ -910,6 +938,7 @@ def execute_benchmark_mode_cycle(
     
     # Comprehensive evaluation integration
     if enable_evaluation and not labeled_data.empty:
+        logger.info(f"Cycle {cycle}: Performing evaluation")
         try:
             # Get model predictions on labeled data for model performance assessment
             model_pred_on_labeled, _ = learner.predict(new_labeled_data, data_manager)
@@ -942,7 +971,7 @@ def execute_benchmark_mode_cycle(
         except Exception as e:
             logger.warning(f"Evaluation failed for cycle {cycle}: {e}")
             # Continue without evaluation metrics
-    
+
     if export_csv:
         return new_labeled_data, new_unlabeled_pool, cycle_metrics, cycle_predictions, cycle_uncertainties, cycle_selections
     else:
@@ -952,7 +981,7 @@ def execute_benchmark_mode_cycle(
 def select_compounds_by_strategy(
     pool: pd.DataFrame,
     predictions: Optional[pd.DataFrame],
-    uncertainties: Optional[pd.DataFrame], 
+    uncertainties: Optional[pd.DataFrame],
     strategy: str,
     batch_size: int,
     score_direction: str = 'higher',
@@ -960,7 +989,7 @@ def select_compounds_by_strategy(
     acquisition_params: Optional[Dict[str, Any]] = None
 ) -> pd.DataFrame:
     """Select compounds using specified strategy with full acquisition module support.
-    
+
     Args:
         pool: Unlabeled compounds pool
         predictions: Model predictions on pool
@@ -970,10 +999,10 @@ def select_compounds_by_strategy(
         score_direction: Direction of score optimization ('higher' or 'lower' is better)
         data_manager: DataManager instance for advanced acquisition methods
         acquisition_params: Parameters for acquisition function initialization
-        
+
     Returns:
         Selected compounds DataFrame
-        
+
     Raises:
         ValueError: If strategy is unknown
     """
@@ -1064,11 +1093,11 @@ def select_compounds_by_strategy(
         
         # Perform selection
         selected = acquisition_function.select(compound_data, n_select=actual_batch_size)
-        
+
         # Return original pool data (without added prediction/uncertainty columns)
         selected_ids = selected['ID'].tolist()
         return pool[pool['ID'].isin(selected_ids)]
-        
+
     except KeyError:
         # Unknown strategy - provide helpful error message
         available_strategies = list_acquisition_functions()
