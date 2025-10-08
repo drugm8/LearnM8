@@ -119,14 +119,17 @@ class TestExpectedImprovementAcquisition:
     def test_ei_basic_functionality(self, compounds_with_uncertainty):
         """Test EI acquisition functionality."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
         # Use default xi parameter for exploration
-        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01)
+        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=5)
-        
+
         assert len(selected) == 5
         assert 'acquisition_score' in selected.columns
         assert np.all(selected['acquisition_score'] >= 0)  # EI is always non-negative
@@ -134,20 +137,23 @@ class TestExpectedImprovementAcquisition:
     def test_ei_xi_parameter(self, compounds_with_uncertainty):
         """Test EI with different xi exploration parameters."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
         # Test with different xi values (exploration parameters)
-        acq_low = ExpectedImprovementAcquisition(data_manager=None, xi=0.001)  # Low exploration
-        acq_high = ExpectedImprovementAcquisition(data_manager=None, xi=0.1)   # High exploration
-        
+        acq_low = ExpectedImprovementAcquisition(data_manager=None, xi=0.001, current_best=current_best)  # Low exploration
+        acq_high = ExpectedImprovementAcquisition(data_manager=None, xi=0.1, current_best=current_best)   # High exploration
+
         selected_low = acq_low.select(compounds, n_select=5)
         selected_high = acq_high.select(compounds, n_select=5)
-        
+
         assert len(selected_low) == 5
         assert len(selected_high) == 5
-        
+
         # Both should select compounds, differences may be subtle
         assert all(isinstance(selected_low.iloc[0]['acquisition_score'], (int, float)) for _ in [0])
         assert all(isinstance(selected_high.iloc[0]['acquisition_score'], (int, float)) for _ in [0])
@@ -155,19 +161,22 @@ class TestExpectedImprovementAcquisition:
     def test_ei_with_realistic_molecular_scenario(self, small_real_compounds):
         """Test EI in realistic molecular discovery scenario."""
         compounds = small_real_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No real molecular data available")
-        
+
         # Simulate model predictions with uncertainty
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 1, len(compounds))
         compounds['uncertainty'] = np.random.uniform(0.1, 0.5, len(compounds))
-        
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
         # Use standard EI with default parameters
-        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01)
+        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=8)
-        
+
         assert len(selected) == 8
         # EI should select compounds with potential for improvement
         ei_scores = selected['acquisition_score'].values
@@ -180,16 +189,19 @@ class TestProbabilityImprovementAcquisition:
     def test_pi_basic_functionality(self, compounds_with_uncertainty):
         """Test PI acquisition functionality."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
-        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.01)
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
+        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=5)
-        
+
         assert len(selected) == 5
         assert 'acquisition_score' in selected.columns
-        
+
         # PI scores should be probabilities (0 to 1)
         pi_scores = selected['acquisition_score'].values
         assert np.all(pi_scores >= 0)
@@ -198,17 +210,20 @@ class TestProbabilityImprovementAcquisition:
     def test_pi_probability_interpretation(self, compounds_with_uncertainty):
         """Test PI probability interpretation."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
         # Set current_best very high to get low PI values
-        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.1)  # Higher exploration parameter
+        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.1, current_best=current_best)  # Higher exploration parameter
         selected = acq.select(compounds, n_select=5)
-        
+
         # Should still select 5 compounds even if PI is low
         assert len(selected) == 5
-        
+
         # PI scores should be valid probabilities
         pi_scores = selected['acquisition_score'].values
         assert np.all(pi_scores >= 0)
