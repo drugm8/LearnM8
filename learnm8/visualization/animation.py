@@ -38,6 +38,34 @@ def load_csv_data(output_dir: str) -> Dict[str, pd.DataFrame]:
     return data
 
 
+def _get_strategy_color_map(strategies):
+    """Create a color map for acquisition strategies."""
+    strategy_colors = {
+        'random': 'yellow',
+        'greedy': 'red',
+        'diverse': 'blue',
+        'ucb': 'orange',
+        'ei': 'purple',
+        'pi': 'green',
+        'thompson': 'cyan',
+        'simulated_annealing': 'magenta',
+        'bitbirch': 'brown'
+    }
+
+    color_map = {}
+    fallback_colors = plt.cm.tab10(np.linspace(0, 1, 10))
+    fallback_idx = 0
+
+    for strategy in strategies:
+        if strategy in strategy_colors:
+            color_map[strategy] = strategy_colors[strategy]
+        else:
+            color_map[strategy] = fallback_colors[fallback_idx % len(fallback_colors)]
+            fallback_idx += 1
+
+    return color_map
+
+
 def create_dashboard_animation_from_csv(
     output_dir: str,
     output_file: Optional[str] = None,
@@ -62,6 +90,39 @@ def create_dashboard_animation_from_csv(
         raise ValueError("No prediction cycles found in data")
 
     logger.info(f"Creating animation for {n_cycles} cycles (benchmark mode: {is_benchmark})")
+
+    global_pred_min = float('inf')
+    global_pred_max = float('-inf')
+    global_unc_max = 0.0
+
+    for pred_col in pred_cols:
+        valid_preds = predictions_df[pred_col].values
+        valid_preds = valid_preds[~np.isnan(valid_preds)]
+        if len(valid_preds) > 0:
+            global_pred_min = min(global_pred_min, valid_preds.min())
+            global_pred_max = max(global_pred_max, valid_preds.max())
+
+    for unc_col in unc_cols:
+        valid_uncs = predictions_df[unc_col].values
+        valid_uncs = valid_uncs[~np.isnan(valid_uncs)]
+        if len(valid_uncs) > 0:
+            global_unc_max = max(global_unc_max, valid_uncs.max())
+
+    if global_pred_min == float('inf'):
+        global_pred_min = 0.0
+        global_pred_max = 1.0
+    if global_unc_max == 0.0:
+        global_unc_max = 1.0
+
+    pred_range = global_pred_max - global_pred_min
+    ax2_xlim = (global_pred_min - pred_range * 0.05, global_pred_max + pred_range * 0.05)
+    ax2_ylim = (0, global_unc_max * 1.1)
+
+    unique_strategies = []
+    strategy_color_map = {}
+    if not selections_df.empty and 'strategy' in selections_df.columns:
+        unique_strategies = selections_df['strategy'].unique().tolist()
+        strategy_color_map = _get_strategy_color_map(unique_strategies)
 
     if is_benchmark:
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -88,11 +149,19 @@ def create_dashboard_animation_from_csv(
 
     scatter1 = ax1.scatter([], [], c=[], cmap='RdYlGn', alpha=0.6, s=20)
     scatter2 = ax2.scatter([], [], c=[], cmap='viridis', alpha=0.6, s=20)
-    scatter2_selected = ax2.scatter([], [], c='red', marker='x', s=100, linewidths=2, label='Selected')
+
+    strategy_scatters = {}
+    if unique_strategies:
+        for strategy in unique_strategies:
+            color = strategy_color_map[strategy]
+            scatter = ax2.scatter([], [], c=color, marker='x', s=100, linewidths=2, label=strategy, alpha=0.8)
+            strategy_scatters[strategy] = scatter
+
     line_rmse, = ax4.plot([], [], 'b-', linewidth=2, label='RMSE')
     line_r2, = ax4.plot([], [], 'g-', linewidth=2, label='R²')
 
-    ax2.legend(loc='upper right')
+    if strategy_scatters:
+        ax2.legend(loc='upper right')
 
     if is_benchmark and 'top_10_percent_overlap' in metrics_df.columns:
         ax4_twin = ax4.twinx()
@@ -115,13 +184,16 @@ def create_dashboard_animation_from_csv(
         scatter1.set_array(np.array([]))
         scatter2.set_offsets(np.empty((0, 2)))
         scatter2.set_array(np.array([]))
-        scatter2_selected.set_offsets(np.empty((0, 2)))
+        for scatter in strategy_scatters.values():
+            scatter.set_offsets(np.empty((0, 2)))
         line_rmse.set_data([], [])
         line_r2.set_data([], [])
         if line_top_k:
             line_top_k.set_data([], [])
 
-        return scatter1, scatter2, scatter2_selected, line_rmse, line_r2
+        artists = [scatter1, scatter2, line_rmse, line_r2]
+        artists.extend(strategy_scatters.values())
+        return tuple(artists)
 
     def update(cycle_idx):
         nonlocal metric_text, regression_line
@@ -206,32 +278,37 @@ def create_dashboard_animation_from_csv(
                 scatter2.set_offsets(np.c_[pred_clean, unc_clean])
                 scatter2.set_array(pred_clean)
 
-                pred_range = pred_clean.max() - pred_clean.min()
-                unc_max = unc_clean.max()
-                ax2.set_xlim(pred_clean.min() - pred_range * 0.05, pred_clean.max() + pred_range * 0.05)
-                ax2.set_ylim(0, unc_max * 1.1 if unc_max > 0 else 1.0)
+                ax2.set_xlim(ax2_xlim)
+                ax2.set_ylim(ax2_ylim)
 
-                if not selections_df.empty:
+                if not selections_df.empty and strategy_scatters:
                     selected_up_to_cycle = selections_df[selections_df['selected_cycle'] <= cycle_num]
-                    if len(selected_up_to_cycle) > 0:
-                        selected_preds = selected_up_to_cycle['prediction_at_selection'].values
-                        selected_uncs = selected_up_to_cycle['uncertainty_at_selection'].values
 
-                        valid_sel_mask = ~np.isnan(selected_preds) & ~np.isnan(selected_uncs)
-                        selected_preds = selected_preds[valid_sel_mask]
-                        selected_uncs = selected_uncs[valid_sel_mask]
+                    for strategy in unique_strategies:
+                        strategy_scatter = strategy_scatters[strategy]
+                        strategy_selections = selected_up_to_cycle[selected_up_to_cycle['strategy'] == strategy]
 
-                        if len(selected_preds) > 0:
-                            scatter2_selected.set_offsets(np.c_[selected_preds, selected_uncs])
+                        if len(strategy_selections) > 0:
+                            selected_preds = strategy_selections['prediction_at_selection'].values
+                            selected_uncs = strategy_selections['uncertainty_at_selection'].values
+
+                            valid_sel_mask = ~np.isnan(selected_preds) & ~np.isnan(selected_uncs)
+                            selected_preds = selected_preds[valid_sel_mask]
+                            selected_uncs = selected_uncs[valid_sel_mask]
+
+                            if len(selected_preds) > 0:
+                                strategy_scatter.set_offsets(np.c_[selected_preds, selected_uncs])
+                            else:
+                                strategy_scatter.set_offsets(np.empty((0, 2)))
                         else:
-                            scatter2_selected.set_offsets(np.empty((0, 2)))
-                    else:
-                        scatter2_selected.set_offsets(np.empty((0, 2)))
+                            strategy_scatter.set_offsets(np.empty((0, 2)))
                 else:
-                    scatter2_selected.set_offsets(np.empty((0, 2)))
+                    for scatter in strategy_scatters.values():
+                        scatter.set_offsets(np.empty((0, 2)))
         else:
             scatter2.set_offsets(np.empty((0, 2)))
-            scatter2_selected.set_offsets(np.empty((0, 2)))
+            for scatter in strategy_scatters.values():
+                scatter.set_offsets(np.empty((0, 2)))
 
         ax3.clear()
         ax3.set_title('Cumulative Best Value Found')
@@ -284,7 +361,8 @@ def create_dashboard_animation_from_csv(
 
         fig.suptitle(f'Active Learning Progress - Cycle {cycle_num}', fontsize=14, fontweight='bold')
 
-        artists = [scatter1, scatter2, scatter2_selected, line_rmse, line_r2]
+        artists = [scatter1, scatter2, line_rmse, line_r2]
+        artists.extend(strategy_scatters.values())
         if line_top_k:
             artists.append(line_top_k)
 
