@@ -107,6 +107,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     
     def __init__(self, data_manager: Optional['DataManager'] = None,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
+                 current_best: Optional[float] = None,
                  **kwargs):
         """Initialize Expected Improvement acquisition function.
 
@@ -115,6 +116,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
             score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
+            current_best: Current best observed value from labeled data. Required for correct EI calculation.
             **kwargs: Additional parameters for compatibility
         """
         # Handle backward compatibility with minimize parameter
@@ -131,6 +133,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             raise ValueError("xi must be non-negative")
 
         self.xi = xi
+        self.current_best = current_best
     
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
         """Select using Expected Improvement.
@@ -154,14 +157,20 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
-        
-        # Calculate current best from the predictions
-        # Note: In a full implementation, this would come from labeled data
+
+        # Require current_best from labeled data
+        if self.current_best is None:
+            raise ValueError(
+                "Expected Improvement requires 'current_best' parameter with the best observed value "
+                "from labeled training data. This should be passed via acquisition_params at the cycle level."
+            )
+
+        current_best = self.current_best
+
+        # Calculate improvement based on score direction
         if self.maximize:
-            current_best = np.max(predictions)
             improvement = predictions - current_best - self.xi
         else:
-            current_best = np.min(predictions)
             improvement = current_best - predictions - self.xi
         
         # Calculate standard deviations
@@ -207,6 +216,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     
     def __init__(self, data_manager: Optional['DataManager'] = None,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
+                 current_best: Optional[float] = None,
                  **kwargs):
         """Initialize Probability of Improvement acquisition function.
 
@@ -215,6 +225,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
             score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
+            current_best: Current best observed value from labeled data. Required for correct PI calculation.
             **kwargs: Additional parameters for compatibility
         """
         # Handle backward compatibility with minimize parameter
@@ -231,6 +242,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             raise ValueError("xi must be non-negative")
 
         self.xi = xi
+        self.current_best = current_best
     
     def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
         """Select using Probability of Improvement.
@@ -254,13 +266,20 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
-        
-        # Calculate current best from the predictions
+
+        # Require current_best from labeled data
+        if self.current_best is None:
+            raise ValueError(
+                "Probability of Improvement requires 'current_best' parameter with the best observed value "
+                "from labeled training data. This should be passed via acquisition_params at the cycle level."
+            )
+
+        current_best = self.current_best
+
+        # Calculate improvement based on score direction
         if self.maximize:
-            current_best = np.max(predictions)
             improvement = predictions - current_best - self.xi
         else:
-            current_best = np.min(predictions)
             improvement = current_best - predictions - self.xi
         
         # Calculate standard deviations
