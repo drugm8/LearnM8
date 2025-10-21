@@ -10,21 +10,21 @@ from typing import Dict, Any, List, Tuple
 logger = logging.getLogger(__name__)
 
 
-def validate_pruning_parameters(strategy_name: str, 
+def validate_pruning_parameters(strategy_name: str,
                                parameters: Dict[str, Any]) -> Tuple[bool, List[str]]:
     """Validate parameters for the score-based pruning strategy.
-    
+
     Args:
-        strategy_name: Name of the pruning strategy (should be 'ScoreBasedPruner')
+        strategy_name: Name of the pruning strategy (should be 'score')
         parameters: Dictionary of strategy parameters
-        
+
     Returns:
         Tuple of (is_valid, error_messages)
     """
     errors = []
-    
-    # Only validate ScoreBasedPruner parameters
-    if strategy_name == 'ScoreBasedPruner':
+
+    # Only validate score-based pruner parameters
+    if strategy_name == 'score':
         # Validate pruning_fraction
         if 'pruning_fraction' in parameters:
             fraction = parameters['pruning_fraction']
@@ -48,22 +48,22 @@ def validate_pruning_parameters(strategy_name: str,
             errors.append(f"Unexpected parameters: {', '.join(unexpected_params)}")
     
     else:
-        errors.append(f"Unknown pruning strategy '{strategy_name}'. Only 'ScoreBasedPruner' is supported.")
-    
+        errors.append(f"Unknown pruning strategy '{strategy_name}'. Only 'score' is supported.")
+
     return len(errors) == 0, errors
 
 
-def create_pruning_strategy(strategy_name: str, 
+def create_pruning_strategy(strategy_name: str,
                            parameters: Dict[str, Any]):
     """Factory function to create the score-based pruning strategy.
-    
+
     Args:
-        strategy_name: Name of the pruning strategy class (should be 'ScoreBasedPruner')
+        strategy_name: Name of the pruning strategy (should be 'score')
         parameters: Dictionary of strategy parameters
-        
+
     Returns:
         Initialized ScoreBasedPruner instance
-        
+
     Raises:
         ValueError: If strategy name is invalid or parameters are invalid
     """
@@ -71,19 +71,19 @@ def create_pruning_strategy(strategy_name: str,
     is_valid, errors = validate_pruning_parameters(strategy_name, parameters)
     if not is_valid:
         raise ValueError(f"Invalid parameters for {strategy_name}: {'; '.join(errors)}")
-    
+
     # Import strategy class
     from .score_based import ScoreBasedPruner
-    
+
     strategy_registry = {
-        'ScoreBasedPruner': ScoreBasedPruner
+        'score': ScoreBasedPruner
     }
-    
+
     if strategy_name not in strategy_registry:
-        raise ValueError(f"Unknown pruning strategy '{strategy_name}'. Only 'ScoreBasedPruner' is supported.")
-    
+        raise ValueError(f"Unknown pruning strategy '{strategy_name}'. Only 'score' is supported.")
+
     strategy_class = strategy_registry[strategy_name]
-    
+
     try:
         return strategy_class(**parameters)
     except Exception as e:
