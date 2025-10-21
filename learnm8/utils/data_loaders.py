@@ -16,26 +16,26 @@ def validate_csv_columns(df: pd.DataFrame, required_columns: list, file_descript
         )
 
 
-def load_benchmark_data(data_path: str, target_column: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def load_benchmark_data(data_path: str, target_col: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load data for benchmark mode from single CSV file.
-    
+
     Args:
         data_path: Path to CSV file
-        target_column: Name of target column
-        
+        target_col: Name of target column
+
     Returns:
         Tuple of (compound_pool_df, ground_truth_df)
     """
     data_path = Path(data_path)
     if not data_path.exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
-    
+
     # Load the data
     df = pd.read_csv(data_path)
-    
+
     # Validate required columns
-    required_columns = ['ID', 'SMILES', target_column]
+    required_columns = ['ID', 'SMILES', target_col]
     validate_csv_columns(df, required_columns, "Benchmark data file")
     
     # Check for optional Activity column
@@ -52,9 +52,9 @@ def load_benchmark_data(data_path: str, target_column: str) -> Tuple[pd.DataFram
     # For benchmark mode, compound pool and ground truth are the same
     compound_pool = df[['ID', 'SMILES']].copy()
     ground_truth = df.copy()
-    
+
     print(f"Loaded {len(df)} compounds for benchmarking")
-    print(f"Target column: {target_column}")
+    print(f"Target column: {target_col}")
     
     return compound_pool, ground_truth
 
@@ -96,21 +96,21 @@ def load_run_data(compounds_path: str, oracle_path: str) -> pd.DataFrame:
     return compound_pool
 
 
-def detect_score_direction_from_data(df: pd.DataFrame, target_column: str) -> str:
+def detect_score_direction_from_data(df: pd.DataFrame, target_col: str) -> str:
     """
     Detect score direction from data distribution.
-    
+
     Args:
         df: DataFrame containing target column
-        target_column: Name of target column
-        
+        target_col: Name of target column
+
     Returns:
         'higher' or 'lower'
     """
-    if target_column not in df.columns:
+    if target_col not in df.columns:
         return 'higher'  # Default
-    
-    column_lower = target_column.lower()
+
+    column_lower = target_col.lower()
     
     # Patterns for lower-is-better
     lower_patterns = ['dock', 'binding_energy', 'energy', 'rmsd', 'error', 'loss', 'distance']
@@ -126,7 +126,7 @@ def detect_score_direction_from_data(df: pd.DataFrame, target_column: str) -> st
     
     # Check data distribution
     try:
-        values = df[target_column].dropna()
+        values = df[target_col].dropna()
         if len(values) > 0 and (values < 0).mean() > 0.7:
             return 'lower'
     except:
