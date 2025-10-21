@@ -62,14 +62,15 @@ class UCBAcquisition(AcquisitionFunction):
         
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
-        
+
         # Calculate UCB scores based on score direction
+        # Note: uncertainties are already standard deviations, not variances
         if self.maximize:
             # For maximization: select upper confidence bound
-            ucb_scores = predictions + self.beta * np.sqrt(uncertainties)
+            ucb_scores = predictions + self.beta * uncertainties
         else:
             # For minimization: select lower confidence bound
-            ucb_scores = predictions - self.beta * np.sqrt(uncertainties)
+            ucb_scores = predictions - self.beta * uncertainties
 
         # Select top compounds (always ascending=False because we want highest UCB scores)
         if self.maximize:
