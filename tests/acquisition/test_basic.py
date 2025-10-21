@@ -16,15 +16,11 @@ class TestGreedyAcquisition:
     def test_greedy_basic_functionality(self, small_real_compounds):
         """Test basic greedy acquisition with real molecular data."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Add synthetic predictions
         np.random.seed(42)
         compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
         
-        acq = GreedyAcquisition(data_manager=None)
+        acq = GreedyAcquisition()
         selected = acq.select(compounds, n_select=5)
         
         # Should select compounds with highest predictions
@@ -38,14 +34,10 @@ class TestGreedyAcquisition:
     def test_greedy_with_activity_scores(self, small_real_compounds):
         """Test greedy selection using actual activity scores."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Use Activity as prediction (meaningful docking scores)
         compounds['prediction'] = compounds['Activity']
         
-        acq = GreedyAcquisition(data_manager=None, score_direction='higher')  # Higher is better
+        acq = GreedyAcquisition(score_direction='higher')  # Higher is better
         selected = acq.select(compounds, n_select=10)
         
         assert len(selected) == 10
@@ -56,13 +48,9 @@ class TestGreedyAcquisition:
     def test_greedy_deterministic_selection(self, small_real_compounds):
         """Test that greedy selection is deterministic."""
         compounds = small_real_compounds.copy()
+        compounds['prediction'] = compounds['Activity']
         
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        compounds['prediction'] = compounds['Activity']  # Use meaningful scores
-        
-        acq = GreedyAcquisition(data_manager=None)
+        acq = GreedyAcquisition()
         selected1 = acq.select(compounds, n_select=5)
         selected2 = acq.select(compounds, n_select=5)
         
@@ -72,19 +60,15 @@ class TestGreedyAcquisition:
     def test_greedy_score_direction(self, small_real_compounds):
         """Test greedy selection with different score directions."""
         compounds = small_real_compounds.head(10).copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Use Activity scores (docking scores, lower is better)
         compounds['prediction'] = compounds['Activity']
         
         # Test 'lower' direction (typical for docking scores)
-        acq_lower = GreedyAcquisition(data_manager=None, score_direction='lower') 
+        acq_lower = GreedyAcquisition(score_direction='lower') 
         selected_lower = acq_lower.select(compounds, n_select=3)
         
         # Test 'higher' direction  
-        acq_higher = GreedyAcquisition(data_manager=None, score_direction='higher')
+        acq_higher = GreedyAcquisition(score_direction='higher')
         selected_higher = acq_higher.select(compounds, n_select=3)
         
         # Should select different compounds
@@ -99,11 +83,7 @@ class TestRandomAcquisition:
     def test_random_basic_functionality(self, small_real_compounds):
         """Test basic random acquisition."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        acq = RandomAcquisition(data_manager=None, random_state=42)
+        acq = RandomAcquisition(random_state=42)
         selected = acq.select(compounds, n_select=8)
         
         assert len(selected) == 8
@@ -115,12 +95,8 @@ class TestRandomAcquisition:
     def test_random_reproducibility(self, small_real_compounds):
         """Test random acquisition reproducibility with seed."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        acq1 = RandomAcquisition(data_manager=None, random_state=42)
-        acq2 = RandomAcquisition(data_manager=None, random_state=42)
+        acq1 = RandomAcquisition(random_state=42)
+        acq2 = RandomAcquisition(random_state=42)
         
         selected1 = acq1.select(compounds, n_select=10)
         selected2 = acq2.select(compounds, n_select=10)
@@ -131,12 +107,8 @@ class TestRandomAcquisition:
     def test_random_different_seeds(self, small_real_compounds):
         """Test that different seeds produce different selections."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        acq1 = RandomAcquisition(data_manager=None, random_state=42)
-        acq2 = RandomAcquisition(data_manager=None, random_state=123)
+        acq1 = RandomAcquisition(random_state=42)
+        acq2 = RandomAcquisition(random_state=123)
         
         selected1 = acq1.select(compounds, n_select=15)
         selected2 = acq2.select(compounds, n_select=15)
@@ -151,7 +123,7 @@ class TestRandomAcquisition:
         if len(compounds) < 50:
             pytest.skip("Insufficient compounds for coverage test")
         
-        acq = RandomAcquisition(data_manager=None, random_state=42)
+        acq = RandomAcquisition(random_state=42)
         
         # Multiple selections should cover different parts of dataset
         selected1 = acq.select(compounds, n_select=20)
@@ -168,14 +140,10 @@ class TestTopKAcquisition:
     def test_topk_basic_functionality(self, small_real_compounds):
         """Test TopK acquisition basic functionality."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Add predictions based on activity
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.1, len(compounds))
         
-        acq = TopKAcquisition(data_manager=None, k_fraction=0.5)
+        acq = TopKAcquisition(k_fraction=0.5)
         selected = acq.select(compounds, n_select=5)
         
         assert len(selected) == 5
@@ -184,15 +152,11 @@ class TestTopKAcquisition:
     def test_topk_fraction_behavior(self, small_real_compounds):
         """Test TopK behavior with different fractions."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         compounds['prediction'] = compounds['Activity']
         
         # Test different k_fractions
-        acq_small = TopKAcquisition(data_manager=None, k_fraction=0.2)
-        acq_large = TopKAcquisition(data_manager=None, k_fraction=0.8)
+        acq_small = TopKAcquisition(k_fraction=0.2)
+        acq_large = TopKAcquisition(k_fraction=0.8)
         
         selected_small = acq_small.select(compounds, n_select=5)
         selected_large = acq_large.select(compounds, n_select=5)
@@ -220,9 +184,9 @@ class TestBasicAcquisitionIntegration:
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 2, len(compounds))
         
         # Test multiple acquisition strategies
-        greedy_acq = GreedyAcquisition(data_manager=None)
-        random_acq = RandomAcquisition(data_manager=None, random_state=42)
-        topk_acq = TopKAcquisition(data_manager=None, k_fraction=0.3)
+        greedy_acq = GreedyAcquisition()
+        random_acq = RandomAcquisition(random_state=42)
+        topk_acq = TopKAcquisition(k_fraction=0.3)
         
         n_select = 10
         greedy_selected = greedy_acq.select(compounds, n_select=n_select)
@@ -256,7 +220,7 @@ class TestBasicAcquisitionIntegration:
         # Add target-aware predictions
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 1, len(compounds))
         
-        acq = GreedyAcquisition(data_manager=None)
+        acq = GreedyAcquisition()
         selected = acq.select(compounds, n_select=min(15, len(compounds)))
         
         assert len(selected) <= len(compounds)

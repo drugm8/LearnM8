@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from learnm8.core.interfaces import Learner, Oracle
-from learnm8.core.data_manager import DataManager
+from learnm8.features import extract_features
 
 
 @pytest.fixture
@@ -239,15 +239,17 @@ def _load_test_data(filename: str) -> pd.DataFrame:
     """Helper function to load test data files with proper error handling."""
     test_data_dir = Path(__file__).parent / "data"
     data_file = test_data_dir / filename
-    
+
     if not data_file.exists():
-        # Fallback to empty DataFrame with proper columns
-        return pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
-    
+        raise FileNotFoundError(
+            f"Required test fixture not found: {data_file}\n"
+            "Run: python3 tests/data/generate_fixtures.py"
+        )
+
     try:
         return pd.read_csv(data_file)
     except Exception as e:
-        pytest.skip(f"Could not load test data {filename}: {e}")
+        raise RuntimeError(f"Could not load test data {filename}: {e}")
 
 
 @pytest.fixture
@@ -412,45 +414,43 @@ def molecular_property_data(small_real_compounds) -> pd.DataFrame:
 class MockLearner(Learner):
     """Mock learner implementation for testing core interfaces."""
 
-    def __init__(self, supports_uncertainty=False):
+    def __init__(self, supports_uncertainty=False, fail_training=False, fail_prediction=False):
         self._trained = False
         self._supports_uncertainty = supports_uncertainty
-        self._training_data = None
+        self._training_features = None
+        self._fail_training = fail_training
+        self._fail_prediction = fail_prediction
 
-    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: DataManager) -> None:
-        """Mock training implementation."""
-        if len(compounds) == 0:
+    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+        """Mock training implementation with featurizer-agnostic interface."""
+        if self._fail_training:
+            raise RuntimeError("Training failed (mock)")
+
+        if len(features) == 0:
             raise ValueError("Cannot train on empty dataset")
 
-        if target_column not in compounds.columns:
-            raise KeyError(f"Target column '{target_column}' not found")
-
-        # Get features to simulate real training
-        compound_ids = compounds['ID'].tolist()
-        smiles_list = compounds['SMILES'].tolist()
-        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
-
-        if len(valid_ids) != len(compounds):
-            raise ValueError(f"Feature shape mismatch: expected {len(compounds)} compounds, got {len(valid_ids)} valid compounds")
+        if features.shape[0] != targets.shape[0]:
+            raise ValueError("Features and targets must have same length")
 
         self._trained = True
-        self._training_data = compounds.copy()
+        self._training_features = features.copy()
 
-    def predict(self, compounds: pd.DataFrame, data_manager: DataManager) -> tuple:
-        """Mock prediction implementation."""
+    def predict(self, features: np.ndarray) -> tuple:
+        """Mock prediction implementation with featurizer-agnostic interface."""
+        if self._fail_prediction:
+            raise RuntimeError("Prediction failed (mock)")
+
         if not self._trained:
             raise RuntimeError("Model must be trained before prediction")
 
-        compound_ids = compounds['ID'].tolist()
-        smiles_list = compounds['SMILES'].tolist()
-        features, valid_ids = data_manager.get_features(compound_ids, smiles_list, 'morgan')
+        if len(features) == 0:
+            return np.array([]), None
 
-        # Generate mock predictions for valid compounds only
         np.random.seed(42)
-        predictions = np.random.uniform(0, 1, len(valid_ids))
+        predictions = np.random.uniform(0, 1, len(features))
 
         if self._supports_uncertainty:
-            uncertainties = np.random.uniform(0.1, 0.3, len(valid_ids))
+            uncertainties = np.random.uniform(0.1, 0.3, len(features))
             return predictions, uncertainties
         else:
             return predictions, None
@@ -532,3 +532,142 @@ def mock_oracle_low_noise():
 def mock_oracle_high_noise():
     """Create a MockOracle instance with high noise level."""
     return MockOracle(noise_level=0.5)
+
+
+# ==============================================================================
+# Master DataFrame Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def sample_master_df(sample_compounds) -> pd.DataFrame:
+    """Create master DataFrame using initialize_master_dataframe().
+
+    Uses sample_compounds fixture as base with 3 labeled compounds (indices 0-2).
+    """
+    from learnm8.core.initialization import initialize_master_dataframe
+
+    compounds = sample_compounds.copy()
+
+    # Initialize with 3 labeled compounds
+    initial_compounds = compounds.iloc[:3]
+    initial_ids = initial_compounds['ID'].tolist()
+    initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
+
+    return initialize_master_dataframe(
+        valid_compounds=compounds,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values,
+        target_col='Activity'
+    )
+
+
+@pytest.fixture
+def master_df_with_predictions(sample_master_df) -> pd.DataFrame:
+    """Create master DataFrame with cycle 0 predictions.
+
+    Adds predictions for unlabeled compounds (indices 3-10) with both
+    predictions and uncertainties.
+    """
+    from learnm8.core.dataframe_ops import add_predictions
+
+    master_df = sample_master_df.copy()
+
+    # Add predictions for unlabeled compounds
+    unlabeled = master_df[master_df['status'] == 'unlabeled'].iloc[:8]
+    unlabeled_ids = unlabeled['ID'].tolist()
+
+    np.random.seed(42)
+    predictions = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
+    uncertainties = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
+
+    return add_predictions(
+        df=master_df,
+        cycle=0,
+        compound_ids=unlabeled_ids,
+        predictions=predictions,
+        uncertainties=uncertainties
+    )
+
+
+@pytest.fixture
+def master_df_multi_cycle(sample_master_df) -> pd.DataFrame:
+    """Create master DataFrame with 3 cycles of predictions.
+
+    Simulates 3 cycles with predictions, uncertainties, and status updates
+    for compounds labeled in cycles 0, 1, 2.
+    """
+    from learnm8.core.dataframe_ops import add_predictions, update_status
+
+    master_df = sample_master_df.copy()
+
+    # Cycle 0
+    unlabeled = master_df[master_df['status'] == 'unlabeled'].iloc[:8]
+    unlabeled_ids = unlabeled['ID'].tolist()
+
+    np.random.seed(42)
+    predictions_0 = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
+    uncertainties_0 = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
+
+    master_df = add_predictions(
+        df=master_df,
+        cycle=0,
+        compound_ids=unlabeled_ids,
+        predictions=predictions_0,
+        uncertainties=uncertainties_0
+    )
+
+    # Label 2 compounds in cycle 0
+    selected_ids_0 = unlabeled_ids[:2]
+    target_values_0 = pd.Series([0.45, 0.55], index=selected_ids_0)
+    master_df = update_status(
+        df=master_df,
+        compound_ids=selected_ids_0,
+        new_status='labeled',
+        cycle=0,
+        target_col='Activity',
+        target_values=target_values_0
+    )
+
+    # Cycle 1
+    unlabeled = master_df[master_df['status'] == 'unlabeled'].iloc[:6]
+    unlabeled_ids = unlabeled['ID'].tolist()
+
+    predictions_1 = np.random.uniform(0.3, 0.9, len(unlabeled_ids))
+    uncertainties_1 = np.random.uniform(0.1, 0.25, len(unlabeled_ids))
+
+    master_df = add_predictions(
+        df=master_df,
+        cycle=1,
+        compound_ids=unlabeled_ids,
+        predictions=predictions_1,
+        uncertainties=uncertainties_1
+    )
+
+    # Label 2 compounds in cycle 1
+    selected_ids_1 = unlabeled_ids[:2]
+    target_values_1 = pd.Series([0.65, 0.75], index=selected_ids_1)
+    master_df = update_status(
+        df=master_df,
+        compound_ids=selected_ids_1,
+        new_status='labeled',
+        cycle=1,
+        target_col='Activity',
+        target_values=target_values_1
+    )
+
+    # Cycle 2
+    unlabeled = master_df[master_df['status'] == 'unlabeled'].iloc[:4]
+    unlabeled_ids = unlabeled['ID'].tolist()
+
+    predictions_2 = np.random.uniform(0.4, 0.85, len(unlabeled_ids))
+    uncertainties_2 = np.random.uniform(0.1, 0.2, len(unlabeled_ids))
+
+    master_df = add_predictions(
+        df=master_df,
+        cycle=2,
+        compound_ids=unlabeled_ids,
+        predictions=predictions_2,
+        uncertainties=uncertainties_2
+    )
+
+    return master_df

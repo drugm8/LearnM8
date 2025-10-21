@@ -1,6 +1,7 @@
-"""Tests for pruning integration and utilities.
+"""Tests for pruning integration via public factory API.
 
-Tests the pruning utility functions and integration with the main active learning workflow.
+Tests the pruning factory function and integration with the main active learning workflow.
+Uses only public API (create_pruning_strategy) rather than internal validators.
 """
 
 import pytest
@@ -8,80 +9,80 @@ import numpy as np
 import pandas as pd
 import json
 
-from learnm8.pruning.utils import validate_pruning_parameters, create_pruning_strategy
+from learnm8.pruning import create_pruning_strategy
 from learnm8.pruning.score_based import ScoreBasedPruner
-from learnm8.pruning.base import PruningError
 
 
-def test_validate_pruning_parameters_valid():
-    """Test validation with valid ScoreBasedPruner parameters."""
-    # Valid parameters
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
+def test_create_pruning_strategy_valid_params():
+    """Test factory with valid ScoreBasedPruner parameters."""
+    pruner = create_pruning_strategy('ScoreBasedPruner', {
         'pruning_fraction': 0.3,
         'score_direction': 'higher'
     })
-    assert is_valid == True
-    assert len(errors) == 0
-    
-    # Valid with minimal parameters
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
+    assert isinstance(pruner, ScoreBasedPruner)
+    assert pruner.pruning_fraction == 0.3
+    assert pruner.score_direction == 'higher'
+
+    pruner = create_pruning_strategy('ScoreBasedPruner', {
         'pruning_fraction': 0.0
     })
-    assert is_valid == True
-    assert len(errors) == 0
+    assert isinstance(pruner, ScoreBasedPruner)
+    assert pruner.pruning_fraction == 0.0
 
 
-def test_validate_pruning_parameters_invalid():
-    """Test validation with invalid parameters."""
-    # Invalid pruning fraction - too high
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'pruning_fraction': 1.0
-    })
-    assert is_valid == False
-    assert any('pruning_fraction must be between 0.0 and 0.9' in error for error in errors)
-    
-    # Invalid pruning fraction - negative
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'pruning_fraction': -0.1
-    })
-    assert is_valid == False
-    assert any('pruning_fraction must be between 0.0 and 0.9' in error for error in errors)
-    
-    # Invalid score direction
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'score_direction': 'invalid'
-    })
-    assert is_valid == False
-    assert any("score_direction must be 'higher' or 'lower'" in error for error in errors)
-    
-    # Invalid pruning fraction type
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'pruning_fraction': 'invalid'
-    })
-    assert is_valid == False
-    assert any('pruning_fraction must be a number' in error for error in errors)
-    
-    # Invalid score direction type
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'score_direction': 123
-    })
-    assert is_valid == False
-    assert any('score_direction must be a string' in error for error in errors)
-    
-    # Unexpected parameters
-    is_valid, errors = validate_pruning_parameters('ScoreBasedPruner', {
-        'pruning_fraction': 0.2,
-        'unexpected_param': 'value'
-    })
-    assert is_valid == False
-    assert any('Unexpected parameters' in error for error in errors)
+def test_create_pruning_strategy_invalid_fraction_too_high():
+    """Test factory rejects invalid pruning fraction (too high)."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'pruning_fraction': 1.0
+        })
 
 
-def test_validate_pruning_parameters_unknown_strategy():
-    """Test validation with unknown strategy."""
-    is_valid, errors = validate_pruning_parameters('UnknownStrategy', {})
-    assert is_valid == False
-    assert any("Unknown pruning strategy 'UnknownStrategy'" in error for error in errors)
+def test_create_pruning_strategy_invalid_fraction_negative():
+    """Test factory rejects invalid pruning fraction (negative)."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'pruning_fraction': -0.1
+        })
+
+
+def test_create_pruning_strategy_invalid_score_direction():
+    """Test factory rejects invalid score_direction."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'score_direction': 'invalid'
+        })
+
+
+def test_create_pruning_strategy_invalid_fraction_type():
+    """Test factory rejects invalid pruning_fraction type."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'pruning_fraction': 'invalid'
+        })
+
+
+def test_create_pruning_strategy_invalid_direction_type():
+    """Test factory rejects invalid score_direction type."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'score_direction': 123
+        })
+
+
+def test_create_pruning_strategy_unexpected_params():
+    """Test factory rejects unexpected parameters."""
+    with pytest.raises(ValueError):
+        create_pruning_strategy('ScoreBasedPruner', {
+            'pruning_fraction': 0.2,
+            'unexpected_param': 'value'
+        })
+
+
+def test_create_pruning_strategy_unknown_strategy():
+    """Test factory rejects unknown strategy."""
+    with pytest.raises(ValueError, match="Unknown pruning strategy 'UnknownStrategy'"):
+        create_pruning_strategy('UnknownStrategy', {})
 
 
 def test_create_pruning_strategy_success():
@@ -127,79 +128,55 @@ def test_create_pruning_strategy_creation_failure():
 
 def test_pruning_integration_with_main_workflow(small_real_compounds):
     """Test that pruning integrates correctly with the main workflow."""
-    from learnm8.learnm8 import apply_pruning_strategy
-    
+    from learnm8.pruning import create_pruning_strategy
+
     # Create test data
-    predictions = pd.DataFrame({'prediction': np.random.rand(len(small_real_compounds))})
-    
+    predictions = np.random.rand(len(small_real_compounds))
+
     # Test score-based pruning
-    pruned_pool, pruning_info = apply_pruning_strategy(
-        pool=small_real_compounds,
-        predictions=predictions,
-        uncertainties=None,
-        strategy='score_based',
-        params={'pruning_fraction': 0.3},
-        score_direction='higher'
+    pruner = create_pruning_strategy(
+        'ScoreBasedPruner',
+        {'pruning_fraction': 0.3, 'score_direction': 'higher'}
     )
-    
+    pruned_pool = pruner.prune(small_real_compounds, predictions, None)
+
     # Verify results
     assert len(pruned_pool) < len(small_real_compounds)
-    assert 'pruned_count' in pruning_info
-    assert 'original_pool_size' in pruning_info
-    assert 'pruned_pool_size' in pruning_info
-    assert 'pruning_fraction' in pruning_info
-    
-    assert pruning_info['original_pool_size'] == len(small_real_compounds)
-    assert pruning_info['pruned_pool_size'] == len(pruned_pool)
-    assert pruning_info['pruned_count'] == len(small_real_compounds) - len(pruned_pool)
+    assert len(pruned_pool) <= len(small_real_compounds)
 
 
 def test_pruning_integration_with_score_direction_injection(small_real_compounds):
     """Test that score_direction is correctly injected into pruning parameters."""
-    from learnm8.learnm8 import apply_pruning_strategy
-    
-    predictions = pd.DataFrame({'prediction': np.random.rand(len(small_real_compounds))})
-    
-    # Test without score_direction in params - should be injected
-    pruned_pool, pruning_info = apply_pruning_strategy(
-        pool=small_real_compounds,
-        predictions=predictions,
-        uncertainties=None,
-        strategy='score_based',
-        params={'pruning_fraction': 0.3},
-        score_direction='lower'  # Should be injected into params
+    from learnm8.pruning import create_pruning_strategy
+
+    predictions = np.random.rand(len(small_real_compounds))
+
+    # Test with score_direction in params
+    pruner = create_pruning_strategy(
+        'ScoreBasedPruner',
+        {'pruning_fraction': 0.3, 'score_direction': 'lower'}
     )
-    
+    pruned_pool = pruner.prune(small_real_compounds, predictions, None)
+
     # Should work correctly
     assert len(pruned_pool) < len(small_real_compounds)
 
 
 def test_pruning_integration_error_handling(small_real_compounds):
     """Test error handling in pruning integration."""
-    from learnm8.learnm8 import apply_pruning_strategy
-    
-    predictions = pd.DataFrame({'prediction': np.random.rand(len(small_real_compounds))})
-    
+    from learnm8.pruning import create_pruning_strategy
+
+    predictions = np.random.rand(len(small_real_compounds))
+
     # Test unknown strategy
-    with pytest.raises(ValueError, match="Failed to create pruning strategy"):
-        apply_pruning_strategy(
-            pool=small_real_compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='unknown_strategy',
-            params={},
-            score_direction='higher'
-        )
-    
+    with pytest.raises(ValueError, match="Unknown pruning strategy"):
+        create_pruning_strategy('unknown_strategy', {})
+
     # Test invalid parameters
-    with pytest.raises(ValueError, match="Failed to create pruning strategy"):
-        apply_pruning_strategy(
-            pool=small_real_compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='score_based',
-            params={'pruning_fraction': 1.5},  # Invalid
-            score_direction='higher'
+    with pytest.raises(ValueError, match="Invalid parameters"):
+        create_pruning_strategy(
+            'ScoreBasedPruner',
+            {'pruning_fraction': 1.5}  # Invalid
         )
 
 
@@ -221,38 +198,27 @@ def test_pruning_backward_compatibility_removed():
     # These should all fail as old strategies are removed
     old_strategies = [
         'ProbabilisticPruner',
-        'UncertaintyThresholdPruner', 
+        'UncertaintyThresholdPruner',
         'PredictionThresholdPruner',
         'ConfidenceIntervalPruner',
         'CycleBudgetPruner',
         'PerformanceBasedPruner'
     ]
-    
+
     for strategy in old_strategies:
         with pytest.raises(ValueError, match=f"Unknown pruning strategy '{strategy}'"):
             create_pruning_strategy(strategy, {})
-    
+
     # CLI-friendly names should also fail
     old_cli_names = [
         'probabilistic',
         'uncertainty_threshold',
-        'prediction_threshold', 
+        'prediction_threshold',
         'confidence_interval',
         'cycle_budget',
         'performance_based'
     ]
-    
-    from learnm8.learnm8 import apply_pruning_strategy
-    predictions = pd.DataFrame({'prediction': [0.5]})
-    test_compounds = pd.DataFrame({'ID': ['test'], 'SMILES': ['CCO']})
-    
+
     for strategy in old_cli_names:
-        with pytest.raises(ValueError, match="Failed to create pruning strategy"):
-            apply_pruning_strategy(
-                pool=test_compounds,
-                predictions=predictions,
-                uncertainties=None,
-                strategy=strategy,
-                params={},
-                score_direction='higher'
-            )
+        with pytest.raises(ValueError, match="Unknown pruning strategy"):
+            create_pruning_strategy(strategy, {})

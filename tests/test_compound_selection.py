@@ -1,8 +1,8 @@
 """
-Tests for compound selection functionality in learnm8.py.
+Tests for compound selection functionality using new acquisition API.
 
-Tests the select_compounds_by_strategy function with real molecular data,
-focusing on different acquisition strategies, error handling, and data validation.
+Tests acquisition functions with real molecular data,
+focusing on different strategies, error handling, and data validation.
 """
 
 import pytest
@@ -10,8 +10,7 @@ import pandas as pd
 import numpy as np
 from unittest.mock import Mock, patch
 
-from learnm8.learnm8 import select_compounds_by_strategy
-from learnm8.core.data_manager import DataManager
+from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
 
 
 class TestSelectCompoundsByStrategy:
@@ -31,17 +30,14 @@ class TestSelectCompoundsByStrategy:
         np.random.seed(42)
         predictions = np.random.uniform(0, 1, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='greedy',
-            batch_size=3,
-            score_direction='higher',
-            data_manager=data_manager
-        )
+        # Get acquisition function and select
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='higher')
+        selected = acq.select(pool, n_select=3)
 
         assert len(selected) == 3
         assert 'ID' in selected.columns
@@ -68,21 +64,18 @@ class TestSelectCompoundsByStrategy:
         np.random.seed(42)
         predictions = np.random.uniform(0, 1, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='greedy',
-            batch_size=2,
-            score_direction='lower',
-            data_manager=data_manager
-        )
+        # Get acquisition function and select
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='lower')
+        selected = acq.select(pool, n_select=2)
 
         assert len(selected) == 2
 
-        # Should select compounds with lowest predictions (after transformation)
+        # Should select compounds with lowest predictions
         selected_indices = [compounds[compounds['ID'] == id_val].index[0] for id_val in selected['ID']]
         selected_predictions = predictions[selected_indices]
 
@@ -102,17 +95,14 @@ class TestSelectCompoundsByStrategy:
 
         predictions = np.random.uniform(0, 1, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='random',
-            batch_size=4,
-            score_direction='higher',
-            data_manager=data_manager
-        )
+        # Get acquisition function and select
+        acq_class = get_acquisition_function('random')
+        acq = acq_class(score_direction='higher', random_state=42)
+        selected = acq.select(pool, n_select=4)
 
         assert len(selected) == 4
         assert 'ID' in selected.columns
@@ -134,29 +124,25 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0.3, 0.7, len(compounds))
         uncertainties = np.random.uniform(0.1, 0.9, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions and uncertainties
+        pool = compounds.copy()
+        pool['prediction'] = predictions
+        pool['uncertainty'] = uncertainties
 
         # Test strategies that use uncertainty
         uncertainty_strategies = ['ucb']  # Start with basic ones that should work
 
         for strategy in uncertainty_strategies:
             try:
-                selected = select_compounds_by_strategy(
-                    pool=compounds,
-                    predictions=predictions,
-                    uncertainties=uncertainties,
-                    strategy=strategy,
-                    batch_size=3,
-                    score_direction='higher',
-                    data_manager=data_manager
-                )
+                acq_class = get_acquisition_function(strategy)
+                acq = acq_class(score_direction='higher')
+                selected = acq.select(pool, n_select=3)
 
                 assert len(selected) == 3
                 assert 'ID' in selected.columns
                 assert selected['ID'].isin(compounds['ID']).all()
 
             except Exception as e:
-                # If the strategy fails, it should fall back to greedy
                 pytest.skip(f"Strategy {strategy} not available or failed: {e}")
 
     def test_batch_size_constraints(self, small_real_compounds, tmp_path):
@@ -174,36 +160,24 @@ class TestSelectCompoundsByStrategy:
 
         predictions = np.array([0.3, 0.7])
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
         # Test batch size larger than pool
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='greedy',
-            batch_size=10,  # Larger than pool size
-            score_direction='higher',
-            data_manager=data_manager
-        )
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='higher')
+        selected = acq.select(pool, n_select=10)  # Larger than pool size
 
         # Should return all available compounds
         assert len(selected) == len(compounds)
 
         # Test zero batch size should raise ValueError
         with pytest.raises(ValueError, match="n_select must be positive"):
-            select_compounds_by_strategy(
-                pool=compounds,
-                predictions=predictions,
-                uncertainties=None,
-                strategy='greedy',
-                batch_size=0,
-                score_direction='higher',
-                data_manager=data_manager
-            )
+            acq.select(pool, n_select=0)
 
     def test_missing_predictions_handling(self, small_real_compounds, tmp_path):
-        """Test handling when predictions are None."""
+        """Test handling when predictions are missing."""
         compounds = small_real_compounds.copy()
 
         if len(compounds) == 0:
@@ -212,19 +186,15 @@ class TestSelectCompoundsByStrategy:
                 'SMILES': ['CCC'] * 5
             })
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Pool without predictions column
+        pool = compounds.copy()
 
-        # Should raise ValueError when predictions are None
-        with pytest.raises(ValueError, match="No predictions available"):
-            select_compounds_by_strategy(
-                pool=compounds,
-                predictions=None,  # No predictions provided
-                uncertainties=None,
-                strategy='greedy',
-                batch_size=2,
-                score_direction='higher',
-                data_manager=data_manager
-            )
+        # Should raise ValueError when predictions are missing
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='higher')
+
+        with pytest.raises(ValueError, match="prediction"):
+            acq.select(pool, n_select=2)
 
     def test_missing_uncertainties_handling(self, small_real_compounds, tmp_path):
         """Test handling when uncertainties are None for uncertainty-based strategies."""
@@ -238,19 +208,16 @@ class TestSelectCompoundsByStrategy:
 
         predictions = np.random.uniform(0, 1, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool without uncertainties
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
         # Should raise ValueError when uncertainties are required but not provided
-        with pytest.raises(ValueError, match="requires uncertainty estimates"):
-            select_compounds_by_strategy(
-                pool=compounds,
-                predictions=predictions,
-                uncertainties=None,  # No uncertainties provided
-                strategy='ucb',
-                batch_size=3,
-                score_direction='higher',
-                data_manager=data_manager
-            )
+        acq_class = get_acquisition_function('ucb')
+        acq = acq_class(score_direction='higher')
+
+        with pytest.raises(ValueError, match="uncertainty"):
+            acq.select(pool, n_select=3)
 
     def test_dataframe_predictions(self, small_real_compounds, tmp_path):
         """Test handling of DataFrame predictions."""
@@ -265,22 +232,13 @@ class TestSelectCompoundsByStrategy:
                 'SMILES': ['CCO'] * 4
             })
 
-        # Create DataFrame predictions
-        predictions_df = pd.DataFrame({
-            'prediction': [0.2, 0.8, 0.5, 0.9][:len(compounds)]
-        })
+        # Create DataFrame with predictions
+        pool = compounds.copy()
+        pool['prediction'] = [0.2, 0.8, 0.5, 0.9][:len(compounds)]
 
-        data_manager = DataManager(results_dir=tmp_path)
-
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions_df,
-            uncertainties=None,
-            strategy='greedy',
-            batch_size=2,
-            score_direction='higher',
-            data_manager=data_manager
-        )
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='higher')
+        selected = acq.select(pool, n_select=2)
 
         assert len(selected) == 2
         assert 'ID' in selected.columns
@@ -298,24 +256,12 @@ class TestSelectCompoundsByStrategy:
                 'SMILES': ['CCO']
             })
 
-        predictions = np.array([0.5])
+        # Pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = np.array([0.5])
 
-        data_manager = DataManager(results_dir=tmp_path)
-
-        with pytest.raises(ValueError) as exc_info:
-            select_compounds_by_strategy(
-                pool=compounds,
-                predictions=predictions,
-                uncertainties=None,
-                strategy='invalid_strategy',
-                batch_size=1,
-                score_direction='higher',
-                data_manager=data_manager
-            )
-
-        # Should provide helpful error message
-        error_msg = str(exc_info.value)
-        assert 'Unknown strategy' in error_msg or 'invalid_strategy' in error_msg
+        with pytest.raises(KeyError):
+            get_acquisition_function('invalid_strategy')
 
     def test_acquisition_params_passing(self, small_real_compounds, tmp_path):
         """Test passing of acquisition parameters."""
@@ -329,20 +275,24 @@ class TestSelectCompoundsByStrategy:
 
         predictions = np.random.uniform(0, 1, len(compounds))
 
-        data_manager = DataManager(results_dir=tmp_path)
+        # Prepare pool with predictions
+        pool = compounds.copy()
+        pool['prediction'] = predictions
 
         # Test with acquisition parameters
-        acquisition_params = {'exploration_weight': 0.5}
-
-        selected = select_compounds_by_strategy(
-            pool=compounds,
-            predictions=predictions,
-            uncertainties=None,
-            strategy='greedy',  # Simple strategy that should ignore params
-            batch_size=2,
-            score_direction='higher',
-            data_manager=data_manager,
-            acquisition_params=acquisition_params
-        )
+        acq_class = get_acquisition_function('greedy')
+        acq = acq_class(score_direction='higher')  # Greedy ignores extra params
+        selected = acq.select(pool, n_select=2)
 
         assert len(selected) == 2
+
+    def test_list_available_strategies(self):
+        """Test listing available acquisition strategies."""
+        strategies = list_acquisition_functions()
+
+        assert isinstance(strategies, list)
+        assert len(strategies) > 0
+
+        # Should include basic strategies
+        assert 'greedy' in strategies
+        assert 'random' in strategies
