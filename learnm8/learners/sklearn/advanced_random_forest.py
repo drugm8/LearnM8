@@ -43,7 +43,6 @@ class AdvancedRandomForestLearner(SklearnLearner):
                  oob_score: bool = True,
                  random_state: int = 42,
                  n_jobs: int = -1,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Advanced Random Forest learner.
 
@@ -60,16 +59,14 @@ class AdvancedRandomForestLearner(SklearnLearner):
             oob_score: Enable out-of-bag scoring
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for AdvancedRandomForestLearner")
-        
-        # Limit CPU cores to prevent oversubscription
+
         if n_jobs == -1:
             n_jobs = min(os.cpu_count() or 1, 32)
-        
+
         model = RandomForestRegressor(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -84,8 +81,8 @@ class AdvancedRandomForestLearner(SklearnLearner):
             random_state=random_state,
             n_jobs=n_jobs
         )
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         self.n_estimators = n_estimators
         self.max_depth = max_depth

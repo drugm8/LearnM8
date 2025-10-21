@@ -9,31 +9,25 @@ from ..sklearn.xgboost_learner import XGBoostLearner
 class MixedEnsemble(EnsembleLearner):
     """Mixed ensemble with RF, Linear Regression, and XGBoost learners."""
     
-    def __init__(self, featurizer_type: str = None, random_state: int = 42, **kwargs):
+    def __init__(self, random_state: int = 42, **kwargs):
         """Initialize mixed ensemble.
 
         Args:
-            featurizer_type: Type of molecular features to use
             random_state: Random state for reproducibility (default: 42)
             **kwargs: Additional arguments passed to EnsembleLearner
         """
-        if featurizer_type is None:
-            raise ValueError("featurizer_type is required")
         learners = [
             RandomForestLearner(
                 n_estimators=100,
-                random_state=random_state,
-                featurizer_type=featurizer_type
+                random_state=random_state
             ),
             LinearRegressionLearner(
                 alpha=1.0,
-                random_state=random_state,
-                featurizer_type=featurizer_type
+                random_state=random_state
             ),
             XGBoostLearner(
                 learning_rate=0.1,
-                random_state=random_state,
-                featurizer_type=featurizer_type
+                random_state=random_state
             )
         ]
         

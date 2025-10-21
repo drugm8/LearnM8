@@ -39,7 +39,6 @@ class RandomForestLearner(SklearnLearner):
                  max_features: str = 'sqrt',
                  random_state: int = 42,
                  n_jobs: int = -1,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Random Forest learner.
 
@@ -51,13 +50,11 @@ class RandomForestLearner(SklearnLearner):
             max_features: Number of features to consider at each split
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for RandomForestLearner")
-        
-        # Create Random Forest model with optimized parameters
+
         model = RandomForestRegressor(
             n_estimators=n_estimators,
             max_depth=max_depth,
@@ -67,10 +64,10 @@ class RandomForestLearner(SklearnLearner):
             random_state=random_state,
             n_jobs=n_jobs,
             bootstrap=True,
-            oob_score=True  # Enable out-of-bag scoring for additional validation
+            oob_score=True
         )
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators

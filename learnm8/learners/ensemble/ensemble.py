@@ -7,15 +7,10 @@ through model diversity.
 
 import logging
 import time
-from typing import List, Tuple, Optional, Dict, Any, Union, TYPE_CHECKING
+from typing import List, Tuple, Optional, Dict, Any, Union
 import numpy as np
-import pandas as pd
 
-# Core imports
 from ...core.interfaces import Learner
-
-if TYPE_CHECKING:
-    from ...core.data_manager import DataManager
 
 # Optional imports for statistical functions
 try:
@@ -79,87 +74,67 @@ class EnsembleLearner(Learner):
         """Validate that all learners are compatible."""
         if not all(isinstance(learner, Learner) for learner in self.learners):
             raise ValueError("All ensemble members must be Learner instances")
-        
-        # Check for featurizer consistency (if learners have this attribute)
-        featurizer_types = []
-        for learner in self.learners:
-            if hasattr(learner, 'featurizer_type'):
-                featurizer_types.append(learner.featurizer_type)
-        
-        if featurizer_types and len(set(featurizer_types)) > 1:
-            logger.warning(f"Mixed featurizer types in ensemble: {set(featurizer_types)}")
     
-    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: 'DataManager') -> None:
-        """Train all ensemble learners.
-        
+    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+        """Train all ensemble learners on feature matrix.
+
         Args:
-            compounds: DataFrame with 'ID', 'SMILES', and target columns
-            target_column: Name of the target property column  
-            data_manager: Central data manager for feature extraction and caching
-            
+            features: Feature matrix (n_samples, n_features)
+            targets: Target values (n_samples,)
+
         Raises:
-            ValueError: If compounds DataFrame is malformed or target_column missing
+            ValueError: If input shapes invalid
             RuntimeError: If training fails for any learner
         """
+        if features.shape[0] != targets.shape[0]:
+            raise ValueError(f"Features and targets must have same length: {features.shape[0]} vs {targets.shape[0]}")
+
+        if features.shape[0] == 0:
+            raise ValueError("Cannot train on empty dataset")
+
         start_time = time.time()
-        
-        # Validate input
-        required_cols = ['ID', 'SMILES', target_column]
-        missing_cols = set(required_cols) - set(compounds.columns)
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
-        
-        if compounds.empty:
-            raise ValueError("compounds DataFrame is empty")
-        
-        logger.info(f"Training ensemble of {len(self.learners)} learners on {len(compounds)} compounds")
-        
-        # Train each learner
+
+        logger.info(f"Training ensemble of {len(self.learners)} learners on {len(features)} samples")
+
         failed_learners = []
-        
+
         for i, learner in enumerate(self.learners):
             try:
                 logger.debug(f"Training ensemble member {i+1}/{len(self.learners)}: {learner.get_name()}")
-                learner.train(compounds, target_column, data_manager)
+                learner.train(features, targets)
             except Exception as e:
                 logger.error(f"Failed to train learner {learner.get_name()}: {e}")
                 failed_learners.append((i, learner.get_name(), str(e)))
-        
+
         if failed_learners:
-            # Remove failed learners from ensemble
             failed_indices = [idx for idx, _, _ in failed_learners]
             self.learners = [learner for i, learner in enumerate(self.learners) if i not in failed_indices]
-            
-            # Adjust weights if necessary
+
             if self.weights is not None:
                 self.weights = np.array([self.weights[i] for i in range(len(self.weights)) if i not in failed_indices])
-                self.weights = self.weights / self.weights.sum()  # Renormalize
-            
+                self.weights = self.weights / self.weights.sum()
+
             logger.warning(f"Removed {len(failed_learners)} failed learners from ensemble. "
                           f"Remaining learners: {len(self.learners)}")
-            
+
             if not self.learners:
                 raise RuntimeError("All ensemble learners failed to train")
-        
+
         self.is_trained = True
         train_time = time.time() - start_time
         logger.info(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
     
-    def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
-        """Predict with ensemble uncertainty.
+    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Predict on feature matrix with ensemble uncertainty.
 
         Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
-            data_manager: Central data manager for feature extraction
+            features: Feature matrix (n_samples, n_features)
 
         Returns:
-            Tuple of (predictions, uncertainties) where uncertainties are estimated
-            from ensemble variance. Only compounds that ALL learners could predict are included.
-            The predictions and uncertainties align with the valid compounds returned
-            by data_manager.prepare_prediction_data().
+            Tuple of (predictions, uncertainties) where uncertainties are
+            estimated from ensemble variance.
 
         Raises:
-            ValueError: If compounds DataFrame is malformed
             RuntimeError: If ensemble is not trained or prediction fails
         """
         if not self.is_trained:
@@ -168,21 +143,12 @@ class EnsembleLearner(Learner):
         start_time = time.time()
 
         try:
-            # Get the valid compounds that can generate features
-            valid_compounds, _ = data_manager.prepare_prediction_data(compounds,
-                                                                     self.learners[0].featurizer_type if hasattr(self.learners[0], 'featurizer_type') else 'morgan')
-
-            if len(valid_compounds) == 0:
-                logger.warning("No compounds could generate valid features")
-                return np.array([]), np.array([])
-
-            # Collect predictions from all learners - they will all work with same valid compounds
             predictions_list = []
             failed_predictions = []
 
             for i, learner in enumerate(self.learners):
                 try:
-                    pred, _ = learner.predict(compounds, data_manager)
+                    pred, _ = learner.predict(features)
                     predictions_list.append(pred)
                 except Exception as e:
                     logger.warning(f"Learner {learner.get_name()} failed to predict: {e}")
@@ -194,21 +160,17 @@ class EnsembleLearner(Learner):
             if failed_predictions:
                 logger.warning(f"{len(failed_predictions)} learners failed to predict")
 
-            # Convert to array for easier manipulation
             predictions_array = np.array(predictions_list)
 
-            # Apply aggregation method
             ensemble_predictions = self._aggregate_predictions(predictions_array)
-
-            # Calculate uncertainty
             uncertainties = self._calculate_uncertainty(predictions_array)
 
             pred_time = time.time() - start_time
-            logger.debug(f"Predicted {len(ensemble_predictions)} compounds with {self.get_name()} "
+            logger.debug(f"Predicted {len(ensemble_predictions)} samples with {self.get_name()} "
                         f"using {len(predictions_list)} learners in {pred_time:.2f}s")
 
             return ensemble_predictions, uncertainties
-            
+
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise RuntimeError(f"Ensemble prediction failed: {e}") from e
@@ -307,32 +269,31 @@ class EnsembleLearner(Learner):
         
         return stats
     
-    def get_individual_predictions(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Dict[str, np.ndarray]:
+    def get_individual_predictions(self, features: np.ndarray) -> Dict[str, np.ndarray]:
         """Get predictions from individual ensemble members.
-        
+
         Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
-            data_manager: Central data manager for feature extraction
-            
+            features: Feature matrix (n_samples, n_features)
+
         Returns:
             Dictionary mapping learner names to their predictions
-            
+
         Raises:
             RuntimeError: If ensemble is not trained
         """
         if not self.is_trained:
             raise RuntimeError("Ensemble must be trained before prediction")
-        
+
         individual_predictions = {}
-        
+
         for learner in self.learners:
             try:
-                pred, _ = learner.predict(compounds, data_manager)
+                pred, _ = learner.predict(features)
                 individual_predictions[learner.get_name()] = pred
             except Exception as e:
                 logger.warning(f"Failed to get predictions from {learner.get_name()}: {e}")
                 individual_predictions[learner.get_name()] = None
-        
+
         return individual_predictions
     
     def add_learner(self, learner: Learner, weight: Optional[float] = None) -> None:

@@ -37,7 +37,6 @@ class MLPLearner(TorchLearner):
                  activation: str = 'relu',
                  dropout_rate: float = 0.2,
                  batch_norm: bool = True,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize MLP learner.
 
@@ -46,13 +45,12 @@ class MLPLearner(TorchLearner):
             activation: Activation function ('relu', 'tanh', 'gelu')
             dropout_rate: Dropout rate for regularization
             batch_norm: Whether to use batch normalization
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to TorchLearner
         """
         if not TORCH_AVAILABLE:
             raise ImportError("PyTorch is required for MLPLearner")
-        
-        super().__init__(featurizer_type=featurizer_type, **kwargs)
+
+        super().__init__(**kwargs)
         
         self.hidden_sizes = hidden_sizes
         self.activation = activation

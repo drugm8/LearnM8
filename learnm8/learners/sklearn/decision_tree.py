@@ -34,7 +34,6 @@ class DecisionTreeLearner(SklearnLearner):
                  min_samples_leaf: int = 5,
                  max_features: Optional[str] = None,
                  random_state: int = 42,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Decision Tree learner.
 
@@ -44,12 +43,11 @@ class DecisionTreeLearner(SklearnLearner):
             min_samples_leaf: Minimum samples required at leaf node
             max_features: Number of features to consider at each split
             random_state: Random seed for reproducibility
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for DecisionTreeLearner")
-        
+
         model = DecisionTreeRegressor(
             max_depth=max_depth,
             min_samples_split=min_samples_split,
@@ -57,8 +55,8 @@ class DecisionTreeLearner(SklearnLearner):
             max_features=max_features,
             random_state=random_state
         )
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
