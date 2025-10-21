@@ -1,8 +1,8 @@
 # learnm8/learners/__init__.py
 """Machine learning models for active learning.
 
-New Architecture (v0.3.0):
-- Dependency injection pattern with DataManager
+New Architecture (v1.0.0):
+- Featurizer-agnostic learners working with numpy arrays
 - Composition-based ensemble methods
 - PyTorch and scikit-learn integration
 - Uncertainty quantification capabilities

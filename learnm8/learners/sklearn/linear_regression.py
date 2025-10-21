@@ -35,7 +35,6 @@ class LinearRegressionLearner(SklearnLearner):
                  fit_intercept: bool = True,
                  n_jobs: int = -1,
                  random_state: int = 42,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Linear/Ridge Regression learner.
 
@@ -45,29 +44,26 @@ class LinearRegressionLearner(SklearnLearner):
             fit_intercept: Whether to fit the intercept term
             n_jobs: Number of parallel jobs (-1 for all cores, only for LinearRegression)
             random_state: Random seed
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for LinearRegressionLearner")
-        
+
         if alpha is None:
-            # Use standard Linear Regression
             model = LinearRegression(
                 fit_intercept=fit_intercept,
                 n_jobs=n_jobs
             )
             self.is_ridge = False
         else:
-            # Use Ridge Regression with L2 regularization
             model = Ridge(
                 alpha=alpha,
                 fit_intercept=fit_intercept,
                 random_state=random_state
             )
             self.is_ridge = True
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         self.alpha = alpha
         self.fit_intercept = fit_intercept

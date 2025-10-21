@@ -9,20 +9,16 @@ class DTEnsemble(EnsembleLearner):
     """Ensemble of 3 Decision Tree learners with different max depths."""
     
     def __init__(self,
-                 featurizer_type: str = None,
                  max_depths: Optional[List[int]] = None,
                  random_states: Optional[List[int]] = None,
                  **kwargs):
         """Initialize DT ensemble.
 
         Args:
-            featurizer_type: Type of molecular features to use
             max_depths: List of max depths for diversity (default: [5, 10, 15])
             random_states: List of random states for diversity (default: [42, 123, 456])
             **kwargs: Additional arguments passed to EnsembleLearner
         """
-        if featurizer_type is None:
-            raise ValueError("featurizer_type is required")
         if max_depths is None:
             max_depths = [5, 10, 15]
         if random_states is None:
@@ -32,8 +28,7 @@ class DTEnsemble(EnsembleLearner):
         for depth, rs in zip(max_depths, random_states):
             dt = DecisionTreeLearner(
                 max_depth=depth,
-                random_state=rs,
-                featurizer_type=featurizer_type
+                random_state=rs
             )
             learners.append(dt)
         

@@ -42,7 +42,6 @@ class XGBoostLearner(SklearnLearner):
                  reg_lambda: float = 1.0,
                  random_state: int = 42,
                  n_jobs: int = -1,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize XGBoost learner.
 
@@ -57,13 +56,11 @@ class XGBoostLearner(SklearnLearner):
             reg_lambda: L2 regularization term
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not XGBOOST_AVAILABLE:
             raise ImportError("XGBoost not installed. Please install with: pip install xgboost")
-        
-        # Create XGBoost model with optimized parameters
+
         model = xgb.XGBRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,
@@ -75,12 +72,12 @@ class XGBoostLearner(SklearnLearner):
             reg_lambda=reg_lambda,
             random_state=random_state,
             n_jobs=n_jobs,
-            verbosity=0,  # Suppress XGBoost output
+            verbosity=0,
             objective='reg:squarederror',
-            tree_method='hist'  # Use histogram-based algorithm for speed
+            tree_method='hist'
         )
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators

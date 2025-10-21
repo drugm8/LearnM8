@@ -41,7 +41,6 @@ class GaussianProcessLearner(SklearnLearner):
                  n_restarts_optimizer: int = 5,
                  normalize_y: bool = True,
                  random_state: int = 42,
-                 featurizer_type: str = None,
                  **kwargs):
         """Initialize Gaussian Process learner.
 
@@ -51,17 +50,14 @@ class GaussianProcessLearner(SklearnLearner):
             n_restarts_optimizer: Number of optimizer restarts for hyperparameter optimization
             normalize_y: Whether to normalize target values
             random_state: Random seed for reproducibility
-            featurizer_type: Type of molecular features to use
             **kwargs: Additional arguments passed to SklearnLearner
         """
         if not SKLEARN_AVAILABLE:
             raise ImportError("scikit-learn is required for GaussianProcessLearner")
-        
-        # Default to RBF kernel with learned hyperparameters if none provided
+
         if kernel is None:
             kernel = C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
-        
-        # Create Gaussian Process model
+
         model = GaussianProcessRegressor(
             kernel=kernel,
             alpha=alpha,
@@ -69,47 +65,33 @@ class GaussianProcessLearner(SklearnLearner):
             normalize_y=normalize_y,
             random_state=random_state
         )
-        
-        super().__init__(model, featurizer_type=featurizer_type, random_state=random_state, **kwargs)
+
+        super().__init__(model, random_state=random_state, **kwargs)
         
         # Store configuration for name generation
         self.alpha = alpha
         self.kernel_name = str(kernel).split('(')[0] if kernel else "RBF"
     
-    def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, np.ndarray]:
-        """Predict with native GP uncertainty.
+    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Predict on feature matrix with uncertainty.
 
         Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
-            data_manager: Central data manager for feature extraction
+            features: Feature matrix (n_samples, n_features)
 
         Returns:
             Tuple of (predictions, uncertainties).
-            GP naturally provides uncertainty.
-            The predictions and uncertainties align with the valid compounds returned
-            by data_manager.prepare_prediction_data().
+            GP naturally provides uncertainty estimates.
 
         Raises:
-            ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
 
         try:
-            # Use DataManager to prepare prediction data (filters invalid compounds)
-            valid_compounds, X = data_manager.prepare_prediction_data(compounds, self.featurizer_type)
-
-            if len(valid_compounds) == 0:
-                logger.warning("No compounds could generate valid features for prediction")
-                return np.array([]), np.array([])
-
-            # Make predictions with uncertainty
-            predictions, std = self.model.predict(X, return_std=True)
-
-            logger.debug(f"Predicted {len(predictions)} compounds with {self.get_name()}")
-
-            return predictions, std  # GP naturally provides uncertainty
+            predictions, std = self.model.predict(features, return_std=True)
+            logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
+            return predictions, std
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")

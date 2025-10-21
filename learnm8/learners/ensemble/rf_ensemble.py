@@ -9,20 +9,16 @@ class RFEnsemble(EnsembleLearner):
     """Ensemble of 3 Random Forest learners with different random states."""
     
     def __init__(self,
-                 featurizer_type: str = None,
                  n_estimators: int = 100,
                  random_states: Optional[List[int]] = None,
                  **kwargs):
         """Initialize RF ensemble.
 
         Args:
-            featurizer_type: Type of molecular features to use
             n_estimators: Number of trees per forest (default: 100)
             random_states: List of random states for diversity (default: [42, 123, 456])
             **kwargs: Additional arguments passed to EnsembleLearner
         """
-        if featurizer_type is None:
-            raise ValueError("featurizer_type is required")
         if random_states is None:
             random_states = [42, 123, 456]
 
@@ -30,8 +26,7 @@ class RFEnsemble(EnsembleLearner):
         for rs in random_states:
             rf = RandomForestLearner(
                 n_estimators=n_estimators,
-                random_state=rs,
-                featurizer_type=featurizer_type
+                random_state=rs
             )
             learners.append(rf)
         
