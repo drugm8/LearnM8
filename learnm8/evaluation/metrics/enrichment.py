@@ -50,22 +50,22 @@ def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
 
 
 def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.DataFrame,
-                           k: int, target_column: str, score_direction: str = 'higher') -> float:
+                           k: int, target_col: str, score_direction: str = 'higher') -> float:
     """
     Calculate percentage overlap between top-k predicted and true compounds.
 
     Args:
         predictions_df: DataFrame with 'ID' and 'prediction' columns
-        ground_truth_df: DataFrame with 'ID' and target_column
+        ground_truth_df: DataFrame with 'ID' and target_col
         k: Number of top compounds to compare
-        target_column: Column name in ground truth
+        target_col: Column name in ground truth
         score_direction: 'higher' or 'lower' for score interpretation
 
     Returns:
         Percentage overlap (0-100)
     """
     # Merge predictions with ground truth
-    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_column]], on='ID')
+    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_col]], on='ID')
 
     # Handle empty data case
     if len(merged) == 0:
@@ -92,9 +92,9 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
                       set(merged.nsmallest(k, 'prediction', keep='first')['ID'].values)
 
     # Get top k by ground truth
-    top_k_true = set(merged.nlargest(k, target_column, keep='first')['ID'].values) \
+    top_k_true = set(merged.nlargest(k, target_col, keep='first')['ID'].values) \
                  if not ascending else \
-                 set(merged.nsmallest(k, target_column, keep='first')['ID'].values)
+                 set(merged.nsmallest(k, target_col, keep='first')['ID'].values)
 
     # Calculate overlap
     overlap_count = len(top_k_predicted & top_k_true)
@@ -104,21 +104,21 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
 
 
 def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth_df: pd.DataFrame,
-                                    target_column: str, score_direction: str = 'higher') -> dict:
+                                    target_col: str, score_direction: str = 'higher') -> dict:
     """
     Calculate multiple top-K overlaps for different K values.
 
     Args:
         predictions_df: DataFrame with 'ID' and 'prediction' columns
-        ground_truth_df: DataFrame with 'ID' and target_column
-        target_column: Column name in ground truth
+        ground_truth_df: DataFrame with 'ID' and target_col
+        target_col: Column name in ground truth
         score_direction: 'higher' or 'lower' for score interpretation
 
     Returns:
         Dictionary with keys: top_100_overlap, top_1000_overlap, top_0_1_percent_overlap, top_1_percent_overlap, top_10_percent_overlap
     """
     # Merge predictions with ground truth
-    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_column]], on='ID')
+    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_col]], on='ID')
     n_total = len(merged)
 
     if n_total == 0:
@@ -166,9 +166,9 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
                           set(merged.nsmallest(k, 'prediction', keep='first')['ID'].values)
 
         # Get top k by ground truth
-        top_k_true = set(merged.nlargest(k, target_column, keep='first')['ID'].values) \
+        top_k_true = set(merged.nlargest(k, target_col, keep='first')['ID'].values) \
                      if not ascending else \
-                     set(merged.nsmallest(k, target_column, keep='first')['ID'].values)
+                     set(merged.nsmallest(k, target_col, keep='first')['ID'].values)
 
         # Calculate overlap
         overlap_count = len(top_k_predicted & top_k_true)
@@ -209,7 +209,7 @@ def calculate_multiple_enrichment_factors(scores: np.ndarray, labels: np.ndarray
 
 
 def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
-                                            target_column: str,
+                                            target_col: str,
                                             score_direction: str = 'higher') -> dict:
     """
     Calculate ground truth enrichment factors using true target scores vs Activity labels.
@@ -217,7 +217,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
 
     Args:
         ground_truth_df: DataFrame with ground truth values including Activity column
-        target_column: Column name for target scores to use as screening scores
+        target_col: Column name for target scores to use as screening scores
         score_direction: 'higher' or 'lower' for score interpretation
 
     Returns:
@@ -234,7 +234,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
         }
 
     # Remove any NaN values for calculation
-    valid_data = ground_truth_df.dropna(subset=[target_column, 'Activity'])
+    valid_data = ground_truth_df.dropna(subset=[target_col, 'Activity'])
 
     if len(valid_data) == 0:
         return {
@@ -245,7 +245,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
         }
 
     # Use target scores as screening scores and Activity as binary labels
-    scores = valid_data[target_column].values
+    scores = valid_data[target_col].values
     labels = valid_data['Activity'].values
 
     # Calculate enrichment factors at fixed percentiles

@@ -34,7 +34,7 @@ def evaluate_cycle(
 	ground_truth: np.ndarray,
 	labeled_data: pd.DataFrame,
 	selected_compounds: pd.DataFrame,
-	target_column: str,
+	target_col: str,
 	oracle_type: str = 'auto',
 	ground_truth_data: Optional[pd.DataFrame] = None,
 	pool_predictions: Optional[np.ndarray] = None,
@@ -64,7 +64,7 @@ def evaluate_cycle(
 		ground_truth: True values for labeled data
 		labeled_data: Currently labeled compounds DataFrame
 		selected_compounds: Newly selected compounds this cycle
-		target_column: Name of target property column
+		target_col: Name of target property column
 		oracle_type: 'benchmark', 'run', or 'auto' for auto-detection
 		ground_truth_data: Full ground truth data (benchmark mode)
 		pool_predictions: Predictions on unlabeled pool
@@ -96,8 +96,8 @@ def evaluate_cycle(
 		metrics['spearman_correlation'] = calculate_spearman_correlation(ground_truth, predictions)
 		
 		# Selection quality
-		if target_column in selected_compounds.columns and len(selected_compounds) > 0:
-			scores = selected_compounds[target_column].values
+		if target_col in selected_compounds.columns and len(selected_compounds) > 0:
+			scores = selected_compounds[target_col].values
 			if len(scores) > 0 and not all(pd.isna(scores)):
 				metrics['avg_score_selected'] = calculate_average_score(scores)
 			else:
@@ -106,9 +106,9 @@ def evaluate_cycle(
 			metrics['avg_score_selected'] = None
 		
 		# Ground truth average score (if available)
-		if ground_truth_data is not None and target_column in ground_truth_data.columns:
+		if ground_truth_data is not None and target_col in ground_truth_data.columns:
 			try:
-				gt_scores = ground_truth_data[target_column].values
+				gt_scores = ground_truth_data[target_col].values
 				metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
 			except Exception as e:
 				logger.warning(f"Error calculating ground truth average score: {e}")
@@ -180,7 +180,7 @@ def evaluate_cycle(
 				top_k_metrics = calculate_multiple_top_k_overlaps(
 					predictions_df=predictions_df,
 					ground_truth_df=ground_truth_data,
-					target_column=target_column,
+					target_col=target_col,
 					score_direction=score_direction
 				)
 				metrics.update(top_k_metrics)
@@ -224,7 +224,7 @@ def evaluate_cycle(
 	if ground_truth_data is not None:
 		try:
 			gt_ef_metrics = calculate_ground_truth_enrichment_factors(
-				ground_truth_data, target_column, score_direction
+				ground_truth_data, target_col, score_direction
 			)
 			metrics.update(gt_ef_metrics)
 		except Exception as e:
@@ -451,16 +451,16 @@ def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', p
 		return fallback
 
 
-def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: str = 'auto', score_direction: str = 'higher', target_column: str = 'Activity') -> None:
+def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: str = 'auto', score_direction: str = 'higher', target_col: str = 'Activity') -> None:
 	"""
 	Export enhanced cycle metrics to CSV file with metadata and mode-specific organization.
-	
+
 	Args:
-		all_cycle_metrics: List of cycle metrics dictionaries  
+		all_cycle_metrics: List of cycle metrics dictionaries
 		output_path: Path to output CSV file
 		oracle_type: Oracle type ('run', 'benchmark', 'auto')
 		score_direction: Score direction ('higher' or 'lower')
-		target_column: Target property column name
+		target_col: Target property column name
 	"""
 	if not all_cycle_metrics:
 		logger.warning("No metrics to export")
@@ -473,7 +473,7 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 		with open(output_path, 'w') as f:
 			f.write("# LearnM8 Active Learning Cycle Metrics\n")
 			f.write(f"# Oracle Type: {oracle_type}\n")
-			f.write(f"# Target Column: {target_column}\n")
+			f.write(f"# Target Column: {target_col}\n")
 			f.write(f"# Score Direction: {score_direction} is better\n")
 			f.write(f"# Total Cycles: {len(all_cycle_metrics)}\n")
 			
