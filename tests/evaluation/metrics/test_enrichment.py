@@ -33,12 +33,12 @@ class TestEnrichmentMetrics:
         })
 
         # Test k=3
-        overlap = calculate_top_k_overlap(predictions_df, ground_truth_data, k=3, target_column='Activity')
+        overlap = calculate_top_k_overlap(predictions_df, ground_truth_data, k=3, target_col='Activity')
         assert overlap == 100.0  # All top 3 are in selected (100% overlap)
 
         # Test k=5 - but we only have 3 compounds that match, so 100% overlap on those 3
         # (The function only considers compounds that exist in both datasets)
-        overlap = calculate_top_k_overlap(predictions_df, ground_truth_data, k=5, target_column='Activity')
+        overlap = calculate_top_k_overlap(predictions_df, ground_truth_data, k=5, target_col='Activity')
         assert overlap == 100.0  # All 3 available compounds overlap (100%)
 
     def test_enrichment_factor(self):
@@ -77,7 +77,7 @@ class TestEnrichmentMetrics:
         # Test with score_direction='lower' - should select compounds with lowest scores
         overlap = calculate_top_k_overlap(
             predictions_df, ground_truth_data,
-            k=3, target_column='dockscore', score_direction='lower'
+            k=3, target_col='dockscore', score_direction='lower'
         )
 
         # Top 3 by prediction: mol_1, mol_2, mol_3 (lowest scores)
@@ -122,11 +122,11 @@ class TestEnrichmentMetrics:
         # Test with k=3
         overlap_lower = calculate_top_k_overlap(
             predictions_df, ground_truth_data,
-            k=3, target_column='activity', score_direction='lower'
+            k=3, target_col='activity', score_direction='lower'
         )
         overlap_higher = calculate_top_k_overlap(
             predictions_df, ground_truth_data,
-            k=3, target_column='activity', score_direction='higher'
+            k=3, target_col='activity', score_direction='higher'
         )
 
         # With perfect correlation:
@@ -161,7 +161,7 @@ class TestEnrichmentMetrics:
         # Test multiple top-K overlaps with lower direction
         results = calculate_multiple_top_k_overlaps(
             predictions_df, ground_truth_data,
-            target_column='dockscore', score_direction='lower'
+            target_col='dockscore', score_direction='lower'
         )
 
         # Should return all expected metrics
@@ -222,7 +222,7 @@ class TestEnrichmentMetrics:
         # Test Top-K overlap - should work with valid directions
         overlap_valid = calculate_top_k_overlap(
             predictions_df, ground_truth_data,
-            k=1, target_column='activity', score_direction='higher'
+            k=1, target_col='activity', score_direction='higher'
         )
         assert isinstance(overlap_valid, (int, float))
 

@@ -270,14 +270,17 @@ class TestUncertaintyBasedIntegration:
     def test_uncertainty_acquisition_comparison(self, compounds_with_uncertainty):
         """Compare different uncertainty-based acquisition methods."""
         compounds = compounds_with_uncertainty.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
-        
+
+        # Calculate current_best from predictions (simulating labeled data)
+        current_best = compounds['prediction'].max()
+
         # Test multiple uncertainty-based methods
         ucb_acq = UCBAcquisition(beta=1.0)
-        ei_acq = ExpectedImprovementAcquisition(xi=0.01)
-        pi_acq = ProbabilityImprovementAcquisition(xi=0.01)
+        ei_acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
+        pi_acq = ProbabilityImprovementAcquisition(xi=0.01, current_best=current_best)
         ts_acq = ThompsonSamplingAcquisition(random_state=42)
         
         n_select = 5
