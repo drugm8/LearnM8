@@ -1,34 +1,70 @@
-"""Core active learning functionality - Architecture (v0.5.0).
+"""Core active learning functionality - Modular Architecture (v1.0.0).
 
-Architecture (Alternative 1):
-- Functional approach with explicit cycle control
-- Simple functions instead of complex class hierarchies  
-- No state management objects (ExperimentState deprecated)
-- No active learning loop classes (StandardActiveLoop deprecated)
-- Centralized data management for feature caching only
+Modular architecture with clear separation of concerns:
+- validation: Early compound validation
+- initialization: Master DataFrame and initial sampling
+- config: Cycle configuration
+- cycle: Unified cycle execution
+- persistence: CSV export
+- dataframe_ops: Vectorized operations
 """
 
 # Core interfaces (maintained for component creation)
 from .interfaces import Oracle, Learner
 
-# Core data management (maintained for feature caching)
+# New modular core functions
 try:
-    from .data_manager import DataManager
+    from .validation import validate_compound_pool, ValidationResult
 except ImportError:
     pass
 
-# DEPRECATED: These are no longer part of the core functional API
-# - ExperimentState: Replaced by simple variables in functional approach
-# - ActiveLearningLoop: Replaced by simple functions
-# - StandardActiveLoop: Replaced by execute_single_cycle function
+try:
+    from .initialization import initialize_master_dataframe, select_initial_sample
+except ImportError:
+    pass
 
+try:
+    from .config import CycleConfig, parse_cycle_schedule, parse_cycle_spec
+except ImportError:
+    pass
+
+try:
+    from .cycle import execute_cycle
+except ImportError:
+    pass
+
+try:
+    from .persistence import save_results
+except ImportError:
+    pass
+
+try:
+    from .dataframe_ops import add_predictions, update_status, get_compounds_by_status, batch_update
+except ImportError:
+    pass
+
+
+# Build __all__ dynamically based on successful imports
 __all__ = [
-    # Core interfaces (maintained)
+    # Core interfaces (always available)
     'Oracle', 'Learner',
-    
-    # Data management (maintained for feature caching)
-    'DataManager',
-    
-    # NOTE: ExperimentState and ActiveLearningLoop classes are deprecated
-    # in the approach (Alternative 1)
 ]
+
+# Add modular functions only if imports succeeded
+if 'validate_compound_pool' in dir():
+    __all__.extend(['validate_compound_pool', 'ValidationResult'])
+
+if 'initialize_master_dataframe' in dir():
+    __all__.extend(['initialize_master_dataframe', 'select_initial_sample'])
+
+if 'CycleConfig' in dir():
+    __all__.extend(['CycleConfig', 'parse_cycle_schedule', 'parse_cycle_spec'])
+
+if 'execute_cycle' in dir():
+    __all__.append('execute_cycle')
+
+if 'save_results' in dir():
+    __all__.append('save_results')
+
+if 'add_predictions' in dir():
+    __all__.extend(['add_predictions', 'update_status', 'get_compounds_by_status', 'batch_update'])

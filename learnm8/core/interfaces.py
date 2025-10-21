@@ -5,13 +5,10 @@ for all major components in the LearnM8 system.
 """
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, List, Dict, Any, TYPE_CHECKING
+from typing import Tuple, Optional, List, Dict, Any
 from pathlib import Path
 import pandas as pd
 import numpy as np
-
-if TYPE_CHECKING:
-    from .data_manager import DataManager
 
 
 class Oracle(ABC):
@@ -42,46 +39,40 @@ class Oracle(ABC):
 
 
 class Learner(ABC):
-    """Simplified base class for all machine learning models.
-    
-    Learners are responsible for training models on labeled data and making
-    predictions on unlabeled compounds. They use dependency injection to
-    receive a DataManager for all feature extraction needs.
+    """Base class for all machine learning models.
+
+    Learners work with feature matrices (numpy arrays) and are agnostic to
+    the molecular domain. Feature extraction happens at the API/cycle level.
     """
-    
+
     @abstractmethod
-    def train(self, compounds: pd.DataFrame, target_column: str, data_manager: 'DataManager') -> None:
+    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """
-        Train the model on labeled compound data.
-        
+        Train the model on feature matrix.
+
         Args:
-            compounds: DataFrame with 'ID', 'SMILES', and target columns
-            target_column: Name of the target property column  
-            data_manager: Central data manager for feature extraction and caching
-            
+            features: Feature matrix (n_samples, n_features)
+            targets: Target values (n_samples,)
+
         Raises:
-            ValueError: If compounds DataFrame is malformed or target_column missing
+            ValueError: If input shapes invalid
             RuntimeError: If training fails
         """
         pass
-    
+
     @abstractmethod
-    def predict(self, compounds: pd.DataFrame, data_manager: 'DataManager') -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """
-        Predict scores for compounds.
+        Predict on feature matrix.
 
         Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
-            data_manager: Central data manager for feature extraction
+            features: Feature matrix (n_samples, n_features)
 
         Returns:
             Tuple of (predictions, uncertainties).
             uncertainties can be None if model doesn't provide uncertainty estimates.
-            The predictions and uncertainties align with the valid compounds returned
-            by data_manager.prepare_prediction_data().
 
         Raises:
-            ValueError: If compounds DataFrame is malformed
             RuntimeError: If model is not trained or prediction fails
         """
         pass
@@ -106,12 +97,8 @@ class Learner(ABC):
             Boolean indicating uncertainty support
         """
         # Default implementation - can be overridden for efficiency
-        try:
-            # This would need proper implementation with actual DataManager
-            # For now, subclasses should override this method
-            return False
-        except Exception:
-            return False
+        # Subclasses should override this method with actual logic
+        return False
 
 
 class AcquisitionFunction(ABC):
