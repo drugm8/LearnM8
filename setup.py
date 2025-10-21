@@ -4,8 +4,8 @@ from setuptools import setup, find_packages
 
 setup(
     name="learnm8",
-    version="0.5.0",
-    description="Active Learning for Molecular Screening - Functional API",
+    version="0.9.0",
+    description="Active Learning for Molecular Screening - Modern Architecture",
     packages=find_packages(),
     python_requires=">=3.11",
     install_requires=[
@@ -15,7 +15,8 @@ setup(
         "rdkit>=2022.03.0",
         "joblib>=1.0.0",
         "rich>=10.0.0",  # For CLI output formatting
-        "h5py>=3.0.0",   # For HDF5 caching in DataManager
+        "h5py>=3.0.0",   # For HDF5 feature caching (learnm8.features.cache)
+        "pyyaml>=5.0.0",  # For CLI config file support
     ],
     extras_require={
         "test": [
@@ -32,14 +33,18 @@ setup(
             # BitBIRCH installation via pip install git+https://github.com/mqcomplab/bitbirch.git
             # Note: This cannot be specified as a regular dependency due to git source
         ],
+        "cli": [
+            "tqdm>=4.0.0",  # For progress bars (optional, graceful fallback)
+        ],
         "full": [
             "umap-learn>=0.5.0",
             "hdbscan>=0.8.0",
+            "tqdm>=4.0.0",
         ],
     },
     entry_points={
         "console_scripts": [
-            "learnm8=learnm8.cli.cli:main",
+            "learnm8=learnm8.cli.main:main",
         ],
     },
     classifiers=[
