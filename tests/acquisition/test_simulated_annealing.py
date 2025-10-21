@@ -19,10 +19,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_basic_functionality(self, small_real_compounds):
         """Test basic simulated annealing functionality with real pharmaceutical compounds."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Add realistic predictions based on docking scores
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))
@@ -67,10 +63,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_cooling_schedules(self, small_real_compounds):
         """Test different cooling schedules with real molecular data."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))
         
@@ -102,10 +94,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_score_directions(self, small_real_compounds):
         """Test both score directions (higher and lower optimization)."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))
         
@@ -139,10 +127,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_reproducibility(self, small_real_compounds):
         """Test reproducible behavior with fixed random seed."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))
         
@@ -168,10 +152,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_edge_cases(self, small_real_compounds):
         """Test edge cases and boundary conditions."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))
         
@@ -211,10 +191,6 @@ class TestSimulatedAnnealingAcquisition:
     def test_error_handling(self, small_real_compounds):
         """Test error handling with real molecular data."""
         compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Add predictions for valid test
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 0.5, len(compounds))

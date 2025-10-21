@@ -196,9 +196,6 @@ class TestEvaluationIntegration:
     
     def test_evaluation_with_real_molecular_workflow(self, medium_real_compounds):
         """Test complete evaluation workflow with real molecular data."""
-        if len(medium_real_compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
         # Use subset for faster testing
         compounds = medium_real_compounds.head(50).copy()
         

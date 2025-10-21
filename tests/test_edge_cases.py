@@ -7,58 +7,39 @@ Covers boundary conditions and unusual inputs for all components.
 import pytest
 import pandas as pd
 import numpy as np
-from learnm8.core.data_manager import DataManager
+from learnm8.features import extract_features
 from learnm8.acquisition.basic import GreedyAcquisition, RandomAcquisition
 from learnm8.evaluation.core import evaluate_cycle
 
 
-class TestDataManagerEdgeCases:
-    """Edge cases for DataManager functionality."""
+class TestFeatureExtractionEdgeCases:
+    """Edge cases for feature extraction functionality."""
     
     def test_single_compound_dataset(self, edge_case_compounds, tmp_path):
-        """Test DataManager with single compound."""
+        """Test feature extraction with single compound."""
         single_compound = edge_case_compounds.head(1)
-        
-        dm = DataManager(results_dir=tmp_path)
-        features, valid_ids = dm.get_features(
-            single_compound['ID'].tolist(),
-            smiles_list=single_compound['SMILES'].tolist(),
-            featurizer_type='morgan'
+
+        features = extract_features(
+            single_compound['SMILES'].tolist(),
+            'morgan',
+            tmp_path
         )
 
-        assert features.shape[0] == len(valid_ids)
+        assert features.shape[0] <= 1
         assert features.shape[1] > 0  # Should have feature dimensions
-        assert len(valid_ids) <= 1  # Should have at most 1 valid compound
     
     def test_invalid_smiles_handling(self, tmp_path):
         """Test handling of invalid SMILES strings."""
-        invalid_data = pd.DataFrame({
-            'ID': ['invalid_1', 'invalid_2'],
-            'SMILES': ['INVALID', 'C((('],  # Invalid SMILES
-            'Activity': [1.0, 2.0]
-        })
-        
-        dm = DataManager(results_dir=tmp_path)
-        
-        # Should handle invalid SMILES gracefully by filtering them out
-        features, valid_ids = dm.get_features(
-            invalid_data['ID'].tolist(),
-            smiles_list=invalid_data['SMILES'].tolist(),
-            featurizer_type='morgan'
-        )
+        invalid_smiles = ['INVALID', 'C(((']  # Invalid SMILES
 
-        # Should filter out invalid SMILES, so no features returned
-        assert features.shape[0] == len(valid_ids)
-        assert len(valid_ids) == 0  # No valid compounds from invalid SMILES
-        assert features.shape == (0, 2048)  # Empty features array
+        # Should raise error for invalid SMILES
+        with pytest.raises(Exception):
+            extract_features(invalid_smiles, 'morgan', tmp_path)
     
     def test_empty_dataset(self, tmp_path):
-        """Test DataManager with empty dataset."""
-        dm = DataManager(results_dir=tmp_path)
-        
-        features, valid_ids = dm.get_features([], [], 'morgan')
+        """Test feature extraction with empty dataset."""
+        features = extract_features([], 'morgan', tmp_path)
         assert features.shape == (0, 2048)  # Empty array with correct feature dimension
-        assert len(valid_ids) == 0  # No valid IDs for empty input
 
 
 class TestAcquisitionEdgeCases:
@@ -186,28 +167,26 @@ class TestIntegratedEdgeCases:
     def test_workflow_with_edge_case_molecules(self, edge_case_compounds, tmp_path):
         """Test complete workflow with edge case molecular structures."""
         compounds = edge_case_compounds.copy()
-        
+
         if len(compounds) == 0:
             pytest.skip("No edge case compounds available")
-        
-        # Test DataManager with edge cases
-        dm = DataManager(results_dir=tmp_path)
+
+        # Test feature extraction with edge cases
         try:
-            features, valid_ids = dm.get_features(
-                compounds['ID'].tolist(),
+            features = extract_features(
                 compounds['SMILES'].tolist(),
-                'morgan'
+                'morgan',
+                tmp_path
             )
-            
+
             # Test acquisition with edge case features
             compounds['prediction'] = np.random.random(len(compounds))
             acq = GreedyAcquisition()
             selected = acq.select(compounds, n_select=min(3, len(compounds)))
-            
+
             assert len(selected) <= len(compounds)
-            assert features.shape[0] == len(valid_ids)
-            assert len(valid_ids) <= len(compounds)
-            
+            assert features.shape[0] <= len(compounds)
+
         except (ValueError, RuntimeError) as e:
             # Some edge cases may legitimately fail
             pytest.skip(f"Edge case molecules caused expected failure: {e}")
@@ -216,24 +195,22 @@ class TestIntegratedEdgeCases:
         """Test workflow with minimal viable dataset."""
         # Use just 2 compounds
         minimal_data = edge_case_compounds.head(2)
-        
+
         if len(minimal_data) < 2:
             pytest.skip("Insufficient compounds for minimal test")
-        
+
         # Should handle minimal data without crashing
-        dm = DataManager(results_dir=tmp_path)
-        features, valid_ids = dm.get_features(
-            minimal_data['ID'].tolist(),
+        features = extract_features(
             minimal_data['SMILES'].tolist(),
-            'morgan'
+            'morgan',
+            tmp_path
         )
 
-        assert features.shape[0] == len(valid_ids)
-        assert len(valid_ids) <= 2  # Should have at most 2 valid compounds
-        
+        assert features.shape[0] <= 2  # Should have at most 2 compounds
+
         # Test acquisition
         minimal_data['prediction'] = [0.1, 0.9]
         acq = GreedyAcquisition()
         selected = acq.select(minimal_data, n_select=1)
-        
+
         assert len(selected) == 1

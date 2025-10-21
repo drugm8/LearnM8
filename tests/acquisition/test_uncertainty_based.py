@@ -23,7 +23,7 @@ class TestUCBAcquisition:
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
         
-        acq = UCBAcquisition(data_manager=None, beta=1.0)
+        acq = UCBAcquisition(beta=1.0)
         selected = acq.select(compounds, n_select=5)
         
         assert len(selected) == 5
@@ -42,8 +42,8 @@ class TestUCBAcquisition:
             pytest.skip("No compounds with uncertainty available")
         
         # Test different exploration parameters
-        acq_conservative = UCBAcquisition(data_manager=None, beta=0.1)  # Low exploration
-        acq_aggressive = UCBAcquisition(data_manager=None, beta=2.0)    # High exploration
+        acq_conservative = UCBAcquisition(beta=0.1)  # Low exploration
+        acq_aggressive = UCBAcquisition(beta=2.0)    # High exploration
         
         selected_conservative = acq_conservative.select(compounds, n_select=5)
         selected_aggressive = acq_aggressive.select(compounds, n_select=5)
@@ -69,16 +69,11 @@ class TestUCBAcquisition:
     
     def test_ucb_uncertainty_weighting(self, small_real_compounds):
         """Test UCB properly weights uncertainty."""
-        compounds = small_real_compounds.head(10).copy()
-
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-
-        # Create scenario with varying uncertainty - use default 'higher' score direction
+        compounds = small_real_compounds.head(10).copy()        # Create scenario with varying uncertainty - use default 'higher' score direction
         compounds['prediction'] = np.random.uniform(0.3, 0.7, len(compounds))
         compounds['uncertainty'] = [0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5]
 
-        acq = UCBAcquisition(data_manager=None, beta=1.0)  # Default is 'higher'
+        acq = UCBAcquisition(beta=1.0)  # Default is 'higher'
         selected = acq.select(compounds, n_select=3)
 
         # For maximization UCB, should prefer compounds with higher uncertainty (exploration)
@@ -87,17 +82,12 @@ class TestUCBAcquisition:
 
     def test_ucb_score_direction_lower(self, small_real_compounds):
         """Test UCB with score_direction='lower' for minimization problems."""
-        compounds = small_real_compounds.head(10).copy()
-
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-
-        # Create test scenario for LCB (minimization)
+        compounds = small_real_compounds.head(10).copy()        # Create test scenario for LCB (minimization)
         compounds['prediction'] = np.array([2.0, 1.0, 3.0, 1.5, 2.5, 0.5, 3.5, 1.2, 2.2, 0.8])
         compounds['uncertainty'] = np.array([0.1, 0.3, 0.2, 0.4, 0.1, 0.2, 0.3, 0.5, 0.1, 0.4])
 
         # Test LCB behavior (score_direction='lower')
-        acq = UCBAcquisition(data_manager=None, beta=1.0, score_direction='lower')
+        acq = UCBAcquisition(beta=1.0, score_direction='lower')
         selected = acq.select(compounds, n_select=3)
 
         assert len(selected) == 3
@@ -127,7 +117,7 @@ class TestExpectedImprovementAcquisition:
         current_best = compounds['prediction'].max()
 
         # Use default xi parameter for exploration
-        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
+        acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=5)
 
         assert len(selected) == 5
@@ -145,8 +135,8 @@ class TestExpectedImprovementAcquisition:
         current_best = compounds['prediction'].max()
 
         # Test with different xi values (exploration parameters)
-        acq_low = ExpectedImprovementAcquisition(data_manager=None, xi=0.001, current_best=current_best)  # Low exploration
-        acq_high = ExpectedImprovementAcquisition(data_manager=None, xi=0.1, current_best=current_best)   # High exploration
+        acq_low = ExpectedImprovementAcquisition(xi=0.001, current_best=current_best)  # Low exploration
+        acq_high = ExpectedImprovementAcquisition(xi=0.1, current_best=current_best)   # High exploration
 
         selected_low = acq_low.select(compounds, n_select=5)
         selected_high = acq_high.select(compounds, n_select=5)
@@ -160,12 +150,7 @@ class TestExpectedImprovementAcquisition:
     
     def test_ei_with_realistic_molecular_scenario(self, small_real_compounds):
         """Test EI in realistic molecular discovery scenario."""
-        compounds = small_real_compounds.copy()
-
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-
-        # Simulate model predictions with uncertainty
+        compounds = small_real_compounds.copy()        # Simulate model predictions with uncertainty
         np.random.seed(42)
         compounds['prediction'] = compounds['Activity'] + np.random.normal(0, 1, len(compounds))
         compounds['uncertainty'] = np.random.uniform(0.1, 0.5, len(compounds))
@@ -174,7 +159,7 @@ class TestExpectedImprovementAcquisition:
         current_best = compounds['prediction'].max()
 
         # Use standard EI with default parameters
-        acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
+        acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=8)
 
         assert len(selected) == 8
@@ -196,7 +181,7 @@ class TestProbabilityImprovementAcquisition:
         # Calculate current_best from predictions (simulating labeled data)
         current_best = compounds['prediction'].max()
 
-        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.01, current_best=current_best)
+        acq = ProbabilityImprovementAcquisition(xi=0.01, current_best=current_best)
         selected = acq.select(compounds, n_select=5)
 
         assert len(selected) == 5
@@ -218,7 +203,7 @@ class TestProbabilityImprovementAcquisition:
         current_best = compounds['prediction'].max()
 
         # Set current_best very high to get low PI values
-        acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.1, current_best=current_best)  # Higher exploration parameter
+        acq = ProbabilityImprovementAcquisition(xi=0.1, current_best=current_best)  # Higher exploration parameter
         selected = acq.select(compounds, n_select=5)
 
         # Should still select 5 compounds even if PI is low
@@ -240,7 +225,7 @@ class TestThompsonSampling:
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
         
-        acq = ThompsonSamplingAcquisition(data_manager=None, random_state=42)
+        acq = ThompsonSamplingAcquisition(random_state=42)
         selected = acq.select(compounds, n_select=5)
         
         assert len(selected) == 5
@@ -253,8 +238,8 @@ class TestThompsonSampling:
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
         
-        acq1 = ThompsonSamplingAcquisition(data_manager=None, random_state=42)
-        acq2 = ThompsonSamplingAcquisition(data_manager=None, random_state=42)
+        acq1 = ThompsonSamplingAcquisition(random_state=42)
+        acq2 = ThompsonSamplingAcquisition(random_state=42)
         
         selected1 = acq1.select(compounds, n_select=8)
         selected2 = acq2.select(compounds, n_select=8)
@@ -269,8 +254,8 @@ class TestThompsonSampling:
         if len(compounds) == 0:
             pytest.skip("No compounds with uncertainty available")
         
-        acq1 = ThompsonSamplingAcquisition(data_manager=None, random_state=42)
-        acq2 = ThompsonSamplingAcquisition(data_manager=None, random_state=123)
+        acq1 = ThompsonSamplingAcquisition(random_state=42)
+        acq2 = ThompsonSamplingAcquisition(random_state=123)
         
         selected1 = acq1.select(compounds, n_select=10)
         selected2 = acq2.select(compounds, n_select=10)
@@ -290,10 +275,10 @@ class TestUncertaintyBasedIntegration:
             pytest.skip("No compounds with uncertainty available")
         
         # Test multiple uncertainty-based methods
-        ucb_acq = UCBAcquisition(data_manager=None, beta=1.0)
-        ei_acq = ExpectedImprovementAcquisition(data_manager=None, xi=0.01)
-        pi_acq = ProbabilityImprovementAcquisition(data_manager=None, xi=0.01)
-        ts_acq = ThompsonSamplingAcquisition(data_manager=None, random_state=42)
+        ucb_acq = UCBAcquisition(beta=1.0)
+        ei_acq = ExpectedImprovementAcquisition(xi=0.01)
+        pi_acq = ProbabilityImprovementAcquisition(xi=0.01)
+        ts_acq = ThompsonSamplingAcquisition(random_state=42)
         
         n_select = 5
         ucb_selected = ucb_acq.select(compounds, n_select=n_select)
@@ -331,7 +316,7 @@ class TestUncertaintyBasedIntegration:
         compounds['uncertainty'] = np.random.uniform(0.1, 1.0, len(compounds))
         
         # Test that uncertainty methods work with real molecular data
-        acq = UCBAcquisition(data_manager=None, beta=1.5)
+        acq = UCBAcquisition(beta=1.5)
         selected = acq.select(compounds, n_select=15)
         
         assert len(selected) == 15
@@ -344,16 +329,11 @@ class TestUncertaintyBasedIntegration:
     
     def test_uncertainty_acquisition_error_handling(self, small_real_compounds):
         """Test error handling in uncertainty-based acquisition."""
-        compounds = small_real_compounds.copy()
-        
-        if len(compounds) == 0:
-            pytest.skip("No real molecular data available")
-        
-        # Test with missing uncertainty
+        compounds = small_real_compounds.copy()        # Test with missing uncertainty
         compounds['prediction'] = compounds['Activity']
         # No uncertainty column
         
-        acq = UCBAcquisition(data_manager=None, beta=1.0)
+        acq = UCBAcquisition(beta=1.0)
         
         with pytest.raises((KeyError, ValueError)):
             acq.select(compounds, n_select=5)
