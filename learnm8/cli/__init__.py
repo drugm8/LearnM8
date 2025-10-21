@@ -1,7 +1,9 @@
 # learnm8/cli/__init__.py
 """Command-line interface for LearnM8.
 
-Simple CLI using the functional API.
+Comprehensive CLI with rich output, multiple input modes, and full feature support.
 """
 
-from .cli import main
+from .main import main
+
+__all__ = ['main']
