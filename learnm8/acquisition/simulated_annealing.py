@@ -13,9 +13,6 @@ from typing import Optional, TYPE_CHECKING
 
 from .base import AcquisitionFunction
 
-if TYPE_CHECKING:
-    from ..core.data_manager import DataManager
-
 logger = logging.getLogger(__name__)
 
 
@@ -34,8 +31,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
     correspond to lower energy (for maximization problems).
     """
     
-    def __init__(self, 
-                 data_manager: Optional['DataManager'] = None,
+    def __init__(self,
                  initial_temp: float = 1.0,
                  final_temp: float = 0.01,
                  max_iterations: int = 1000,
@@ -44,9 +40,8 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
                  random_state: int = 42,
                  **kwargs):
         """Initialize simulated annealing acquisition function.
-        
+
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by SimulatedAnnealingAcquisition)
             initial_temp: Starting temperature for annealing process
             final_temp: Final temperature for annealing process
             max_iterations: Maximum number of annealing iterations
@@ -58,7 +53,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         Raises:
             ValueError: If parameters are invalid
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        super().__init__(score_direction=score_direction, **kwargs)
         # Validate parameters
         if initial_temp <= 0:
             raise ValueError("initial_temp must be positive")
