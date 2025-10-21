@@ -55,6 +55,29 @@ def _get_optimal_n_jobs(n_compounds: int, n_jobs: int = -1) -> int:
     return max(1, n_jobs)
 
 
+def _get_feature_dimension(featurizer_type: str) -> int:
+    """
+    Get the feature dimension for a given featurizer type.
+
+    Args:
+        featurizer_type: Type of featurizer
+
+    Returns:
+        Feature dimension for the featurizer
+
+    Raises:
+        ValueError: If featurizer_type is unknown
+    """
+    if featurizer_type in ['morgan', 'ecfp6', 'morgan_feat']:
+        return 2048
+    elif featurizer_type == 'maccs':
+        return 167
+    elif featurizer_type == 'descriptors':
+        return 1613
+    else:
+        raise ValueError(f"Unknown featurizer type: {featurizer_type}")
+
+
 def _extract_single_feature(smiles: str, featurizer_type: str) -> np.ndarray:
     """
     Extract feature for a single SMILES string.
@@ -104,10 +127,10 @@ def _extract_features_parallel(
     Returns:
         Array of features with shape (n_compounds, n_features)
     """
-    # Uniform empty input handling: return (0, 0) arrays for all featurizer types
-    # This ensures consumers handle empty inputs uniformly without assuming fixed feature dimensions
+    # Handle empty input: return array with proper feature dimension
     if len(smiles_list) == 0:
-        return np.empty((0, 0), dtype=np.float32)
+        feature_dim = _get_feature_dimension(featurizer_type)
+        return np.empty((0, feature_dim), dtype=np.float32)
 
     optimal_n_jobs = _get_optimal_n_jobs(len(smiles_list), n_jobs)
     logger.debug(f"Extracting {featurizer_type} features for {len(smiles_list)} compounds with n_jobs={optimal_n_jobs}")
