@@ -1,2 +1,2 @@
 from .create_embedding_plots import create_embedding_plots
-from .data_loading import setup_data_with_error_handling
+from .data_loading import load_validation_dataset, validate_compounds_with_features
