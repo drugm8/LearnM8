@@ -11,9 +11,6 @@ import pandas as pd
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
-if TYPE_CHECKING:
-    from ..core.data_manager import DataManager
-
 # Optional imports for statistical functions
 try:
     from scipy.stats import norm
@@ -33,17 +30,15 @@ class UCBAcquisition(AcquisitionFunction):
     prediction + beta * uncertainty.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, 
-                 beta: float = 2.0, **kwargs):
+    def __init__(self, beta: float = 2.0, **kwargs):
         """Initialize UCB acquisition function.
-        
+
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by UCBAcquisition)
             beta: Confidence parameter controlling exploration vs exploitation.
                   Higher values favor exploration.
             **kwargs: Additional parameters for compatibility
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        super().__init__(**kwargs)
         if beta < 0:
             raise ValueError("beta must be non-negative")
         
@@ -105,14 +100,13 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     providing a principled way to balance exploration and exploitation.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None,
+    def __init__(self,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
                  current_best: Optional[float] = None,
                  **kwargs):
         """Initialize Expected Improvement acquisition function.
 
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by ExpectedImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
             score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
@@ -128,7 +122,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             )
             score_direction = 'lower' if minimize else 'higher'
 
-        super().__init__(data_manager=data_manager, score_direction=score_direction, **kwargs)
+        super().__init__(score_direction=score_direction, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
 
@@ -214,14 +208,13 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     the current best observed value.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None,
+    def __init__(self,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
                  current_best: Optional[float] = None,
                  **kwargs):
         """Initialize Probability of Improvement acquisition function.
 
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by ProbabilityImprovementAcquisition)
             xi: Exploration parameter. Small positive values encourage exploration.
             minimize: DEPRECATED. Use score_direction instead. If provided, overrides score_direction.
             score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
@@ -237,7 +230,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             )
             score_direction = 'lower' if minimize else 'higher'
 
-        super().__init__(data_manager=data_manager, score_direction=score_direction, **kwargs)
+        super().__init__(score_direction=score_direction, **kwargs)
         if xi < 0:
             raise ValueError("xi must be non-negative")
 
@@ -323,16 +316,14 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
     stochastic exploration strategy.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, 
-                 random_state: int = 42, **kwargs):
+    def __init__(self, random_state: int = 42, **kwargs):
         """Initialize Thompson Sampling acquisition function.
-        
+
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by ThompsonSamplingAcquisition)
             random_state: Random seed for reproducible sampling
             **kwargs: Additional parameters for compatibility
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        super().__init__(**kwargs)
         self.random_state = random_state
         self._rng = np.random.RandomState(random_state)
     
@@ -385,16 +376,14 @@ class EntropyAcquisition(AcquisitionFunction):
     the most information, measured by prediction entropy or uncertainty.
     """
     
-    def __init__(self, data_manager: Optional['DataManager'] = None, 
-                 entropy_type: str = 'uncertainty', **kwargs):
+    def __init__(self, entropy_type: str = 'uncertainty', **kwargs):
         """Initialize Entropy acquisition function.
-        
+
         Args:
-            data_manager: Optional DataManager for feature extraction (not used by EntropyAcquisition)
             entropy_type: Type of entropy measure ('uncertainty', 'variance')
             **kwargs: Additional parameters for compatibility
         """
-        super().__init__(data_manager=data_manager, **kwargs)
+        super().__init__(**kwargs)
         if entropy_type not in ['uncertainty', 'variance']:
             raise ValueError("entropy_type must be 'uncertainty' or 'variance'")
         

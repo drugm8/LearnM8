@@ -10,34 +10,29 @@ from typing import List, Optional, TYPE_CHECKING
 import pandas as pd
 import numpy as np
 
-if TYPE_CHECKING:
-    from ..core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
 
 class AcquisitionFunction(ABC):
     """Base class for compound selection strategies.
-    
+
     Acquisition functions determine which compounds to select for labeling
     in each active learning cycle based on model predictions and optionally
     uncertainty estimates.
-    
+
     Args:
-        data_manager: Optional DataManager for feature extraction and caching.
-                     Some acquisition methods require this for fingerprint access.
+        score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
+        **kwargs: Additional parameters for specific acquisition methods
     """
-    
-    def __init__(self, data_manager: Optional['DataManager'] = None,
-                 score_direction: str = 'higher', **kwargs):
-        """Initialize acquisition function with optional DataManager.
+
+    def __init__(self, score_direction: str = 'higher', **kwargs):
+        """Initialize acquisition function.
 
         Args:
-            data_manager: Optional DataManager instance for feature extraction
             score_direction: Direction to optimize ('higher' or 'lower'). Default 'higher'
             **kwargs: Additional parameters for specific acquisition methods
         """
-        self.data_manager = data_manager
 
         # Validate and store score direction
         if score_direction not in ['higher', 'lower']:

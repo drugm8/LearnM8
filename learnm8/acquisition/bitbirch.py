@@ -10,38 +10,44 @@ import pandas as pd
 from typing import List
 
 from .base import AcquisitionFunction
-from ..core.data_manager import DataManager
 
 logger = logging.getLogger(__name__)
 
 
 class BitBIRCHAcquisition(AcquisitionFunction):
 	"""BitBIRCH-based acquisition for molecular diversity.
-	
+
 	Uses the BitBIRCH algorithm specifically designed for molecular fingerprints
 	with native Tanimoto similarity support. Provides exceptional scalability
 	for large molecular libraries (1M+ compounds).
-	
+
 	Selects compounds evenly across clusters without utility scoring for
 	straightforward diversity sampling.
+
+	Features must be pre-computed and passed during initialization.
 	"""
-	
+
 	def __init__(self,
-				 data_manager: DataManager,
+				 features: np.ndarray,
+				 compound_ids: List[str],
 				 featurizer_type: str = 'morgan',
 				 threshold: float = 0.5,
 				 branching_factor: int = 50,
 				 random_state: int = 42):
 		"""Initialize BitBIRCH acquisition function.
-		
+
 		Args:
-			data_manager: DataManager instance for feature extraction
+			features: Pre-computed molecular fingerprints (n_compounds, n_features)
+			compound_ids: List of compound IDs corresponding to feature rows
 			featurizer_type: Type of molecular features ('morgan', 'ecfp6', 'maccs')
 			threshold: BitBIRCH threshold parameter (molecular similarity threshold)
 			branching_factor: Maximum number of subclusters in a node
 			random_state: Random seed for reproducibility
 		"""
-		self.data_manager = data_manager
+		super().__init__(score_direction='higher')
+		self.features = features
+		self.compound_ids = compound_ids
+		self._id_to_idx = {cid: idx for idx, cid in enumerate(compound_ids)}
 		self.featurizer_type = featurizer_type
 		self.threshold = threshold
 		self.branching_factor = branching_factor
@@ -99,17 +105,31 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		
 		if n_select >= len(compounds):
 			return compounds.copy()
-		
+
 		logger.info(f"Selecting {n_select} compounds using BitBIRCH clustering")
-		
-		# Get molecular fingerprints (binary features required for BitBIRCH)
-		fingerprints = self.data_manager.get_features(
-			compound_ids=compounds['ID'].tolist(),
-			smiles_list=compounds['SMILES'].tolist(),
-			featurizer_type=self.featurizer_type
-		)
-		
-		# Ensure fingerprints are binary and int64 format (BitBIRCH requirement)
+
+		requested_ids = compounds['ID'].tolist()
+		valid_ids = [cid for cid in requested_ids if cid in self._id_to_idx]
+
+		if len(valid_ids) == 0:
+			logger.warning("No matching features for provided IDs. Returning empty selection.")
+			return compounds.iloc[0:0].copy()
+
+		if len(valid_ids) < len(requested_ids):
+			missing_ids = set(requested_ids) - set(valid_ids)
+			logger.warning(f"Only {len(valid_ids)}/{len(requested_ids)} compounds have valid features. "
+						  f"Missing IDs: {list(missing_ids)[:5]}{'...' if len(missing_ids) > 5 else ''}")
+			compounds = compounds[compounds['ID'].isin(valid_ids)].copy()
+
+		if n_select > len(compounds):
+			logger.warning(
+				f"n_select ({n_select}) exceeds available compounds with features ({len(compounds)}); selecting all available"
+			)
+			n_select = len(compounds)
+
+		indices = [self._id_to_idx[cid] for cid in valid_ids]
+		fingerprints = self.features[indices]
+
 		fingerprints = self._prepare_fingerprints(fingerprints)
 		
 		cluster_mol_ids = self._bitbirch_clustering(fingerprints)
@@ -128,28 +148,19 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 	
 	def _prepare_fingerprints(self, fingerprints: np.ndarray) -> np.ndarray:
 		"""Prepare fingerprints for BitBIRCH (binary, int64 format).
-		
+
 		Args:
 			fingerprints: Raw fingerprint array
-			
+
 		Returns:
 			Prepared fingerprint array
 		"""
-		# Convert to binary if not already
-		if fingerprints.dtype not in [np.int64, np.float64, np.int32]:
-			fingerprints = fingerprints.astype(np.int64)
-		
-		# Ensure binary values
 		if not np.all(np.isin(fingerprints, [0, 1])):
 			logger.warning("Non-binary fingerprint values detected. Converting to binary.")
 			fingerprints = (fingerprints > 0).astype(np.int64)
-		
-		# Convert to int64 (BitBIRCH requirement)
-		fingerprints = fingerprints.astype(np.int64)
-		
-		logger.info(f"Prepared {len(fingerprints)} fingerprints for BitBIRCH "
-				   f"(shape: {fingerprints.shape}, binary: {np.all(np.isin(fingerprints, [0, 1]))})")
-		
+		else:
+			fingerprints = fingerprints.astype(np.int64)
+		logger.info(f"Prepared {len(fingerprints)} fingerprints for BitBIRCH (shape: {fingerprints.shape}, binary: {np.all(np.isin(fingerprints, [0, 1]))})")
 		return fingerprints
 	
 	def _bitbirch_clustering(self, fingerprints: np.ndarray) -> List[List[int]]:
