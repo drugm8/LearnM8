@@ -59,7 +59,7 @@ class TestExtractFeatures:
     def test_empty_smiles_list(self, tmp_path):
         features = extract_features([], 'morgan', tmp_path)
 
-        assert features.shape == (0, 0)
+        assert features.shape == (0, 2048)  # Empty array preserves feature dimension
 
     def test_single_compound(self, tmp_path):
         features = extract_features(['CCO'], 'morgan', tmp_path)

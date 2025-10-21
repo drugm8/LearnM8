@@ -39,7 +39,7 @@ class TestFeatureExtractionEdgeCases:
     def test_empty_dataset(self, tmp_path):
         """Test feature extraction with empty dataset."""
         features = extract_features([], 'morgan', tmp_path)
-        assert features.shape == (0, 2048)  # Empty array with correct feature dimension
+        assert features.shape == (0, 2048)  # Empty array preserves feature dimension
 
 
 class TestAcquisitionEdgeCases:
@@ -109,7 +109,7 @@ class TestEvaluationEdgeCases:
             ground_truth=ground_truth,
             labeled_data=single_compound,
             selected_compounds=single_compound,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle single compound case
@@ -130,7 +130,7 @@ class TestEvaluationEdgeCases:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=empty_selection,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle empty selection gracefully
@@ -152,7 +152,7 @@ class TestEvaluationEdgeCases:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle extreme values

@@ -35,7 +35,7 @@ class TestEvaluateCore:
             ground_truth=labeled_data['Activity'].values,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Verify result structure
@@ -70,7 +70,7 @@ class TestEvaluateCore:
             ground_truth=labeled_data['Activity'].values,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity',
+            target_col='Activity',
             ground_truth_data=ground_truth_data
         )
         
@@ -95,7 +95,7 @@ class TestEvaluateCore:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity',
+            target_col='Activity',
             uncertainties=uncertainty
         )
         
@@ -119,14 +119,14 @@ class TestEvaluateCore:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=empty_selection,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle empty selection gracefully
         assert isinstance(result, dict)
         assert result['batch_size'] == 0
     
-    def test_evaluate_cycle_missing_target_column(self, small_real_compounds):
+    def test_evaluate_cycle_missing_target_col(self, small_real_compounds):
         """Test error handling when target column is missing."""
         labeled_data = small_real_compounds.drop(columns=['Activity'])
         selected_compounds = small_real_compounds.head(5)
@@ -141,7 +141,7 @@ class TestEvaluateCore:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         # Should handle gracefully and return basic metrics (not dependent on target column)
         assert isinstance(result, dict)
@@ -216,7 +216,7 @@ class TestEvaluationIntegration:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Verify realistic results
@@ -244,7 +244,7 @@ class TestEvaluationIntegration:
             ground_truth=labeled_data['Activity'].values,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         # Should handle gracefully and return None for failed metrics
         assert result['rmse'] is None
@@ -257,7 +257,7 @@ class TestEvaluationIntegration:
             ground_truth=labeled_data['Activity'].values,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='NonexistentColumn'
+            target_col='NonexistentColumn'
         )
         # Should handle gracefully and return basic metrics
         assert isinstance(result, dict)
@@ -288,7 +288,7 @@ class TestEvaluationEdgeCases:
                 ground_truth=ground_truth,
                 labeled_data=labeled_data,
                 selected_compounds=selected_compounds,
-                target_column='Activity'
+                target_col='Activity'
             )
             # If it succeeds, metrics should be finite or None (function sets None for errors)
             assert (result['rmse'] is None or 
@@ -312,7 +312,7 @@ class TestEvaluationEdgeCases:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle constant predictions
@@ -339,7 +339,7 @@ class TestEvaluationEdgeCases:
             ground_truth=ground_truth,
             labeled_data=single_compound,
             selected_compounds=single_compound,
-            target_column='Activity'
+            target_col='Activity'
         )
         
         # Should handle single compound case
