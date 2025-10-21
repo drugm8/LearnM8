@@ -363,7 +363,7 @@ def execute_cycle(
                         ground_truth=eval_ground_truth[valid_mask],
                         labeled_data=labeled_for_eval,
                         selected_compounds=selected_for_eval,
-                        target_column=target_col,
+                        target_col=target_col,
                         oracle_type=mode,
                         ground_truth_data=original_pool_for_eval,
                         pool_predictions=pool_predictions_for_eval,
