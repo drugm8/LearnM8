@@ -198,6 +198,7 @@ dependencies:
   - flask
   - flask_cors
   - h5py
+  - datamol
   - pip
   - pip:
     - git+https://github.com/mqcomplab/bitbirch.git
