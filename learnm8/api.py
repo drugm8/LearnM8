@@ -542,7 +542,7 @@ def run_active_learning(
             )
 
         logger.info("Phase 1: Validating compound pool")
-        validation_result = validate_compound_pool(compound_pool, featurizer_type, cache_dir)
+        validation_result = validate_compound_pool(compound_pool, n_jobs=-1, progress=True)
 
         if len(validation_result.valid_compounds) == 0:
             logger.error(

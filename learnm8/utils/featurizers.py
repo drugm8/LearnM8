@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import pickle
 import logging
-from rdkit import Chem
+from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors, AllChem
 from joblib import Parallel, delayed
 
@@ -28,10 +28,12 @@ def smiles_to_morgan_fingerprint(smiles: str) -> np.ndarray:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
-    
+
     morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     fp = morgan_gen.GetFingerprint(mol)
-    return np.array(fp)
+    arr = np.zeros(len(fp), dtype=np.uint8)
+    DataStructs.ConvertToNumpyArray(fp, arr)
+    return arr
 
 def smiles_to_morgan_feature_fingerprint(smiles: str) -> np.ndarray:
     """
@@ -65,9 +67,11 @@ def smiles_to_maccs_fingerprint(smiles: str) -> np.ndarray:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
-    
+
     maccs_fp = rdMolDescriptors.GetMACCSKeysFingerprint(mol)
-    return np.array(maccs_fp)
+    arr = np.zeros(len(maccs_fp), dtype=np.uint8)
+    DataStructs.ConvertToNumpyArray(maccs_fp, arr)
+    return arr
 
 
 def smiles_to_ecfp6_fingerprint(smiles: str) -> np.ndarray:
@@ -83,10 +87,12 @@ def smiles_to_ecfp6_fingerprint(smiles: str) -> np.ndarray:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
-    
+
     ecfp6_gen = rdFingerprintGenerator.GetMorganGenerator(radius=3, fpSize=2048)
     fp = ecfp6_gen.GetFingerprint(mol)
-    return np.array(fp)
+    arr = np.zeros(len(fp), dtype=np.uint8)
+    DataStructs.ConvertToNumpyArray(fp, arr)
+    return arr
 
 
 def smiles_to_fingerprints(smiles_list: list[str], featurizer_type: str = "morgan", n_jobs: int = -1) -> np.ndarray:
@@ -151,14 +157,18 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
         # Add rows filled with zeros for all input molecules
         for _ in range(len(smiles_list)):
             empty_df.loc[len(empty_df)] = 0
+        empty_df = empty_df.astype(np.float32)
         return empty_df
     
     # Calculate descriptors for valid molecules
     descriptors_df = calc.pandas(mols)
-    
+
     # Fill NaN values for molecules that couldn't be processed
     descriptors_df = descriptors_df.fillna(0)
-    
+
+    # Cast to float32
+    descriptors_df = descriptors_df.astype(np.float32)
+
     # Create final dataframe with all input molecules
     if len(valid_indices) == len(smiles_list):
         # All molecules were valid
@@ -167,7 +177,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
         # Some molecules were invalid, need to insert zero rows
         final_df = pd.DataFrame(columns=descriptors_df.columns)
         valid_idx = 0
-        
+
         for i in range(len(smiles_list)):
             if i in valid_indices:
                 # Use computed descriptors
@@ -176,7 +186,8 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
             else:
                 # Fill with zeros for invalid molecules
                 final_df.loc[len(final_df)] = 0
-        
+
+        final_df = final_df.astype(np.float32)
         return final_df
 
 
