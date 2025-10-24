@@ -16,9 +16,9 @@ def load_csv_data(output_dir: str) -> Dict[str, pd.DataFrame]:
 
     data = {}
 
-    predictions_file = output_path / 'predictions_by_cycle.csv'
+    predictions_file = output_path / 'compounds_final.csv'
     if predictions_file.exists():
-        data['predictions'] = pd.read_csv(predictions_file)
+        data['predictions'] = pd.read_csv(predictions_file, comment='#')
     else:
         raise FileNotFoundError(f"Required file not found: {predictions_file}")
 
@@ -30,7 +30,7 @@ def load_csv_data(output_dir: str) -> Dict[str, pd.DataFrame]:
 
     selection_file = output_path / 'selection_history.csv'
     if selection_file.exists():
-        data['selections'] = pd.read_csv(selection_file)
+        data['selections'] = pd.read_csv(selection_file, comment='#')
     else:
         logger.warning(f"Selection history not found: {selection_file}")
         data['selections'] = pd.DataFrame()
@@ -84,6 +84,19 @@ def create_dashboard_animation_from_csv(
 
     pred_cols = [col for col in predictions_df.columns if col.startswith('prediction_cycle_')]
     unc_cols = [col for col in predictions_df.columns if col.startswith('uncertainty_cycle_')]
+
+    # Detect target column (oracle values) by elimination
+    system_cols = {'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle'}
+    target_col = None
+    for col in predictions_df.columns:
+        if col not in system_cols and not col.startswith('prediction_cycle_') and not col.startswith('uncertainty_cycle_'):
+            target_col = col
+            break
+
+    if target_col is None:
+        logger.warning("Could not detect target column for true values")
+    else:
+        logger.info(f"Detected target column: {target_col}")
 
     n_cycles = len(pred_cols)
     if n_cycles == 0:
@@ -147,7 +160,8 @@ def create_dashboard_animation_from_csv(
     ax4.set_xlabel('Cycle')
     ax4.set_ylabel('Metric Value')
 
-    scatter1 = ax1.scatter([], [], c=[], cmap='RdYlGn', alpha=0.6, s=20)
+    scatter_train = ax1.scatter([], [], c='blue', alpha=0.5, s=20, label='Training')
+    scatter_new = ax1.scatter([], [], c='red', marker='x', s=100, linewidths=2, label='Newly Selected', alpha=0.8)
     scatter2 = ax2.scatter([], [], c=[], cmap='viridis', alpha=0.6, s=20)
 
     strategy_scatters = {}
@@ -176,12 +190,14 @@ def create_dashboard_animation_from_csv(
     if ax4_twin:
         ax4_twin.legend(loc='upper right')
 
+    ax1.legend(loc='lower right')
+
     metric_text = None
     regression_line = None
 
     def init():
-        scatter1.set_offsets(np.empty((0, 2)))
-        scatter1.set_array(np.array([]))
+        scatter_train.set_offsets(np.empty((0, 2)))
+        scatter_new.set_offsets(np.empty((0, 2)))
         scatter2.set_offsets(np.empty((0, 2)))
         scatter2.set_array(np.array([]))
         for scatter in strategy_scatters.values():
@@ -191,7 +207,7 @@ def create_dashboard_animation_from_csv(
         if line_top_k:
             line_top_k.set_data([], [])
 
-        artists = [scatter1, scatter2, line_rmse, line_r2]
+        artists = [scatter_train, scatter_new, scatter2, line_rmse, line_r2]
         artists.extend(strategy_scatters.values())
         return tuple(artists)
 
@@ -202,63 +218,105 @@ def create_dashboard_animation_from_csv(
         cycle_num = int(cycle_col.split('_')[-1])
 
         predictions = predictions_df[cycle_col].values
-        true_values = predictions_df['final_oracle_value'].values if 'final_oracle_value' in predictions_df.columns else None
+        true_values = predictions_df[target_col].values if target_col and target_col in predictions_df.columns else None
 
         if is_benchmark and true_values is not None:
-            valid_mask = ~np.isnan(predictions) & ~np.isnan(true_values)
-            pred_clean = predictions[valid_mask]
-            true_clean = true_values[valid_mask]
+            labeled_cycles = predictions_df['labeled_cycle'].values
 
-            if len(pred_clean) > 0:
-                if len(pred_clean) > downsample_scatter:
-                    sample_indices = np.random.choice(len(pred_clean), downsample_scatter, replace=False)
-                    pred_clean = pred_clean[sample_indices]
-                    true_clean = true_clean[sample_indices]
+            # Separate training (labeled before this cycle) from newly selected (labeled in this cycle)
+            training_mask = (labeled_cycles < cycle_num) & ~np.isnan(predictions) & ~np.isnan(true_values)
+            new_mask = (labeled_cycles == cycle_num) & ~np.isnan(predictions) & ~np.isnan(true_values)
 
-                scatter1.set_offsets(np.c_[true_clean, pred_clean])
-                scatter1.set_array(pred_clean)
+            pred_train = predictions[training_mask]
+            true_train = true_values[training_mask]
+            pred_new = predictions[new_mask]
+            true_new = true_values[new_mask]
 
-                all_values = np.concatenate([pred_clean, true_clean])
+            # Downsample if needed (applied separately to maintain proportions)
+            if len(pred_train) > downsample_scatter:
+                sample_indices = np.random.choice(len(pred_train), downsample_scatter, replace=False)
+                pred_train = pred_train[sample_indices]
+                true_train = true_train[sample_indices]
+
+            if len(pred_new) > downsample_scatter // 2:
+                sample_indices = np.random.choice(len(pred_new), downsample_scatter // 2, replace=False)
+                pred_new = pred_new[sample_indices]
+                true_new = true_new[sample_indices]
+
+            # Plot training set
+            if len(pred_train) > 0:
+                scatter_train.set_offsets(np.c_[true_train, pred_train])
+            else:
+                scatter_train.set_offsets(np.empty((0, 2)))
+
+            # Plot newly selected compounds
+            if len(pred_new) > 0:
+                scatter_new.set_offsets(np.c_[true_new, pred_new])
+            else:
+                scatter_new.set_offsets(np.empty((0, 2)))
+
+            # Set axis limits based on all data
+            all_values = np.concatenate([pred_train, true_train, pred_new, true_new])
+            if len(all_values) > 0:
                 vmin, vmax = all_values.min(), all_values.max()
                 margin = (vmax - vmin) * 0.1 if vmax > vmin else 1.0
                 ax1.set_xlim(vmin - margin, vmax + margin)
                 ax1.set_ylim(vmin - margin, vmax + margin)
 
+                # Clear old lines and add diagonal reference
                 while len(ax1.lines) > 0:
                     ax1.lines[0].remove()
                 ax1.plot([vmin - margin, vmax + margin], [vmin - margin, vmax + margin], 'k--', alpha=0.5, linewidth=1)
 
-                if len(pred_clean) > 1:
-                    coeffs = np.polyfit(true_clean, pred_clean, 1)
+                # Fit regression line ONLY to training data
+                if len(pred_train) > 1:
+                    coeffs = np.polyfit(true_train, pred_train, 1)
                     poly_line = np.poly1d(coeffs)
                     x_fit = np.array([vmin - margin, vmax + margin])
                     y_fit = poly_line(x_fit)
-                    regression_line, = ax1.plot(x_fit, y_fit, 'r-', alpha=0.6, linewidth=2, label='Best Fit')
+                    regression_line, = ax1.plot(x_fit, y_fit, 'purple', linestyle='--', alpha=0.6, linewidth=2)
 
-                if cycle_idx < len(metrics_df):
-                    r2 = metrics_df['r2_score'].iloc[cycle_idx]
-                    spearman = metrics_df['spearman_correlation'].iloc[cycle_idx] if 'spearman_correlation' in metrics_df.columns else None
+            # Calculate R² separately for training and newly selected
+            if metric_text is not None:
+                metric_text.remove()
 
-                    if metric_text is not None:
-                        metric_text.remove()
+            metric_lines = []
 
-                    metric_str = f"R² = {r2:.3f}"
-                    if spearman is not None and not np.isnan(spearman):
-                        metric_str += f"\nρ = {spearman:.3f}"
+            # R² for training set
+            if len(pred_train) > 1:
+                ss_res_train = np.sum((true_train - pred_train) ** 2)
+                ss_tot_train = np.sum((true_train - np.mean(true_train)) ** 2)
+                r2_train = 1 - (ss_res_train / ss_tot_train) if ss_tot_train > 0 else 0.0
+                metric_lines.append(f"R² (train) = {r2_train:.3f}")
 
-                    metric_text = ax1.text(0.02, 0.98, metric_str,
-                                          transform=ax1.transAxes,
-                                          fontsize=12, fontweight='bold',
-                                          verticalalignment='top',
-                                          bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
+            # R² for newly selected (if any)
+            if len(pred_new) > 1:
+                ss_res_new = np.sum((true_new - pred_new) ** 2)
+                ss_tot_new = np.sum((true_new - np.mean(true_new)) ** 2)
+                r2_new = 1 - (ss_res_new / ss_tot_new) if ss_tot_new > 0 else 0.0
+                metric_lines.append(f"R² (new) = {r2_new:.3f}")
+
+            # Add Spearman if available (calculated on all labeled data)
+            if cycle_idx < len(metrics_df):
+                spearman = metrics_df['spearman_correlation'].iloc[cycle_idx] if 'spearman_correlation' in metrics_df.columns else None
+                if spearman is not None and not np.isnan(spearman):
+                    metric_lines.append(f"ρ = {spearman:.3f}")
+
+            metric_str = '\n'.join(metric_lines)
+            metric_text = ax1.text(0.02, 0.98, metric_str,
+                                  transform=ax1.transAxes,
+                                  fontsize=12, fontweight='bold',
+                                  verticalalignment='top',
+                                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
         else:
+            # Non-benchmark mode: show prediction evolution over cycles
             cycles_array = np.arange(cycle_idx + 1)
             pred_means = []
             for i in range(cycle_idx + 1):
                 col_preds = predictions_df[pred_cols[i]].values
                 pred_means.append(np.nanmean(col_preds))
-            scatter1.set_offsets(np.c_[cycles_array, pred_means])
-            scatter1.set_array(np.array(pred_means))
+            scatter_train.set_offsets(np.c_[cycles_array, pred_means])
+            scatter_new.set_offsets(np.empty((0, 2)))  # Clear new scatter in run mode
             ax1.set_xlim(-0.5, n_cycles + 0.5)
 
         if cycle_idx < len(unc_cols):
@@ -282,7 +340,7 @@ def create_dashboard_animation_from_csv(
                 ax2.set_ylim(ax2_ylim)
 
                 if not selections_df.empty and strategy_scatters:
-                    selected_up_to_cycle = selections_df[selections_df['selected_cycle'] <= cycle_num]
+                    selected_up_to_cycle = selections_df[selections_df['cycle'] <= cycle_num]
 
                     for strategy in unique_strategies:
                         strategy_scatter = strategy_scatters[strategy]
@@ -316,15 +374,15 @@ def create_dashboard_animation_from_csv(
         ax3.set_ylabel('Best Value (Lower is Better)')
 
         if not selections_df.empty:
-            selected_up_to_cycle = selections_df[selections_df['selected_cycle'] <= cycle_num]
+            selected_up_to_cycle = selections_df[selections_df['cycle'] <= cycle_num]
             if len(selected_up_to_cycle) > 0:
                 cumulative_best = []
                 best_so_far = float('inf')
 
                 for c in range(cycle_num + 1):
-                    cycle_selections = selections_df[selections_df['selected_cycle'] == c]
+                    cycle_selections = selections_df[selections_df['cycle'] == c]
                     if len(cycle_selections) > 0:
-                        cycle_values = cycle_selections['oracle_measured_value'].values
+                        cycle_values = cycle_selections['measured_value'].values
                         cycle_best = np.nanmin(cycle_values)
                         best_so_far = min(best_so_far, cycle_best)
                     cumulative_best.append(best_so_far)
@@ -332,8 +390,8 @@ def create_dashboard_animation_from_csv(
                 cycles_range = np.arange(len(cumulative_best))
                 ax3.plot(cycles_range, cumulative_best, 'b-', linewidth=2, marker='o', markersize=4, label='Best Found')
 
-                if 'final_oracle_value' in predictions_df.columns:
-                    true_best = predictions_df['final_oracle_value'].min()
+                if target_col and target_col in predictions_df.columns:
+                    true_best = predictions_df[target_col].min()
                     if not np.isnan(true_best):
                         ax3.axhline(y=true_best, color='g', linestyle='--', linewidth=2, alpha=0.7, label='True Best')
 
@@ -361,7 +419,7 @@ def create_dashboard_animation_from_csv(
 
         fig.suptitle(f'Active Learning Progress - Cycle {cycle_num}', fontsize=14, fontweight='bold')
 
-        artists = [scatter1, scatter2, line_rmse, line_r2]
+        artists = [scatter_train, scatter_new, scatter2, line_rmse, line_r2]
         artists.extend(strategy_scatters.values())
         if line_top_k:
             artists.append(line_top_k)
