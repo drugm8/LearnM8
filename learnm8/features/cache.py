@@ -2,7 +2,7 @@
 HDF5-based caching for molecular feature extraction.
 
 This module provides a decorator for caching molecular features to HDF5 files
-with SMILES hash-based deduplication and gzip compression.
+with SMILES hash-based deduplication and blosc compression.
 """
 
 import hashlib
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable, List
 
 import h5py
+import hdf5plugin
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -103,14 +104,13 @@ def cache_features(default_cache_dir: Path) -> Callable:
                             for idx, smiles in enumerate(uncached_smiles):
                                 smiles_hash = get_smiles_hash(smiles)
                                 try:
-                                    ds = features_group.require_dataset(
+                                    ds = features_group.create_dataset(
                                         smiles_hash,
-                                        shape=new_features[idx].shape,
-                                        dtype=new_features[idx].dtype,
-                                        compression='gzip',
-                                        compression_opts=6
+                                        data=new_features[idx],
+                                        chunks=True,
+                                        compression=32001,  # blosc filter ID
+                                        compression_opts=(0, 0, 0, 0, 5, 1, 1)  # blosc:lz4 configuration
                                     )
-                                    ds[...] = new_features[idx]
                                     logger.debug(f"Cached features for SMILES hash {smiles_hash[:8]}...")
                                 except (TypeError, ValueError) as e:
                                     logger.warning(f"Existing dataset for {smiles_hash[:8]} has incompatible shape/dtype; skipping cache write: {e}")
