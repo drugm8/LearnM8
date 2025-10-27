@@ -100,8 +100,27 @@ class TestCacheFeaturesDecorator:
             features_group = h5f['features']
             for key in features_group.keys():
                 ds = features_group[key]
-                assert ds.compression == 'gzip'
-                assert ds.compression_opts == 6
+                # Check blosc compression using plist (ds.compression returns None for custom filters)
+                plist = ds.id.get_create_plist()
+                assert plist.get_nfilters() > 0
+                filter_info = plist.get_filter(0)
+                assert filter_info[0] == 32001  # blosc filter ID
+                assert ds.chunks is not None  # chunking enabled
+
+    def test_blosc_lz4_compression(self, tmp_path):
+        cache_dir = tmp_path / 'cache'
+
+        mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+
+        cache_file = cache_dir / 'morgan_features.h5'
+        with h5py.File(cache_file, 'r') as h5f:
+            ds = h5f['features'][get_smiles_hash('CCO')]
+            # Check blosc compression using plist
+            plist = ds.id.get_create_plist()
+            filter_info = plist.get_filter(0)
+            assert filter_info[0] == 32001  # blosc filter ID
+            assert filter_info[3] == b'blosc'  # filter name
+            assert ds.chunks is not None
 
     def test_cache_different_featurizers(self, tmp_path):
         cache_dir = tmp_path / 'cache'

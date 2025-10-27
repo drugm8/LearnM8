@@ -198,6 +198,7 @@ dependencies:
   - flask
   - flask_cors
   - h5py
+  - hdf5plugin>=3.0
   - datamol
   - pip
   - pip:

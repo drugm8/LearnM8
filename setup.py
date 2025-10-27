@@ -16,6 +16,7 @@ setup(
         "joblib>=1.0.0",
         "rich>=10.0.0",  # For CLI output formatting
         "h5py>=3.0.0",   # For HDF5 feature caching (learnm8.features.cache)
+        "hdf5plugin>=3.0.0",  # For blosc compression in HDF5 caching
         "pyyaml>=5.0.0",  # For CLI config file support
         "datamol>=0.12.0",  # For validation and standardization
     ],

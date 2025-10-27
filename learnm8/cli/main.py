@@ -656,12 +656,7 @@ def cmd_validate(args: argparse.Namespace):
             console=console
         ) as progress:
             task = progress.add_task("Validating compounds...", total=None)
-            if hasattr(args, 'cache_dir') and args.cache_dir:
-                cache_dir = args.cache_dir
-            else:
-                cache_dir = Path(args.output or '.') / '.cache'
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            result = validate_compound_pool(compounds, args.featurizer, cache_dir)
+            result = validate_compound_pool(compounds, n_jobs=-1, progress=False)
             progress.update(task, completed=True, description="[green]✓ Complete")
 
         console.print("\n[green]✓ Validation complete[/green]")
