@@ -1,0 +1,246 @@
+# LearnM8 Acquisition Strategy Validation Configuration
+# Version: 1.0.0
+# Last Updated: 2025-10-28
+
+global:
+  dataset_name: 'ampc_30k'
+  clean_invalid_scores: true
+  numpy_seed: 42
+  model_random_state: 42
+  visualization_seed: 123
+
+  n_cycles: 10
+  initial_fraction: 0.01
+  batch_fraction: 0.01
+
+  featurizer_type: 'morgan'
+  cache_dir: '../.shared_cache'
+
+  learner: 'rf_ensemble'
+  learner_params:
+    n_estimators: 100
+    random_states: [40, 41, 42]
+
+  output_base_dir: 'reports'
+  animation_fps: 2
+  animation_dpi: 100
+  plot_dpi: 300
+
+strategies:
+  ucb:
+    name: 'UCB'
+    full_name: 'Upper Confidence Bound'
+    class_name: 'UCBAcquisition'
+    param_name: 'beta'
+    param_values: [0.1, 1.0, 2.0, 5.0, 10.0, 100.0]
+    representative_param: 2.0
+    requires_current_best: false
+    requires_scipy: false
+    description: |
+      UCB balances exploration and exploitation by constructing confidence intervals around predictions.
+      For docking scores (lower is better), we use the Lower Confidence Bound (LCB) formulation.
+    formula: |
+      **For Maximization (score_direction='higher'):**
+      ```
+      UCB(x) = μ(x) + β·σ(x)
+      ```
+
+      **For Minimization (score_direction='lower'):**
+      ```
+      LCB(x) = μ(x) - β·σ(x)
+      ```
+
+      Where:
+      - `μ(x)` = predicted mean
+      - `σ(x)` = predicted uncertainty (standard deviation)
+      - `β` = exploration parameter (β ≥ 0)
+    param_interpretation: |
+      **Beta (β) Controls Exploration-Exploitation Tradeoff:**
+      - **β = 0:** Pure exploitation (greedy selection on predictions)
+      - **β = 1-2:** Balanced exploration (moderate uncertainty weighting)
+      - **β = 5-10:** Strong exploration (heavily favor uncertain regions)
+      - **β > 10:** Very strong exploration (almost pure uncertainty-based)
+
+      **Interpretation:** β represents the number of standard deviations added/subtracted from the mean.
+      Higher β increases the confidence interval width, leading to more exploratory behavior.
+
+  ei:
+    name: 'EI'
+    full_name: 'Expected Improvement'
+    class_name: 'ExpectedImprovementAcquisition'
+    param_name: 'xi'
+    param_values: [0.0, 0.01, 0.1, 1.0]
+    representative_param: 0.01
+    requires_current_best: true
+    requires_scipy: true
+    description: |
+      Expected Improvement (EI) calculates the expected value of improvement over the current best observed value.
+      It naturally balances exploration and exploitation by considering both the magnitude and probability of improvement.
+    formula: |
+      **Formula:**
+      ```
+      EI(x) = (μ(x) - f* - ξ) · Φ(Z) + σ(x) · φ(Z)
+      ```
+
+      Where:
+      - `μ(x)` = predicted mean
+      - `σ(x)` = predicted uncertainty (standard deviation)
+      - `f*` = current best observed value
+      - `ξ` = exploration parameter (ξ ≥ 0)
+      - `Z = (μ(x) - f* - ξ) / σ(x)`
+      - `Φ(Z)` = standard normal cumulative distribution function
+      - `φ(Z)` = standard normal probability density function
+
+      **Selection:** Choose compounds with highest EI values
+    param_interpretation: |
+      **Xi (ξ) Controls Exploration:**
+      - **ξ = 0:** Pure expected improvement (balanced by default)
+      - **ξ = 0.01:** Small exploration bonus (common default)
+      - **ξ = 0.1:** Moderate exploration (encourages discovery)
+      - **ξ ≥ 1.0:** Strong exploration (aggressive search)
+
+  pi:
+    name: 'PI'
+    full_name: 'Probability of Improvement'
+    class_name: 'ProbabilityImprovementAcquisition'
+    param_name: 'xi'
+    param_values: [0.0, 0.01, 0.1, 1.0]
+    representative_param: 0.01
+    requires_current_best: true
+    requires_scipy: true
+    description: |
+      Probability of Improvement (PI) calculates the probability that a compound will be better than the current best observed value.
+      It is more conservative than Expected Improvement, focusing purely on the likelihood of improvement rather than its magnitude.
+    formula: |
+      **Formula:**
+      ```
+      PI(x) = Φ((μ(x) - f* - ξ) / σ(x))
+      ```
+
+      Where:
+      - `μ(x)` = predicted mean
+      - `σ(x)` = predicted uncertainty (standard deviation)
+      - `f*` = current best observed value
+      - `ξ` = exploration parameter (ξ ≥ 0)
+      - `Φ(·)` = standard normal cumulative distribution function
+
+      **Selection:** Choose compounds with highest PI values
+    param_interpretation: |
+      **Xi (ξ) Controls Exploration:**
+      - **ξ = 0:** Pure probability of improvement
+      - **ξ = 0.01:** Small exploration bonus (common default)
+      - **ξ = 0.1:** Moderate exploration
+      - **ξ ≥ 1.0:** Strong exploration (requires large improvements)
+
+  thompson:
+    name: 'Thompson Sampling'
+    full_name: 'Thompson Sampling'
+    class_name: 'ThompsonSamplingAcquisition'
+    param_name: 'random_state'
+    param_values: [42, 123, 456, 789]
+    representative_param: 42
+    requires_current_best: false
+    requires_scipy: false
+    description: |
+      Thompson Sampling is a stochastic acquisition strategy that samples from the posterior predictive distribution.
+      It naturally balances exploration and exploitation through randomization, without explicit parameters.
+    formula: |
+      **Formula:**
+      ```
+      1. Sample: s_i ~ N(μ(x_i), σ²(x_i)) for all i
+      2. Select: argmax_i s_i (maximization) or argmin_i s_i (minimization)
+      ```
+
+      Where:
+      - `μ(x_i)` = predicted mean for compound i
+      - `σ²(x_i)` = predicted variance for compound i
+      - `s_i` = sampled value from posterior distribution
+
+      **Selection:** Sample values from predicted distributions, select compounds with best sampled values
+    param_interpretation: |
+      **Random State (seed):**
+      - Controls reproducibility of stochastic sampling
+      - Different seeds produce different selection orders
+      - No explicit exploration parameter (randomness provides exploration)
+
+  entropy:
+    name: 'Entropy'
+    full_name: 'Entropy-Based Selection'
+    class_name: 'EntropyAcquisition'
+    param_name: 'entropy_type'
+    param_values: ['uncertainty', 'variance']
+    representative_param: 'uncertainty'
+    requires_current_best: false
+    requires_scipy: false
+    description: |
+      Entropy-based acquisition focuses purely on exploration by selecting compounds with maximum uncertainty.
+      It ignores predicted values, prioritizing information gain.
+    formula: |
+      **Formula (uncertainty entropy):**
+      ```
+      H(x) = σ(x)
+      ```
+
+      **Formula (variance entropy):**
+      ```
+      H(x) = σ²(x)
+      ```
+
+      Where:
+      - `σ(x)` = predicted uncertainty (standard deviation)
+      - `σ²(x)` = predicted variance
+
+      **Selection:** Choose compounds with highest entropy values
+    param_interpretation: |
+      **Entropy Type:**
+      - **'uncertainty':** Select based on standard deviation σ(x)
+      - **'variance':** Select based on variance σ²(x)
+
+      **Interpretation:** Pure exploration strategy (ignores predicted mean)
+
+  score_based_pruning:
+    name: 'Score-Based Pruning'
+    full_name: 'Score-Based Pruning Validation'
+    class_name: 'N/A'
+    param_name: 'pruning_fraction'
+    param_values: [0.0, 0.15, 0.3]
+    representative_param: 0.15
+    requires_current_best: false
+    requires_scipy: false
+    description: |
+      Score-based pruning reduces the unlabeled compound pool by removing low-scoring compounds after each cycle.
+      This validation compares different pruning aggressiveness levels to assess the trade-off between
+      computational efficiency (smaller search space) and model performance (discovery and ranking quality).
+    formula: |
+      **Pruning Formula:**
+      ```
+      For minimization (lower scores better):
+        1. Rank unlabeled pool by predicted scores (ascending)
+        2. Remove bottom p% of compounds (highest/worst scores)
+        3. Remaining pool = top (1-p)% by predicted quality
+
+      For maximization (higher scores better):
+        1. Rank unlabeled pool by predicted scores (descending)
+        2. Remove bottom p% of compounds (lowest scores)
+        3. Remaining pool = top (1-p)% by predicted quality
+      ```
+
+      Where:
+      - `p` = pruning_fraction (e.g., 0.15 = 15%)
+      - Pruning occurs AFTER acquisition, BEFORE next training cycle
+      - Cumulative effect: pool size decreases each cycle
+    param_interpretation: |
+      **Pruning Fraction (p) Controls Search Space Reduction:**
+      - **p = 0.0:** No pruning (baseline) - full exploration, maximum pool size
+      - **p = 0.15:** Light pruning - modest efficiency gains, minimal risk
+      - **p = 0.3:** Heavy pruning - aggressive efficiency gains, higher discovery risk
+
+      **Trade-offs:**
+      - Higher p → Faster iterations (smaller pool) but risk missing good compounds
+      - Lower p → Safer (more exploration) but slower iterations
+
+      **Metrics to Monitor:**
+      - Discovery rates: Do we still find top compounds?
+      - Ranking quality: Does model quality degrade on smaller pools?
+      - Pool size: How quickly does search space shrink?
+      - Score ratios: Are selected compounds still high quality?
