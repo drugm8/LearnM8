@@ -9,8 +9,6 @@ from typing import Dict, Any, Optional
 import pandas as pd
 import numpy as np
 
-# Direct sklearn imports for basic metrics
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Import specialized metric functions from modular metrics package
 from .metrics.performance import (
@@ -19,7 +17,17 @@ from .metrics.performance import (
 from .metrics.enrichment import (
 	calculate_top_k_overlap, calculate_multiple_top_k_overlaps,
 	calculate_enrichment_factor, calculate_multiple_enrichment_factors,
-	calculate_ground_truth_enrichment_factors
+	calculate_ground_truth_enrichment_factors,
+	# NEW IMPORTS
+	calculate_multiple_top_k_discovery_rates,
+	calculate_cumulative_enrichment_factor,
+	calculate_batch_hit_rate,
+	calculate_batch_enrichment_factor,
+	calculate_average_score_ratio,
+	calculate_batch_average_score_ratio,
+	calculate_multiple_unlabeled_top_k_overlaps,
+	calculate_multiple_unlabeled_enrichment_factors,
+	calculate_unlabeled_ranking_correlation,
 )
 from .metrics.similarity import (
 	calculate_molecular_similarity_metrics
@@ -43,19 +51,21 @@ def evaluate_cycle(
 	previously_selected: Optional[pd.DataFrame] = None,
 	advanced_metrics: bool = False,
 	disable_molecular_similarity: bool = False,
-	score_direction: str = 'higher'
+	score_direction: str = 'higher',
+	cumulative_selected_ids: Optional[set] = None,
+	cumulative_labeled_count: Optional[int] = None
 ) -> Dict[str, Any]:
 	"""
 	Comprehensive evaluation with adaptive metrics based on available data.
-	
+
 	Always calculates:
-	- All model performance metrics (RMSE, MAE, MSE, R²)
+	- Selection quality metrics (avg_score_selected, batch_size, cumulative_labeled)
 	- Molecular similarity metrics (when SMILES available and not disabled)
 	- Progress tracking metrics
-	
-	Adaptively adds:
-	- Top-K overlaps (benchmark mode with ground truth)
-	- Enrichment factors (Activity column present)
+
+	Adaptively adds (benchmark mode only):
+	- Discovery metrics (Top-K discovery rates, enrichment factors, score ratios)
+	- Unlabeled ranking metrics (unlabeled Top-K overlap, unlabeled EF, unlabeled Spearman)
 	- Uncertainty metrics (when available)
 	
 	Args:
@@ -74,58 +84,42 @@ def evaluate_cycle(
 		advanced_metrics: Include additional metrics (MAPE, etc.)
 		disable_molecular_similarity: Skip expensive molecular calculations
 		score_direction: Direction of score optimization ('higher' or 'lower' is better)
+		cumulative_labeled_count: Total count of labeled compounds (if None, uses len(labeled_data))
 		
 	Returns:
 		Dictionary containing all calculated metrics
 	"""
 	metrics = {}
-	
+
 	# Basic cycle info
 	metrics['cycle'] = cycle
 	metrics['batch_size'] = len(selected_compounds)
-	metrics['cumulative_labeled'] = len(labeled_data)
+
+	if cumulative_labeled_count is not None:
+		metrics['cumulative_labeled'] = cumulative_labeled_count
+	else:
+		metrics['cumulative_labeled'] = len(labeled_data)
 	
-	# Core model performance metrics (always calculated)
-	try:
-		metrics['rmse'] = np.sqrt(mean_squared_error(ground_truth, predictions))
-		metrics['mae'] = mean_absolute_error(ground_truth, predictions)
-		metrics['mse'] = mean_squared_error(ground_truth, predictions)
-		metrics['r2_score'] = r2_score(ground_truth, predictions)
-		
-		# Spearman correlation (good for ranking quality)
-		metrics['spearman_correlation'] = calculate_spearman_correlation(ground_truth, predictions)
-		
-		# Selection quality
-		if target_col in selected_compounds.columns and len(selected_compounds) > 0:
-			scores = selected_compounds[target_col].values
-			if len(scores) > 0 and not all(pd.isna(scores)):
-				metrics['avg_score_selected'] = calculate_average_score(scores)
-			else:
-				metrics['avg_score_selected'] = None
+	# Selection quality (scores of selected compounds this cycle)
+	if target_col in selected_compounds.columns and len(selected_compounds) > 0:
+		scores = selected_compounds[target_col].values
+		if len(scores) > 0 and not all(pd.isna(scores)):
+			metrics['avg_score_selected'] = calculate_average_score(scores)
 		else:
 			metrics['avg_score_selected'] = None
-		
-		# Ground truth average score (if available)
-		if ground_truth_data is not None and target_col in ground_truth_data.columns:
-			try:
-				gt_scores = ground_truth_data[target_col].values
-				metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
-			except Exception as e:
-				logger.warning(f"Error calculating ground truth average score: {e}")
-				metrics['ground_truth_avg_score'] = None
-		else:
+	else:
+		metrics['avg_score_selected'] = None
+
+	# Ground truth average score (if available)
+	if ground_truth_data is not None and target_col in ground_truth_data.columns:
+		try:
+			gt_scores = ground_truth_data[target_col].values
+			metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
+		except Exception as e:
+			logger.warning(f"Error calculating ground truth average score: {e}")
 			metrics['ground_truth_avg_score'] = None
-			
-		if advanced_metrics:
-			metrics['mape'] = calculate_mape(ground_truth, predictions)
-			
-	except Exception as e:
-		logger.warning(f"Error calculating core metrics: {e}")
-		# Set default values
-		metrics.update({
-			'rmse': None, 'mae': None, 'mse': None, 'r2_score': None,
-			'spearman_correlation': None, 'avg_score_selected': None, 'ground_truth_avg_score': None
-		})
+	else:
+		metrics['ground_truth_avg_score'] = None
 	
 	# Uncertainty metrics (when available)
 	if uncertainties is not None and len(uncertainties) > 0:
@@ -161,63 +155,136 @@ def evaluate_cycle(
 			'inter_cycle_similarity': None,
 			'batch_novelty_score': None
 		})
-	
+
 	# Benchmark mode specific metrics (when ground truth available)
 	# Auto mode: enable benchmark mode when ground_truth_data and pool_predictions are available
-	is_benchmark_mode = (oracle_type == 'benchmark' or 
+	is_benchmark_mode = (oracle_type == 'benchmark' or
 						(oracle_type == 'auto' and ground_truth_data is not None and pool_predictions is not None))
-	
-	if is_benchmark_mode:
+
+	# Discovery Metrics (Category A) - PRIMARY in benchmark mode
+	if is_benchmark_mode and ground_truth_data is not None and cumulative_selected_ids is not None:
 		try:
-			# Create predictions DataFrame for top-k calculations
-			if pool_predictions is not None and pool_ids is not None:
-				predictions_df = pd.DataFrame({
-					'ID': pool_ids,
-					'prediction': pool_predictions
-				})
-				
-				# Calculate multiple top-K overlaps
-				top_k_metrics = calculate_multiple_top_k_overlaps(
-					predictions_df=predictions_df,
-					ground_truth_df=ground_truth_data,
-					target_col=target_col,
-					score_direction=score_direction
-				)
-				metrics.update(top_k_metrics)
-			
+			# Top-K Discovery Rates (6 values)
+			discovery_rates = calculate_multiple_top_k_discovery_rates(
+				cumulative_selected_ids,
+				ground_truth_data,
+				target_col,
+				score_direction
+			)
+			metrics.update(discovery_rates)
+
+			# Cumulative Enrichment Factor (if Activity present)
+			cumulative_ef = calculate_cumulative_enrichment_factor(
+				cumulative_selected_ids,
+				ground_truth_data,
+				'Activity'
+			)
+			metrics['cumulative_ef'] = cumulative_ef
+
+			# Batch Hit Rate (if Activity present)
+			batch_hit_rate = calculate_batch_hit_rate(
+				selected_compounds,
+				'Activity'
+			)
+			metrics['batch_hit_rate'] = batch_hit_rate
+
+			# Batch Enrichment Factor (if Activity present)
+			batch_ef = calculate_batch_enrichment_factor(
+				selected_compounds,
+				ground_truth_data,
+				'Activity'
+			)
+			metrics['batch_ef'] = batch_ef
+
+			# Average Score Ratios (always available with continuous data)
+			cumulative_score_ratio = calculate_average_score_ratio(
+				cumulative_selected_ids,
+				ground_truth_data,
+				target_col,
+				score_direction
+			)
+			metrics['cumulative_avg_score_ratio'] = cumulative_score_ratio
+
+			batch_avg_score_ratio = calculate_batch_average_score_ratio(
+				selected_compounds,
+				ground_truth_data,
+				target_col,
+				score_direction
+			)
+			metrics['batch_avg_score_ratio'] = batch_avg_score_ratio
+
 		except Exception as e:
-			logger.warning(f"Error calculating top-K overlap metrics: {e}")
+			logger.warning(f"Error calculating discovery metrics: {e}")
 			metrics.update({
-				'top_100_overlap': None,
-				'top_1000_overlap': None,
-				'top_0_1_percent_overlap': None,
-				'top_1_percent_overlap': None,
-				'top_10_percent_overlap': None
+				'top_10_discovery': None,
+				'top_100_discovery': None,
+				'top_1000_discovery': None,
+				'top_0_1_pct_discovery': None,
+				'top_1_pct_discovery': None,
+				'top_10_pct_discovery': None,
+				'cumulative_ef': None,
+				'batch_hit_rate': None,
+				'batch_ef': None,
+				'cumulative_avg_score_ratio': None,
+				'batch_avg_score_ratio': None
 			})
 	
-	# Enrichment factors (when Activity column is available)
-	if ground_truth_data is not None and 'Activity' in ground_truth_data.columns:
+	# Ranking Metrics (Category B) - UNLABELED ONLY
+	if is_benchmark_mode:
 		try:
-			# For enrichment factors, use pool predictions vs Activity labels
-			if pool_predictions is not None and pool_ids is not None:
-				# Merge predictions with ground truth Activity labels
-				pred_with_labels = pd.merge(
-					pd.DataFrame({'ID': pool_ids, 'prediction': pool_predictions}),
-					ground_truth_data[['ID', 'Activity']],
-					on='ID'
-				)
-				
-				if len(pred_with_labels) > 0:
-					ef_metrics = calculate_multiple_enrichment_factors(
-						scores=pred_with_labels['prediction'].values,
-						labels=pred_with_labels['Activity'].values,
+			# CRITICAL: Filter predictions to exclude labeled compounds
+			if pool_predictions is not None and pool_ids is not None and cumulative_selected_ids is not None:
+				# Create unlabeled predictions DataFrame (EXCLUDE labeled)
+				unlabeled_mask = ~np.isin(pool_ids, list(cumulative_selected_ids))
+				unlabeled_predictions_df = pd.DataFrame({
+					'ID': pool_ids[unlabeled_mask],
+					'prediction': pool_predictions[unlabeled_mask]
+				})
+
+				if len(unlabeled_predictions_df) > 0:
+					# Calculate unlabeled ranking overlaps
+					unlabeled_top_k_metrics = calculate_multiple_unlabeled_top_k_overlaps(
+						unlabeled_predictions_df=unlabeled_predictions_df,
+						ground_truth_df=ground_truth_data,
+						target_column=target_col,
 						score_direction=score_direction
 					)
-					metrics.update(ef_metrics)
+					metrics.update(unlabeled_top_k_metrics)
+
+					# Calculate unlabeled prospective EFs (if Activity present)
+					unlabeled_ef_metrics = calculate_multiple_unlabeled_enrichment_factors(
+						unlabeled_predictions_df=unlabeled_predictions_df,
+						ground_truth_df=ground_truth_data,
+						activity_column='Activity',
+						score_direction=score_direction
+					)
+					metrics.update(unlabeled_ef_metrics)
+
+					# Calculate unlabeled ranking correlation
+					unlabeled_spearman = calculate_unlabeled_ranking_correlation(
+						unlabeled_predictions_df=unlabeled_predictions_df,
+						ground_truth_df=ground_truth_data,
+						target_column=target_col
+					)
+					metrics['unlabeled_spearman_correlation'] = unlabeled_spearman
+				else:
+					# No unlabeled compounds left
+					metrics.update({
+						'unlabeled_top_100_overlap': None,
+						'unlabeled_top_1000_overlap': None,
+						'unlabeled_ef_1_0': None,
+						'unlabeled_ef_5_0': None,
+						'unlabeled_spearman_correlation': None
+					})
+
 		except Exception as e:
-			logger.warning(f"Error calculating enrichment factors: {e}")
+			logger.warning(f"Error calculating unlabeled ranking metrics: {e}")
 			metrics.update({
-				'ef_5_0': None, 'ef_1_0': None, 'ef_0_5': None, 'ef_0_1': None
+				'unlabeled_top_100_overlap': None,
+				'unlabeled_top_1000_overlap': None,
+				'unlabeled_ef_1_0': None,
+				'unlabeled_ef_5_0': None,
+				'unlabeled_spearman_correlation': None
 			})
 	
 	# Ground truth enrichment factors (when ground truth data available)
@@ -335,9 +402,9 @@ def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', p
 					 title_style="bold white", padding=(0, 1))
 		
 		# Add 3 columns with headers for logical grouping
-		table.add_column("Model Performance", style="white", width=18)
-		table.add_column("Selection Quality", style="white", width=18)
-		table.add_column("Benchmark Metrics", style="white", width=18)
+		table.add_column("Selection Quality", style="white", width=22)
+		table.add_column("Discovery Metrics", style="white", width=24)
+		table.add_column("Ranking (Unlabeled)", style="white", width=22)
 		
 		# Helper to format metric with optional unit and label
 		def format_metric_with_label(label: str, key: str, digits: int = 3, unit: str = "") -> str:
@@ -347,79 +414,92 @@ def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', p
 			return ""
 		
 		# Organize metrics into logical groups (now as single strings per column)
-		# Column 1: Model Performance
-		model_perf = []
-		if metrics.get('r2_score') is not None:
-			model_perf.append(format_metric_with_label('R²', 'r2_score'))
-		if metrics.get('rmse') is not None:
-			model_perf.append(format_metric_with_label('RMSE', 'rmse'))
-		if metrics.get('mae') is not None:
-			model_perf.append(format_metric_with_label('MAE', 'mae'))
-		if metrics.get('mse') is not None:
-			model_perf.append(format_metric_with_label('MSE', 'mse'))
-		if metrics.get('spearman_correlation') is not None:
-			model_perf.append(format_metric_with_label('Spearman', 'spearman_correlation'))
-		if metrics.get('mape') is not None:
-			model_perf.append(format_metric_with_label('MAPE', 'mape', 1, '%'))
-		if metrics.get('uncertainty_mean') is not None:
-			model_perf.append(format_metric_with_label('Uncert μ', 'uncertainty_mean'))
-		if metrics.get('uncertainty_std') is not None:
-			model_perf.append(format_metric_with_label('Uncert σ', 'uncertainty_std'))
-		
-		# Column 2: Selection Quality  
-		selection_qual = []
+		# Column 1: Selection Quality (replaces model performance)
+		selection_quality = []
+		# Batch selection metrics
+		if metrics.get('batch_size') is not None:
+			selection_quality.append(f"Batch Size: {metrics['batch_size']}")
 		if metrics.get('avg_score_selected') is not None:
-			selection_qual.append(format_metric_with_label('Avg Sel', 'avg_score_selected'))
+			selection_quality.append(format_metric_with_label('Batch Avg', 'avg_score_selected', 3))
 		if metrics.get('ground_truth_avg_score') is not None:
-			selection_qual.append(format_metric_with_label('GT Avg', 'ground_truth_avg_score'))
+			selection_quality.append(format_metric_with_label('GT Avg', 'ground_truth_avg_score', 3))
 		if metrics.get('cumulative_labeled') is not None:
-			selection_qual.append(f"Labeled: {metrics['cumulative_labeled']}")
+			selection_quality.append(f"Total Labeled: {metrics['cumulative_labeled']}")
+
+		# Uncertainty metrics (if available)
+		if metrics.get('uncertainty_mean') is not None:
+			selection_quality.append(format_metric_with_label('Uncert μ', 'uncertainty_mean', 3))
+		if metrics.get('uncertainty_std') is not None:
+			selection_quality.append(format_metric_with_label('Uncert σ', 'uncertainty_std', 3))
+
+		# Molecular metrics
 		if metrics.get('intra_batch_diversity') is not None:
-			selection_qual.append(format_metric_with_label('Diversity', 'intra_batch_diversity'))
-		if metrics.get('inter_cycle_similarity') is not None:
-			selection_qual.append(format_metric_with_label('Similarity', 'inter_cycle_similarity'))
+			selection_quality.append(format_metric_with_label('Diversity', 'intra_batch_diversity', 3))
 		if metrics.get('batch_novelty_score') is not None:
-			selection_qual.append(format_metric_with_label('Novelty', 'batch_novelty_score'))
-		
-		# Column 3: Benchmarks (Top-K & EFs)
-		benchmarks = []
+			selection_quality.append(format_metric_with_label('Novelty', 'batch_novelty_score', 3))
+
+		# Column 2: Discovery Metrics
+		discovery = []
 		if oracle_type == 'benchmark':
-			# All Top-K overlaps
-			for key, name in [('top_100_overlap', 'Top-100'), ('top_1000_overlap', 'Top-1K'), 
-							  ('top_0_1_percent_overlap', 'Top-0.1%'), ('top_1_percent_overlap', 'Top-1%'), 
-							  ('top_10_percent_overlap', 'Top-10%')]:
+			# Top-K Discovery Rates
+			for key, name in [('top_10_discovery', 'Top-10'), ('top_100_discovery', 'Top-100'),
+							  ('top_1000_discovery', 'Top-1K'), ('top_1_pct_discovery', 'Top-1%')]:
 				if metrics.get(key) is not None:
-					benchmarks.append(format_metric_with_label(name, key, 1, '%'))
-			
-			# All current EFs
-			for key, name in [('ef_5_0', 'EF@5%'), ('ef_1_0', 'EF@1%'), 
-							  ('ef_0_5', 'EF@0.5%'), ('ef_0_1', 'EF@0.1%')]:
+					discovery.append(format_metric_with_label(name, key, 1, '%'))
+
+			# Batch Quality
+			if metrics.get('batch_hit_rate') is not None:
+				discovery.append(format_metric_with_label('Batch HR', 'batch_hit_rate', 3))
+			if metrics.get('batch_ef') is not None:
+				discovery.append(format_metric_with_label('Batch EF', 'batch_ef', 2))
+			if metrics.get('batch_avg_score_ratio') is not None:
+				discovery.append(format_metric_with_label('Batch Ratio', 'batch_avg_score_ratio', 2))
+
+			# Cumulative Quality
+			if metrics.get('cumulative_ef') is not None:
+				discovery.append(format_metric_with_label('Cumul EF', 'cumulative_ef', 2))
+			if metrics.get('cumulative_avg_score_ratio') is not None:
+				discovery.append(format_metric_with_label('Cumul Ratio', 'cumulative_avg_score_ratio', 2))
+
+		# Column 3: Ranking (Unlabeled Only)
+		ranking = []
+		if oracle_type == 'benchmark':
+			# Unlabeled ranking metrics
+			for key, name in [('unlabeled_top_100_overlap', 'U-Top100'),
+							  ('unlabeled_top_1000_overlap', 'U-Top1K')]:
 				if metrics.get(key) is not None:
-					benchmarks.append(format_metric_with_label(name, key, 2, 'x'))
-			
-			# All ground truth EFs
-			for key, name in [('ground_truth_ef_5_0', 'GT@5%'), ('ground_truth_ef_1_0', 'GT@1%'), 
-							  ('ground_truth_ef_0_5', 'GT@0.5%'), ('ground_truth_ef_0_1', 'GT@0.1%')]:
+					ranking.append(format_metric_with_label(name, key, 1, '%'))
+
+			for key, name in [('unlabeled_ef_1_0', 'U-EF@1%'),
+							  ('unlabeled_ef_5_0', 'U-EF@5%')]:
 				if metrics.get(key) is not None:
-					benchmarks.append(format_metric_with_label(name, key, 2, 'x'))
-		
+					ranking.append(format_metric_with_label(name, key, 2))
+
+			if metrics.get('unlabeled_spearman_correlation') is not None:
+				ranking.append(format_metric_with_label('U-Spear', 'unlabeled_spearman_correlation', 3))
+
+			# Ground truth EFs (still valid)
+			for key, name in [('ground_truth_ef_5_0', 'GT@5%'), ('ground_truth_ef_1_0', 'GT@1%')]:
+				if metrics.get(key) is not None:
+					ranking.append(format_metric_with_label(name, key, 2, 'x'))
+
 		# Find max length for rows
-		max_rows = max(len(model_perf), len(selection_qual), len(benchmarks))
+		max_rows = max(len(selection_quality), len(discovery), len(ranking))
 		
 		# Pad lists to same length
-		while len(model_perf) < max_rows:
-			model_perf.append("")
-		while len(selection_qual) < max_rows:
-			selection_qual.append("")
-		while len(benchmarks) < max_rows:
-			benchmarks.append("")
-		
+		while len(selection_quality) < max_rows:
+			selection_quality.append("")
+		while len(discovery) < max_rows:
+			discovery.append("")
+		while len(ranking) < max_rows:
+			ranking.append("")
+
 		# Add rows
 		for i in range(max_rows):
 			table.add_row(
-				model_perf[i],
-				selection_qual[i], 
-				benchmarks[i]
+				selection_quality[i],
+				discovery[i],
+				ranking[i]
 			)
 		
 		console.print(table)
@@ -439,15 +519,12 @@ def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', p
 		# Provide basic text fallback
 		cycle = metrics.get('cycle', '?')
 		batch_size = metrics.get('batch_size', '?')
-		r2 = metrics.get('r2_score')
-		rmse = metrics.get('rmse')
-		
+		avg_score = metrics.get('avg_score_selected')
+
 		fallback = f"Cycle {cycle} ({batch_size} selected)"
-		if r2 is not None:
-			fallback += f" | R²: {r2:.3f}"
-		if rmse is not None:
-			fallback += f" | RMSE: {rmse:.3f}"
-		
+		if avg_score is not None:
+			fallback += f" | Avg Score: {avg_score:.3f}"
+
 		return fallback
 
 
@@ -489,15 +566,16 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 			f.write("#\n")
 		
 		# Organize columns by category for better readability
-		core_cols = ['cycle', 'strategy', 'batch_fraction', 'selected_count', 'remaining_pool', 'cumulative_labeled']
-		model_cols = [col for col in metrics_df.columns if col in ['r2_score', 'rmse', 'mae', 'mse', 'spearman_correlation', 'mape', 'uncertainty_mean', 'uncertainty_std']]
-		selection_cols = [col for col in metrics_df.columns if col in ['prediction_mean', 'prediction_std', 'measured_mean', 'measured_std', 'measured_min', 'measured_max', 'avg_score_selected', 'ground_truth_avg_score']]
+		core_cols = ['cycle', 'strategy', 'batch_fraction', 'selected_count', 'remaining_pool', 'cumulative_labeled', 'batch_size']
+		selection_cols = [col for col in metrics_df.columns if col in ['avg_score_selected', 'ground_truth_avg_score', 'uncertainty_mean', 'uncertainty_std']]
 		molecular_cols = [col for col in metrics_df.columns if 'diversity' in col or 'similarity' in col or 'novelty' in col]
-		benchmark_cols = [col for col in metrics_df.columns if 'top_k_overlap' in col or 'enrichment_factor' in col or 'ground_truth_ef' in col]
-		other_cols = [col for col in metrics_df.columns if col not in core_cols + model_cols + selection_cols + molecular_cols + benchmark_cols]
+		discovery_cols = [col for col in metrics_df.columns if 'discovery' in col or 'cumulative_ef' in col or 'batch_ef' in col or 'batch_hit_rate' in col or 'score_ratio' in col]
+		unlabeled_ranking_cols = [col for col in metrics_df.columns if 'unlabeled_' in col]
+		ground_truth_cols = [col for col in metrics_df.columns if 'ground_truth_ef' in col]
+		other_cols = [col for col in metrics_df.columns if col not in core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols]
 		
 		# Reorder columns for logical grouping
-		ordered_cols = core_cols + model_cols + selection_cols + molecular_cols + benchmark_cols + other_cols
+		ordered_cols = core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols + other_cols
 		metrics_df = metrics_df[[col for col in ordered_cols if col in metrics_df.columns]]
 		
 		# Append the DataFrame (without header since we added metadata)

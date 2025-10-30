@@ -14,11 +14,23 @@ from .performance import (
 )
 
 from .enrichment import (
+    # Discovery metrics (Category A)
+    calculate_multiple_top_k_discovery_rates,
+    calculate_cumulative_enrichment_factor,
+    calculate_batch_hit_rate,
+    calculate_batch_enrichment_factor,
+    calculate_average_score_ratio,
+    calculate_batch_average_score_ratio,
+    # Ranking metrics (Category B) - unlabeled only
+    calculate_multiple_unlabeled_top_k_overlaps,
+    calculate_multiple_unlabeled_enrichment_factors,
+    calculate_unlabeled_ranking_correlation,
+    # Existing functions (kept for compatibility)
     calculate_enrichment_factor,
-    calculate_multiple_enrichment_factors,
     calculate_top_k_overlap,
     calculate_multiple_top_k_overlaps,
-    calculate_ground_truth_enrichment_factors
+    calculate_multiple_enrichment_factors,
+    calculate_ground_truth_enrichment_factors,
 )
 
 from .similarity import (
@@ -31,7 +43,20 @@ __all__ = [
     'calculate_spearman_correlation',
     'calculate_average_score',
 
-    # Enrichment metrics
+    # Discovery metrics
+    'calculate_multiple_top_k_discovery_rates',
+    'calculate_cumulative_enrichment_factor',
+    'calculate_batch_hit_rate',
+    'calculate_batch_enrichment_factor',
+    'calculate_average_score_ratio',
+    'calculate_batch_average_score_ratio',
+
+    # Ranking metrics
+    'calculate_multiple_unlabeled_top_k_overlaps',
+    'calculate_multiple_unlabeled_enrichment_factors',
+    'calculate_unlabeled_ranking_correlation',
+
+    # Existing enrichment metrics
     'calculate_enrichment_factor',
     'calculate_multiple_enrichment_factors',
     'calculate_top_k_overlap',

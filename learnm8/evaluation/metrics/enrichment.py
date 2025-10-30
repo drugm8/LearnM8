@@ -264,3 +264,443 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
             results[key] = None
 
     return results
+
+
+def calculate_multiple_top_k_discovery_rates(
+    selected_ids: set,
+    ground_truth_df: pd.DataFrame,
+    target_column: str,
+    score_direction: str = 'higher'
+) -> dict:
+    """
+    Calculate discovery rates at multiple K values (both fixed and percentage-based).
+
+    Discovery rate = fraction of true top-K compounds that have been selected.
+    NO predictions needed - pure discovery metric.
+
+    Args:
+        selected_ids: Set of all compound IDs selected so far (cumulative)
+        ground_truth_df: DataFrame with ground truth target values (must have 'ID' column)
+        target_column: Column name for target property
+        score_direction: 'higher' or 'lower' for score interpretation
+
+    Returns:
+        Dictionary with 6 discovery rates:
+        - top_10_discovery: Discovery rate for top-10 compounds (%)
+        - top_100_discovery: Discovery rate for top-100 compounds (%)
+        - top_1000_discovery: Discovery rate for top-1000 compounds (%)
+        - top_0_1_pct_discovery: Discovery rate for top-0.1% compounds (%)
+        - top_1_pct_discovery: Discovery rate for top-1% compounds (%)
+        - top_10_pct_discovery: Discovery rate for top-10% compounds (%)
+    """
+    n_total = len(ground_truth_df)
+    ascending = (score_direction == 'lower')
+
+    # Define K values: fixed numbers and percentages
+    k_values = {
+        'top_10_discovery': min(10, n_total),
+        'top_100_discovery': min(100, n_total),
+        'top_1000_discovery': min(1000, n_total),
+        'top_0_1_pct_discovery': max(1, int(n_total * 0.001)),  # 0.1%
+        'top_1_pct_discovery': max(1, int(n_total * 0.01)),     # 1%
+        'top_10_pct_discovery': max(1, int(n_total * 0.10))     # 10%
+    }
+
+    results = {}
+    for key, k in k_values.items():
+        # Get true top-K compounds
+        if ascending:
+            true_top_k = set(ground_truth_df.nsmallest(k, target_column)['ID'].values)
+        else:
+            true_top_k = set(ground_truth_df.nlargest(k, target_column)['ID'].values)
+
+        # Calculate discovery: how many of true top-K have we selected?
+        discovered = selected_ids & true_top_k
+        discovery_rate = (len(discovered) / k) * 100
+        results[key] = round(discovery_rate, 2)
+
+    return results
+
+
+def calculate_cumulative_enrichment_factor(
+    selected_ids: set,
+    ground_truth_df: pd.DataFrame,
+    activity_column: str = 'Activity'
+) -> float:
+    """
+    Calculate enrichment factor of all selections vs random.
+
+    Works with BINARY labels (active/inactive). Returns None if Activity column absent.
+
+    Args:
+        selected_ids: Set of all selected compound IDs
+        ground_truth_df: DataFrame with ground truth Activity labels
+        activity_column: Column name for binary activity (0/1)
+
+    Returns:
+        Enrichment factor, or None if Activity column not present
+    """
+    # Check if Activity column present
+    if activity_column not in ground_truth_df.columns:
+        return None
+
+    # Selected compounds
+    selected_df = ground_truth_df[ground_truth_df['ID'].isin(selected_ids)]
+    n_selected = len(selected_df)
+    if n_selected == 0:
+        return None
+
+    n_actives_found = (selected_df[activity_column] == 1).sum()
+
+    # Population
+    n_total = len(ground_truth_df)
+    n_actives_total = (ground_truth_df[activity_column] == 1).sum()
+
+    # Calculate EF
+    if n_actives_total == 0:
+        return None
+
+    hit_rate_selected = n_actives_found / n_selected
+    hit_rate_population = n_actives_total / n_total
+
+    cumulative_ef = hit_rate_selected / hit_rate_population
+
+    return round(cumulative_ef, 3)
+
+
+def calculate_batch_hit_rate(
+    newly_selected_df: pd.DataFrame,
+    activity_column: str = 'Activity'
+) -> float:
+    """
+    Calculate hit rate for current batch.
+
+    Returns None if Activity column not present.
+
+    Args:
+        newly_selected_df: DataFrame of newly selected compounds (with Activity measured)
+        activity_column: Column name for binary activity
+
+    Returns:
+        Hit rate as fraction (0-1), or None if Activity column absent
+    """
+    if activity_column not in newly_selected_df.columns:
+        return None
+
+    n_batch = len(newly_selected_df)
+    if n_batch == 0:
+        return None
+
+    n_actives_batch = (newly_selected_df[activity_column] == 1).sum()
+
+    batch_hit_rate = n_actives_batch / n_batch
+
+    return round(batch_hit_rate, 4)
+
+
+def calculate_batch_enrichment_factor(
+    newly_selected_df: pd.DataFrame,
+    ground_truth_df: pd.DataFrame,
+    activity_column: str = 'Activity'
+) -> float:
+    """
+    Calculate enrichment factor for this cycle's batch.
+
+    Returns None if Activity column not present.
+
+    Args:
+        newly_selected_df: DataFrame of newly selected compounds
+        ground_truth_df: Full ground truth DataFrame
+        activity_column: Column name for binary activity
+
+    Returns:
+        Batch enrichment factor, or None if Activity column absent
+    """
+    # Check if Activity column present
+    if activity_column not in newly_selected_df.columns or \
+       activity_column not in ground_truth_df.columns:
+        return None
+
+    # Batch statistics
+    n_batch = len(newly_selected_df)
+    if n_batch == 0:
+        return None
+
+    n_actives_batch = (newly_selected_df[activity_column] == 1).sum()
+
+    # Population statistics
+    n_total = len(ground_truth_df)
+    n_actives_total = (ground_truth_df[activity_column] == 1).sum()
+
+    # Calculate EF
+    if n_actives_total == 0:
+        return None
+
+    hit_rate_batch = n_actives_batch / n_batch
+    hit_rate_population = n_actives_total / n_total
+
+    batch_ef = hit_rate_batch / hit_rate_population
+
+    return round(batch_ef, 3)
+
+
+def calculate_average_score_ratio(
+    selected_ids: set,
+    ground_truth_df: pd.DataFrame,
+    target_column: str,
+    score_direction: str = 'higher'
+) -> float:
+    """
+    Calculate ratio of average scores between all selections and population.
+
+    Alternative to enrichment factor when only continuous scores available
+    (no binary Activity labels).
+
+    The ratio compares the magnitude of selected compounds' average score
+    to the population average. For score_direction='lower', uses absolute
+    values to correctly handle negative scores (e.g., docking energies where
+    more negative values indicate better binding).
+
+    Args:
+        selected_ids: Set of all compound IDs selected so far (cumulative)
+        ground_truth_df: DataFrame with ground truth target values
+        target_column: Column name for target property
+        score_direction: 'higher' or 'lower' for score interpretation
+
+    Returns:
+        Score ratio (>1.0 means selections better than average)
+    """
+    # Selected compounds
+    selected_df = ground_truth_df[ground_truth_df['ID'].isin(selected_ids)]
+    if len(selected_df) == 0:
+        return 1.0
+
+    avg_score_selected = selected_df[target_column].mean()
+
+    # Population
+    avg_score_population = ground_truth_df[target_column].mean()
+
+    # Calculate ratio based on direction
+    if score_direction == 'higher':
+        # Higher scores are better
+        score_ratio = avg_score_selected / avg_score_population
+    else:
+        # Lower scores are better (e.g., docking scores, energies)
+        # Use absolute values for magnitude comparison to handle negative scores
+        score_ratio = abs(avg_score_selected) / abs(avg_score_population)
+
+    return round(score_ratio, 3)
+
+
+def calculate_batch_average_score_ratio(
+    newly_selected_df: pd.DataFrame,
+    ground_truth_df: pd.DataFrame,
+    target_column: str,
+    score_direction: str = 'higher'
+) -> float:
+    """
+    Calculate score ratio for current batch only.
+
+    The ratio compares the magnitude of batch average score to population
+    average. For score_direction='lower', uses absolute values to correctly
+    handle negative scores (e.g., docking energies where more negative values
+    indicate better binding).
+
+    Args:
+        newly_selected_df: DataFrame of newly selected compounds this cycle
+        ground_truth_df: Full ground truth DataFrame
+        target_column: Column name for target property
+        score_direction: 'higher' or 'lower' for score interpretation
+
+    Returns:
+        Batch score ratio (>1.0 means batch better than average)
+    """
+    if len(newly_selected_df) == 0:
+        return 1.0
+
+    avg_score_batch = newly_selected_df[target_column].mean()
+    avg_score_population = ground_truth_df[target_column].mean()
+
+    # Calculate ratio based on direction
+    if score_direction == 'higher':
+        score_ratio = avg_score_batch / avg_score_population
+    else:
+        # Lower scores are better (e.g., docking scores, energies)
+        # Use absolute values for magnitude comparison to handle negative scores
+        score_ratio = abs(avg_score_batch) / abs(avg_score_population)
+
+    return round(score_ratio, 3)
+
+
+def calculate_multiple_unlabeled_top_k_overlaps(
+    unlabeled_predictions_df: pd.DataFrame,
+    ground_truth_df: pd.DataFrame,
+    target_column: str,
+    score_direction: str = 'higher'
+) -> dict:
+    """
+    Calculate top-K ranking overlaps on UNLABELED compounds only.
+
+    CRITICAL: unlabeled_predictions_df MUST exclude all labeled/training compounds
+    to avoid training data contamination.
+
+    Ranking overlap = model's predicted top-K ∩ true top-K (within unlabeled pool)
+
+    Args:
+        unlabeled_predictions_df: DataFrame with 'ID' and 'prediction' for UNLABELED compounds only
+        ground_truth_df: DataFrame with ground truth values
+        target_column: Column name for target property
+        score_direction: 'higher' or 'lower' for score interpretation
+
+    Returns:
+        Dictionary with:
+        - unlabeled_top_100_overlap: Overlap percentage for top-100 (%)
+        - unlabeled_top_1000_overlap: Overlap percentage for top-1000 (%)
+    """
+    k_values = {
+        'unlabeled_top_100_overlap': 100,
+        'unlabeled_top_1000_overlap': 1000
+    }
+
+    # Merge predictions with ground truth (unlabeled only)
+    merged = pd.merge(
+        unlabeled_predictions_df,
+        ground_truth_df[['ID', target_column]],
+        on='ID'
+    )
+
+    results = {}
+    ascending = (score_direction == 'lower')
+
+    for key, k in k_values.items():
+        # Adjust k if unlabeled pool smaller
+        k_actual = min(k, len(merged))
+        if k_actual == 0:
+            results[key] = 0.0
+            continue
+
+        # Get top-K by MODEL predictions (on unlabeled)
+        if ascending:
+            model_top_k = set(merged.nsmallest(k_actual, 'prediction')['ID'].values)
+        else:
+            model_top_k = set(merged.nlargest(k_actual, 'prediction')['ID'].values)
+
+        # Get top-K by TRUTH (within unlabeled)
+        if ascending:
+            true_top_k = set(merged.nsmallest(k_actual, target_column)['ID'].values)
+        else:
+            true_top_k = set(merged.nlargest(k_actual, target_column)['ID'].values)
+
+        # Calculate overlap
+        overlap = len(model_top_k & true_top_k)
+        overlap_pct = (overlap / k_actual) * 100
+        results[key] = round(overlap_pct, 2)
+
+    return results
+
+
+def calculate_multiple_unlabeled_enrichment_factors(
+    unlabeled_predictions_df: pd.DataFrame,
+    ground_truth_df: pd.DataFrame,
+    activity_column: str,
+    score_direction: str = 'higher'
+) -> dict:
+    """
+    Calculate prospective enrichment factors on UNLABELED compounds only.
+
+    "If we selected top X% of unlabeled by model, what EF would we get?"
+
+    Returns None values if Activity column absent.
+
+    Args:
+        unlabeled_predictions_df: Predictions on UNLABELED compounds only
+        ground_truth_df: Ground truth with Activity labels
+        activity_column: Column name for binary labels
+        score_direction: 'higher' or 'lower' for score interpretation
+
+    Returns:
+        Dictionary with:
+        - unlabeled_ef_1_0: Prospective EF at 1% (or None)
+        - unlabeled_ef_5_0: Prospective EF at 5% (or None)
+    """
+    # Check if Activity column present
+    if activity_column not in ground_truth_df.columns:
+        return {
+            'unlabeled_ef_1_0': None,
+            'unlabeled_ef_5_0': None
+        }
+
+    # Merge unlabeled predictions with Activity labels
+    merged = pd.merge(
+        unlabeled_predictions_df,
+        ground_truth_df[['ID', activity_column]],
+        on='ID'
+    )
+
+    if len(merged) == 0:
+        return {
+            'unlabeled_ef_1_0': None,
+            'unlabeled_ef_5_0': None
+        }
+
+    percentiles = [1.0, 5.0]
+    results = {}
+    ascending = (score_direction == 'lower')
+
+    for p in percentiles:
+        # Sort by model predictions
+        sorted_df = merged.sort_values('prediction', ascending=ascending)
+
+        # Select top percentile
+        n_total = len(sorted_df)
+        n_select = max(1, int(n_total * p / 100))
+        top_percentile = sorted_df.head(n_select)
+
+        # Calculate EF
+        n_actives_selected = (top_percentile[activity_column] == 1).sum()
+        n_actives_total = (merged[activity_column] == 1).sum()
+
+        if n_select == 0 or n_actives_total == 0:
+            ef = 0.0
+        else:
+            hit_rate_selected = n_actives_selected / n_select
+            hit_rate_population = n_actives_total / n_total
+            ef = hit_rate_selected / hit_rate_population
+
+        # Create key name (1.0 -> ef_1_0, 5.0 -> ef_5_0)
+        key = f"unlabeled_ef_{str(p).replace('.', '_')}"
+        results[key] = round(ef, 3)
+
+    return results
+
+
+def calculate_unlabeled_ranking_correlation(
+    unlabeled_predictions_df: pd.DataFrame,
+    ground_truth_df: pd.DataFrame,
+    target_column: str
+) -> float:
+    """
+    Calculate Spearman correlation on UNLABELED compounds only.
+
+    Args:
+        unlabeled_predictions_df: Predictions on unlabeled only
+        ground_truth_df: Ground truth values
+        target_column: Target property column
+
+    Returns:
+        Spearman correlation coefficient
+    """
+    from scipy.stats import spearmanr
+
+    merged = pd.merge(
+        unlabeled_predictions_df,
+        ground_truth_df[['ID', target_column]],
+        on='ID'
+    )
+
+    if len(merged) < 2:
+        return 0.0
+
+    correlation, _ = spearmanr(merged['prediction'], merged[target_column])
+
+    return round(correlation, 4) if not np.isnan(correlation) else 0.0
