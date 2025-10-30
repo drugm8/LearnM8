@@ -144,71 +144,104 @@ def create_dashboard_animation_from_csv(
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
         ((ax1, ax2), (ax3, ax4)) = axes
 
-    ax1.set_title('Predicted vs True Activity' if is_benchmark else 'Prediction Evolution')
-    ax1.set_xlabel('True Activity' if is_benchmark else 'Cycle')
-    ax1.set_ylabel('Predicted Activity')
+    ax1.set_title('Uncertainty vs Prediction')
+    ax1.set_xlabel('Predicted Activity')
+    ax1.set_ylabel('Uncertainty')
 
-    ax2.set_title('Uncertainty vs Prediction')
-    ax2.set_xlabel('Predicted Activity')
-    ax2.set_ylabel('Uncertainty')
+    ax2.set_title('Discovery Metrics')
+    ax2.set_xlabel('Data Explored')
+    ax2.set_ylabel('Discovery Rate (%)')
 
     ax3.set_title('Cumulative Best Value Found')
-    ax3.set_xlabel('Cycle')
+    ax3.set_xlabel('Data Explored')
     ax3.set_ylabel('Best Value (Lower is Better)')
 
-    ax4.set_title('Cumulative Performance')
-    ax4.set_xlabel('Cycle')
+    ax4.set_title('Model Ranking Metrics')
+    ax4.set_xlabel('Data Explored')
     ax4.set_ylabel('Metric Value')
 
-    scatter_train = ax1.scatter([], [], c='blue', alpha=0.5, s=20, label='Training')
-    scatter_new = ax1.scatter([], [], c='red', marker='x', s=100, linewidths=2, label='Newly Selected', alpha=0.8)
-    scatter2 = ax2.scatter([], [], c=[], cmap='viridis', alpha=0.6, s=20)
+    # Panel A: Uncertainty vs Prediction scatter
+    scatter1 = ax1.scatter([], [], c=[], cmap='viridis', alpha=0.6, s=20)
 
     strategy_scatters = {}
     if unique_strategies:
         for strategy in unique_strategies:
             color = strategy_color_map[strategy]
-            scatter = ax2.scatter([], [], c=color, marker='x', s=100, linewidths=2, label=strategy, alpha=0.8)
+            scatter = ax1.scatter([], [], c=color, marker='x', s=100, linewidths=2, label=strategy, alpha=0.8)
             strategy_scatters[strategy] = scatter
 
-    line_rmse, = ax4.plot([], [], 'b-', linewidth=2, label='RMSE')
-    line_r2, = ax4.plot([], [], 'g-', linewidth=2, label='R²')
-
     if strategy_scatters:
-        ax2.legend(loc='upper right')
+        ax1.legend(loc='upper right')
 
-    if is_benchmark and 'top_10_percent_overlap' in metrics_df.columns:
-        ax4_twin = ax4.twinx()
-        line_top_k, = ax4_twin.plot([], [], 'r-', linewidth=2, label='Top-10% Recovery')
-        ax4_twin.set_ylabel('Top-10% Recovery (%)', color='r')
-        ax4_twin.tick_params(axis='y', labelcolor='r')
-    else:
-        ax4_twin = None
-        line_top_k = None
+    # Panel B: Discovery metrics (6 line plots)
+    line_top10_disc, = ax2.plot([], [], 'r-o', linewidth=2, markersize=4, label='Top-10')
+    line_top100_disc, = ax2.plot([], [], 'b-s', linewidth=2, markersize=4, label='Top-100')
+    line_top01pct_disc, = ax2.plot([], [], 'g-^', linewidth=2, markersize=4, label='Top-0.1%')
+    line_top1pct_disc, = ax2.plot([], [], 'm-d', linewidth=2, markersize=4, label='Top-1%')
 
-    ax4.legend(loc='upper left')
-    if ax4_twin:
-        ax4_twin.legend(loc='upper right')
+    ax2_twin = ax2.twinx()
+    line_batch_ratio, = ax2_twin.plot([], [], 'c--', linewidth=2, markersize=4, label='Batch Ratio')
+    line_cumul_ratio, = ax2_twin.plot([], [], 'orange', linestyle='--', linewidth=2, markersize=4, label='Cumul Ratio')
+    ax2_twin.set_ylabel('Avg Score Ratio', color='darkcyan', fontweight='bold')
+    ax2_twin.tick_params(axis='y', labelcolor='darkcyan')
 
-    ax1.legend(loc='lower right')
+    ax2.legend(loc='upper left', fontsize=8)
+    ax2_twin.legend(loc='upper right', fontsize=8)
+    ax2.set_ylim(0, 100)
+
+    # Panel D: Model ranking metrics (3 line plots)
+    line_spearman, = ax4.plot([], [], 'b-o', linewidth=2, markersize=4, label='Spearman ρ')
+
+    ax4_twin1 = ax4.twinx()
+    line_top1000_overlap, = ax4_twin1.plot([], [], 'g-s', linewidth=2, markersize=4, label='Top-1000 Overlap')
+
+    ax4_twin2 = ax4.twinx()
+    ax4_twin2.spines['right'].set_position(('outward', 60))
+    line_top100_overlap, = ax4_twin2.plot([], [], 'r-^', linewidth=2, markersize=4, label='Top-100 Overlap')
+
+    ax4.set_ylabel('Spearman ρ', color='blue', fontweight='bold')
+    ax4.tick_params(axis='y', labelcolor='blue')
+    ax4.set_ylim(-1, 1)
+
+    ax4_twin1.set_ylabel('Top-1000 Overlap (%)', color='green', fontweight='bold')
+    ax4_twin1.tick_params(axis='y', labelcolor='green')
+    ax4_twin1.set_ylim(0, 100)
+
+    ax4_twin2.set_ylabel('Top-100 Overlap (%)', color='red', fontweight='bold')
+    ax4_twin2.tick_params(axis='y', labelcolor='red')
+    ax4_twin2.set_ylim(0, 100)
+
+    lines = [line_spearman] + [line_top1000_overlap] + [line_top100_overlap]
+    labels = [l.get_label() for l in lines]
+    ax4.legend(lines, labels, loc='center left', fontsize=8)
 
     metric_text = None
     regression_line = None
 
     def init():
-        scatter_train.set_offsets(np.empty((0, 2)))
-        scatter_new.set_offsets(np.empty((0, 2)))
-        scatter2.set_offsets(np.empty((0, 2)))
-        scatter2.set_array(np.array([]))
+        scatter1.set_offsets(np.empty((0, 2)))
+        scatter1.set_array(np.array([]))
         for scatter in strategy_scatters.values():
             scatter.set_offsets(np.empty((0, 2)))
-        line_rmse.set_data([], [])
-        line_r2.set_data([], [])
-        if line_top_k:
-            line_top_k.set_data([], [])
 
-        artists = [scatter_train, scatter_new, scatter2, line_rmse, line_r2]
+        # Panel B: Discovery metrics
+        line_top10_disc.set_data([], [])
+        line_top100_disc.set_data([], [])
+        line_top01pct_disc.set_data([], [])
+        line_top1pct_disc.set_data([], [])
+        line_batch_ratio.set_data([], [])
+        line_cumul_ratio.set_data([], [])
+
+        # Panel D: Model ranking metrics
+        line_spearman.set_data([], [])
+        line_top1000_overlap.set_data([], [])
+        line_top100_overlap.set_data([], [])
+
+        artists = [scatter1]
         artists.extend(strategy_scatters.values())
+        artists.extend([line_top10_disc, line_top100_disc, line_top01pct_disc, line_top1pct_disc,
+                       line_batch_ratio, line_cumul_ratio,
+                       line_spearman, line_top1000_overlap, line_top100_overlap])
         return tuple(artists)
 
     def update(cycle_idx):
@@ -218,107 +251,8 @@ def create_dashboard_animation_from_csv(
         cycle_num = int(cycle_col.split('_')[-1])
 
         predictions = predictions_df[cycle_col].values
-        true_values = predictions_df[target_col].values if target_col and target_col in predictions_df.columns else None
 
-        if is_benchmark and true_values is not None:
-            labeled_cycles = predictions_df['labeled_cycle'].values
-
-            # Separate training (labeled before this cycle) from newly selected (labeled in this cycle)
-            training_mask = (labeled_cycles < cycle_num) & ~np.isnan(predictions) & ~np.isnan(true_values)
-            new_mask = (labeled_cycles == cycle_num) & ~np.isnan(predictions) & ~np.isnan(true_values)
-
-            pred_train = predictions[training_mask]
-            true_train = true_values[training_mask]
-            pred_new = predictions[new_mask]
-            true_new = true_values[new_mask]
-
-            # Downsample if needed (applied separately to maintain proportions)
-            if len(pred_train) > downsample_scatter:
-                sample_indices = np.random.choice(len(pred_train), downsample_scatter, replace=False)
-                pred_train = pred_train[sample_indices]
-                true_train = true_train[sample_indices]
-
-            if len(pred_new) > downsample_scatter // 2:
-                sample_indices = np.random.choice(len(pred_new), downsample_scatter // 2, replace=False)
-                pred_new = pred_new[sample_indices]
-                true_new = true_new[sample_indices]
-
-            # Plot training set
-            if len(pred_train) > 0:
-                scatter_train.set_offsets(np.c_[true_train, pred_train])
-            else:
-                scatter_train.set_offsets(np.empty((0, 2)))
-
-            # Plot newly selected compounds
-            if len(pred_new) > 0:
-                scatter_new.set_offsets(np.c_[true_new, pred_new])
-            else:
-                scatter_new.set_offsets(np.empty((0, 2)))
-
-            # Set axis limits based on all data
-            all_values = np.concatenate([pred_train, true_train, pred_new, true_new])
-            if len(all_values) > 0:
-                vmin, vmax = all_values.min(), all_values.max()
-                margin = (vmax - vmin) * 0.1 if vmax > vmin else 1.0
-                ax1.set_xlim(vmin - margin, vmax + margin)
-                ax1.set_ylim(vmin - margin, vmax + margin)
-
-                # Clear old lines and add diagonal reference
-                while len(ax1.lines) > 0:
-                    ax1.lines[0].remove()
-                ax1.plot([vmin - margin, vmax + margin], [vmin - margin, vmax + margin], 'k--', alpha=0.5, linewidth=1)
-
-                # Fit regression line ONLY to training data
-                if len(pred_train) > 1:
-                    coeffs = np.polyfit(true_train, pred_train, 1)
-                    poly_line = np.poly1d(coeffs)
-                    x_fit = np.array([vmin - margin, vmax + margin])
-                    y_fit = poly_line(x_fit)
-                    regression_line, = ax1.plot(x_fit, y_fit, 'purple', linestyle='--', alpha=0.6, linewidth=2)
-
-            # Calculate R² separately for training and newly selected
-            if metric_text is not None:
-                metric_text.remove()
-
-            metric_lines = []
-
-            # R² for training set
-            if len(pred_train) > 1:
-                ss_res_train = np.sum((true_train - pred_train) ** 2)
-                ss_tot_train = np.sum((true_train - np.mean(true_train)) ** 2)
-                r2_train = 1 - (ss_res_train / ss_tot_train) if ss_tot_train > 0 else 0.0
-                metric_lines.append(f"R² (train) = {r2_train:.3f}")
-
-            # R² for newly selected (if any)
-            if len(pred_new) > 1:
-                ss_res_new = np.sum((true_new - pred_new) ** 2)
-                ss_tot_new = np.sum((true_new - np.mean(true_new)) ** 2)
-                r2_new = 1 - (ss_res_new / ss_tot_new) if ss_tot_new > 0 else 0.0
-                metric_lines.append(f"R² (new) = {r2_new:.3f}")
-
-            # Add Spearman if available (calculated on all labeled data)
-            if cycle_idx < len(metrics_df):
-                spearman = metrics_df['spearman_correlation'].iloc[cycle_idx] if 'spearman_correlation' in metrics_df.columns else None
-                if spearman is not None and not np.isnan(spearman):
-                    metric_lines.append(f"ρ = {spearman:.3f}")
-
-            metric_str = '\n'.join(metric_lines)
-            metric_text = ax1.text(0.02, 0.98, metric_str,
-                                  transform=ax1.transAxes,
-                                  fontsize=12, fontweight='bold',
-                                  verticalalignment='top',
-                                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='black'))
-        else:
-            # Non-benchmark mode: show prediction evolution over cycles
-            cycles_array = np.arange(cycle_idx + 1)
-            pred_means = []
-            for i in range(cycle_idx + 1):
-                col_preds = predictions_df[pred_cols[i]].values
-                pred_means.append(np.nanmean(col_preds))
-            scatter_train.set_offsets(np.c_[cycles_array, pred_means])
-            scatter_new.set_offsets(np.empty((0, 2)))  # Clear new scatter in run mode
-            ax1.set_xlim(-0.5, n_cycles + 0.5)
-
+        # Panel A: Uncertainty vs Prediction scatter
         if cycle_idx < len(unc_cols):
             unc_col = unc_cols[cycle_idx]
             uncertainties = predictions_df[unc_col].values
@@ -333,11 +267,11 @@ def create_dashboard_animation_from_csv(
                     pred_clean = pred_clean[sample_indices]
                     unc_clean = unc_clean[sample_indices]
 
-                scatter2.set_offsets(np.c_[pred_clean, unc_clean])
-                scatter2.set_array(pred_clean)
+                scatter1.set_offsets(np.c_[pred_clean, unc_clean])
+                scatter1.set_array(pred_clean)
 
-                ax2.set_xlim(ax2_xlim)
-                ax2.set_ylim(ax2_ylim)
+                ax1.set_xlim(ax2_xlim)
+                ax1.set_ylim(ax2_ylim)
 
                 if not selections_df.empty and strategy_scatters:
                     selected_up_to_cycle = selections_df[selections_df['cycle'] <= cycle_num]
@@ -364,13 +298,45 @@ def create_dashboard_animation_from_csv(
                     for scatter in strategy_scatters.values():
                         scatter.set_offsets(np.empty((0, 2)))
         else:
-            scatter2.set_offsets(np.empty((0, 2)))
+            scatter1.set_offsets(np.empty((0, 2)))
             for scatter in strategy_scatters.values():
                 scatter.set_offsets(np.empty((0, 2)))
 
+        # Panel B: Discovery Metrics
+        cycles = np.arange(cycle_idx + 1)
+        top10_values = metrics_df['top_10_discovery'].iloc[:cycle_idx + 1].values if 'top_10_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        top100_values = metrics_df['top_100_discovery'].iloc[:cycle_idx + 1].values if 'top_100_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        top01pct_values = metrics_df['top_0_1_pct_discovery'].iloc[:cycle_idx + 1].values if 'top_0_1_pct_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        top1pct_values = metrics_df['top_1_pct_discovery'].iloc[:cycle_idx + 1].values if 'top_1_pct_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        batch_ratio_values = metrics_df['batch_avg_score_ratio'].iloc[:cycle_idx + 1].values if 'batch_avg_score_ratio' in metrics_df.columns else np.ones(cycle_idx + 1)
+        cumul_ratio_values = metrics_df['cumulative_avg_score_ratio'].iloc[:cycle_idx + 1].values if 'cumulative_avg_score_ratio' in metrics_df.columns else np.ones(cycle_idx + 1)
+
+        # Calculate percentage explored for x-axis coordinates
+        n_total = len(predictions_df)
+        pct_explored = []
+        for i in range(cycle_idx + 1):
+            cumulative = metrics_df['cumulative_labeled'].iloc[i] if 'cumulative_labeled' in metrics_df.columns else 0
+            pct = (cumulative / n_total) * 100 if n_total > 0 else 0
+            pct_explored.append(pct)
+
+        line_top10_disc.set_data(pct_explored, top10_values)
+        line_top100_disc.set_data(pct_explored, top100_values)
+        line_top01pct_disc.set_data(pct_explored, top01pct_values)
+        line_top1pct_disc.set_data(pct_explored, top1pct_values)
+        line_batch_ratio.set_data(pct_explored, batch_ratio_values)
+        line_cumul_ratio.set_data(pct_explored, cumul_ratio_values)
+
+        max_pct = pct_explored[-1] if len(pct_explored) > 0 else 5.0
+        ax2.set_xlim(0, max_pct * 1.1)
+        ax2.set_xlabel('Data Explored (%)', fontsize=10)
+        ax2.set_xticks(pct_explored)
+        x_labels = [f'{pct:.1f}%\n(c{c})' for c, pct in zip(cycles, pct_explored)]
+        ax2.set_xticklabels(x_labels, fontsize=8, rotation=0)
+
+        # Panel C: Cumulative Best Value Found
         ax3.clear()
         ax3.set_title('Cumulative Best Value Found')
-        ax3.set_xlabel('Cycle')
+        ax3.set_xlabel('Data Explored (%)', fontsize=10)
         ax3.set_ylabel('Best Value (Lower is Better)')
 
         if not selections_df.empty:
@@ -387,42 +353,48 @@ def create_dashboard_animation_from_csv(
                         best_so_far = min(best_so_far, cycle_best)
                     cumulative_best.append(best_so_far)
 
-                cycles_range = np.arange(len(cumulative_best))
-                ax3.plot(cycles_range, cumulative_best, 'b-', linewidth=2, marker='o', markersize=4, label='Best Found')
+                pct_range = pct_explored[:cycle_num + 1]
+                ax3.plot(pct_range, cumulative_best, 'b-', linewidth=2, marker='o', markersize=4, label='Best Found')
 
                 if target_col and target_col in predictions_df.columns:
                     true_best = predictions_df[target_col].min()
                     if not np.isnan(true_best):
                         ax3.axhline(y=true_best, color='g', linestyle='--', linewidth=2, alpha=0.7, label='True Best')
 
-                ax3.set_xlim(-0.5, n_cycles + 0.5)
+                max_pct = pct_explored[-1] if len(pct_explored) > 0 else 5.0
+                ax3.set_xlim(0, max_pct * 1.1)
                 if len(cumulative_best) > 0:
                     y_range = cumulative_best[0] - cumulative_best[-1]
                     ax3.set_ylim(cumulative_best[-1] - y_range * 0.2, cumulative_best[0] + y_range * 0.2)
                 ax3.legend(loc='upper right')
                 ax3.grid(True, alpha=0.3)
 
-        cycles = np.arange(cycle_idx + 1)
-        rmse_values = metrics_df['rmse'].iloc[:cycle_idx + 1].values
-        r2_values = metrics_df['r2_score'].iloc[:cycle_idx + 1].values
+                # Update x-axis labels for Panel C
+                ax3.set_xticks(pct_range)
+                x_labels_c = [f'{pct:.1f}%\n(c{c})' for c, pct in zip(range(len(pct_range)), pct_range)]
+                ax3.set_xticklabels(x_labels_c, fontsize=8, rotation=0)
 
-        line_rmse.set_data(cycles, rmse_values)
-        line_r2.set_data(cycles, r2_values)
+        # Panel D: Model Ranking Metrics
+        spearman_values = metrics_df['unlabeled_spearman_correlation'].iloc[:cycle_idx + 1].values if 'unlabeled_spearman_correlation' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        top1000_overlap_values = metrics_df['unlabeled_top_1000_overlap'].iloc[:cycle_idx + 1].values if 'unlabeled_top_1000_overlap' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        top100_overlap_values = metrics_df['unlabeled_top_100_overlap'].iloc[:cycle_idx + 1].values if 'unlabeled_top_100_overlap' in metrics_df.columns else np.zeros(cycle_idx + 1)
 
-        ax4.set_xlim(-0.5, n_cycles + 0.5)
-        ax4.set_ylim(0, max(rmse_values.max() * 1.1, 1.0))
+        line_spearman.set_data(pct_explored, spearman_values)
+        line_top1000_overlap.set_data(pct_explored, top1000_overlap_values)
+        line_top100_overlap.set_data(pct_explored, top100_overlap_values)
 
-        if line_top_k and 'top_10_percent_overlap' in metrics_df.columns:
-            top_k_values = metrics_df['top_10_percent_overlap'].iloc[:cycle_idx + 1].values
-            line_top_k.set_data(cycles, top_k_values)
-            ax4_twin.set_ylim(0, 100)
+        ax4.set_xlim(0, max_pct * 1.1)
+        ax4.set_xlabel('Data Explored (%)', fontsize=10)
+        ax4.set_xticks(pct_explored)
+        ax4.set_xticklabels(x_labels, fontsize=8, rotation=0)
 
         fig.suptitle(f'Active Learning Progress - Cycle {cycle_num}', fontsize=14, fontweight='bold')
 
-        artists = [scatter_train, scatter_new, scatter2, line_rmse, line_r2]
+        artists = [scatter1]
         artists.extend(strategy_scatters.values())
-        if line_top_k:
-            artists.append(line_top_k)
+        artists.extend([line_top10_disc, line_top100_disc, line_top01pct_disc, line_top1pct_disc,
+                       line_batch_ratio, line_cumul_ratio,
+                       line_spearman, line_top1000_overlap, line_top100_overlap])
 
         return tuple(artists)
 
