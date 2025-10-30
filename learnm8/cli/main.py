@@ -75,8 +75,11 @@ Examples:
 
 Oracle Auto-Detection:
   - When oracle is omitted, the compound_pool CSV file is used as the oracle (benchmark mode)
-  - CSV oracles automatically trigger benchmark mode (full dataset prediction)
-  - Python oracles (module.py:function) automatically trigger run mode (unlabeled only)
+  - CSV oracles automatically trigger benchmark mode (enables discovery/ranking metrics using ground truth)
+  - Python oracles (module.py:function) automatically trigger run mode (basic metrics only)
+
+Note: Both modes predict on unlabeled compounds only for efficiency. Benchmark mode differs
+only in metric computation (includes discovery and ranking metrics using ground truth reference).
 
 Config File Precedence:
   - Config files provide default values for all parameters
@@ -298,27 +301,6 @@ def create_parser() -> argparse.ArgumentParser:
         default='random',
         help='First cycle strategy (default: random)'
     )
-    simple_group.add_argument(
-        '--initial-batch-fraction',
-        type=float,
-        default=0.01,
-        help='First cycle fraction (default: 0.01)'
-    )
-
-    initial_group = run_parser.add_argument_group('Initial Sampling')
-    initial_group.add_argument(
-        '--n-initial',
-        type=int,
-        default=10,
-        help='Initial training set size (default: 10)'
-    )
-    initial_group.add_argument(
-        '--initial-sampling',
-        choices=['random', 'diverse'],
-        default='random',
-        help='Initial sampling strategy (default: random)'
-    )
-
     pruning_group = run_parser.add_argument_group('Pruning')
     pruning_group.add_argument(
         '--pruning-fraction',
@@ -475,7 +457,6 @@ def cmd_run(args: argparse.Namespace):
         table.add_row("Featurizer", args.featurizer)
         table.add_row("Learner", args.learner)
         table.add_row("Score Direction", args.score_direction)
-        table.add_row("Initial Samples", str(args.n_initial))
         table.add_row("Total Cycles", str(len(cycles) if cycles else args.n_cycles))
         pruning_text = f"{args.pruning_fraction:.1%} per cycle" if args.pruning_fraction else "Disabled"
         table.add_row("Pruning", pruning_text)
@@ -511,9 +492,6 @@ def cmd_run(args: argparse.Namespace):
                         batch_fraction=args.batch_fraction,
                         strategy=args.strategy,
                         initial_strategy=args.initial_strategy,
-                        initial_batch_fraction=args.initial_batch_fraction,
-                        n_initial=args.n_initial,
-                        initial_sampling_strategy=args.initial_sampling,
                         score_direction=args.score_direction,
                         mode=args.mode,
                         output_dir=args.output,
@@ -541,9 +519,6 @@ def cmd_run(args: argparse.Namespace):
                     batch_fraction=args.batch_fraction,
                     strategy=args.strategy,
                     initial_strategy=args.initial_strategy,
-                    initial_batch_fraction=args.initial_batch_fraction,
-                    n_initial=args.n_initial,
-                    initial_sampling_strategy=args.initial_sampling,
                     score_direction=args.score_direction,
                     mode=args.mode,
                     output_dir=args.output,
