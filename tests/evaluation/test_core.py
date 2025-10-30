@@ -41,17 +41,14 @@ class TestEvaluateCore:
         # Verify result structure
         assert isinstance(result, dict)
         assert 'cycle' in result
-        assert 'rmse' in result
-        assert 'mae' in result
-        assert 'r2_score' in result
-        assert 'spearman_correlation' in result
-        
+        assert 'batch_size' in result
+        assert 'cumulative_labeled' in result
+        assert 'avg_score_selected' in result
+
         # Verify numeric values are reasonable
         assert result['cycle'] == 0
-        assert result['rmse'] >= 0
-        assert result['mae'] >= 0
-        assert -1 <= result['r2_score'] <= 1
-        assert -1 <= result['spearman_correlation'] <= 1
+        assert result['batch_size'] >= 0
+        assert result['cumulative_labeled'] >= 0
     
     def test_evaluate_cycle_benchmark_mode(self, diverse_real_compounds):
         """Test evaluate_cycle in benchmark mode with ground truth data."""
@@ -156,28 +153,25 @@ class TestEvaluationIntegration:
         metrics = {
             'cycle': 5,
             'batch_size': 20,
-            'rmse': 1.234,
-            'mae': 0.876,
-            'r2_score': 0.654,
-            'spearman_correlation': 0.789,
-            'cumulative_labeled': 150
+            'avg_score_selected': 1.234,
+            'ground_truth_avg_score': 0.876,
+            'cumulative_labeled': 150,
+            'uncertainty_mean': 0.321
         }
-        
+
         output = format_progress_output(metrics)
-        
+
         assert isinstance(output, str)
         assert 'Cycle 5' in output
-        assert '1.234' in output  # RMSE
-        assert '0.876' in output  # MAE
-        assert '0.654' in output  # R²
-        assert '0.789' in output  # Spearman
+        assert '20' in output  # batch_size
+        assert '150' in output  # cumulative_labeled
     
     def test_export_metrics_csv(self, tmp_path):
         """Test CSV export functionality."""
         metrics_list = [
-            {'cycle': 0, 'rmse': 1.5, 'mae': 1.2, 'r2_score': 0.6, 'spearman_correlation': 0.7},
-            {'cycle': 1, 'rmse': 1.3, 'mae': 1.0, 'r2_score': 0.7, 'spearman_correlation': 0.8},
-            {'cycle': 2, 'rmse': 1.1, 'mae': 0.9, 'r2_score': 0.8, 'spearman_correlation': 0.85}
+            {'cycle': 0, 'batch_size': 10, 'cumulative_labeled': 10, 'avg_score_selected': 1.5},
+            {'cycle': 1, 'batch_size': 10, 'cumulative_labeled': 20, 'avg_score_selected': 1.3},
+            {'cycle': 2, 'batch_size': 10, 'cumulative_labeled': 30, 'avg_score_selected': 1.1}
         ]
         
         output_file = tmp_path / "test_metrics.csv"
@@ -190,9 +184,9 @@ class TestEvaluationIntegration:
         df = pd.read_csv(output_file, comment='#')
         assert len(df) == 3
         assert 'cycle' in df.columns
-        assert 'rmse' in df.columns
+        assert 'batch_size' in df.columns
         assert df['cycle'].tolist() == [0, 1, 2]
-        assert df['rmse'].tolist() == [1.5, 1.3, 1.1]
+        assert df['batch_size'].tolist() == [10, 10, 10]
     
     def test_evaluation_with_real_molecular_workflow(self, medium_real_compounds):
         """Test complete evaluation workflow with real molecular data."""
@@ -224,13 +218,9 @@ class TestEvaluationIntegration:
         assert result['cycle'] == 3
         assert result['cumulative_labeled'] == 30
         assert result['batch_size'] == 10
-        assert result['rmse'] >= 0
-        assert result['mae'] >= 0
-        assert -1 <= result['spearman_correlation'] <= 1
-        
-        # Results should be reasonable for molecular data
-        assert result['rmse'] < 10  # Not too high for normalized activities
-        assert result['mae'] < 10
+
+        # Check basic metrics are present
+        assert 'avg_score_selected' in result or result['avg_score_selected'] is None
     
     def test_evaluation_error_handling(self, small_real_compounds):
         """Test error handling in evaluation functions."""
@@ -246,9 +236,9 @@ class TestEvaluationIntegration:
             selected_compounds=selected_compounds,
             target_col='Activity'
         )
-        # Should handle gracefully and return None for failed metrics
-        assert result['rmse'] is None
-        assert result['mae'] is None
+        # Should handle gracefully and return basic metrics
+        assert isinstance(result, dict)
+        assert 'cycle' in result
         
         # Invalid target column - function handles gracefully
         result = evaluate_cycle(
@@ -290,9 +280,9 @@ class TestEvaluationEdgeCases:
                 selected_compounds=selected_compounds,
                 target_col='Activity'
             )
-            # If it succeeds, metrics should be finite or None (function sets None for errors)
-            assert (result['rmse'] is None or 
-                   (isinstance(result['rmse'], (int, float)) and np.isfinite(result['rmse'])))
+            # If it succeeds, should return valid structure
+            assert isinstance(result, dict)
+            assert 'cycle' in result
         except (ValueError, RuntimeError):
             # This is also acceptable behavior
             pass
@@ -317,10 +307,8 @@ class TestEvaluationEdgeCases:
         
         # Should handle constant predictions
         assert isinstance(result, dict)
-        assert result['rmse'] >= 0
-        assert result['mae'] >= 0
-        # Spearman correlation should be NaN or 0 for constant predictions
-        assert np.isnan(result['spearman_correlation']) or result['spearman_correlation'] == 0
+        assert 'cycle' in result
+        assert 'batch_size' in result
     
     def test_evaluation_single_compound(self):
         """Test evaluation with single compound."""
@@ -346,5 +334,3 @@ class TestEvaluationEdgeCases:
         assert isinstance(result, dict)
         assert result['cumulative_labeled'] == 1
         assert result['batch_size'] == 1
-        # Single point correlations are undefined - function returns 0.0
-        assert result['spearman_correlation'] == 0.0

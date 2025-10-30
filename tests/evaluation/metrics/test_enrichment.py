@@ -12,7 +12,9 @@ from learnm8.evaluation.metrics.enrichment import (
     calculate_top_k_overlap,
     calculate_enrichment_factor,
     calculate_multiple_top_k_overlaps,
-    calculate_multiple_enrichment_factors
+    calculate_multiple_enrichment_factors,
+    calculate_average_score_ratio,
+    calculate_batch_average_score_ratio
 )
 
 

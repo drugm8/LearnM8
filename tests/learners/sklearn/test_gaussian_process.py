@@ -157,3 +157,38 @@ class TestGaussianProcessLearner:
 
         assert np.all(uncertainties >= 0)
         assert len(uncertainties) == len(test_compounds)
+
+    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].values)
+
+        predictions, uncertainty = learner.predict(features)
+
+        assert learner.supports_uncertainty() is True
+        assert uncertainty is not None
+        assert uncertainty.shape[0] == len(compounds)
+
+    def test_train_with_empty_arrays(self, learner):
+        empty_features = np.array([]).reshape(0, 10)
+        empty_targets = np.array([])
+
+        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+            learner.train(empty_features, empty_targets)
+
+    def test_train_with_mismatched_shapes(self, learner):
+        features = np.random.randn(10, 5)
+        targets = np.random.randn(8)
+
+        with pytest.raises(ValueError, match="Features and targets must have same length"):
+            learner.train(features, targets)
+
+    def test_train_with_1d_features(self, learner):
+        features_1d = np.random.rand(10)
+        targets = np.random.rand(10)
+
+        with pytest.raises((ValueError, RuntimeError)):
+            learner.train(features_1d, targets)

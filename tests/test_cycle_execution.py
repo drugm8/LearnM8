@@ -15,7 +15,7 @@ from learnm8.core.config import CycleConfig
 
 def create_test_master_df(compounds, initial_labeled_count=3):
     """Helper to create master DataFrame for testing."""
-    from learnm8.core.initialization import initialize_master_dataframe
+    from conftest import create_initialized_master_df as initialize_master_dataframe
 
     initial_compounds = compounds.iloc[:initial_labeled_count]
     initial_ids = initial_compounds['ID'].tolist()
@@ -26,9 +26,10 @@ def create_test_master_df(compounds, initial_labeled_count=3):
 
     return initialize_master_dataframe(
         valid_compounds=compounds,
-        initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values,
         target_col='Activity'
+    ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
     )
 
 
@@ -243,7 +244,7 @@ class TestCycleExecution:
     
     def test_score_direction_lower(self, tmp_path, mock_oracle, mock_learner):
         """Test cycle execution with 'lower' score direction."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(8)],
@@ -253,11 +254,12 @@ class TestCycleExecution:
         initial_ids = compounds['ID'].iloc[:2].tolist()
         initial_values = pd.Series([0.9, 0.1], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner
@@ -283,7 +285,7 @@ class TestCycleExecution:
     
     def test_csv_export_mode(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test cycle execution with CSV export enabled."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(6)],
@@ -293,11 +295,12 @@ class TestCycleExecution:
         initial_ids = compounds['ID'].iloc[:2].tolist()
         initial_values = pd.Series([0.3, 0.7], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -322,8 +325,8 @@ class TestCycleExecution:
         assert metrics['strategy'] == 'random'
     
     def test_learner_training_failure(self, tmp_path, mock_oracle, mock_learner):
-        """Test handling of learner training failure."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        """Test handling of cycle with no labeled compounds (graceful handling)."""
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
@@ -331,34 +334,38 @@ class TestCycleExecution:
         })
 
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=[],
-            initial_measurements=pd.Series(dtype='float64'),
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=[],
+        initial_measurements=pd.Series(dtype='float64')
+    )
 
         oracle = mock_oracle
         learner = mock_learner
 
         config = CycleConfig(strategy='greedy', batch_fraction=0.5)
-        with pytest.raises((ValueError, RuntimeError)):
-            execute_cycle(
-                compounds_df=master_df,
-                cycle=0,
-                config=config,
-                learner=learner,
-                oracle=oracle,
-                target_col='Activity',
-                featurizer_type='morgan',
-                cache_dir=tmp_path,
-                original_pool_size=len(compounds),
-                score_direction='higher',
-                mode='run'
-            )
+
+        updated_df, metrics = execute_cycle(
+            compounds_df=master_df,
+            cycle=0,
+            config=config,
+            learner=learner,
+            oracle=oracle,
+            target_col='Activity',
+            featurizer_type='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(compounds),
+            score_direction='higher',
+            mode='run'
+        )
+
+        assert metrics['selected_count'] == 1
+        assert 'prediction_cycle_0' not in updated_df.columns
     
     def test_prediction_statistics_calculation(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test calculation of prediction statistics in cycle metrics."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -368,11 +375,12 @@ class TestCycleExecution:
         initial_ids = compounds['ID'].iloc[:3].tolist()
         initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -402,7 +410,7 @@ class TestCycleExecution:
     
     def test_multiple_strategies(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test cycle execution with different acquisition strategies."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
@@ -419,11 +427,12 @@ class TestCycleExecution:
 
         for strategy in strategies_to_test:
             master_df = initialize_master_dataframe(
-                valid_compounds=compounds,
-                initial_labeled_ids=initial_ids,
-                initial_measurements=initial_values,
-                target_col='Activity'
-            )
+        valid_compounds=compounds,
+        target_col='Activity'
+            ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
             config = CycleConfig(strategy=strategy, batch_fraction=0.25)
             updated_master_df, metrics = execute_cycle(
@@ -582,13 +591,13 @@ class TestMasterDataFrameCycleIntegration:
         # Confirm returned master_df is different object
         assert updated_master_df is not master_df_original
 
-    def test_benchmark_mode_stores_full_predictions(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
-        """Test benchmark mode stores full-pool predictions in master_df.
+    def test_benchmark_mode_stores_unlabeled_predictions(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
+        """Test benchmark mode stores unlabeled-only predictions in master_df.
 
-        In benchmark mode, predictions should exist for approximately the size of original_compound_pool
-        after feature filtering (or at least greater than the unlabeled-only count).
+        Both run and benchmark modes now predict on unlabeled compounds only for efficiency.
+        The difference is that benchmark mode calculates additional discovery/ranking metrics.
         """
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
@@ -602,11 +611,12 @@ class TestMasterDataFrameCycleIntegration:
         initial_ids = compounds['ID'].iloc[:3].tolist()
         initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -628,24 +638,21 @@ class TestMasterDataFrameCycleIntegration:
             original_pool=compounds
         )
 
-        # Verify full dataset predictions are stored
+        # Verify unlabeled-only predictions are stored
         pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
-        # Benchmark mode should predict on MORE than just unlabeled (includes full pool minus invalid SMILES)
-        assert pred_count > unlabeled_count, \
-            f"Expected predictions for full pool ({pred_count}) to be > unlabeled only ({unlabeled_count})"
-
-        # Should be close to original pool size (minus any invalid SMILES)
-        assert pred_count >= len(compounds) * 0.9, \
-            f"Expected predictions for ~{len(compounds)} compounds, got {pred_count}"
+        # Benchmark mode now predicts on unlabeled only (same as run mode)
+        assert pred_count == unlabeled_count, \
+            f"Expected predictions for unlabeled only ({unlabeled_count}), got {pred_count}"
 
     def test_evaluation_uses_correct_prediction_pool_run_mode(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test evaluation uses unlabeled predictions in run mode.
 
+        Both run and benchmark modes now use identical prediction logic (unlabeled only).
         Verify by checking that predictions in master_df are only populated for unlabeled compounds.
         """
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -658,11 +665,12 @@ class TestMasterDataFrameCycleIntegration:
         initial_ids = compounds['ID'].iloc[:3].tolist()
         initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -691,11 +699,12 @@ class TestMasterDataFrameCycleIntegration:
             f"Run mode should predict only {unlabeled_count} unlabeled compounds, got {pred_count} predictions"
 
     def test_evaluation_uses_correct_prediction_pool_benchmark_mode(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
-        """Test evaluation uses full-pool predictions in benchmark mode.
+        """Test evaluation uses unlabeled predictions in benchmark mode.
 
-        Verify by checking that predictions in master_df are populated for ALL compounds (not just unlabeled).
+        Both run and benchmark modes now use identical prediction logic (unlabeled only).
+        Benchmark mode differs only in calculating additional discovery/ranking metrics.
         """
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -708,11 +717,12 @@ class TestMasterDataFrameCycleIntegration:
         initial_ids = compounds['ID'].iloc[:3].tolist()
         initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -736,18 +746,91 @@ class TestMasterDataFrameCycleIntegration:
             original_pool=compounds
         )
 
-        # Verify predictions exist for more than just unlabeled (benchmark mode behavior)
+        # Verify predictions exist only for unlabeled (same as run mode)
         pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
-        assert pred_count > unlabeled_count, \
-            f"Benchmark mode should predict MORE than {unlabeled_count} unlabeled (full pool), got {pred_count} predictions"
+        assert pred_count == unlabeled_count, \
+            f"Benchmark mode should predict {unlabeled_count} unlabeled (same as run mode), got {pred_count} predictions"
 
-        # Should be close to full pool size
-        assert pred_count >= len(compounds) * 0.9, \
-            f"Benchmark mode should predict ~{len(compounds)} compounds (full pool), got {pred_count} predictions"
+    def test_benchmark_and_run_modes_use_same_prediction_logic(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
+        """Test that benchmark and run modes use identical prediction logic.
+
+        Both modes should predict on the same compound set (unlabeled only).
+        The only difference should be in metrics computation.
+        """
+        from conftest import create_initialized_master_df as initialize_master_dataframe
+
+        compounds = pd.DataFrame({
+            'ID': [f'COMP_{i:03d}' for i in range(15)],
+            'SMILES': ['CCO'] * 15
+        })
+        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+
+        # Create master DataFrame with 5 labeled
+        initial_ids = compounds['ID'].iloc[:5].tolist()
+        initial_values = pd.Series([0.2, 0.4, 0.6, 0.8, 1.0], index=initial_ids)
+        master_df_run = initialize_master_dataframe(
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
+        master_df_benchmark = master_df_run.copy()
+
+        oracle = mock_oracle
+        learner_run = mock_learner_with_uncertainty
+        learner_benchmark = mock_learner_with_uncertainty
+
+        config = CycleConfig(strategy='greedy', batch_fraction=0.2)
+
+        # Execute run mode cycle
+        updated_df_run, metrics_run = execute_cycle(
+            compounds_df=master_df_run,
+            cycle=0,
+            config=config,
+            learner=learner_run,
+            oracle=oracle,
+            target_col='Activity',
+            featurizer_type='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(compounds),
+            score_direction='higher',
+            mode='run'
+        )
+
+        # Execute benchmark mode cycle
+        updated_df_benchmark, metrics_benchmark = execute_cycle(
+            compounds_df=master_df_benchmark,
+            cycle=0,
+            config=config,
+            learner=learner_benchmark,
+            oracle=oracle,
+            target_col='Activity',
+            featurizer_type='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(compounds),
+            score_direction='higher',
+            mode='benchmark',
+            original_pool=compounds
+        )
+
+        # Verify both modes predicted on the same number of compounds
+        pred_count_run = updated_df_run['prediction_cycle_0'].notna().sum()
+        pred_count_benchmark = updated_df_benchmark['prediction_cycle_0'].notna().sum()
+
+        assert pred_count_run == pred_count_benchmark, \
+            f"Run and benchmark modes should predict on same compounds: run={pred_count_run}, benchmark={pred_count_benchmark}"
+
+        # Verify both equal the unlabeled count
+        unlabeled_count = (master_df_run['status'] == 'unlabeled').sum()
+        assert pred_count_run == unlabeled_count, \
+            f"Both modes should predict on {unlabeled_count} unlabeled compounds, run mode got {pred_count_run}"
+        assert pred_count_benchmark == unlabeled_count, \
+            f"Both modes should predict on {unlabeled_count} unlabeled compounds, benchmark mode got {pred_count_benchmark}"
 
     def test_selected_and_labeled_cycle_consistency(self, tmp_path, mock_oracle, mock_learner):
         """Test selected_cycle and labeled_cycle are set correctly and remain unchanged."""
-        from learnm8.core.initialization import initialize_master_dataframe
+        from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -760,11 +843,12 @@ class TestMasterDataFrameCycleIntegration:
         initial_ids = compounds['ID'].iloc[:2].tolist()
         initial_values = pd.Series([0.3, 0.7], index=initial_ids)
         master_df = initialize_master_dataframe(
-            valid_compounds=compounds,
-            initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values,
-            target_col='Activity'
-        )
+        valid_compounds=compounds,
+        target_col='Activity'
+        ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
+    )
 
         oracle = mock_oracle
         learner = mock_learner

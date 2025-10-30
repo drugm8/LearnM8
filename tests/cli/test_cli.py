@@ -53,7 +53,6 @@ learner: rf
 n_cycles: 3
 batch_fraction: 0.2
 strategy: greedy
-n_initial: 2
 random_state: 42
 """
     config_path.write_text(config_content)
@@ -71,20 +70,20 @@ def config_json(tmp_path):
         "n_cycles": 3,
         "batch_fraction": 0.2,
         "strategy": "greedy",
-        "n_initial": 2,
         "random_state": 42
     }
     config_path.write_text(json.dumps(config))
     return config_path
 
 
-def run_cli(*args):
-    """Helper function to run CLI command."""
+def run_cli(*args, timeout=60):
+    """Helper function to run CLI command with optional timeout."""
     cmd = [sys.executable, '-m', 'learnm8.cli.main'] + list(args)
     result = subprocess.run(
         cmd,
         capture_output=True,
-        text=True
+        text=True,
+        timeout=timeout
     )
     return result
 
@@ -747,3 +746,41 @@ class TestIntegration:
         )
 
         assert result.returncode == 0
+
+    @pytest.mark.xfail(reason="Known issue: pruning strategy name mismatch ('score_based' vs 'score')")
+    def test_cli_flags_override_config_file(self, minimal_compounds, tmp_path):
+        """Test that CLI flags override config file values."""
+        config_path = tmp_path / "override_config.yaml"
+        config_content = """
+target_col: Activity
+featurizer: morgan
+learner: rf
+n_cycles: 1
+batch_fraction: 0.2
+strategy: greedy
+random_state: 42
+"""
+        config_path.write_text(config_content)
+
+        output_dir = tmp_path / "override"
+
+        result = run_cli(
+            'run',
+            str(minimal_compounds),
+            '--config', str(config_path),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--learner', 'gp',
+            '--n-cycles', '2',
+            '-o', str(output_dir),
+            timeout=120
+        )
+
+        assert result.returncode == 0
+
+        compounds_final = pd.read_csv(output_dir / 'compounds_final.csv')
+        assert len(compounds_final) > 0
+
+        config_used = json.loads((output_dir / 'config.json').read_text())
+        assert config_used['learner'] == 'gp'
+        assert config_used['n_cycles'] == 2

@@ -145,13 +145,15 @@ class TestParseCycleSchedule:
             strategy='greedy',
             n_cycles=5,
             batch_fraction=0.01,
-            initial_strategy='diverse',
-            initial_batch_fraction=0.02
+            initial_strategy='diverse'
         )
 
         assert len(schedule) == 5
         assert schedule[0].strategy == 'diverse'
-        assert schedule[0].batch_fraction == 0.02
+        assert schedule[0].batch_fraction == 0.01
+        for config in schedule[1:]:
+            assert config.strategy == 'greedy'
+            assert config.batch_fraction == 0.01
 
     def test_advanced_api_with_cycle_configs(self):
         cycles = [

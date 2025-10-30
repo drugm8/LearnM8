@@ -1,28 +1,36 @@
-"""Tests for RandomForestLearner implementation."""
+"""Tests for DecisionTreeLearner implementation."""
 
 import pytest
 import numpy as np
 import pandas as pd
 
-from learnm8.learners.sklearn.random_forest import RandomForestLearner
+from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
 from learnm8.features.extraction import extract_features
 
 
-class TestRandomForestLearner:
-    """Test RandomForestLearner functionality with real molecular data."""
+class TestDecisionTreeLearner:
+    """Test DecisionTreeLearner functionality with real molecular data."""
 
     @pytest.fixture
     def learner(self):
-        """Create RandomForestLearner instance for testing."""
-        return RandomForestLearner(n_estimators=10, random_state=42)
-    
-    def test_initialization(self, learner):
-        """Test learner initialization."""
-        assert learner.n_estimators == 10
-        assert learner.random_state == 42
+        """Create DecisionTreeLearner instance for testing."""
+        return DecisionTreeLearner(max_depth=10, random_state=42)
+
+    def test_initialization(self):
+        """Test DecisionTreeLearner initializes with correct parameters."""
+        learner = DecisionTreeLearner(
+            max_depth=15,
+            min_samples_split=5,
+            min_samples_leaf=3,
+            random_state=123
+        )
+
+        assert learner.max_depth == 15
+        assert learner.min_samples_split == 5
+        assert learner.min_samples_leaf == 3
+        assert learner.random_state == 123
         assert not learner.is_trained
-        assert learner.supports_uncertainty() is False
-    
+
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.copy()
@@ -39,7 +47,7 @@ class TestRandomForestLearner:
         assert predictions.shape[0] == len(compounds)
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
-    
+
     def test_train_with_empty_arrays(self, learner):
         """Test error handling with empty arrays."""
         empty_features = np.array([]).reshape(0, 10)
@@ -61,13 +69,12 @@ class TestRandomForestLearner:
         features = np.random.randn(5, 10)
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
-    
+
     def test_get_name(self, learner):
         """Test name generation."""
         name = learner.get_name()
-        assert "RandomForest" in name
-        assert "n_estimators=10" in name
-    
+        assert "DecisionTree" in name
+
     def test_feature_importance(self, learner, small_real_compounds, tmp_path):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.copy()
@@ -78,69 +85,58 @@ class TestRandomForestLearner:
 
         features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
         learner.train(features, compounds['Activity'].values)
+
         importance = learner.get_feature_importance()
         assert importance is not None
-        assert len(importance) > 0
+        assert importance.shape[0] == features.shape[1]
         assert np.all(importance >= 0)
+        assert np.isclose(importance.sum(), 1.0)
 
-    def test_oob_score(self, learner, small_real_compounds, tmp_path):
-        """Test out-of-bag score retrieval."""
-        compounds = small_real_compounds.copy()
-        if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
-
-        assert learner.get_oob_score() is None
-
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
-        oob_score = learner.get_oob_score()
-        assert oob_score is not None
-        assert isinstance(oob_score, float)
-    
-    def test_different_hyperparameters(self, tmp_path, small_real_compounds):
-        """Test learner with different hyperparameters."""
-        compounds = small_real_compounds.copy()
-        if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
-
-        learner = RandomForestLearner(
-            n_estimators=5,
-            max_depth=3,
-            min_samples_split=5,
-            random_state=42
-        )
-
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
-        predictions, _ = learner.predict(features)
-
-        assert learner.max_depth == 3
-        assert predictions.shape[0] == len(compounds)
-
-    def test_edge_case_single_compound(self, learner, tmp_path):
-        """Test with single compound."""
-        single_compound = pd.DataFrame({
-            'ID': ['COMP_001'],
-            'SMILES': ['CCO'],
-            'Activity': [0.5]
-        })
-
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
-        predictions, _ = learner.predict(features)
-
-        assert len(predictions) == 1
-        assert np.isfinite(predictions[0])
-
-    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
-        compounds = small_real_compounds.copy()
-        if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
-
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
-
-        predictions, uncertainty = learner.predict(features)
-
+    def test_supports_uncertainty(self, learner):
+        """Test DecisionTreeLearner does not support uncertainty."""
         assert learner.supports_uncertainty() is False
-        assert uncertainty is None
+
+    def test_train_with_1d_features(self, learner):
+        """Test training with 1D features raises error."""
+        features_1d = np.random.rand(10)
+        targets = np.random.rand(10)
+
+        with pytest.raises((ValueError, RuntimeError)):
+            learner.train(features_1d, targets)
+
+    def test_deterministic_predictions(self, small_real_compounds, tmp_path):
+        """Test predictions are deterministic with same random_state."""
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        targets = compounds['Activity'].values
+
+        learner1 = DecisionTreeLearner(random_state=42)
+        learner1.train(features, targets)
+        pred1, _ = learner1.predict(features)
+
+        learner2 = DecisionTreeLearner(random_state=42)
+        learner2.train(features, targets)
+        pred2, _ = learner2.predict(features)
+
+        np.testing.assert_array_equal(pred1, pred2)
+
+    def test_max_depth_parameter(self, small_real_compounds, tmp_path):
+        """Test max_depth parameter affects model complexity."""
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        targets = compounds['Activity'].values
+
+        learner_shallow = DecisionTreeLearner(max_depth=2, random_state=42)
+        learner_shallow.train(features, targets)
+
+        learner_deep = DecisionTreeLearner(max_depth=20, random_state=42)
+        learner_deep.train(features, targets)
+
+        assert learner_shallow.model.get_depth() <= 2
+        assert learner_deep.model.get_depth() > learner_shallow.model.get_depth()
