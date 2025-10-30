@@ -233,3 +233,24 @@ class TestMCDropoutLearner:
         assert len(pred1) == len(pred2)
         assert np.all(np.isfinite(pred1))
         assert np.all(np.isfinite(pred2))
+
+    def test_train_with_empty_arrays(self, learner):
+        empty_features = np.array([]).reshape(0, 10)
+        empty_targets = np.array([])
+
+        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+            learner.train(empty_features, empty_targets)
+
+    def test_train_with_mismatched_shapes(self, learner):
+        features = np.random.randn(10, 5)
+        targets = np.random.randn(8)
+
+        with pytest.raises(ValueError, match="Features and targets must have same length"):
+            learner.train(features, targets)
+
+    def test_train_with_1d_features(self, learner):
+        features_1d = np.random.rand(10)
+        targets = np.random.rand(10)
+
+        with pytest.raises((ValueError, RuntimeError)):
+            learner.train(features_1d, targets)

@@ -259,3 +259,43 @@ class TestEnsembleLearner:
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
+
+    def test_uncertainty_consistency(self, base_learners, small_real_compounds, tmp_path):
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        ensemble = EnsembleLearner(base_learners)
+
+        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        ensemble.train(features, compounds['Activity'].values)
+
+        predictions, uncertainty = ensemble.predict(features)
+
+        assert ensemble.supports_uncertainty() is True
+        assert uncertainty is not None
+        assert uncertainty.shape[0] == len(compounds)
+
+    def test_train_with_empty_arrays(self, base_learners):
+        empty_features = np.array([]).reshape(0, 10)
+        empty_targets = np.array([])
+        ensemble = EnsembleLearner(base_learners)
+
+        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+            ensemble.train(empty_features, empty_targets)
+
+    def test_train_with_mismatched_shapes(self, base_learners):
+        features = np.random.randn(10, 5)
+        targets = np.random.randn(8)
+        ensemble = EnsembleLearner(base_learners)
+
+        with pytest.raises(ValueError, match="Features and targets must have same length"):
+            ensemble.train(features, targets)
+
+    def test_train_with_1d_features(self, base_learners):
+        features_1d = np.random.rand(10)
+        targets = np.random.rand(10)
+        ensemble = EnsembleLearner(base_learners)
+
+        with pytest.raises((ValueError, RuntimeError)):
+            ensemble.train(features_1d, targets)

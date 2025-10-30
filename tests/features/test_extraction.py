@@ -101,6 +101,52 @@ class TestExtractFeatures:
 
         assert np.allclose(features_1, features_2)
 
+    def test_extract_features_creates_cache_files(self, small_real_compounds, tmp_path):
+        """Test that extract_features creates HDF5 cache files."""
+        cache_dir = tmp_path / "cache"
+        smiles_list = small_real_compounds['SMILES'].tolist()
+
+        features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+
+        cache_file = cache_dir / 'morgan_features.h5'
+        assert cache_file.exists()
+
+        assert features1.shape[0] == len(smiles_list)
+
+        import time
+        start = time.time()
+        features2 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+        elapsed = time.time() - start
+
+        assert elapsed < 1.0
+
+        np.testing.assert_array_equal(features1, features2)
+
+    def test_show_progress_enabled(self, tmp_path):
+        pytest.importorskip("tqdm")
+
+        smiles_list = ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC'] * 20
+        features = extract_features(smiles_list, 'morgan', cache_dir=tmp_path, show_progress=True)
+
+        assert features.shape[0] == len(smiles_list)
+        assert features.shape[1] == 2048
+
+    def test_show_progress_disabled(self, tmp_path):
+        smiles_list = ['CCO', 'CCC', 'CCN']
+        features = extract_features(smiles_list, 'morgan', cache_dir=tmp_path, show_progress=False)
+
+        assert features.shape[0] == len(smiles_list)
+        assert features.shape[1] == 2048
+
+    def test_mixed_valid_invalid_smiles(self, tmp_path):
+        from rdkit import RDLogger
+        RDLogger.DisableLog('rdApp.*')
+
+        smiles_list = ['CCO', 'INVALID_SMILES', 'CCC']
+
+        with pytest.raises((ValueError, RuntimeError)):
+            extract_features(smiles_list, 'morgan', cache_dir=tmp_path)
+
 
 class TestGetOptimalNJobs:
 

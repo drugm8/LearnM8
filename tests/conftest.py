@@ -538,26 +538,61 @@ def mock_oracle_high_noise():
 # Master DataFrame Fixtures
 # ==============================================================================
 
+def create_initialized_master_df(
+    valid_compounds: pd.DataFrame,
+    target_col: str,
+    initial_labeled_ids: Optional[List[str]] = None,
+    initial_measurements: Optional[pd.Series] = None
+) -> pd.DataFrame:
+    """Helper to create master DataFrame with initial labeled compounds.
+
+    This helper mimics the old initialize_master_dataframe behavior for test compatibility.
+    It creates an empty master DataFrame and then manually labels initial compounds.
+
+    Args:
+        valid_compounds: DataFrame with ID and SMILES columns
+        target_col: Name of target column
+        initial_labeled_ids: Optional list of compound IDs to label initially
+        initial_measurements: Optional Series with measurements (index=IDs, values=measurements)
+
+    Returns:
+        Master DataFrame with initial compounds labeled
+    """
+    from learnm8.core.initialization import initialize_master_dataframe_empty
+    from learnm8.core.dataframe_ops import update_status
+
+    master_df = initialize_master_dataframe_empty(valid_compounds, target_col)
+
+    if initial_labeled_ids and initial_measurements is not None and len(initial_labeled_ids) > 0:
+        master_df = update_status(
+            df=master_df,
+            compound_ids=initial_labeled_ids,
+            new_status='labeled',
+            cycle=-1,
+            target_col=target_col,
+            target_values=initial_measurements
+        )
+
+    return master_df
+
+
 @pytest.fixture
 def sample_master_df(sample_compounds) -> pd.DataFrame:
-    """Create master DataFrame using initialize_master_dataframe().
+    """Create master DataFrame with 3 labeled compounds (indices 0-2).
 
-    Uses sample_compounds fixture as base with 3 labeled compounds (indices 0-2).
+    Uses sample_compounds fixture as base.
     """
-    from learnm8.core.initialization import initialize_master_dataframe
-
     compounds = sample_compounds.copy()
 
-    # Initialize with 3 labeled compounds
     initial_compounds = compounds.iloc[:3]
     initial_ids = initial_compounds['ID'].tolist()
     initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
 
-    return initialize_master_dataframe(
+    return create_initialized_master_df(
         valid_compounds=compounds,
+        target_col='Activity',
         initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values,
-        target_col='Activity'
+        initial_measurements=initial_values
     )
 
 

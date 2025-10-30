@@ -8,7 +8,7 @@ from learnm8.core.dataframe_ops import (
     get_compounds_by_status,
     batch_update
 )
-from learnm8.core.initialization import initialize_master_dataframe
+from conftest import create_initialized_master_df as initialize_master_dataframe
 
 
 @pytest.fixture
@@ -23,9 +23,10 @@ def sample_initialized_df():
 
     return initialize_master_dataframe(
         valid_compounds=compounds,
-        initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values,
         target_col='Activity'
+    ,
+        initial_labeled_ids=initial_ids,
+        initial_measurements=initial_values
     )
 
 

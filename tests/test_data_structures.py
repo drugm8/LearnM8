@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from learnm8.core.initialization import initialize_master_dataframe
+from learnm8.core.initialization import initialize_master_dataframe_empty
 from learnm8.core.dataframe_ops import (
     add_predictions,
     update_status,
@@ -14,6 +14,7 @@ from learnm8.core.data_structures import (
     STATUS_UNLABELED,
     STATUS_PRUNED
 )
+from conftest import create_initialized_master_df
 
 
 @pytest.fixture
@@ -28,11 +29,11 @@ def sample_compound_pool():
 @pytest.fixture
 def sample_master_df(sample_compound_pool):
     """Create sample master DataFrame."""
-    return initialize_master_dataframe(
+    return create_initialized_master_df(
         valid_compounds=sample_compound_pool,
+        target_col='Activity',
         initial_labeled_ids=['COMP_000', 'COMP_001', 'COMP_002'],
-        initial_measurements=pd.Series([0.5, 0.7, 0.9], index=['COMP_000', 'COMP_001', 'COMP_002']),
-        target_col='Activity'
+        initial_measurements=pd.Series([0.5, 0.7, 0.9], index=['COMP_000', 'COMP_001', 'COMP_002'])
     )
 
 
@@ -41,11 +42,11 @@ def test_initialize_master_dataframe(sample_compound_pool):
     initial_ids = ['COMP_000', 'COMP_001']
     initial_values = pd.Series([0.5, 0.7], index=['COMP_000', 'COMP_001'])
 
-    master_df = initialize_master_dataframe(
+    master_df = create_initialized_master_df(
         valid_compounds=sample_compound_pool,
+        target_col='Activity',
         initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values,
-        target_col='Activity'
+        initial_measurements=initial_values
     )
 
     # Verify schema (new version uses actual target column name, not 'target_value')
@@ -64,11 +65,11 @@ def test_initialize_master_dataframe(sample_compound_pool):
 
 def test_initialize_master_dataframe_empty_initial(sample_compound_pool):
     """Test initialization with no initial labeled compounds."""
-    master_df = initialize_master_dataframe(
+    master_df = create_initialized_master_df(
         valid_compounds=sample_compound_pool,
+        target_col='Activity',
         initial_labeled_ids=[],
-        initial_measurements=pd.Series(dtype='float64'),
-        target_col='Activity'
+        initial_measurements=pd.Series(dtype='float64')
     )
 
     # All compounds should be unlabeled
@@ -358,11 +359,11 @@ def test_large_dataset():
     initial_values = pd.Series([float(i) * 0.01 for i in range(100)], index=initial_ids)
 
     # Test initialization
-    master_df = initialize_master_dataframe(
+    master_df = create_initialized_master_df(
         valid_compounds=large_pool,
+        target_col='Activity',
         initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values,
-        target_col='Activity'
+        initial_measurements=initial_values
     )
 
     # Verify correct size

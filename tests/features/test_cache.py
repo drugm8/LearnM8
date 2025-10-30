@@ -196,3 +196,76 @@ class TestCacheFeaturesDecorator:
 
         features = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
         assert features.shape[0] == 1
+
+    def test_cache_with_real_featurization(self, small_real_compounds, tmp_path):
+        """Test cache_features with actual molecular featurization (not mocks)."""
+        from learnm8.features.extraction import extract_features
+        from learnm8.features.cache import cache_features
+
+        cache_dir = tmp_path / "real_cache"
+        smiles_list = small_real_compounds['SMILES'].tolist()
+
+        features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+        assert features1.shape[0] == len(smiles_list)
+
+        cache_files = list(cache_dir.glob('*.h5'))
+        assert len(cache_files) > 0
+
+        features2 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+
+        np.testing.assert_array_equal(features1, features2)
+
+        assert features1.dtype == np.uint8
+        assert np.any(features1 > 0)
+
+    def test_cache_corruption_recovery(self, tmp_path):
+        from learnm8.features.extraction import extract_features
+
+        cache_dir = tmp_path / "corrupt_cache"
+        smiles_list = ['CCO', 'CCC', 'CCN']
+
+        features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+        assert features1.shape[0] == 3
+
+        cache_file = cache_dir / 'morgan_features.h5'
+        assert cache_file.exists()
+
+        with open(cache_file, 'wb') as f:
+            f.write(b'corrupted data')
+
+        features2 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+        assert features2.shape[0] == 3
+        assert np.all(np.isfinite(features2))
+
+    def test_concurrent_cache_access(self, tmp_path):
+        from learnm8.features.extraction import extract_features
+        import concurrent.futures
+
+        cache_dir = tmp_path / "concurrent_cache"
+        smiles_list = ['CCO', 'CCC', 'CCN', 'CCCC']
+
+        def extract_task(task_id):
+            return extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = [executor.submit(extract_task, i) for i in range(3)]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        assert len(results) == 3
+        for features in results:
+            assert features.shape == (4, 2048)
+
+        for i in range(1, len(results)):
+            np.testing.assert_array_equal(results[0], results[i])
+
+    def test_large_dataset_cpu_cap(self):
+        from learnm8.features.extraction import _get_optimal_n_jobs
+        import os
+
+        large_compound_count = 50000
+        n_jobs = _get_optimal_n_jobs(large_compound_count, n_jobs=-1)
+
+        cpu_count = os.cpu_count() or 1
+        expected_cap = min(cpu_count, 32)
+
+        assert n_jobs == expected_cap

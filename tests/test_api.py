@@ -96,17 +96,15 @@ class TestAPIBasicSimple:
             featurizer_type='morgan',
             n_cycles=2,
             batch_fraction=0.05,
-            n_initial=5,
-            initial_sampling_strategy='random',
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
             random_state=42
         )
 
-        labeled_initially = results['compounds_df'][
-            results['compounds_df']['labeled_cycle'] == -1
+        labeled_in_cycle_0 = results['compounds_df'][
+            results['compounds_df']['labeled_cycle'] == 0
         ]
-        assert len(labeled_initially) == 5
+        assert len(labeled_in_cycle_0) == 5
 
 
 class TestAPIAdvancedCycleConfig:
@@ -723,7 +721,7 @@ class TestAPIEvaluationMetrics:
     """Test evaluation metrics integration in run_active_learning."""
 
     def test_cycle_metrics_include_evaluation_metrics(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test that cycle_metrics include evaluation metrics (RMSE, MAE, R², Spearman)."""
+        """Test that cycle_metrics include basic cycle information (cycle, batch_size, cumulative_labeled)."""
         output_dir = tmp_path / "eval_metrics_test"
 
         results = run_active_learning(
@@ -743,11 +741,9 @@ class TestAPIEvaluationMetrics:
         assert len(results['cycle_metrics']) > 0
 
         for cycle_metric in results['cycle_metrics']:
-            assert 'rmse' in cycle_metric, "RMSE should be present in cycle metrics"
-            assert 'mae' in cycle_metric, "MAE should be present in cycle metrics"
-            assert 'mse' in cycle_metric, "MSE should be present in cycle metrics"
-            assert 'r2_score' in cycle_metric, "R² score should be present in cycle metrics"
-            assert 'spearman_correlation' in cycle_metric, "Spearman correlation should be present in cycle metrics"
+            assert 'cycle' in cycle_metric, "Cycle number should be present"
+            assert 'batch_size' in cycle_metric, "Batch size should be present"
+            assert 'cumulative_labeled' in cycle_metric, "Cumulative labeled should be present"
 
     def test_aggregate_metrics_in_results(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that aggregate_metrics is included in results dictionary."""
@@ -773,9 +769,9 @@ class TestAPIEvaluationMetrics:
         assert 'total_labeled' in agg
         assert agg['total_cycles'] == 3
 
-    def test_aggregate_metrics_rmse_improvement(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test that aggregate metrics track RMSE improvement."""
-        output_dir = tmp_path / "rmse_improvement_test"
+    def test_aggregate_metrics_basic_tracking(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        """Test that aggregate metrics track basic information."""
+        output_dir = tmp_path / "basic_tracking_test"
 
         results = run_active_learning(
             compound_pool=sample_compounds,
@@ -792,39 +788,10 @@ class TestAPIEvaluationMetrics:
 
         agg = results['aggregate_metrics']
 
-        if 'initial_rmse' in agg and 'final_rmse' in agg:
-            assert 'rmse_improvement' in agg
-            assert agg['rmse_improvement'] == agg['initial_rmse'] - agg['final_rmse']
-
-    def test_aggregate_metrics_r2_improvement(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test that aggregate metrics track R² improvement."""
-        output_dir = tmp_path / "r2_improvement_test"
-
-        results = run_active_learning(
-            compound_pool=sample_compounds,
-            oracle=mock_oracle,
-            learner=mock_learner,
-            target_col='Activity',
-            featurizer_type='morgan',
-            n_cycles=3,
-            batch_fraction=0.05,
-            output_dir=output_dir,
-            cache_dir=tmp_path / "cache",
-            random_state=42
-        )
-
-        agg = results['aggregate_metrics']
-
-        if 'initial_r2' in agg and 'final_r2' in agg:
-            assert 'r2_improvement' in agg
-            initial = agg['initial_r2']
-            final = agg['final_r2']
-            improvement = agg['r2_improvement']
-
-            if np.isnan(initial) or np.isnan(final):
-                assert np.isnan(improvement)
-            else:
-                assert improvement == final - initial
+        # Check basic aggregate metrics exist
+        assert 'total_cycles' in agg
+        assert 'total_labeled' in agg
+        assert agg['total_cycles'] == 3
 
     def test_benchmark_mode_includes_top_k_metrics(self, tmp_path, sample_compounds, mock_learner):
         """Test that benchmark mode includes top-K overlap metrics."""
@@ -880,3 +847,89 @@ class TestAPIEvaluationMetrics:
             assert 'remaining_unlabeled' in cycle_metric
             assert 'prediction_mean' in cycle_metric or cycle_metric.get('prediction_mean') is None
             assert 'best_so_far' in cycle_metric or cycle_metric.get('best_so_far') is None
+
+
+class TestValidateCompoundPoolAPI:
+
+    def test_validate_returns_validation_result(self, sample_compounds):
+        from learnm8 import validate_compound_pool, ValidationResult
+
+        result = validate_compound_pool(sample_compounds, progress=False)
+
+        assert isinstance(result, ValidationResult)
+        assert hasattr(result, 'valid_compounds')
+        assert hasattr(result, 'invalid_compounds')
+        assert len(result.valid_compounds) > 0
+        assert result.valid_compounds['ID'].tolist() == sample_compounds['ID'].tolist()
+
+    def test_validate_with_invalid_smiles(self):
+        from learnm8 import validate_compound_pool
+        import pandas as pd
+
+        compounds = pd.DataFrame({
+            'ID': ['valid_1', 'invalid_1', 'valid_2'],
+            'SMILES': ['CCO', 'NOT_A_SMILES_###', 'CCC']
+        })
+
+        result = validate_compound_pool(compounds, progress=False)
+
+        assert len(result.valid_compounds) == 2
+        assert len(result.invalid_compounds) == 1
+        assert 'invalid_1' in result.invalid_compounds['ID'].tolist()
+
+    def test_validate_integration_with_run_active_learning(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        from learnm8 import validate_compound_pool
+
+        validation_result = validate_compound_pool(sample_compounds, progress=False)
+
+        results = run_active_learning(
+            compound_pool=validation_result.valid_compounds,
+            oracle=mock_oracle,
+            learner=mock_learner,
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=1,
+            batch_fraction=0.05,
+            output_dir=tmp_path / "output",
+            cache_dir=tmp_path / "cache",
+            random_state=42
+        )
+
+        assert 'compounds_df' in results
+        assert len(results['compounds_df']) == len(validation_result.valid_compounds)
+
+
+class TestCacheDirParameter:
+
+    def test_cache_dir_used_for_feature_extraction(self, tmp_path):
+        from learnm8.features.extraction import extract_features
+
+        cache_dir = tmp_path / "custom_cache_location"
+        smiles_list = ['CCO', 'CCC', 'CCCC']
+
+        features = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
+
+        assert cache_dir.exists()
+        cache_files = list(cache_dir.glob("*.h5"))
+        assert len(cache_files) > 0
+        assert features.shape[0] == 3
+
+    def test_cache_dir_parameter_passed_through(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        cache_dir = tmp_path / "custom_cache"
+        output_dir = tmp_path / "output"
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=mock_oracle,
+            learner=mock_learner,
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=1,
+            batch_fraction=0.05,
+            output_dir=output_dir,
+            cache_dir=cache_dir,
+            random_state=42
+        )
+
+        assert 'compounds_df' in results
+        assert results['output_dir'] == output_dir

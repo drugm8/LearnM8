@@ -131,3 +131,16 @@ class TestRandomForestLearner:
 
         assert len(predictions) == 1
         assert np.isfinite(predictions[0])
+
+    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].values)
+
+        predictions, uncertainty = learner.predict(features)
+
+        assert learner.supports_uncertainty() is False
+        assert uncertainty is None
