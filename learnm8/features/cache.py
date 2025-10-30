@@ -72,7 +72,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
             uncached_indices = []
 
             try:
-                with h5py.File(cache_file, 'a') as h5f:
+                with h5py.File(cache_file, 'a', libver='latest') as h5f:
                     features_group = h5f.require_group('features')
 
                     for idx, smiles in enumerate(smiles_list):
@@ -98,7 +98,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
                     new_features = func(uncached_smiles, featurizer_type, *args, **kwargs)
 
                     try:
-                        with h5py.File(cache_file, 'a') as h5f:
+                        with h5py.File(cache_file, 'a', libver='latest') as h5f:
                             features_group = h5f.require_group('features')
 
                             for idx, smiles in enumerate(uncached_smiles):
