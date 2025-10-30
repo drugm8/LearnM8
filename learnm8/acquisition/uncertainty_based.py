@@ -167,10 +167,10 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             improvement = predictions - current_best - self.xi
         else:
             improvement = current_best - predictions - self.xi
-        
-        # Calculate standard deviations
-        std_devs = np.sqrt(uncertainties)
-        
+
+        # Use uncertainties directly (already standard deviations, not variances)
+        std_devs = uncertainties
+
         # Calculate Expected Improvement
         with np.errstate(divide="ignore", invalid="ignore"):
             z_scores = improvement / std_devs
@@ -275,10 +275,10 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             improvement = predictions - current_best - self.xi
         else:
             improvement = current_best - predictions - self.xi
-        
-        # Calculate standard deviations
-        std_devs = np.sqrt(uncertainties)
-        
+
+        # Use uncertainties directly (already standard deviations, not variances)
+        std_devs = uncertainties
+
         # Calculate Probability of Improvement
         with np.errstate(divide="ignore"):
             z_scores = improvement / std_devs
@@ -346,9 +346,10 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
-        
+
         # Sample from posterior predictive distribution
-        std_devs = np.sqrt(uncertainties)
+        # Use uncertainties directly (already standard deviations, not variances)
+        std_devs = uncertainties
         thompson_samples = self._rng.normal(predictions, std_devs)
         
         # Select top compounds based on samples and score direction
