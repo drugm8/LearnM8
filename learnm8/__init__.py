@@ -26,6 +26,9 @@ from .core.validation import validate_compound_pool, ValidationResult
 from .features import extract_features
 from .core.config import CycleConfig
 
+# Utility functions
+from .utils.logging import setup_logging
+
 
 # Optional components (with graceful import failures)
 try:
@@ -72,6 +75,9 @@ __all__ = [
     'validate_compound_pool', 'ValidationResult',
     'extract_features',
     'CycleConfig',
+
+    # Utility functions
+    'setup_logging',
 
     # Core interfaces (for advanced users)
     'Learner', 'Oracle',
