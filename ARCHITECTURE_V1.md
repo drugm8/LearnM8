@@ -3,7 +3,7 @@
 **Modular Active Learning for Molecular Screening**
 
 **Version:** 1.0.0
-**Date:** 2025-10-14
+**Date:** 2025-10-31
 **Status:** Stable
 
 ---
@@ -123,7 +123,7 @@ The codebase is organized into 7 core modules, each with a single, clear respons
 | Module | Responsibility | Size |
 |--------|---------------|------|
 | `validation.py` | Validate compounds upfront | ~150 lines |
-| `initialization.py` | Create master DataFrame and initial sample | ~200 lines |
+| `initialization.py` | Create master DataFrame and cycle 0 batch selection | ~200 lines |
 | `config.py` | Parse and validate cycle configurations | ~150 lines |
 | `cycle.py` | Execute active learning cycles | ~400 lines |
 | `persistence.py` | Save results to CSV files | ~300 lines |
@@ -227,9 +227,8 @@ learnm8/
 │   │   └── validate_compound_pool() # Main validation function
 │   │
 │   ├── initialization.py           # Master DataFrame setup (~200 lines)
-│   │   ├── initialize_master_dataframe() # Create master DataFrame
-│   │   ├── select_initial_sample() # Initial training set
-│   │   └── _FeatureProvider        # BitBIRCH compatibility wrapper
+│   │   ├── initialize_master_dataframe_empty() # Create master DataFrame (all unlabeled)
+│   │   └── select_initial_batch()  # Initial batch selection (cycle 0)
 │   │
 │   ├── config.py                   # Cycle configuration (~150 lines)
 │   │   ├── CycleConfig             # Dataclass for cycle config
@@ -283,7 +282,7 @@ learnm8/
 │   ├── basic.py                    # Greedy, Random
 │   ├── uncertainty_based.py        # UCB, EI, PI, Thompson
 │   ├── diversity.py                # Diverse acquisition
-│   └── bitbirch.py                 # BitBIRCH clustering
+│   └── bitbirch.py                 # BitBIRCH (deferred to future release)
 │
 ├── oracles/                        # Measurement sources (unchanged)
 │   ├── csv_oracle.py               # CSV-based oracle
@@ -314,7 +313,7 @@ learnm8/
 |--------|---------|---------------|-------|--------------|
 | `api.py` | Main entry point | `run_active_learning` | ~400 | All core modules |
 | `validation.py` | Early validation | `validate_compound_pool` | ~150 | features/ |
-| `initialization.py` | Setup | `initialize_master_dataframe`, `select_initial_sample` | ~200 | features/, acquisition/ |
+| `initialization.py` | Setup | `initialize_master_dataframe_empty`, `select_initial_batch` | ~200 | features/, acquisition/ |
 | `config.py` | Configuration | `CycleConfig`, `parse_cycle_schedule` | ~150 | None |
 | `cycle.py` | Cycle execution | `execute_cycle` | ~400 | learners/, acquisition/, oracles/, pruning/ |
 | `persistence.py` | CSV export | `save_results` | ~300 | None |
@@ -688,10 +687,35 @@ def initialize_master_dataframe_empty(
 - **Unified cycle execution**: Initial batch follows same workflow as subsequent cycles
 - **Simple and consistent**: Same batch fraction for all cycles
 
+**Cycle Numbering Convention:**
+
+LearnM8 uses a **zero-indexed cycle numbering system**:
+
+- **Cycle 0**: Initialization phase
+  - Selects initial training set (typically random strategy)
+  - Measures selected compounds via oracle
+  - No model predictions (no model trained yet)
+  - Metrics captured: selection stats, measured values, discovery rates (benchmark mode)
+
+- **Cycles 1-N**: Active learning cycles
+  - Train model on labeled compounds
+  - Predict on unlabeled pool
+  - Select next batch using acquisition strategy
+  - Measure selected compounds
+  - Metrics captured: predictions, uncertainties, model performance
+
+**Important:** When `n_cycles=10` is specified:
+- Total cycles executed: **10 cycles** (cycles 0-9)
+- Cycle 0: Initialization (1 cycle)
+- Cycles 1-9: Active learning (9 cycles)
+- `cycle_metrics` list length: **10** (includes cycle 0)
+- CSV exports start at cycle 0
+
 **Benefits:**
-- Cleaner architecture: No dual initialization logic
-- Easier to understand: Cycle 0 is just the first cycle
-- Consistent sizing: All cycles use same batch_fraction
+- Clear distinction between initialization and active learning
+- Consistent indexing across code, logs, and exports
+- Easy to identify initialization metrics (cycle == 0)
+- Aligns with Python's zero-indexing convention
 - Vectorized operations for O(n) performance
 
 ---
@@ -1374,7 +1398,7 @@ def _save_compounds_df(compounds_df: pd.DataFrame, path: Path):
         f.write("# Column Guide:\n")
         f.write("# - ID, SMILES: Compound identifiers\n")
         f.write("# - status: labeled/unlabeled/pruned\n")
-        f.write("# - *_cycle: Cycle when event occurred (-1 = initial)\n")
+        f.write("# - *_cycle: Cycle when event occurred (0 = initial)\n")
         f.write("# - prediction_cycle_N: Predictions from cycle N\n")
         f.write("# - uncertainty_cycle_N: Uncertainties from cycle N\n")
         f.write("# \n")
@@ -1657,29 +1681,23 @@ results = run_active_learning(
     featurizer_type='morgan',
 
     # Cycle parameters (simple mode)
-    n_cycles=10,                        # Number of cycles
-    batch_fraction=0.01,                # 1% of pool per cycle
-    strategy='greedy',                  # Exploitation strategy
-    initial_strategy='random',          # Unbiased initial sampling
-
-    # Initial sampling
-    n_initial=20,                       # Initial training set size
-    initial_sampling_strategy='diverse', # Diverse initial coverage
+    n_cycles=10,                        # Number of cycles (cycle 0 + 9 active learning cycles)
+    batch_fraction=0.01,                # 1% of original pool per cycle
 
     # Optional features
-    pruning_fraction=0.3,               # Prune bottom 30% each cycle
     score_direction='higher',           # Maximize target
 
     # Output
     output_dir='results/',
+    cache_dir='.cache',                 # HDF5 cache directory
     random_state=42                     # Reproducibility
 )
 
 # Access results
-print(f"Labeled compounds: {len(results['labeled_data'])}")
-print(f"Unlabeled compounds: {len(results['unlabeled_data'])}")
-print(f"Output directory: {results['output_dir']}")
-print(f"Saved files: {results['saved_files']}")
+compounds_df = results['compounds_df']  # Master DataFrame
+cycle_metrics = results['cycle_metrics']  # Metrics per cycle
+output_dir = results['output_dir']
+saved_files = results['saved_files']
 
 # Access master DataFrame
 compounds_df = results['compounds_df']
@@ -1736,7 +1754,7 @@ cycles = [
 
     # Cycle 10: Final diverse selection
     CycleConfig(
-        strategy='bitbirch',
+        strategy='random',  # Note: bitbirch deferred to future release
         n_cycles=1,
         batch_size=50  # Absolute batch size instead of fraction
     )
@@ -1974,7 +1992,7 @@ Complete mapping of shortcuts to classes:
 | pi | Yes | gp, mc_dropout, ensemble |
 | thompson | Yes | gp, mc_dropout, *_ensemble |
 | entropy | Yes | mc_dropout, ensemble |
-| bitbirch | No | All |
+| bitbirch | No | All (deferred to future release) |
 
 ---
 
@@ -2169,7 +2187,7 @@ Uncertainty-based:
   entropy      Maximum Entropy
 
 Diversity-based:
-  bitbirch     BitBIRCH clustering
+  bitbirch     BitBIRCH clustering (deferred to future release)
 ```
 
 **List Featurizers:**
@@ -2216,7 +2234,7 @@ diverse (10 cycles):
   - random:0.02 × 1
   - greedy:0.01 × 3
   - ucb:0.01 × 3
-  - bitbirch:0.01 × 3
+  - random:0.01 × 3  (Note: bitbirch deferred to future release)
 ```
 
 ---
@@ -2299,7 +2317,7 @@ Detailed breakdown of each schedule:
   - 1 cycle random (2%)
   - 3 cycles greedy (1%)
   - 3 cycles UCB (1%)
-  - 3 cycles bitbirch (1%) - diversity
+  - 3 cycles random (1%) - Note: bitbirch deferred to future release
 
 ---
 
@@ -3057,53 +3075,38 @@ def validate_compound_pool(
 
 ### Module 2: initialization.py
 
-**Purpose:** Master DataFrame creation and initial sampling.
+**Purpose:** Master DataFrame creation and initial batch selection (cycle 0).
 
 **Location:** `learnm8/core/initialization.py` (~200 lines)
 
 **Key Functions:**
 
-**1. initialize_master_dataframe():**
+**1. initialize_master_dataframe_empty():**
 
-Creates the master DataFrame with all metadata columns. Uses vectorized operations for O(n) initialization. Marks initial compounds with `labeled_cycle = -1` to distinguish from cycle 0.
+Creates the master DataFrame with all compounds starting unlabeled. Uses vectorized operations for O(n) initialization. All compounds initialized with `status='unlabeled'`, empty tracking columns, and no measurements.
 
-**2. select_initial_sample():**
+Cycle 0 will select and measure the initial batch as part of normal cycle execution.
 
-Selects initial training set using random or diverse sampling strategies.
+**2. select_initial_batch():**
+
+Selects initial batch for cycle 0 using specified strategy. Currently supports 'random' strategy only.
 
 **Random Strategy:**
-- Simple pandas `.sample()` with random_state
+- Uses RandomAcquisition for consistent selection behavior
 - Fast, unbiased, reproducible
-- Default choice
+- No model predictions needed (compounds start unlabeled)
+- Default and recommended choice
 
-**Diverse Strategy:**
-- Uses BitBIRCH clustering for diversity
-- Extracts features (instant - cached from validation!)
-- Fallback to random if BitBIRCH unavailable
-- Better initial coverage of chemical space
-
-**3. _FeatureProvider:**
-
-Minimal compatibility wrapper to provide features to BitBIRCH.
-
-```python
-class _FeatureProvider:
-    """Compatibility wrapper for BitBIRCH integration."""
-
-    def __init__(self, features: np.ndarray):
-        self.features = features
-
-    def get_features(self, compound_ids, smiles_list, featurizer_type):
-        """Return pre-computed features."""
-        return self.features, compound_ids
-```
+**Future Strategies:**
+- BitBIRCH and other diversity-based initialization strategies are deferred to a future release
+- When requested, function falls back to random with warning
 
 **Design Patterns:**
 
-- **Vectorized initialization:** No loops, uses `.isin()` and `.map()`
+- **Vectorized initialization:** No loops, uses pandas categorical types and vectorized operations
 - **Immutable operations:** Returns new DataFrames, never modifies input
-- **Graceful fallback:** BitBIRCH failure → random sampling
-- **Cached features:** Leverages validation cache for instant extraction
+- **Graceful fallback:** Unsupported strategies → random sampling with warning
+- **Consistent with cycle execution:** Uses same acquisition functions as regular cycles
 
 ---
 
@@ -3363,7 +3366,7 @@ ACQUISITION_REGISTRY = {
     'pi': ProbabilityOfImprovementAcquisition,
     'thompson': ThompsonSampling,
     'entropy': EntropyAcquisition,
-    'bitbirch': BitBIRCHAcquisition,
+    'bitbirch': BitBIRCHAcquisition,  # Note: Implementation deferred to future release
 }
 
 def get_acquisition_function(name: str) -> Type[AcquisitionFunction]:
@@ -4283,8 +4286,8 @@ All output files are CSV with metadata comments:
 |---------|-------------|------------------------|
 | RandomForest | Yes | All strategies |
 | GaussianProcess | Yes | All strategies |
-| XGBoost | No | greedy, random, topk, bitbirch |
-| MLP | No | greedy, random, topk, bitbirch |
+| XGBoost | No | greedy, random, topk |
+| MLP | No | greedy, random, topk |
 | MCDropout | Yes | All strategies |
 | Ensemble | Yes | All strategies |
 
@@ -4300,7 +4303,7 @@ All output files are CSV with metadata comments:
 | pi | Yes | gp, mc_dropout, ensemble |
 | thompson | Yes | gp, mc_dropout, ensemble |
 | entropy | Yes | mc_dropout, ensemble |
-| bitbirch | No | Any |
+| bitbirch | No | Any (deferred to future release) |
 
 ---
 
