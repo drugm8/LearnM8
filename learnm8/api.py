@@ -51,7 +51,7 @@ from typing import Union, Optional, List, Dict, Any, Literal
 import pandas as pd
 
 from learnm8.core.validation import validate_compound_pool, ValidationResult
-from learnm8.core.initialization import initialize_master_dataframe, select_initial_sample
+from learnm8.core.initialization import initialize_master_dataframe_empty, select_initial_batch
 from learnm8.core.config import parse_cycle_schedule, CycleConfig
 from learnm8.core.cycle import execute_cycle
 from learnm8.core.persistence import save_results
@@ -207,31 +207,6 @@ def _calculate_aggregate_metrics(
 
     agg = {}
 
-    rmse_values = [m.get('rmse') for m in all_metrics if m.get('rmse') is not None]
-    if rmse_values:
-        agg['initial_rmse'] = rmse_values[0]
-        agg['final_rmse'] = rmse_values[-1]
-        agg['rmse_improvement'] = rmse_values[0] - rmse_values[-1]
-        agg['rmse_improvement_pct'] = ((rmse_values[0] - rmse_values[-1]) / rmse_values[0] * 100) if rmse_values[0] != 0 else 0
-
-    r2_values = [m.get('r2_score') for m in all_metrics if m.get('r2_score') is not None]
-    if r2_values:
-        agg['initial_r2'] = r2_values[0]
-        agg['final_r2'] = r2_values[-1]
-        agg['r2_improvement'] = r2_values[-1] - r2_values[0]
-
-    mae_values = [m.get('mae') for m in all_metrics if m.get('mae') is not None]
-    if mae_values:
-        agg['initial_mae'] = mae_values[0]
-        agg['final_mae'] = mae_values[-1]
-        agg['mae_improvement'] = mae_values[0] - mae_values[-1]
-
-    spearman_values = [m.get('spearman_correlation') for m in all_metrics if m.get('spearman_correlation') is not None]
-    if spearman_values:
-        agg['initial_spearman'] = spearman_values[0]
-        agg['final_spearman'] = spearman_values[-1]
-        agg['spearman_improvement'] = spearman_values[-1] - spearman_values[0]
-
     avg_score_values = [m.get('avg_score_selected') for m in all_metrics if m.get('avg_score_selected') is not None]
     if avg_score_values:
         agg['avg_selection_quality'] = float(np.mean(avg_score_values))
@@ -244,15 +219,39 @@ def _calculate_aggregate_metrics(
         agg['best_compound_found_cycle'] = best_cycle
 
     if mode == 'benchmark':
-        top100_values = [m.get('top_100_overlap') for m in all_metrics if m.get('top_100_overlap') is not None]
-        if top100_values:
-            agg['final_top_100_overlap'] = top100_values[-1]
-            agg['avg_top_100_overlap'] = float(np.mean(top100_values))
+        top10_disc_values = [m.get('top_10_discovery') for m in all_metrics if m.get('top_10_discovery') is not None]
+        if top10_disc_values:
+            agg['final_top_10_discovery'] = top10_disc_values[-1]
+            agg['avg_top_10_discovery'] = float(np.mean(top10_disc_values))
 
-        top1k_values = [m.get('top_1000_overlap') for m in all_metrics if m.get('top_1000_overlap') is not None]
-        if top1k_values:
-            agg['final_top_1000_overlap'] = top1k_values[-1]
-            agg['avg_top_1000_overlap'] = float(np.mean(top1k_values))
+        top100_disc_values = [m.get('top_100_discovery') for m in all_metrics if m.get('top_100_discovery') is not None]
+        if top100_disc_values:
+            agg['final_top_100_discovery'] = top100_disc_values[-1]
+            agg['avg_top_100_discovery'] = float(np.mean(top100_disc_values))
+
+        cumulative_ef_values = [m.get('cumulative_ef') for m in all_metrics if m.get('cumulative_ef') is not None]
+        if cumulative_ef_values:
+            agg['final_cumulative_ef'] = cumulative_ef_values[-1]
+            agg['avg_cumulative_ef'] = float(np.mean(cumulative_ef_values))
+
+        batch_avg_ratio_values = [m.get('batch_avg_score_ratio') for m in all_metrics if m.get('batch_avg_score_ratio') is not None]
+        if batch_avg_ratio_values:
+            agg['avg_batch_score_ratio'] = float(np.mean(batch_avg_ratio_values))
+
+        unlabeled_spearman_values = [m.get('unlabeled_spearman_correlation') for m in all_metrics if m.get('unlabeled_spearman_correlation') is not None]
+        if unlabeled_spearman_values:
+            agg['final_unlabeled_spearman'] = unlabeled_spearman_values[-1]
+            agg['avg_unlabeled_spearman'] = float(np.mean(unlabeled_spearman_values))
+
+        unlabeled_top100_values = [m.get('unlabeled_top_100_overlap') for m in all_metrics if m.get('unlabeled_top_100_overlap') is not None]
+        if unlabeled_top100_values:
+            agg['final_unlabeled_top_100_overlap'] = unlabeled_top100_values[-1]
+            agg['avg_unlabeled_top_100_overlap'] = float(np.mean(unlabeled_top100_values))
+
+        unlabeled_ef_values = [m.get('unlabeled_ef_1_0') for m in all_metrics if m.get('unlabeled_ef_1_0') is not None]
+        if unlabeled_ef_values:
+            agg['final_unlabeled_ef_1_0'] = unlabeled_ef_values[-1]
+            agg['avg_unlabeled_ef_1_0'] = float(np.mean(unlabeled_ef_values))
 
     agg['total_cycles'] = len(all_metrics)
     agg['total_labeled'] = int((compounds_df['status'] == 'labeled').sum())
@@ -274,10 +273,6 @@ def run_active_learning(
     batch_fraction: float = 0.01,
     strategy: str = 'greedy',
     initial_strategy: str = 'random',
-    initial_batch_fraction: float = 0.01,
-    # Initial sampling
-    n_initial: int = 10,
-    initial_sampling_strategy: Literal['random', 'diverse'] = 'random',
     # Common parameters
     score_direction: str = 'higher',
     mode: Optional[Literal['run', 'benchmark']] = None,
@@ -299,7 +294,7 @@ def run_active_learning(
 
     Two APIs are supported:
 
-    **Simple API** - Specify basic parameters:
+    **Simple API** - Consistent batch size, flexible strategies:
         run_active_learning(
             compound_pool='compounds.csv',
             oracle='oracle.csv',
@@ -307,7 +302,9 @@ def run_active_learning(
             target_col='Activity',
             featurizer_type='morgan',
             n_cycles=10,
-            batch_fraction=0.01
+            batch_fraction=0.01,       # 1% per cycle (ALL cycles)
+            initial_strategy='random',  # Strategy for cycle 0
+            strategy='greedy'          # Strategy for cycles 1-9
         )
 
     **Advanced API** - Provide CycleConfig list for full control:
@@ -318,8 +315,9 @@ def run_active_learning(
             target_col='Activity',
             featurizer_type='morgan',
             cycles=[
-                CycleConfig('random', n_cycles=3, batch_fraction=0.02),
-                CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)
+                CycleConfig('random', n_cycles=1, batch_fraction=0.02),
+                CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
+                CycleConfig('ucb', n_cycles=10, batch_fraction=0.005)
             ]
         )
 
@@ -346,26 +344,24 @@ def run_active_learning(
         cycles: Advanced API - List of CycleConfig objects
             If provided, overrides simple API parameters
 
-        n_cycles: Simple API - Number of cycles (default: 10)
+        n_cycles: Simple API - Total number of cycles (default: 10)
 
-        batch_fraction: Simple API - Fraction per cycle (default: 0.01)
+        batch_fraction: Simple API - Fraction per cycle for ALL cycles (default: 0.01)
 
-        strategy: Simple API - Acquisition strategy (default: 'greedy')
+        strategy: Simple API - Acquisition strategy for cycles 1+ (default: 'greedy')
 
-        initial_strategy: Simple API - First cycle strategy (default: 'random')
-
-        initial_batch_fraction: Simple API - First cycle fraction (default: 0.01)
-
-        n_initial: Initial training set size (default: 10)
-
-        initial_sampling_strategy: Initial sampling method ('random' or 'diverse')
+        initial_strategy: Simple API - Acquisition strategy for cycle 0 (default: 'random')
 
         score_direction: Optimization direction ('higher' or 'lower')
 
         mode: Execution mode:
             - None: Auto-detect from oracle type
-            - 'run': Production screening (predict unlabeled only)
-            - 'benchmark': Evaluation (predict full dataset)
+            - 'run': Production screening (basic metrics only, no ground truth needed)
+            - 'benchmark': Evaluation (includes discovery/ranking metrics using ground truth)
+
+            Note: Both modes predict on unlabeled compounds only. The difference is in
+            metric computation: benchmark mode calculates additional discovery and ranking
+            metrics using the ground truth reference (original_pool).
 
         output_dir: Output directory path
             If None, auto-generates timestamped directory
@@ -563,57 +559,10 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
-        logger.info("Phase 2: Selecting initial training set")
+        logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
 
-        if n_initial > len(validation_result.valid_compounds):
-            logger.warning(
-                f"n_initial ({n_initial}) > valid compounds ({len(validation_result.valid_compounds)}), "
-                f"using all valid compounds"
-            )
-            n_initial = len(validation_result.valid_compounds)
-
-        initial_ids = select_initial_sample(
+        compounds_df = initialize_master_dataframe_empty(
             validation_result.valid_compounds,
-            n_initial,
-            initial_sampling_strategy,
-            featurizer_type,
-            cache_dir,
-            random_state
-        )
-
-        if len(initial_ids) == 0:
-            raise ValueError("Initial sampling returned 0 compounds")
-
-        logger.info(
-            f"Selected {len(initial_ids)} initial compounds using {initial_sampling_strategy} strategy"
-        )
-
-        logger.info("Phase 3: Measuring initial compounds")
-        initial_compounds = validation_result.valid_compounds[
-            validation_result.valid_compounds['ID'].isin(initial_ids)
-        ]
-        initial_measurements = oracle.measure(initial_compounds, [target_col])
-
-        measured_ids = set(initial_measurements['ID'])
-        missing_ids = set(initial_ids) - measured_ids
-        if missing_ids:
-            raise ValueError(
-                f"Oracle failed to measure {len(missing_ids)} initial compounds: {missing_ids}"
-            )
-
-        initial_values = initial_measurements.set_index('ID')[target_col]
-        logger.info(
-            f"Measured initial compounds: mean={initial_values.mean():.3f}, "
-            f"std={initial_values.std():.3f}, "
-            f"min={initial_values.min():.3f}, "
-            f"max={initial_values.max():.3f}"
-        )
-
-        logger.info("Phase 4: Initializing master DataFrame")
-        compounds_df = initialize_master_dataframe(
-            validation_result.valid_compounds,
-            initial_ids,
-            initial_values,
             target_col
         )
 
@@ -622,34 +571,26 @@ def run_active_learning(
             missing = expected_cols - set(compounds_df.columns)
             raise ValueError(f"Master DataFrame missing columns: {missing}")
 
-        logger.info(
-            f"Initialized master DataFrame: shape={compounds_df.shape}, "
-            f"labeled={len(compounds_df[compounds_df['status'] == 'labeled'])}"
-        )
+        logger.info(f"Master DataFrame initialized: {len(compounds_df)} compounds (all unlabeled)")
 
-        logger.info("Phase 5: Parsing cycle schedule")
+        logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
 
         if pruning_fraction is not None or pruning_strategy is not None:
-            # Validate pruning_fraction if provided
             if pruning_fraction is not None:
                 if not (0.0 <= pruning_fraction <= 0.9):
                     raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
 
-            # Set defaults
             if pruning_strategy is None:
                 pruning_strategy = 'score'
             if pruning_params is None:
                 pruning_params = {}
 
-            # Add pruning_fraction to params if provided via Simple API
             if pruning_fraction is not None:
                 pruning_params['pruning_fraction'] = pruning_fraction
 
-            # Add to kwargs for parse_cycle_schedule
             kwargs['pruning_strategy'] = pruning_strategy
             kwargs['pruning_params'] = pruning_params
 
-            # Log configuration
             fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
             logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
 
@@ -658,27 +599,68 @@ def run_active_learning(
 
         cycle_schedule = parse_cycle_schedule(
             cycles, strategy, n_cycles, batch_fraction,
-            initial_strategy, initial_batch_fraction,
+            initial_strategy,
             **kwargs
         )
 
         if len(cycle_schedule) == 0:
-            raise ValueError("Cycle schedule is empty")
+            raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
+
+        init_config = cycle_schedule[0]
+
+        logger.info(
+            f"Cycle 0 (initialization) config: "
+            f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
+        )
+
+        original_pool = validation_result.valid_compounds.copy() if mode == 'benchmark' else None
+        original_pool_size = len(validation_result.valid_compounds)
+
+        compounds_df, cycle_0_metrics = select_initial_batch(
+            compounds_df=compounds_df,
+            oracle=oracle,
+            target_col=target_col,
+            strategy=init_config.strategy,
+            batch_fraction=init_config.batch_fraction,
+            featurizer_type=featurizer_type,
+            cache_dir=cache_dir,
+            original_pool_size=original_pool_size,
+            random_state=random_state,
+            acquisition_params=init_config.acquisition_params,
+            score_direction=score_direction,
+            mode=mode,
+            original_pool=original_pool
+        )
+
+        labeled_count = (compounds_df['status'] == 'labeled').sum()
+        logger.info(
+            f"Cycle 0 (initialization) complete: {labeled_count} compounds labeled "
+            f"(strategy={init_config.strategy})"
+        )
+
+        # Initialize metrics list with cycle 0
+        all_metrics = [cycle_0_metrics]
+        logger.info(
+            f"Cycle 0 metrics captured: "
+            f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
+            f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
+        )
+
+        logger.info("Phase 3: Starting active learning cycles")
 
         from collections import Counter
         strategy_counts = Counter(config.strategy for config in cycle_schedule)
         logger.info(
-            f"Cycle schedule parsed: {len(cycle_schedule)} total cycles, "
+            f"Cycle schedule: {len(cycle_schedule)} cycles, "
             f"strategies: {dict(strategy_counts)}"
         )
 
-        logger.info("Phase 6: Executing active learning cycles")
-        original_pool = validation_result.valid_compounds.copy() if mode == 'benchmark' else None
-        original_pool_size = len(validation_result.valid_compounds)
-        all_metrics = []
+        logger.info("Phase 4: Executing active learning cycles (1, 2, 3, ...)")
 
-        for cycle_num, config in enumerate(cycle_schedule):
-            logger.info(f"Executing cycle {cycle_num + 1}/{len(cycle_schedule)}")
+        cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
+
+        for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
+            logger.info(f"Executing active learning cycle {cycle_num}/{len(cycle_schedule) - 1}")
 
             try:
                 compounds_df, metrics = execute_cycle(
@@ -693,9 +675,13 @@ def run_active_learning(
                     original_pool_size=original_pool_size,
                     score_direction=score_direction,
                     mode=mode,
-                    original_pool=original_pool
+                    original_pool=original_pool,
+                    cumulative_selected_ids=cumulative_selected_ids
                 )
                 all_metrics.append(metrics)
+
+                # Update cumulative_selected_ids after cycle
+                cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
 
                 logger.info(
                     f"Cycle {cycle_num} complete: "
@@ -711,7 +697,7 @@ def run_active_learning(
                 logger.error(f"Cycle {cycle_num} failed: {e}")
                 raise RuntimeError(f"Cycle {cycle_num} failed: {e}") from e
 
-        logger.info("Phase 7: Calculating aggregate metrics")
+        logger.info("Phase 5: Calculating aggregate metrics")
         aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)
 
         if aggregate_metrics:
@@ -721,7 +707,7 @@ def run_active_learning(
             if 'r2_improvement' in aggregate_metrics:
                 logger.info(f"  R²: {aggregate_metrics.get('initial_r2', 'N/A'):.4f} → {aggregate_metrics.get('final_r2', 'N/A'):.4f} (improvement: {aggregate_metrics.get('r2_improvement', 0):.4f})")
 
-        logger.info("Phase 8: Saving results")
+        logger.info("Phase 6: Saving results")
         config_dict = {
             'target_col': target_col,
             'featurizer_type': featurizer_type,
@@ -730,9 +716,7 @@ def run_active_learning(
             'n_cycles': len(all_metrics),
             'random_state': random_state,
             'learner': learner.__class__.__name__,
-            'oracle': oracle.__class__.__name__,
-            'initial_sampling_strategy': initial_sampling_strategy,
-            'n_initial': n_initial
+            'oracle': oracle.__class__.__name__
         }
 
         saved_files = save_results(

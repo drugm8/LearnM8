@@ -54,7 +54,8 @@ def execute_cycle(
     original_pool_size: int,
     score_direction: str = 'higher',
     mode: Literal['run', 'benchmark'] = 'run',
-    original_pool: Optional[pd.DataFrame] = None
+    original_pool: Optional[pd.DataFrame] = None,
+    cumulative_selected_ids: Optional[set] = None
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -118,42 +119,49 @@ def execute_cycle(
     if score_direction not in ['higher', 'lower']:
         raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
 
-    logger.info(f"Executing cycle {cycle} with strategy '{config.strategy}' in {mode} mode")
+    logger.info(
+        f"Executing cycle {cycle} (strategy='{config.strategy}', mode={mode})"
+    )
 
-    # Step 2: Get Labeled Compounds for Training
+    # Extract cumulative selected IDs if not provided
+    if cumulative_selected_ids is None:
+        cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
+
+    # Step 2 & 3: Training
+    # Get Labeled Compounds for Training
     labeled_df = get_compounds_by_status(
         compounds_df, 'labeled', columns=['ID', 'SMILES', target_col]
     ).copy()
 
     if len(labeled_df) == 0:
-        raise ValueError(f"No labeled compounds available for training in cycle {cycle}")
-
-    logger.debug(f"Training on {len(labeled_df)} labeled compounds")
-
-    # Step 3: Extract features and train learner
-    try:
-        training_features = extract_features(
-            labeled_df['SMILES'].tolist(),
-            featurizer_type,
-            cache_dir
+        raise RuntimeError(
+            f"Cycle {cycle}: No labeled compounds available. "
+            f"This should not happen after initialization (cycle 0). "
+            f"Check that select_initial_batch() ran successfully before cycles."
         )
-        training_targets = labeled_df[target_col].values
-        learner.train(training_features, training_targets)
-    except Exception as e:
-        logger.error(f"Training failed in cycle {cycle}: {e}")
-        raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
+    else:
+        logger.debug(f"Training on {len(labeled_df)} labeled compounds")
 
-    logger.info(f"Training complete for cycle {cycle}")
+        # Extract features and train learner
+        try:
+            logger.info(f"Extracting features for {len(labeled_df)} training compounds")
+            training_features = extract_features(
+                labeled_df['SMILES'].tolist(),
+                featurizer_type,
+                cache_dir=cache_dir
+            )
+            training_targets = labeled_df[target_col].values
+            learner.train(training_features, training_targets)
+        except Exception as e:
+            logger.error(f"Training failed in cycle {cycle}: {e}")
+            raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
 
-    # Step 4: Determine Prediction Pool (MODE-SPECIFIC)
-    if mode == 'benchmark':
-        prediction_pool = original_pool[['ID', 'SMILES']].copy()
-        logger.debug(f"Benchmark mode: predicting on {len(prediction_pool)} compounds (full original pool)")
-    else:  # run mode
-        prediction_pool = get_compounds_by_status(
-            compounds_df, 'unlabeled', columns=['ID', 'SMILES']
-        ).copy()
-        logger.debug(f"Run mode: predicting on {len(prediction_pool)} unlabeled compounds")
+        logger.info(f"Training complete for cycle {cycle}")
+
+    prediction_pool = get_compounds_by_status(
+        compounds_df, 'unlabeled', columns=['ID', 'SMILES']
+    ).copy()
+    logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
 
     if len(prediction_pool) == 0:
         logger.warning(f"No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.")
@@ -169,14 +177,17 @@ def execute_cycle(
         }
         return compounds_df, metrics
 
-    # Step 5: Extract features and predict
     try:
+        logger.info(f"Extracting features for {len(prediction_pool):,} unlabeled compounds")
         prediction_features = extract_features(
             prediction_pool['SMILES'].tolist(),
             featurizer_type,
-            cache_dir
+            cache_dir=cache_dir,
+            show_progress=len(prediction_pool) > 10000
         )
+        logger.info(f"Generating predictions for {len(prediction_pool):,} compounds")
         predictions, uncertainties = learner.predict(prediction_features)
+        logger.info(f"Predictions complete: {len(predictions):,} predictions generated")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
@@ -186,13 +197,11 @@ def execute_cycle(
 
     logger.debug(f"Generated {len(predictions)} predictions")
 
-    # Step 6: Add Predictions to Master DataFrame
     valid_compound_ids = prediction_pool['ID'].tolist()
     compounds_df = add_predictions(
         compounds_df, cycle, valid_compound_ids, predictions, uncertainties
     )
 
-    # Step 7: Prepare Selection Pool (Always Unlabeled)
     unlabeled_mask = compounds_df['status'] == 'unlabeled'
     pred_col = f'prediction_cycle_{cycle}'
     has_pred_mask = compounds_df[pred_col].notna()
@@ -372,11 +381,13 @@ def execute_cycle(
                         previously_selected=None,
                         advanced_metrics=False,
                         disable_molecular_similarity=True,
-                        score_direction=score_direction
+                        score_direction=score_direction,
+                        cumulative_selected_ids=cumulative_selected_ids,
+                        cumulative_labeled_count=int((compounds_df['status'] == 'labeled').sum())
                     )
 
                     metrics.update(eval_metrics)
-                    logger.debug(f"Enhanced metrics with evaluation (RMSE: {eval_metrics.get('rmse', 'N/A')})")
+                    logger.debug(f"Enhanced metrics with evaluation (Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%)")
     except Exception as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
 
@@ -448,7 +459,7 @@ def _calculate_cycle_metrics(
     metrics['selected_ids'] = selected_ids
 
     # Prediction statistics (with NaN safeguards)
-    if len(predictions) > 0:
+    if predictions is not None and len(predictions) > 0:
         metrics['prediction_mean'] = float(np.nanmean(predictions)) if not np.all(np.isnan(predictions)) else None
         metrics['prediction_std'] = float(np.nanstd(predictions)) if not np.all(np.isnan(predictions)) else None
         metrics['prediction_min'] = float(np.nanmin(predictions)) if not np.all(np.isnan(predictions)) else None

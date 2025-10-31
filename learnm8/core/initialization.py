@@ -1,162 +1,341 @@
 """Initialization functions for active learning experiments.
 
-Provides clean initialization with:
-- Actual target column names (not 'target_value')
-- Vectorized operations for performance
-- Flexible initial sampling (random or diverse)
-- Compatibility with new architecture (Phases 1 and 2)
-
-This module replaces the old initialize_master_dataframe() in data_structures.py
-with a cleaner, more consistent implementation.
+Provides clean initialization with all compounds starting unlabeled,
+followed by a separate initialization phase (cycle 0) that selects the
+initial batch before active learning cycles begin.
 """
 
 import pandas as pd
 import numpy as np
-from typing import List, Optional, Literal
 import logging
+import math
 from pathlib import Path
-from .data_structures import STATUS_LABELED, STATUS_UNLABELED, VALID_STATUSES
-from learnm8.features.extraction import extract_features
+from typing import Dict, Optional, Tuple, Any, List, Set
+from .data_structures import STATUS_UNLABELED, VALID_STATUSES
+from .interfaces import Oracle
 
 logger = logging.getLogger(__name__)
 
 
-def initialize_master_dataframe(
+def initialize_master_dataframe_empty(
     valid_compounds: pd.DataFrame,
-    initial_labeled_ids: List[str],
-    initial_measurements: pd.Series,
     target_col: str
 ) -> pd.DataFrame:
-    """Create master DataFrame from validated compounds.
+    """Create master DataFrame with all compounds unlabeled.
 
-    This is the NEW version that replaces the old one in data_structures.py.
-
-    Key differences from old version:
-    - Takes valid_compounds (already validated) instead of raw compound_pool
-    - Uses actual target_col name throughout (not 'target_value')
-    - Marks initial compounds with labeled_cycle = -1 (not pd.NA)
-    - Does NOT create 'last_prediction' or 'last_uncertainty' columns (removed in Phase 2)
-    - Uses vectorized initialization (not iterative loop)
+    All compounds start unlabeled. The first cycle (cycle 0) will select
+    and measure the initial batch as part of normal cycle execution.
 
     Args:
         valid_compounds: DataFrame with 'ID' and 'SMILES' columns (already validated)
-        initial_labeled_ids: List of compound IDs to mark as initially labeled
-        initial_measurements: Series mapping compound ID to measured value
         target_col: Name of target column for measurements
 
     Returns:
         Master DataFrame with columns: ID, SMILES, status, labeled_cycle,
         selected_cycle, pruned_cycle, target_col
 
+        All compounds have status='unlabeled', all tracking columns are empty.
+
     Example:
-        >>> master_df = initialize_master_dataframe(
+        >>> master_df = initialize_master_dataframe_empty(
         ...     valid_compounds=validated_df,
-        ...     initial_labeled_ids=['compound_1', 'compound_2'],
-        ...     initial_measurements=pd.Series({'compound_1': 0.5, 'compound_2': 0.8}),
         ...     target_col='Activity'
         ... )
+        >>> # All compounds unlabeled, cycle 0 will select initial batch
     """
     if 'ID' not in valid_compounds.columns or 'SMILES' not in valid_compounds.columns:
         raise ValueError("valid_compounds must contain 'ID' and 'SMILES' columns")
 
     master_df = valid_compounds[['ID', 'SMILES']].copy()
 
-    initial_set = set(initial_labeled_ids)
+    # All compounds start unlabeled
     master_df['status'] = pd.Categorical(
-        [STATUS_LABELED if cid in initial_set else STATUS_UNLABELED for cid in master_df['ID']],
+        [STATUS_UNLABELED] * len(master_df),
         categories=VALID_STATUSES
     )
 
+    # Initialize empty tracking columns
     master_df['labeled_cycle'] = pd.Series(dtype='Int64')
     master_df['selected_cycle'] = pd.Series(dtype='Int64')
     master_df['pruned_cycle'] = pd.Series(dtype='Int64')
     master_df[target_col] = pd.Series(dtype='float64')
 
-    mask = master_df['ID'].isin(initial_set)
-    id_to_value = initial_measurements.to_dict()
-    master_df.loc[mask, target_col] = master_df.loc[mask, 'ID'].map(id_to_value)
-    master_df.loc[mask, 'labeled_cycle'] = -1
-    master_df.loc[mask, 'selected_cycle'] = -1
-
-    logger.info(f"Initialized master DataFrame with {len(master_df)} compounds, {len(initial_labeled_ids)} initially labeled")
+    logger.info(
+        f"Initialized master DataFrame: {len(master_df)} compounds (all unlabeled)"
+    )
 
     return master_df
 
 
-def select_initial_sample(
+def calculate_initialization_metrics(
     compounds_df: pd.DataFrame,
-    n_initial: int,
-    strategy: Literal['random', 'diverse'] = 'random',
-    featurizer_type: str = 'morgan',
-    cache_dir: Optional[Path] = None,
-    random_state: int = 42
-) -> List[str]:
-    """Select initial training set using random or diverse sampling strategies.
+    selected_ids: List[str],
+    target_col: str,
+    strategy: str,
+    score_direction: str,
+    mode: str,
+    original_pool: Optional[pd.DataFrame] = None,
+    cumulative_selected_ids: Optional[Set[str]] = None
+) -> Dict[str, Any]:
+    """Calculate metrics for initialization phase (cycle 0).
+
+    Generates metrics similar to execute_cycle() but simplified for initialization:
+    - No predictions/uncertainties (no model trained yet)
+    - No pruning (always 0)
+    - Focus on pool state and measured values
+    - Includes discovery metrics if in benchmark mode
 
     Args:
-        compounds_df: DataFrame with 'ID' and 'SMILES' columns
-        n_initial: Number of compounds to select for initial training set
-        strategy: Sampling strategy - 'random' or 'diverse' (requires BitBIRCH)
-        featurizer_type: Type of molecular featurizer for diverse sampling
-        cache_dir: Directory for feature cache (diverse sampling only)
-        random_state: Random seed for reproducibility
+        compounds_df: Master DataFrame after initialization
+        selected_ids: IDs of compounds selected in initialization
+        target_col: Target property column name
+        strategy: Acquisition strategy used (typically 'random')
+        score_direction: 'higher' or 'lower' for optimization
+        mode: 'run' or 'benchmark' execution mode
+        original_pool: Full original pool (required for benchmark mode)
+        cumulative_selected_ids: Set of all selected IDs (for discovery metrics)
 
     Returns:
-        List of compound IDs selected for initial training set
+        Dictionary with cycle 0 metrics matching structure of execute_cycle() metrics
+    """
+    metrics = {}
 
-    Examples:
-        >>> # Random sampling
-        >>> ids = select_initial_sample(df, n_initial=10, strategy='random')
+    # Basic cycle info
+    metrics['cycle'] = 0
+    metrics['strategy'] = strategy
+    metrics['batch_size'] = len(selected_ids)
+    metrics['selected_count'] = len(selected_ids)
 
-        >>> # Diverse sampling (requires BitBIRCH)
-        >>> ids = select_initial_sample(
-        ...     df, n_initial=10, strategy='diverse',
-        ...     featurizer_type='morgan', cache_dir=Path('.cache')
+    # Pool statistics
+    metrics['remaining_unlabeled'] = int((compounds_df['status'] == 'unlabeled').sum())
+    metrics['cumulative_labeled'] = int((compounds_df['status'] == 'labeled').sum())
+    metrics['cumulative_pruned'] = 0
+    metrics['pool_size'] = metrics['remaining_unlabeled']
+
+    # Pruning statistics (none in initialization)
+    metrics['pruned_count'] = 0
+    metrics['pruned_ids'] = []
+
+    # Selection statistics
+    metrics['selected_ids'] = selected_ids
+
+    # Prediction statistics (None - no model yet)
+    metrics['prediction_mean'] = None
+    metrics['prediction_std'] = None
+    metrics['prediction_min'] = None
+    metrics['prediction_max'] = None
+    metrics['prediction_median'] = None
+
+    # Uncertainty statistics (None - no model yet)
+    metrics['has_uncertainty'] = False
+
+    # Measured value statistics for selected compounds
+    measured_values = compounds_df[
+        compounds_df['ID'].isin(selected_ids)
+    ][target_col].values
+
+    if len(measured_values) > 0 and not np.all(np.isnan(measured_values)):
+        metrics['measured_mean'] = float(np.nanmean(measured_values))
+        metrics['measured_std'] = float(np.nanstd(measured_values))
+        metrics['measured_min'] = float(np.nanmin(measured_values))
+        metrics['measured_max'] = float(np.nanmax(measured_values))
+        metrics['measured_best'] = float(
+            np.nanmax(measured_values) if score_direction == 'higher' else np.nanmin(measured_values)
+        )
+        metrics['best_so_far'] = metrics['measured_best']
+        metrics['avg_score_selected'] = metrics['measured_mean']
+    else:
+        metrics['measured_mean'] = None
+        metrics['measured_std'] = None
+        metrics['measured_min'] = None
+        metrics['measured_max'] = None
+        metrics['measured_best'] = None
+        metrics['best_so_far'] = None
+        metrics['avg_score_selected'] = None
+
+    # Enhanced metrics from evaluation framework (if benchmark mode)
+    if mode == 'benchmark' and original_pool is not None:
+        try:
+            from learnm8.evaluation import evaluate_cycle
+
+            # For cycle 0, we have measurements but no predictions
+            # Focus on discovery metrics (what was found) not ranking metrics
+            labeled_for_eval = compounds_df[compounds_df['status'] == 'labeled'][['ID', 'SMILES', target_col]].copy()
+            selected_for_eval = compounds_df[compounds_df['ID'].isin(selected_ids)][['ID', 'SMILES', target_col]].copy()
+
+            if cumulative_selected_ids is None:
+                cumulative_selected_ids = set(selected_ids)
+
+            eval_metrics = evaluate_cycle(
+                cycle=0,
+                predictions=None,
+                ground_truth=None,
+                labeled_data=labeled_for_eval,
+                selected_compounds=selected_for_eval,
+                target_col=target_col,
+                oracle_type='benchmark',
+                ground_truth_data=original_pool,
+                pool_predictions=None,
+                pool_ids=None,
+                uncertainties=None,
+                previously_selected=None,
+                advanced_metrics=False,
+                disable_molecular_similarity=True,
+                score_direction=score_direction,
+                cumulative_selected_ids=cumulative_selected_ids,
+                cumulative_labeled_count=len(selected_ids)
+            )
+
+            metrics.update(eval_metrics)
+            logger.debug(f"Cycle 0 enhanced metrics: Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%")
+
+        except Exception as e:
+            logger.warning(f"Failed to calculate enhanced evaluation metrics for cycle 0: {e}")
+
+    return metrics
+
+
+def select_initial_batch(
+    compounds_df: pd.DataFrame,
+    oracle: Oracle,
+    target_col: str,
+    strategy: str,
+    batch_fraction: float,
+    featurizer_type: str,
+    cache_dir: Path,
+    original_pool_size: int,
+    random_state: int = 42,
+    acquisition_params: Optional[Dict] = None,
+    score_direction: str = 'higher',
+    mode: str = 'run',
+    original_pool: Optional[pd.DataFrame] = None
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Select and measure initial batch before active learning cycles.
+
+    This is the initialization phase (cycle 0) - no model training/prediction needed.
+    Uses acquisition strategies that don't require predictions (random, bitbirch).
+
+    Args:
+        compounds_df: Master DataFrame (all unlabeled)
+        oracle: Oracle for measurements
+        target_col: Target property column name
+        strategy: Acquisition strategy ('random' or 'bitbirch')
+        batch_fraction: Fraction of pool to select
+        featurizer_type: Molecular featurizer ('morgan', 'ecfp6', etc.)
+        cache_dir: Feature cache directory
+        original_pool_size: Original pool size for batch calculation
+        random_state: Random seed for reproducibility
+        acquisition_params: Optional parameters for acquisition function
+        score_direction: 'higher' or 'lower' for optimization (default: 'higher')
+        mode: 'run' or 'benchmark' execution mode (default: 'run')
+        original_pool: Full original pool (required for benchmark mode metrics)
+
+    Returns:
+        Tuple of (updated DataFrame, cycle 0 metrics dict)
+        - DataFrame: With initial batch labeled (labeled_cycle=0)
+        - metrics: Dictionary with cycle 0 metrics
+
+    Raises:
+        ValueError: If calculated batch size is 0
+        RuntimeError: If oracle measurement fails or no unlabeled compounds
+
+    Example:
+        >>> compounds_df, metrics = select_initial_batch(
+        ...     compounds_df=master_df,
+        ...     oracle=csv_oracle,
+        ...     target_col='Activity',
+        ...     strategy='random',
+        ...     batch_fraction=0.01,
+        ...     featurizer_type='morgan',
+        ...     cache_dir=Path('.cache'),
+        ...     original_pool_size=10000,
+        ...     score_direction='higher',
+        ...     mode='benchmark',
+        ...     original_pool=original_df
         ... )
     """
-    if n_initial > len(compounds_df):
-        logger.warning(f"n_initial ({n_initial}) > available compounds ({len(compounds_df)}), using all compounds")
-        n_initial = len(compounds_df)
+    from .dataframe_ops import update_status
+    from learnm8.acquisition import get_acquisition_function
 
-    if strategy == 'random':
-        selected_ids = compounds_df.sample(n=n_initial, random_state=random_state)['ID'].tolist()
-        logger.info(f"Selected {n_initial} compounds using random sampling")
-        return selected_ids
+    batch_size = min(
+        max(1, math.ceil(original_pool_size * batch_fraction)),
+        len(compounds_df)
+    )
 
-    elif strategy == 'diverse':
-        try:
-            from learnm8.acquisition.bitbirch import BitBIRCHAcquisition
+    if batch_size == 0:
+        raise ValueError(
+            f"Calculated batch size is 0 (pool_size={original_pool_size}, "
+            f"batch_fraction={batch_fraction})"
+        )
 
-            cache_dir = cache_dir or Path('.cache')
+    logger.info(f"Initialization: selecting {batch_size} compounds using '{strategy}' strategy")
 
-            features = extract_features(
-                compounds_df['SMILES'].tolist(),
-                featurizer_type,
-                cache_dir
-            )
+    unlabeled = compounds_df[compounds_df['status'] == 'unlabeled'][['ID', 'SMILES']].copy()
 
-            acq = BitBIRCHAcquisition(
-                features=features,
-                compound_ids=compounds_df['ID'].tolist(),
-                featurizer_type=featurizer_type,
-                random_state=random_state
-            )
+    if len(unlabeled) == 0:
+        raise RuntimeError("No unlabeled compounds available for initialization")
 
-            temp_df = compounds_df.copy()
-            temp_df['prediction'] = 0.0
+    if strategy != 'random':
+        logger.warning(
+            f"Strategy '{strategy}' not yet supported for initialization. "
+            f"Using 'random' strategy instead. "
+            f"(BitBIRCH and other strategies deferred to future release)"
+        )
+        strategy = 'random'
 
-            selected_df = acq.select(temp_df, n_initial)
-            selected_ids = selected_df['ID'].tolist()
+    acq_class = get_acquisition_function('random')
+    acq_func = acq_class(random_state=random_state)
 
-            logger.info(f"Selected {n_initial} compounds using diverse sampling (BitBIRCH)")
-            return selected_ids
+    selected_df = acq_func.select(unlabeled, batch_size)
 
-        except ImportError:
-            logger.warning("BitBIRCH not available, falling back to random sampling")
-            return select_initial_sample(compounds_df, n_initial, 'random', random_state=random_state)
-        except Exception as e:
-            logger.warning(f"Diverse sampling failed ({e}), falling back to random sampling")
-            return select_initial_sample(compounds_df, n_initial, 'random', random_state=random_state)
+    selected_ids = selected_df['ID'].tolist()
 
-    else:
-        raise ValueError(f"Unknown strategy '{strategy}'. Must be 'random' or 'diverse'")
+    if len(selected_ids) == 0:
+        raise RuntimeError("Acquisition strategy selected 0 compounds")
+
+    logger.info(f"Measuring {len(selected_ids)} selected compounds...")
+
+    selected_compounds = compounds_df[
+        compounds_df['ID'].isin(selected_ids)
+    ][['ID', 'SMILES']].copy()
+
+    try:
+        measurements = oracle.measure(selected_compounds, [target_col])
+    except Exception as e:
+        logger.error(f"Oracle measurement failed during initialization: {e}")
+        raise RuntimeError(f"Initialization failed - oracle measurement error: {e}")
+
+    if not all(sid in measurements['ID'].values for sid in selected_ids):
+        missing = set(selected_ids) - set(measurements['ID'].values)
+        raise RuntimeError(
+            f"Oracle did not return measurements for {len(missing)} compounds"
+        )
+
+    compounds_df = update_status(
+        compounds_df,
+        selected_ids,
+        'labeled',
+        cycle=0,
+        target_col=target_col,
+        target_values=measurements.set_index('ID')[target_col]
+    )
+
+    logger.info(
+        f"Initialization (cycle 0) complete: {len(selected_ids)} compounds labeled "
+        f"(strategy='{strategy}')"
+    )
+
+    # Calculate cycle 0 metrics
+    cumulative_selected_ids = set(selected_ids)
+    metrics = calculate_initialization_metrics(
+        compounds_df=compounds_df,
+        selected_ids=selected_ids,
+        target_col=target_col,
+        strategy=strategy,
+        score_direction=score_direction,
+        mode=mode,
+        original_pool=original_pool,
+        cumulative_selected_ids=cumulative_selected_ids
+    )
+
+    return compounds_df, metrics

@@ -19,7 +19,7 @@ except ImportError:
     pass
 
 try:
-    from .initialization import initialize_master_dataframe, select_initial_sample
+    from .initialization import initialize_master_dataframe_empty
 except ImportError:
     pass
 
@@ -54,8 +54,8 @@ __all__ = [
 if 'validate_compound_pool' in dir():
     __all__.extend(['validate_compound_pool', 'ValidationResult'])
 
-if 'initialize_master_dataframe' in dir():
-    __all__.extend(['initialize_master_dataframe', 'select_initial_sample'])
+if 'initialize_master_dataframe_empty' in dir():
+    __all__.append('initialize_master_dataframe_empty')
 
 if 'CycleConfig' in dir():
     __all__.extend(['CycleConfig', 'parse_cycle_schedule', 'parse_cycle_spec'])

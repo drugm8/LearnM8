@@ -144,7 +144,6 @@ def parse_cycle_schedule(
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
     initial_strategy: str = 'random',
-    initial_batch_fraction: float = 0.01,
     **kwargs
 ) -> List[CycleConfig]:
     """Convert either advanced API (cycles list) or simple API (individual parameters) to unified List[CycleConfig].
@@ -158,26 +157,24 @@ def parse_cycle_schedule(
 
     Args:
         cycles: Advanced API - List of CycleConfig objects
-        strategy: Simple API - Acquisition strategy for main cycles
+        strategy: Simple API - Acquisition strategy for cycles 1+
         n_cycles: Simple API - Total number of cycles
-        batch_fraction: Simple API - Batch fraction for main cycles
-        initial_strategy: Simple API - Strategy for first cycle (typically 'random')
-        initial_batch_fraction: Simple API - Batch fraction for first cycle
+        batch_fraction: Simple API - Batch fraction for ALL cycles (including cycle 0)
+        initial_strategy: Simple API - Strategy for cycle 0 (default: 'random')
         **kwargs: Additional parameters passed to CycleConfig (pruning_strategy, acquisition_params, etc.)
 
     Returns:
         List of CycleConfig objects, each with n_cycles=1 (expanded from multi-cycle configs)
 
     Examples:
-        >>> # Simple API
+        >>> # Simple API - same batch size, different strategies
         >>> schedule = parse_cycle_schedule(
         ...     strategy='greedy',
         ...     n_cycles=10,
         ...     batch_fraction=0.01,
-        ...     initial_strategy='random',
-        ...     initial_batch_fraction=0.02
+        ...     initial_strategy='random'
         ... )
-        >>> # Returns: [CycleConfig('random', 1, batch_fraction=0.02),
+        >>> # Returns: [CycleConfig('random', 1, batch_fraction=0.01),
         >>> #           CycleConfig('greedy', 1, batch_fraction=0.01), ...] (10 total)
 
         >>> # Advanced API
@@ -234,13 +231,15 @@ def parse_cycle_schedule(
 
     schedule = []
 
+    # Cycle 0: initial_strategy with same batch_fraction
     schedule.append(CycleConfig(
         strategy=initial_strategy,
         n_cycles=1,
-        batch_fraction=initial_batch_fraction,
+        batch_fraction=batch_fraction,
         **cycle_kwargs
     ))
 
+    # Cycles 1+: main strategy with same batch_fraction
     for _ in range(n_cycles - 1):
         schedule.append(CycleConfig(
             strategy=strategy,
