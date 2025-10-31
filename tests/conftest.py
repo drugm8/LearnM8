@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures for LearnM8 tests."""
 
+import logging
 import pytest
 import pandas as pd
 import numpy as np
@@ -706,3 +707,17 @@ def master_df_multi_cycle(sample_master_df) -> pd.DataFrame:
     )
 
     return master_df
+
+
+@pytest.fixture
+def caplog_info(caplog):
+    """Capture INFO level logs."""
+    caplog.set_level(logging.INFO)
+    return caplog
+
+
+@pytest.fixture
+def caplog_debug(caplog):
+    """Capture DEBUG level logs."""
+    caplog.set_level(logging.DEBUG)
+    return caplog

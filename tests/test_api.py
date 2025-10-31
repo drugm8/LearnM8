@@ -16,6 +16,7 @@ Validates results structure:
 - validation_result
 """
 
+import logging
 import pytest
 import pandas as pd
 import numpy as np
@@ -980,3 +981,99 @@ class TestCacheDirParameter:
 
         assert 'compounds_df' in results
         assert results['output_dir'] == output_dir
+
+
+class TestLoggingBehavior:
+    """Test logging level behavior after refactoring."""
+
+    def test_info_logs_are_user_focused(self, sample_compounds, tmp_path, caplog_info):
+        """INFO logs should show high-level progress only, no technical details."""
+        from learnm8 import run_active_learning
+
+        # Save sample compounds as CSV for oracle
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.copy()
+        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
+        oracle_data.to_csv(oracle_path, index=False)
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=str(oracle_path),
+            learner='rf',
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=2,
+            batch_fraction=0.1,
+            cache_dir=tmp_path,
+            output_dir=tmp_path / "output"
+        )
+
+        info_messages = [rec.message for rec in caplog_info.records
+                        if rec.levelno == logging.INFO]
+
+        assert any('Starting active learning' in msg for msg in info_messages)
+        assert any('Phase 1: Validating' in msg for msg in info_messages)
+        assert any('Training model' in msg for msg in info_messages)
+        assert any('Acquiring compounds' in msg for msg in info_messages)
+
+        assert not any('cache_dir=' in msg.lower() for msg in info_messages)
+        assert not any('shape:' in msg.lower() for msg in info_messages)
+        assert not any('dtype' in msg.lower() for msg in info_messages)
+
+    def test_debug_logs_contain_technical_details(self, sample_compounds, tmp_path, caplog_debug):
+        """DEBUG logs should contain technical details and shapes."""
+        from learnm8 import run_active_learning
+
+        # Save sample compounds as CSV for oracle
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.copy()
+        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
+        oracle_data.to_csv(oracle_path, index=False)
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=str(oracle_path),
+            learner='rf',
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=2,
+            batch_fraction=0.1,
+            cache_dir=tmp_path,
+            output_dir=tmp_path / "output"
+        )
+
+        debug_messages = [rec.message for rec in caplog_debug.records
+                         if rec.levelno == logging.DEBUG]
+
+        assert len(debug_messages) > 0
+        assert any('shape' in msg.lower() for msg in debug_messages)
+
+    def test_phase_separators_in_info_logs(self, sample_compounds, tmp_path, caplog_info):
+        """INFO logs should include phase separators for visual organization."""
+        from learnm8 import run_active_learning
+
+        # Save sample compounds as CSV for oracle
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.copy()
+        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
+        oracle_data.to_csv(oracle_path, index=False)
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=str(oracle_path),
+            learner='rf',
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=2,
+            batch_fraction=0.1,
+            cache_dir=tmp_path,
+            output_dir=tmp_path / "output"
+        )
+
+        info_messages = [rec.message for rec in caplog_info.records
+                        if rec.levelno == logging.INFO]
+
+        assert any('═══════' in msg for msg in info_messages)
+        assert any('Phase 1:' in msg for msg in info_messages)
+        assert any('Phase 2:' in msg for msg in info_messages)
+        assert any('Phase 5:' in msg for msg in info_messages)
