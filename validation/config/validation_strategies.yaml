@@ -10,7 +10,6 @@ global:
   visualization_seed: 123
 
   n_cycles: 10
-  initial_fraction: 0.01
   batch_fraction: 0.01
 
   featurizer_type: 'morgan'
