@@ -52,10 +52,13 @@ class GreedyAcquisition(AcquisitionFunction):
         """
         # Validate input
         self.validate_input(compounds, n_select)
-        
+
         # Get prediction scores
         scores = compounds['prediction'].values
-        
+
+        logger.debug(f"GreedyAcquisition: selecting top {n_select} from {len(compounds)} compounds")
+        logger.debug(f"Score statistics: min={scores.min():.3f}, max={scores.max():.3f}, mean={scores.mean():.3f}")
+
         # Adjust n_select if it exceeds available compounds
         actual_n_select = min(n_select, len(compounds))
         
@@ -115,11 +118,13 @@ class RandomAcquisition(AcquisitionFunction):
         
         # Adjust n_select if it exceeds available compounds
         actual_n_select = min(n_select, len(compounds))
-        
+
         if actual_n_select < n_select:
             logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
                          f"will select all {len(compounds)} available compounds")
-        
+
+        logger.debug(f"RandomAcquisition: randomly selecting {actual_n_select} from {len(compounds)} compounds with random_state={self.random_state}")
+
         # Random selection
         selected_indices = self._rng.choice(
             len(compounds), size=actual_n_select, replace=False
@@ -187,7 +192,9 @@ class TopKAcquisition(AcquisitionFunction):
         # Calculate K - the number of top compounds to consider
         k_consider = max(actual_n_select, int(len(compounds) * self.k_fraction))
         k_consider = min(k_consider, len(compounds))
-        
+
+        logger.debug(f"TopKAcquisition: k_fraction={self.k_fraction}, candidates to consider: {k_consider}")
+
         # Sort compounds by prediction based on score direction
         if self.score_direction == 'higher':
             # Sort descending (highest first)

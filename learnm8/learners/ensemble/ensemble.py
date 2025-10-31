@@ -94,7 +94,7 @@ class EnsembleLearner(Learner):
 
         start_time = time.time()
 
-        logger.info(f"Training ensemble of {len(self.learners)} learners on {len(features)} samples")
+        logger.debug(f"Training ensemble of {len(self.learners)} learners on {len(features)} samples")
 
         failed_learners = []
 
@@ -122,7 +122,7 @@ class EnsembleLearner(Learner):
 
         self.is_trained = True
         train_time = time.time() - start_time
-        logger.info(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
+        logger.debug(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
     
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Predict on feature matrix with ensemble uncertainty.
@@ -164,6 +164,8 @@ class EnsembleLearner(Learner):
 
             ensemble_predictions = self._aggregate_predictions(predictions_array)
             uncertainties = self._calculate_uncertainty(predictions_array)
+
+            logger.debug(f"Ensemble prediction: aggregated {len(predictions_list)} predictions using {self.aggregation_method}")
 
             pred_time = time.time() - start_time
             logger.debug(f"Predicted {len(ensemble_predictions)} samples with {self.get_name()} "

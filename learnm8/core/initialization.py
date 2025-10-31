@@ -268,6 +268,10 @@ def select_initial_batch(
             f"batch_fraction={batch_fraction})"
         )
 
+    logger.debug(f"Starting initialization phase (cycle 0)")
+    logger.debug(f"Strategy: {strategy}, batch_fraction: {batch_fraction}")
+    logger.debug(f"Original pool size: {original_pool_size}, calculated batch: {batch_size}")
+
     logger.info(f"Initialization: selecting {batch_size} compounds using '{strategy}' strategy")
 
     unlabeled = compounds_df[compounds_df['status'] == 'unlabeled'][['ID', 'SMILES']].copy()
@@ -285,6 +289,9 @@ def select_initial_batch(
 
     acq_class = get_acquisition_function('random')
     acq_func = acq_class(random_state=random_state)
+
+    logger.debug(f"Acquiring from {len(unlabeled)} unlabeled compounds")
+    logger.debug(f"Acquisition function: {acq_class.__name__}")
 
     selected_df = acq_func.select(unlabeled, batch_size)
 
@@ -310,6 +317,9 @@ def select_initial_batch(
         raise RuntimeError(
             f"Oracle did not return measurements for {len(missing)} compounds"
         )
+
+    logger.debug(f"Oracle measured {len(selected_ids)} compounds")
+    logger.debug(f"Updating DataFrame: status=labeled, labeled_cycle=0")
 
     compounds_df = update_status(
         compounds_df,

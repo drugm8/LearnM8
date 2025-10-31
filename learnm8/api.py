@@ -45,6 +45,7 @@ Examples:
 import logging
 import json
 import inspect
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any, Literal
@@ -61,6 +62,11 @@ from learnm8.learners import (
     RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
     MLPLearner, MCDropoutLearner, EnsembleLearner,
     RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble
+)
+from learnm8.utils.logging_formatters import (
+    format_cycle_schedule,
+    format_duration,
+    format_experiment_summary
 )
 
 logger = logging.getLogger(__name__)
@@ -411,6 +417,8 @@ def run_active_learning(
         - Results are automatically saved to CSV files in output_dir
     """
 
+    start_time = time.time()
+
     try:
         DEPRECATED_PARAMS = {
             'export_csv': 'CSV export is now automatic via save_results(). This parameter has no effect.',
@@ -456,15 +464,17 @@ def run_active_learning(
         logger.info(f"Starting active learning experiment at {datetime.now()}")
         logger.info(f"Output directory: {output_dir}")
 
+        logger.debug(f"Normalizing compound_pool input (type: {type(compound_pool).__name__})")
+
         if isinstance(compound_pool, (str, Path)):
             compound_pool_path = Path(compound_pool)
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
                 raise FileNotFoundError(f"Compound pool file not found: {compound_pool_path}")
             compound_pool = pd.read_csv(compound_pool_path)
-            logger.info(f"Loaded compound pool from file: {compound_pool_path}")
+            logger.debug(f"Loading DataFrame from CSV: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
         elif isinstance(compound_pool, pd.DataFrame):
-            logger.info("Using provided DataFrame as compound pool")
+            logger.debug("Using provided DataFrame as compound pool")
         else:
             raise TypeError(
                 f"compound_pool must be str, Path, or pd.DataFrame, got {type(compound_pool)}"
@@ -479,12 +489,12 @@ def run_active_learning(
         mode_detected = False
 
         if oracle is None:
-            logger.info("Oracle not provided, attempting auto-detection")
+            logger.debug("Oracle not provided, attempting auto-detection from compound_pool")
             if original_compound_pool_path is not None:
                 oracle = CSVOracle(str(original_compound_pool_path))
                 mode = 'benchmark'
                 mode_detected = True
-                logger.info(f"Auto-detected CSV oracle from compound pool, mode=benchmark")
+                logger.debug(f"Auto-detected CSV oracle from compound pool, mode=benchmark")
             else:
                 raise ValueError(
                     "Oracle required when compound_pool is DataFrame. "
@@ -497,7 +507,7 @@ def run_active_learning(
                 if mode is None:
                     mode = 'benchmark'
                     mode_detected = True
-                logger.info(f"Using CSV oracle: {oracle_path}, mode={mode}")
+                logger.debug(f"Using CSV oracle: {oracle_path}, mode={mode}")
             else:
                 if ':' not in str(oracle):
                     raise ValueError(
@@ -509,9 +519,9 @@ def run_active_learning(
                 if mode is None:
                     mode = 'run'
                     mode_detected = True
-                logger.info(f"Using Python oracle: {module_path}:{function_name}, mode={mode}")
+                logger.debug(f"Using Python oracle: {module_path}:{function_name}, mode={mode}")
         elif isinstance(oracle, Oracle):
-            logger.info(f"Using provided oracle instance: {oracle.__class__.__name__}")
+            logger.debug(f"Using provided oracle instance: {oracle.__class__.__name__}")
             if mode is None:
                 mode = 'run'
         else:
@@ -519,25 +529,36 @@ def run_active_learning(
                 f"oracle must be None, str, Path, or Oracle instance, got {type(oracle)}"
             )
 
+        logger.debug(f"Detected {mode} mode (oracle type: {type(oracle).__name__})")
+
         if mode is None:
             mode = 'run'
-            logger.info(f"Mode not specified, defaulting to: {mode}")
         elif mode_detected:
-            logger.info(f"Mode auto-detected: {mode}")
+            pass
         else:
-            logger.info(f"Mode explicitly set: {mode}")
+            pass
 
         if isinstance(learner, str):
+            learner_str = learner
             learner = _create_learner(learner, random_state)
-            logger.info(f"Instantiated learner from string: {learner.__class__.__name__}")
+            logger.info(f"Using learner: {learner.__class__.__name__}")
+            logger.debug(f"Instantiated learner from string: {learner_str}")
         elif isinstance(learner, Learner):
-            logger.info(f"Using provided learner instance: {learner.__class__.__name__}")
+            logger.info(f"Using learner: {learner.__class__.__name__}")
+            logger.debug(f"Using provided learner instance")
         else:
             raise TypeError(
                 f"learner must be str or Learner instance, got {type(learner)}"
             )
 
+        oracle_desc = f"{oracle.__class__.__name__}"
+        if hasattr(oracle, 'source_file'):
+            oracle_desc += f" ({oracle.source_file})"
+        logger.info(f"Using oracle: {oracle_desc}")
+
+        logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 1: Validating compound pool")
+        logger.info("═══════════════════════════════════════════════════════════════")
         validation_result = validate_compound_pool(compound_pool, n_jobs=-1, progress=True)
 
         if len(validation_result.valid_compounds) == 0:
@@ -559,7 +580,9 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
+        logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
         compounds_df = initialize_master_dataframe_empty(
             validation_result.valid_compounds,
@@ -573,7 +596,9 @@ def run_active_learning(
 
         logger.info(f"Master DataFrame initialized: {len(compounds_df)} compounds (all unlabeled)")
 
+        logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
         if pruning_fraction is not None or pruning_strategy is not None:
             if pruning_fraction is not None:
@@ -646,21 +671,31 @@ def run_active_learning(
             f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
         )
 
-        logger.info("Phase 3: Starting active learning cycles")
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Phase 3: Cycle Schedule")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
-        from collections import Counter
-        strategy_counts = Counter(config.strategy for config in cycle_schedule)
-        logger.info(
-            f"Cycle schedule: {len(cycle_schedule)} cycles, "
-            f"strategies: {dict(strategy_counts)}"
+        for i, config in enumerate(cycle_schedule, 1):
+            schedule_msg = format_cycle_schedule(i, config, original_pool_size)
+            logger.info(schedule_msg)
+
+        total_cycles = len(cycle_schedule)
+        total_compounds_to_label = sum(
+            int(original_pool_size * c.batch_fraction) * c.n_cycles
+            for c in cycle_schedule
         )
+        logger.info(f"Total: {total_cycles} cycles, {total_compounds_to_label} compounds to be labeled")
 
-        logger.info("Phase 4: Executing active learning cycles (1, 2, 3, ...)")
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Phase 4: Active Learning Cycles")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
         cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
 
         for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
-            logger.info(f"Executing active learning cycle {cycle_num}/{len(cycle_schedule) - 1}")
+            logger.info("─────────────────────────────────────────────────────────────")
+            logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
+            logger.info("─────────────────────────────────────────────────────────────")
 
             try:
                 compounds_df, metrics = execute_cycle(
@@ -697,17 +732,27 @@ def run_active_learning(
                 logger.error(f"Cycle {cycle_num} failed: {e}")
                 raise RuntimeError(f"Cycle {cycle_num} failed: {e}") from e
 
-        logger.info("Phase 5: Calculating aggregate metrics")
+        logger.debug("Calculating aggregate metrics")
         aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)
 
         if aggregate_metrics:
-            logger.info("Aggregate metrics:")
+            logger.debug("Aggregate metrics:")
             if 'rmse_improvement' in aggregate_metrics:
-                logger.info(f"  RMSE: {aggregate_metrics.get('initial_rmse', 'N/A'):.4f} → {aggregate_metrics.get('final_rmse', 'N/A'):.4f} (improvement: {aggregate_metrics.get('rmse_improvement', 0):.4f})")
+                logger.debug(f"  RMSE: {aggregate_metrics.get('initial_rmse', 'N/A'):.4f} → {aggregate_metrics.get('final_rmse', 'N/A'):.4f} (improvement: {aggregate_metrics.get('rmse_improvement', 0):.4f})")
             if 'r2_improvement' in aggregate_metrics:
-                logger.info(f"  R²: {aggregate_metrics.get('initial_r2', 'N/A'):.4f} → {aggregate_metrics.get('final_r2', 'N/A'):.4f} (improvement: {aggregate_metrics.get('r2_improvement', 0):.4f})")
+                logger.debug(f"  R²: {aggregate_metrics.get('initial_r2', 'N/A'):.4f} → {aggregate_metrics.get('final_r2', 'N/A'):.4f} (improvement: {aggregate_metrics.get('r2_improvement', 0):.4f})")
 
-        logger.info("Phase 6: Saving results")
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Experiment Complete")
+        logger.info("═══════════════════════════════════════════════════════════════")
+
+        summary_lines = format_experiment_summary(compounds_df, time.time() - start_time, len(all_metrics))
+        for line in summary_lines:
+            logger.info(line)
+
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Phase 5: Saving Results")
+        logger.info("═══════════════════════════════════════════════════════════════")
         config_dict = {
             'target_col': target_col,
             'featurizer_type': featurizer_type,
@@ -723,11 +768,10 @@ def run_active_learning(
             compounds_df, all_metrics, validation_result, config_dict, output_dir
         )
 
-        logger.info(f"Results saved to: {output_dir}")
+        logger.info(f"All results saved to: {output_dir}")
+        logger.debug("Saved files:")
         for file_type, file_path in saved_files.items():
-            logger.info(f"  {file_type}: {file_path}")
-
-        logger.info("Active learning complete")
+            logger.debug(f"  {file_type}: {file_path}")
 
         return {
             'compounds_df': compounds_df,

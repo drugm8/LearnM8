@@ -91,7 +91,8 @@ def cache_features(default_cache_dir: Path) -> Callable:
                             uncached_smiles.append(smiles)
                             uncached_indices.append(idx)
 
-                    logger.info(f"Cache: {len(cached_features)} hits, {len(uncached_smiles)} misses")
+                    hit_rate = (len(cached_features)/(len(cached_features)+len(uncached_smiles))*100) if (len(cached_features)+len(uncached_smiles)) > 0 else 0
+                    logger.debug(f"Cache statistics: {len(cached_features)} hits, {len(uncached_smiles)} misses ({hit_rate:.1f}% hit rate)")
 
                 if uncached_smiles:
                     logger.debug(f"Computing features for {len(uncached_smiles)} uncached SMILES")
@@ -117,7 +118,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
                                 except (OSError, IOError, RuntimeError) as e:
                                     logger.warning(f"Failed to cache features for SMILES hash {smiles_hash[:8]}: {e}")
 
-                            logger.info(f"Cached {len(uncached_smiles)} new feature vectors")
+                            logger.debug(f"Cached {len(uncached_smiles)} new feature vectors to HDF5")
                     except (OSError, IOError, RuntimeError) as e:
                         logger.warning(f"Cache write failed: {e}; continuing without caching")
 

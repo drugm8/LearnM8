@@ -63,6 +63,8 @@ class UCBAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        logger.debug(f"UCBAcquisition: β={self.beta}, calculating UCB scores")
+
         # Calculate UCB scores based on score direction
         # Note: uncertainties are already standard deviations, not variances
         if self.maximize:
@@ -71,6 +73,8 @@ class UCBAcquisition(AcquisitionFunction):
         else:
             # For minimization: select lower confidence bound
             ucb_scores = predictions - self.beta * uncertainties
+
+        logger.debug(f"UCB score statistics: min={ucb_scores.min():.3f}, max={ucb_scores.max():.3f}, mean={ucb_scores.mean():.3f}")
 
         # Select top compounds (always ascending=False because we want highest UCB scores)
         if self.maximize:
@@ -162,6 +166,8 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
 
         current_best = self.current_best
 
+        logger.debug(f"EIAcquisition: current_best={current_best:.3f}, calculating expected improvement")
+
         # Calculate improvement based on score direction
         if self.maximize:
             improvement = predictions - current_best - self.xi
@@ -181,7 +187,9 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         # Handle zero variance case
         zero_var_mask = uncertainties == 0
         ei_scores[zero_var_mask] = np.maximum(improvement[zero_var_mask], 0)
-        
+
+        logger.debug(f"EI statistics: {(ei_scores > 0).sum()} compounds with positive EI")
+
         # Select top compounds
         selected = self._safe_select_top_k(
             compounds, ei_scores, n_select, ascending=False
@@ -270,6 +278,8 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
         current_best = self.current_best
 
+        logger.debug(f"PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement")
+
         # Calculate improvement based on score direction
         if self.maximize:
             improvement = predictions - current_best - self.xi
@@ -347,6 +357,8 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        logger.debug(f"ThompsonAcquisition: sampling from posterior with random_state={self.random_state}")
+
         # Sample from posterior predictive distribution
         # Use uncertainties directly (already standard deviations, not variances)
         std_devs = uncertainties
@@ -409,14 +421,18 @@ class EntropyAcquisition(AcquisitionFunction):
         
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
-        
+
+        logger.debug(f"EntropyAcquisition: calculating predictive entropy")
+
         if self.entropy_type == 'uncertainty':
             # Use uncertainty directly as information measure
             entropy_scores = uncertainties
         else:  # variance
             # Use variance (square of uncertainty) as information measure
             entropy_scores = uncertainties ** 2
-        
+
+        logger.debug(f"Entropy statistics: min={entropy_scores.min():.3f}, max={entropy_scores.max():.3f}, mean={entropy_scores.mean():.3f}")
+
         # Select compounds with highest entropy/information
         selected = self._safe_select_top_k(
             compounds, entropy_scores, n_select, ascending=False

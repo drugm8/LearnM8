@@ -186,6 +186,8 @@ def parse_cycle_schedule(
         ... ])
         >>> # Returns: 8 CycleConfig objects, each with n_cycles=1
     """
+    logger.debug(f"Parsing cycle schedule: cycles={cycles is not None}, strategy='{strategy}', n_cycles={n_cycles}")
+
     VALID_CYCLE_PARAMS = {'pruning_strategy', 'pruning_params', 'acquisition_params'}
 
     cycle_kwargs = {}
@@ -218,34 +220,47 @@ def parse_cycle_schedule(
                 raise ValueError("Each element in cycles must be a CycleConfig instance")
 
             for _ in range(config.n_cycles):
-                expanded.append(CycleConfig(
+                new_config = CycleConfig(
                     strategy=config.strategy,
                     n_cycles=1,
                     batch_fraction=config.batch_fraction,
                     pruning_strategy=config.pruning_strategy,
                     pruning_params=config.pruning_params,
                     acquisition_params=config.acquisition_params
-                ))
+                )
+                expanded.append(new_config)
+                logger.debug(f"Created CycleConfig(strategy='{new_config.strategy}', n_cycles={new_config.n_cycles}, "
+                            f"batch_fraction={new_config.batch_fraction}, pruning={new_config.pruning_strategy or 'disabled'})")
 
+        total_cycles = len(expanded)
+        logger.debug(f"Schedule parsed: {len(cycles)} config blocks, {total_cycles} total cycles")
         return expanded
 
     schedule = []
 
     # Cycle 0: initial_strategy with same batch_fraction
-    schedule.append(CycleConfig(
+    config_0 = CycleConfig(
         strategy=initial_strategy,
         n_cycles=1,
         batch_fraction=batch_fraction,
         **cycle_kwargs
-    ))
+    )
+    schedule.append(config_0)
+    logger.debug(f"Created CycleConfig(strategy='{config_0.strategy}', n_cycles={config_0.n_cycles}, "
+                f"batch_fraction={config_0.batch_fraction}, pruning={config_0.pruning_strategy or 'disabled'})")
 
     # Cycles 1+: main strategy with same batch_fraction
     for _ in range(n_cycles - 1):
-        schedule.append(CycleConfig(
+        config_i = CycleConfig(
             strategy=strategy,
             n_cycles=1,
             batch_fraction=batch_fraction,
             **cycle_kwargs
-        ))
+        )
+        schedule.append(config_i)
+        logger.debug(f"Created CycleConfig(strategy='{config_i.strategy}', n_cycles={config_i.n_cycles}, "
+                    f"batch_fraction={config_i.batch_fraction}, pruning={config_i.pruning_strategy or 'disabled'})")
 
+    total_cycles = len(schedule)
+    logger.debug(f"Schedule parsed: simple API, {total_cycles} total cycles")
     return schedule

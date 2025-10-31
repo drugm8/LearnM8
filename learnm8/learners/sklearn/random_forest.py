@@ -68,7 +68,9 @@ class RandomForestLearner(SklearnLearner):
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
+        logger.debug(f"Initialized RandomForestLearner with n_estimators={n_estimators}, random_state={random_state}")
+
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators
         self.max_depth = max_depth

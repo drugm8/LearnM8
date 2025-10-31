@@ -78,7 +78,9 @@ class XGBoostLearner(SklearnLearner):
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
+        logger.debug(f"Initialized XGBoostLearner with n_estimators={n_estimators}, max_depth={max_depth}")
+
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
