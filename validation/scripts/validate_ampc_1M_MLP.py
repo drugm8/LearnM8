@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Standalone validation script for AmpC 500K dataset using UCB acquisition.
+Standalone validation script for AmpC 1M dataset using UCB acquisition.
 
-This script runs a complete active learning validation on the AmpC 500K dataset:
+This script runs a complete active learning validation on the AmpC 1M dataset:
 - Strategy: UCB (Upper Confidence Bound) with beta=1.0
 - Learner: RF Ensemble (Random Forest Ensemble)
 - Featurizer: Morgan fingerprints
@@ -10,15 +10,15 @@ This script runs a complete active learning validation on the AmpC 500K dataset:
 - Batch size: 1% per cycle (5,000 compounds)
 
 Usage:
-    python validation/scripts/validate_ampc_500k_ucb.py
+    python validation/scripts/validate_ampc_1M_ucb.py
 
 Output:
-    validation/reports/ampc_500k_ucb_validation/
-        ├── data/ampc_500k_ucb_beta_1.0_<timestamp>/
+    validation/reports/ampc_1M_ucb_validation/
+        ├── data/ampc_1M_ucb_beta_1.0_<timestamp>/
         │   ├── compounds_final.csv
         │   ├── cycle_metrics.csv
         │   └── selection_history.csv
-        ├── plots/ampc_500k_ucb_validation.png
+        ├── plots/ampc_1M_ucb_validation.png
         └── summary.txt
 
 Expected Runtime: 40-60 minutes (first run with cache generation)
@@ -27,20 +27,13 @@ Memory Requirements: ~8-12 GB
 
 import sys
 import time
-import logging
 from pathlib import Path
 from datetime import datetime
 import warnings
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from learnm8 import run_active_learning
+from learnm8 import run_active_learning, CycleConfig
 from learnm8.oracles import CSVOracle
 from validation.lib import (
     load_validation_dataset,
@@ -51,10 +44,13 @@ from validation.lib import (
 
 warnings.filterwarnings('ignore')
 
+from learnm8 import setup_logging
+setup_logging(level='INFO')
+
 
 def print_header():
     print("=" * 80)
-    print("  AmpC 500K UCB Validation")
+    print("  AmpC 1M UCB Validation")
     print("=" * 80)
     print()
 
@@ -63,7 +59,7 @@ def check_dataset_exists(dataset_path):
     if not dataset_path.exists():
         print(f"❌ ERROR: Dataset not found at {dataset_path}")
         print()
-        print("Please ensure the AmpC 500K dataset is available at:")
+        print("Please ensure the AmpC 1M dataset is available at:")
         print(f"  {dataset_path}")
         sys.exit(1)
     print(f"✓ Dataset found: {dataset_path}")
@@ -72,7 +68,7 @@ def check_dataset_exists(dataset_path):
 def print_configuration(beta, n_cycles, batch_fraction, compounds_count):
     print()
     print("Configuration:")
-    print(f"  Dataset: AmpC 500K ({compounds_count:,} compounds)")
+    print(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)")
     print(f"  Strategy: UCB (beta={beta})")
     print(f"  Learner: RF Ensemble")
     print(f"  Featurizer: Morgan fingerprints")
@@ -97,11 +93,11 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
     final_metrics = results['cycle_metrics'][-1]
 
     with open(summary_path, 'w') as f:
-        f.write("AmpC 500K UCB Validation Summary\n")
+        f.write("AmpC 1M UCB Validation Summary\n")
         f.write("=" * 80 + "\n\n")
 
         f.write("Configuration:\n")
-        f.write(f"  Dataset: AmpC 500K ({compounds_count:,} compounds)\n")
+        f.write(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)\n")
         f.write(f"  Strategy: UCB (beta=1.0)\n")
         f.write(f"  Learner: RF Ensemble\n")
         f.write(f"  Featurizer: Morgan fingerprints\n")
@@ -130,7 +126,7 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
 
         f.write("\nOutput Files:\n")
         f.write(f"  Data: {results['output_dir']}/\n")
-        f.write(f"  Plot: {output_dir}/plots/ampc_500k_ucb_validation.png\n")
+        f.write(f"  Plot: {output_dir}/plots/ampc_1M_ucb_validation.png\n")
         f.write(f"  Summary: {summary_path}\n")
 
     return summary_path
@@ -140,15 +136,15 @@ def main():
     print_header()
 
     # Configuration
-    DATASET_NAME = 'ampc_500k'
+    DATASET_NAME = 'ampc_1000k'
     BETA = 1.0
     N_CYCLES = 10
     BATCH_FRACTION = 0.01
 
     # Timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output_dir = Path('validation/reports/ampc_500k_ucb_validation')
-    data_output_dir = base_output_dir / 'data' / f'ampc_500k_ucb_beta_{BETA}_{timestamp}'
+    base_output_dir = Path('validation/reports/ampc_1M_MCD_validation')
+    data_output_dir = base_output_dir / 'data' / f'ampc_1M_MCD_beta_{BETA}_{timestamp}'
     plots_dir = base_output_dir / 'plots'
 
     print(f"Output directory: {base_output_dir.resolve()}")
@@ -208,21 +204,20 @@ def main():
     start_time = time.time()
 
     try:
+        cycles = [CycleConfig('random', n_cycles=1, batch_fraction=0.001), CycleConfig('greedy', n_cycles=15, batch_fraction=0.001)]
+
         results = run_active_learning(
             compound_pool=compound_pool,
             oracle=oracle,
-            learner='rf_ensemble',
+            learner='mc_dropout',
             target_col=metadata['target_column'],
             featurizer_type='morgan',
-            initial_strategy='random',
-            strategy='ucb',
-            n_cycles=N_CYCLES,
-            batch_fraction=BATCH_FRACTION,
+            cycles=cycles,
             score_direction=metadata['score_direction'],
             acquisition_params={'beta': BETA},
             output_dir=str(data_output_dir),
             mode='benchmark',
-            cache_dir=Path(base_output_dir / '.ampc500k_cache')
+            cache_dir=Path(base_output_dir/'.ampc1M_cache')
         )
 
         elapsed_time = time.time() - start_time
@@ -244,7 +239,7 @@ def main():
     print("Generating validation plot...")
     try:
         plots_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = plots_dir / 'ampc_500k_ucb_validation.png'
+        plot_path = plots_dir / 'ampc_1M_ucb_validation.png'
 
         strategy_config = {
             'name': 'UCB',
