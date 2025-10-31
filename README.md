@@ -498,6 +498,41 @@ from learnm8.acquisition import list_acquisition_functions
 print(list_acquisition_functions())
 ```
 
+### Cycle Numbering Convention
+
+LearnM8 uses a **zero-indexed cycle numbering system** where:
+
+- **Cycle 0**: Initialization phase (random selection of initial training set)
+- **Cycles 1-N**: Active learning cycles using specified acquisition strategy
+
+**Important Notes:**
+- When `n_cycles=10` is specified, you get exactly 10 cycles total: cycle 0 (initialization) + cycles 1-9 (active learning)
+- The `cycle_metrics` list contains metrics for all cycles starting from cycle 0
+- CSV exports (`cycle_metrics.csv`) start at cycle 0
+- This convention ensures clear distinction between initialization and active learning phases
+
+**Example:**
+```python
+results = run_active_learning(
+    compound_pool='data.csv',
+    oracle='oracle.csv',
+    learner='gp',
+    target_col='Activity',
+    featurizer_type='morgan',
+    initial_strategy='random',  # Used for cycle 0
+    strategy='ucb',             # Used for cycles 1-9
+    n_cycles=10                 # Total: 10 cycles (0-9)
+)
+
+# Check cycle numbers and strategies
+cycle_metrics = results['cycle_metrics']
+print(len(cycle_metrics))  # Output: 10
+print(cycle_metrics[0]['cycle'])     # Output: 0
+print(cycle_metrics[0]['strategy'])  # Output: 'random'
+print(cycle_metrics[1]['strategy'])  # Output: 'ucb'
+print(cycle_metrics[9]['strategy'])  # Output: 'ucb'
+```
+
 ## 📦 Installation
 
 ### Requirements
