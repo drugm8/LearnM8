@@ -67,7 +67,9 @@ class GaussianProcessLearner(SklearnLearner):
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
+        logger.debug(f"Initialized GaussianProcessLearner with kernel={kernel}, random_state={random_state}")
+
         # Store configuration for name generation
         self.alpha = alpha
         self.kernel_name = str(kernel).split('(')[0] if kernel else "RBF"

@@ -147,7 +147,7 @@ def _extract_features_parallel(
             from tqdm import tqdm
             smiles_iterator = tqdm(smiles_list, desc="Extracting features")
         except ImportError:
-            logger.debug("tqdm not available, falling back to no progress bar")
+            logger.debug("tqdm not available, running without progress bar")
 
     if optimal_n_jobs == 1:
         features = [_extract_single_feature(smiles, featurizer_type) for smiles in smiles_iterator]
@@ -157,8 +157,9 @@ def _extract_features_parallel(
             for smiles in smiles_iterator
         )
 
-    logger.info(f"Extracted {len(features)} {featurizer_type} feature vectors")
-    return np.array(features)
+    features_array = np.array(features)
+    logger.debug(f"Feature matrix shape: {features_array.shape}, dtype: {features_array.dtype}")
+    return features_array
 
 
 @cache_features(Path('.cache'))

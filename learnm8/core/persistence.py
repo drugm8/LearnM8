@@ -165,6 +165,10 @@ def save_results(
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_files = {}
 
+    logger.info("═══════════════════════════════════════════════════════════════")
+    logger.info("Phase 5: Saving Results")
+    logger.info("═══════════════════════════════════════════════════════════════")
+
     target_col = config.get('target_col', 'target')
     featurizer_type = config.get('featurizer_type', 'unknown')
     n_cycles = config.get('n_cycles', len([c for c in compounds_df.columns if c.startswith('prediction_cycle_')]))
@@ -212,7 +216,8 @@ def save_results(
         _add_csv_metadata(final_path, metadata)
 
         saved_files['compounds_final'] = final_path
-        logger.info(f"Saved compounds_final.csv: {len(compounds_final)} compounds")
+        logger.debug(f"Saved compounds_final.csv: {len(compounds_final)} compounds")
+        logger.info(f"Saved compounds_final.csv ({len(compounds_final)} compounds)")
 
     except IOError as e:
         logger.error(f"Failed to save compounds_final.csv: {e}")
@@ -254,7 +259,8 @@ def save_results(
         _add_csv_metadata(metrics_path, metadata)
 
         saved_files['cycle_metrics'] = metrics_path
-        logger.info(f"Saved cycle_metrics.csv: {len(metrics_df)} cycles")
+        logger.debug(f"Saved cycle_metrics.csv: {len(metrics_df)} cycles")
+        logger.info(f"Saved cycle_metrics.csv ({len(metrics_df)} cycles)")
 
     except IOError as e:
         logger.error(f"Failed to save cycle_metrics.csv: {e}")
@@ -317,7 +323,8 @@ def save_results(
         _add_csv_metadata(selection_path, metadata)
 
         saved_files['selection_history'] = selection_path
-        logger.info(f"Saved selection_history.csv: {len(selection_df)} selections")
+        logger.debug(f"Saved selection_history.csv: {len(selection_df)} selections")
+        logger.info(f"Saved selection_history.csv ({len(selection_df)} selections)")
 
     except IOError as e:
         logger.error(f"Failed to save selection_history.csv: {e}")
@@ -346,7 +353,8 @@ def save_results(
             _add_csv_metadata(validation_path, metadata)
 
             saved_files['validation_report'] = validation_path
-            logger.info(f"Saved validation_report.csv: {len(invalid_df)} invalid compounds")
+            logger.debug(f"Saved validation_report.csv: {len(invalid_df)} invalid compounds")
+            logger.info(f"Saved validation_report.csv ({len(invalid_df)} invalid compounds)")
 
         except IOError as e:
             logger.warning(f"Failed to save validation_report.csv: {e}")
@@ -357,6 +365,7 @@ def save_results(
             json.dump(config, f, indent=2)
 
         saved_files['config'] = config_path
+        logger.debug(f"Saved config.json")
         logger.info(f"Saved config.json")
 
     except IOError as e:

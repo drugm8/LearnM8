@@ -83,6 +83,8 @@ class SklearnLearner(Learner):
         if features.shape[0] == 0:
             raise ValueError("Cannot train on empty dataset")
 
+        logger.debug(f"Training {self.get_name()} on features shape: {features.shape}, targets shape: {targets.shape}")
+
         start_time = time.time()
 
         try:
@@ -90,7 +92,7 @@ class SklearnLearner(Learner):
             self.is_trained = True
 
             train_time = time.time() - start_time
-            logger.info(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
+            logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
 
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
@@ -111,6 +113,8 @@ class SklearnLearner(Learner):
         """
         if not self.is_trained:
             raise RuntimeError("Model must be trained before prediction")
+
+        logger.debug(f"Predicting with {self.get_name()} on {len(features)} samples")
 
         start_time = time.time()
 

@@ -54,7 +54,11 @@ def _add_predictions_inplace(
     if len(set(compound_ids)) != len(compound_ids):
         raise ValueError("compound_ids contains duplicates")
 
+    logger.debug(f"Adding predictions for {len(compound_ids)} compounds in cycle {cycle}")
+
     pred_col = f'prediction_cycle_{cycle}'
+    unc_col = f'uncertainty_cycle_{cycle}' if uncertainties is not None else None
+    logger.debug(f"Prediction column: {pred_col}, uncertainty column: {unc_col}")
 
     if pred_col not in df.columns:
         df[pred_col] = pd.Series(pd.NA, index=df.index, dtype='Float64')
@@ -74,8 +78,6 @@ def _add_predictions_inplace(
 
         id_to_unc = dict(zip(compound_ids, uncertainties))
         df.loc[mask, unc_col] = df.loc[mask, 'ID'].map(id_to_unc)
-
-    logger.debug(f"Added predictions for {len(compound_ids)} compounds in cycle {cycle}")
 
     return df
 
@@ -162,6 +164,8 @@ def _update_status_inplace(
     """
     if new_status not in VALID_STATUSES:
         raise ValueError(f"new_status must be one of {VALID_STATUSES}, got '{new_status}'")
+
+    logger.debug(f"Updating status to '{new_status}' for {len(compound_ids)} compounds")
 
     mask = df['ID'].isin(compound_ids)
     df.loc[mask, 'status'] = new_status

@@ -81,6 +81,8 @@ def validate_compound_pool(
     Returns:
         ValidationResult with valid/invalid compounds and error messages
     """
+    logger.info(f"Validating {len(compound_pool)} compounds with datamol")
+
     required = {'ID', 'SMILES'}
     missing = required - set(compound_pool.columns)
 
@@ -100,6 +102,7 @@ def validate_compound_pool(
         )
 
     logger.info(f"Validating {len(compound_pool)} compounds with datamol...")
+    logger.debug(f"Validating compounds using datamol.sanitize_smiles()")
 
     smiles_list = compound_pool['SMILES'].tolist()
 
@@ -131,8 +134,15 @@ def validate_compound_pool(
     invalid_df = pd.DataFrame(invalid_compounds) if invalid_compounds else pd.DataFrame(columns=compound_pool.columns)
 
     result = ValidationResult(valid_df, invalid_df, errors)
+
+    if len(invalid_df) > 0:
+        logger.debug(f"Invalid compounds detected: {len(invalid_df)} failed validation")
+        compound_ids = invalid_df['ID'].head(5).tolist() if 'ID' in invalid_df.columns else []
+        if compound_ids:
+            logger.debug(f"First few invalid IDs: {compound_ids}")
+
     logger.info(
-        f"Validation complete: {len(valid_df)} valid, {len(invalid_df)} invalid "
+        f"Validation complete: {len(valid_df)} valid compounds, {len(invalid_df)} invalid compounds "
         f"({result.success_rate:.1%} success rate)"
     )
 

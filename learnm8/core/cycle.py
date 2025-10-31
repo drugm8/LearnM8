@@ -38,6 +38,7 @@ import numpy as np
 from learnm8.features.extraction import extract_features
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
+from learnm8.utils.logging_formatters import format_cycle_metrics_table
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +120,6 @@ def execute_cycle(
     if score_direction not in ['higher', 'lower']:
         raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
 
-    logger.info(
-        f"Executing cycle {cycle} (strategy='{config.strategy}', mode={mode})"
-    )
-
     # Extract cumulative selected IDs if not provided
     if cumulative_selected_ids is None:
         cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
@@ -133,6 +130,13 @@ def execute_cycle(
         compounds_df, 'labeled', columns=['ID', 'SMILES', target_col]
     ).copy()
 
+    unlabeled_df = get_compounds_by_status(
+        compounds_df, 'unlabeled', columns=['ID', 'SMILES']
+    )
+
+    logger.debug(f"Cycle {cycle}: Pool composition - {len(labeled_df)} labeled, {len(unlabeled_df)} unlabeled")
+    logger.debug(f"Cycle {cycle} configuration: strategy={config.strategy}, batch_fraction={config.batch_fraction}, pruning={config.pruning_strategy or 'disabled'}")
+
     if len(labeled_df) == 0:
         raise RuntimeError(
             f"Cycle {cycle}: No labeled compounds available. "
@@ -140,28 +144,30 @@ def execute_cycle(
             f"Check that select_initial_batch() ran successfully before cycles."
         )
     else:
-        logger.debug(f"Training on {len(labeled_df)} labeled compounds")
-
         # Extract features and train learner
         try:
-            logger.info(f"Extracting features for {len(labeled_df)} training compounds")
+            logger.info(f"Extracting features for {len(labeled_df)} training compounds ({featurizer_type} fingerprints)")
             training_features = extract_features(
                 labeled_df['SMILES'].tolist(),
                 featurizer_type,
                 cache_dir=cache_dir
             )
+            logger.debug(f"Extracting {featurizer_type} features with cache_dir={cache_dir}")
+            logger.info(f"Features extracted: {len(labeled_df)} compounds processed")
+
+            logger.info(f"Training model on {len(labeled_df)} labeled compounds")
             training_targets = labeled_df[target_col].values
             learner.train(training_features, training_targets)
+            logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
         except Exception as e:
             logger.error(f"Training failed in cycle {cycle}: {e}")
             raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
 
-        logger.info(f"Training complete for cycle {cycle}")
+        logger.info("Training complete")
 
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
     ).copy()
-    logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
 
     if len(prediction_pool) == 0:
         logger.warning(f"No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.")
@@ -178,16 +184,21 @@ def execute_cycle(
         return compounds_df, metrics
 
     try:
-        logger.info(f"Extracting features for {len(prediction_pool):,} unlabeled compounds")
+        logger.info(f"Extracting features for {len(prediction_pool)} unlabeled compounds ({featurizer_type} fingerprints)")
         prediction_features = extract_features(
             prediction_pool['SMILES'].tolist(),
             featurizer_type,
             cache_dir=cache_dir,
             show_progress=len(prediction_pool) > 10000
         )
-        logger.info(f"Generating predictions for {len(prediction_pool):,} compounds")
+        logger.debug(f"Extracting {featurizer_type} features for prediction pool")
+        logger.info(f"Features extracted: {len(prediction_pool)} compounds processed")
+
+        logger.info(f"Generating predictions for {len(prediction_pool)} unlabeled compounds")
         predictions, uncertainties = learner.predict(prediction_features)
-        logger.info(f"Predictions complete: {len(predictions):,} predictions generated")
+        logger.info(f"Predictions complete: {len(predictions)} predictions generated")
+        logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
+        logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
@@ -224,8 +235,11 @@ def execute_cycle(
 
     # Step 8: Apply Pruning (If Specified)
     pruning_stats = {'pruned_count': 0, 'pruned_ids': []}
+    unlabeled_before_prune = len(selection_pool)
 
     if config.pruning_strategy:
+        logger.info(f"Pruning design space with '{config.pruning_strategy}' strategy")
+
         uncertainty_values = None
         if 'uncertainty' in selection_pool.columns:
             uncertainty_values = selection_pool['uncertainty'].values
@@ -245,10 +259,12 @@ def execute_cycle(
                 compounds_df, pruned_ids, 'pruned', cycle, target_col, None
             )
 
-        logger.info(
-            f"Pruned {pruning_stats['pruned_count']} compounds "
-            f"({pruning_stats.get('pruning_fraction', 0):.1%})"
-        )
+        if pruning_stats['pruned_count'] > 0:
+            prune_pct = (pruning_stats['pruned_count'] / unlabeled_before_prune) * 100
+            logger.info(f"Pruned {pruning_stats['pruned_count']} compounds ({prune_pct:.1f}% of unlabeled pool)")
+
+        logger.debug(f"Pruning parameters: {config.pruning_params}")
+        logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
 
     if len(selection_pool) == 0:
         raise RuntimeError(f"No compounds remaining after pruning in cycle {cycle}")
@@ -264,8 +280,6 @@ def execute_cycle(
             f"Calculated batch size is 0 (original_pool_size={original_pool_size}, "
             f"batch_fraction={config.batch_fraction}). Increase batch_fraction."
         )
-
-    logger.debug(f"Batch size: {batch_size}")
 
     # Step 10: Prepare acquisition params with current_best from labeled data
     acquisition_params = (config.acquisition_params or {}).copy()
@@ -283,6 +297,11 @@ def execute_cycle(
             )
 
     # Step 11: Select Compounds Using Acquisition Strategy
+    if config.pruning_strategy and pruning_stats['pruned_count'] > 0:
+        logger.info(f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} remaining candidates")
+    else:
+        logger.info(f"Acquiring compounds with '{config.strategy}' strategy")
+
     selected_df = _select_compounds(
         selection_pool,
         config.strategy,
@@ -296,7 +315,10 @@ def execute_cycle(
     if len(selected_ids) == 0:
         raise RuntimeError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
 
-    logger.info(f"Selected {len(selected_ids)} compounds using '{config.strategy}' strategy")
+    logger.info(f"Selected {len(selected_ids)} compounds for labeling")
+    logger.debug(f"Selection pool: {len(selection_pool)} unlabeled compounds with predictions")
+    logger.debug(f"Batch size: {batch_size} (calculated from {config.batch_fraction} * {original_pool_size})")
+    logger.debug(f"{config.strategy.upper()} acquisition selected {len(selected_ids)} compounds")
 
     # Step 12: Measure Selected Compounds
     selected_compounds = compounds_df[
@@ -391,11 +413,34 @@ def execute_cycle(
     except Exception as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
 
-    # Step 15: Return Results
-    logger.info(
-        f"Cycle {cycle} complete: {len(selected_ids)} selected, "
-        f"{(compounds_df['status'] == 'unlabeled').sum()} remaining unlabeled"
-    )
+    # Step 15: Display Rich Metrics Table
+    try:
+        # Get previous cycle metrics if available (for change indicators)
+        previous_metrics = None
+        if cycle > 1:
+            # This will be passed from api.py in a future enhancement
+            pass
+
+        metrics_table = format_cycle_metrics_table(
+            metrics=metrics,
+            oracle_type=mode,
+            previous_metrics=previous_metrics
+        )
+
+        if metrics_table:
+            logger.info("\n" + metrics_table)
+
+    except ImportError:
+        logger.debug("Rich not installed, skipping metrics table display")
+    except Exception as e:
+        logger.debug(f"Failed to display metrics table: {e}")
+
+    # Step 16: Return Results
+    total_labeled = len(compounds_df[compounds_df['status'] == 'labeled'])
+    total_unlabeled = len(compounds_df[compounds_df['status'] == 'unlabeled'])
+    logger.info(f"Cycle {cycle} complete: {total_labeled} labeled, {total_unlabeled} unlabeled remaining")
+
+    logger.debug(f"Oracle measured {len(selected_ids)} compounds for property: {target_col}")
 
     return compounds_df, metrics
 
