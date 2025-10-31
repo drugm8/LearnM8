@@ -325,7 +325,7 @@ class TestCycleExecution:
         assert metrics['strategy'] == 'random'
     
     def test_learner_training_failure(self, tmp_path, mock_oracle, mock_learner):
-        """Test handling of cycle with no labeled compounds (graceful handling)."""
+        """Test handling of cycle with no labeled compounds raises error."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pd.DataFrame({
@@ -346,22 +346,21 @@ class TestCycleExecution:
 
         config = CycleConfig(strategy='greedy', batch_fraction=0.5)
 
-        updated_df, metrics = execute_cycle(
-            compounds_df=master_df,
-            cycle=0,
-            config=config,
-            learner=learner,
-            oracle=oracle,
-            target_col='Activity',
-            featurizer_type='morgan',
-            cache_dir=tmp_path,
-            original_pool_size=len(compounds),
-            score_direction='higher',
-            mode='run'
-        )
-
-        assert metrics['selected_count'] == 1
-        assert 'prediction_cycle_0' not in updated_df.columns
+        # Cycle 0 should raise error if no labeled compounds (this validates initialization check)
+        with pytest.raises(RuntimeError, match="No labeled compounds available"):
+            execute_cycle(
+                compounds_df=master_df,
+                cycle=0,
+                config=config,
+                learner=learner,
+                oracle=oracle,
+                target_col='Activity',
+                featurizer_type='morgan',
+                cache_dir=tmp_path,
+                original_pool_size=len(compounds),
+                score_direction='higher',
+                mode='run'
+            )
     
     def test_prediction_statistics_calculation(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test calculation of prediction statistics in cycle metrics."""

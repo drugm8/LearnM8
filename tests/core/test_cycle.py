@@ -10,42 +10,38 @@ from conftest import create_initialized_master_df as initialize_master_dataframe
 
 class TestExecuteCycle:
 
-    def test_cycle_0_execution_no_training_no_predictions(self, sample_compounds, mock_oracle, tmp_path):
-        from learnm8.core.interfaces import Learner
+    def test_cycle_1_with_initialization(self, sample_compounds, mock_learner, mock_oracle, tmp_path):
+        """Test that cycle 1 (first AL cycle) trains and predicts after cycle 0 (initialization)."""
+        from learnm8.core.initialization import initialize_master_dataframe_empty, select_initial_batch
 
-        class TrackingLearner(Learner):
-            def __init__(self):
-                self.train_called = False
-                self.predict_called = False
+        master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
 
-            def train(self, features, targets):
-                self.train_called = True
+        assert (master_df['status'] == 'unlabeled').all()
 
-            def predict(self, features):
-                self.predict_called = True
-                return np.random.rand(features.shape[0]), None
-
-            def supports_uncertainty(self):
-                return False
-
-            def get_name(self):
-                return "TrackingLearner"
-
-        master_df = initialize_master_dataframe(
-            valid_compounds=sample_compounds,
+        master_df, cycle_0_metrics = select_initial_batch(
+            compounds_df=master_df,
+            oracle=mock_oracle,
             target_col='Activity',
-            initial_labeled_ids=[],
-            initial_measurements=pd.Series(dtype='float64')
+            strategy='random',
+            batch_fraction=0.1,
+            featurizer_type='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(sample_compounds),
+            random_state=42
         )
 
-        config = CycleConfig('random', n_cycles=1, batch_fraction=0.05)
-        learner = TrackingLearner()
+        init_labeled = master_df[master_df['labeled_cycle'] == 0]
+        assert len(init_labeled) == 10
+        assert (init_labeled['status'] == 'labeled').all()
+        assert cycle_0_metrics['cycle'] == 0
+
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
 
         updated_df, metrics = execute_cycle(
             compounds_df=master_df,
-            cycle=0,
+            cycle=1,
             config=config,
-            learner=learner,
+            learner=mock_learner,
             oracle=mock_oracle,
             target_col='Activity',
             featurizer_type='morgan',
@@ -54,30 +50,57 @@ class TestExecuteCycle:
             mode='run'
         )
 
-        assert learner.train_called is False
-        assert learner.predict_called is False
-        assert metrics['cycle'] == 0
-        assert metrics['strategy'] == 'random'
-        assert metrics['selected_count'] > 0
-        assert (updated_df['status'] == 'labeled').sum() == metrics['selected_count']
+        cycle_1_labeled = updated_df[updated_df['labeled_cycle'] == 1]
+        assert len(cycle_1_labeled) == 10
+
+        init_labeled = updated_df[updated_df['labeled_cycle'] == 0]
+        assert len(init_labeled) == 10
+
+        total_labeled = (updated_df['status'] == 'labeled').sum()
+        assert total_labeled == 20
+
+        assert 'prediction_cycle_1' in updated_df.columns
+        assert metrics['cycle'] == 1
+        assert metrics['strategy'] == 'greedy'
+
+    def test_cycle_execution_requires_labeled_data(self, sample_compounds, mock_learner, mock_oracle, tmp_path):
+        """Test that AL cycle execution fails if no labeled data (missing initialization)."""
+        from learnm8.core.initialization import initialize_master_dataframe_empty
+
+        master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
+
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
+
+        with pytest.raises(RuntimeError, match="No labeled compounds available"):
+            execute_cycle(
+                compounds_df=master_df,
+                cycle=1,
+                config=config,
+                learner=mock_learner,
+                oracle=mock_oracle,
+                target_col='Activity',
+                featurizer_type='morgan',
+                cache_dir=tmp_path,
+                original_pool_size=len(sample_compounds),
+                mode='run'
+            )
 
     def test_run_mode_basic_execution(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
         initial_ids = sample_compounds['ID'].iloc[:5].tolist()
         initial_values = pd.Series([0.3, 0.5, 0.7, 0.4, 0.6], index=initial_ids)
 
         master_df = initialize_master_dataframe(
-        valid_compounds=sample_compounds,
-        target_col='Activity'
-        ,
-        initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values
-    )
+            valid_compounds=sample_compounds,
+            target_col='Activity',
+            initial_labeled_ids=initial_ids,
+            initial_measurements=initial_values
+        )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
         updated_df, metrics = execute_cycle(
             compounds_df=master_df,
-            cycle=0,
+            cycle=1,
             config=config,
             learner=mock_learner_with_uncertainty,
             oracle=mock_oracle,
@@ -89,8 +112,8 @@ class TestExecuteCycle:
         )
 
         assert len(updated_df) == len(master_df)
-        assert 'prediction_cycle_0' in updated_df.columns
-        assert metrics['cycle'] == 0
+        assert 'prediction_cycle_1' in updated_df.columns
+        assert metrics['cycle'] == 1
         assert metrics['strategy'] == 'greedy'
         assert metrics['selected_count'] > 0
 
