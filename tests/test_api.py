@@ -85,7 +85,7 @@ class TestAPIBasicSimple:
         assert results['compounds_df'] is not None
 
     def test_simple_api_initial_sampling_parameters(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test simple API with custom initial sampling parameters."""
+        """Test simple API with initialization phase."""
         output_dir = tmp_path / "initial_test"
 
         results = run_active_learning(
@@ -101,10 +101,20 @@ class TestAPIBasicSimple:
             random_state=42
         )
 
-        labeled_in_cycle_0 = results['compounds_df'][
+        labeled_in_init = results['compounds_df'][
             results['compounds_df']['labeled_cycle'] == 0
         ]
-        assert len(labeled_in_cycle_0) == 5
+        assert len(labeled_in_init) == 5
+
+        labeled_in_cycle_1 = results['compounds_df'][
+            results['compounds_df']['labeled_cycle'] == 1
+        ]
+        assert len(labeled_in_cycle_1) == 5
+
+        labeled_in_cycle_2 = results['compounds_df'][
+            results['compounds_df']['labeled_cycle'] == 2
+        ]
+        assert len(labeled_in_cycle_2) == 0
 
 
 class TestAPIAdvancedCycleConfig:
@@ -159,6 +169,7 @@ class TestAPIAdvancedCycleConfig:
             random_state=42
         )
 
+        # Count cycles in the list: 3
         assert len(results['cycle_metrics']) == 3
 
     def test_advanced_api_mixed_strategies(self, tmp_path, sample_compounds, mock_learner_with_uncertainty, mock_oracle):
@@ -479,24 +490,60 @@ class TestAPIResultsStructure:
         assert required_columns.issubset(compounds_df.columns)
 
     def test_cycle_metrics_length_matches_executed_cycles(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test that len(cycle_metrics) matches number of executed cycles."""
+        """Test that len(cycle_metrics) matches number of executed cycles (including cycle 0)."""
         output_dir = tmp_path / "metrics_length_test"
 
-        n_cycles = 4
+        n_al_cycles = 4
         results = run_active_learning(
             compound_pool=sample_compounds,
             oracle=mock_oracle,
             learner=mock_learner,
             target_col='Activity',
             featurizer_type='morgan',
-            n_cycles=n_cycles,
+            n_cycles=n_al_cycles,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
             random_state=42
         )
 
-        assert len(results['cycle_metrics']) == n_cycles
+        assert len(results['cycle_metrics']) == n_al_cycles
+
+    def test_cycle_0_in_metrics(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        """Test that cycle 0 (initialization) is included in cycle_metrics."""
+        output_dir = tmp_path / "cycle_0_test"
+
+        n_al_cycles = 3
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=mock_oracle,
+            learner=mock_learner,
+            target_col='Activity',
+            featurizer_type='morgan',
+            n_cycles=n_al_cycles,
+            batch_fraction=0.05,
+            output_dir=output_dir,
+            cache_dir=tmp_path / "cache",
+            random_state=42
+        )
+
+        cycle_metrics = results['cycle_metrics']
+
+        assert len(cycle_metrics) == n_al_cycles
+
+        # Check that cycle 0 is present
+        assert cycle_metrics[0]['cycle'] == 0
+        assert cycle_metrics[0]['strategy'] == 'random'
+
+        # Check that cycles are sequential: 0, 1, 2
+        cycles = [m['cycle'] for m in cycle_metrics]
+        assert cycles == [0, 1, 2]
+
+        # Check that cycle 0 has expected metrics structure
+        assert 'batch_size' in cycle_metrics[0]
+        assert 'cumulative_labeled' in cycle_metrics[0]
+        assert 'has_uncertainty' in cycle_metrics[0]
+        assert cycle_metrics[0]['has_uncertainty'] is False
 
     def test_labeled_data_accessor(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test labeled_data convenience accessor."""
