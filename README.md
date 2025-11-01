@@ -10,11 +10,8 @@ conda env create -f environment.yml
 conda activate learnm8
 pip install -e .
 
-# Validate compounds before running
-learnm8 validate compounds.csv --featurizer morgan
-
-# Validate with custom cache directory
-learnm8 validate compounds.csv --featurizer morgan --cache-dir .shared_cache
+# Validate compounds before running (checks SMILES validity using datamol)
+learnm8 validate compounds.csv
 
 # Basic usage (auto-detect oracle from compound_pool)
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
@@ -252,16 +249,17 @@ learnm8 list      # List available components
 ### Validation Subcommand
 
 ```bash
-# Validate compounds early
-learnm8 validate compounds.csv --featurizer morgan
+# Validate compounds early (uses datamol for SMILES validation)
+learnm8 validate compounds.csv
 
-# With custom cache directory
-learnm8 validate compounds.csv --featurizer morgan --cache-dir .cache
+# With output report
+learnm8 validate compounds.csv -o validation_results/
 
 # Outputs:
 # - Valid compounds count
 # - Invalid compounds with error messages
 # - Success rate statistics
+# - Optional: validation_report.csv with detailed errors
 ```
 
 ### List Subcommand
@@ -428,13 +426,12 @@ results = run_active_learning(
 
 ```python
 from learnm8 import validate_compound_pool
-from pathlib import Path
 
-# Validate compounds before running
+# Validate compounds using datamol (checks SMILES validity)
 result = validate_compound_pool(
     compound_pool=df,
-    featurizer_type='morgan',
-    cache_dir=Path('.cache')
+    n_jobs=-1,      # Use all CPU cores
+    progress=True   # Show progress bar
 )
 
 print(f"Valid: {len(result.valid_compounds)}")
@@ -442,7 +439,7 @@ print(f"Invalid: {len(result.invalid_compounds)}")
 print(f"Success rate: {result.success_rate:.1%}")
 
 # Access error details
-for compound_id, error in result.invalid_compounds.items():
+for compound_id, error in result.validation_errors.items():
     print(f"{compound_id}: {error}")
 ```
 
