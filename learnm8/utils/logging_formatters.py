@@ -147,9 +147,12 @@ def format_cycle_metrics_table(
             console_config_modified = console_config.copy()
             console_config_modified['force_jupyter'] = False
             console_config_modified['force_terminal'] = True
-            console = Console(file=string_io, width=terminal_width, **console_config_modified)
+            console_config_modified['width'] = terminal_width
+            console = Console(file=string_io, **console_config_modified)
         else:
-            console = Console(file=string_io, width=terminal_width, **console_config)
+            console_config_modified = console_config.copy()
+            console_config_modified['width'] = terminal_width
+            console = Console(file=string_io, **console_config_modified)
 
         cycle = metrics.get('cycle', '?')
         batch_size = metrics.get('batch_size', '?')
