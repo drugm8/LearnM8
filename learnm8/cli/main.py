@@ -358,27 +358,16 @@ def create_parser() -> argparse.ArgumentParser:
         help='Component type'
     )
 
-    validate_parser = subparsers.add_parser('validate', help='Validate compound pool')
+    validate_parser = subparsers.add_parser('validate', help='Validate compound pool using datamol SMILES validation')
     validate_parser.add_argument(
         'compound_pool',
         type=Path,
-        help='CSV file with compounds'
-    )
-    validate_parser.add_argument(
-        '--featurizer',
-        required=True,
-        choices=['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'],
-        help='Featurizer type'
+        help='CSV file with compounds (must have ID and SMILES columns)'
     )
     validate_parser.add_argument(
         '-o', '--output',
         type=Path,
         help='Output directory for validation report'
-    )
-    validate_parser.add_argument(
-        '--cache-dir',
-        type=Path,
-        help='Cache directory for feature storage (default: output/.cache or ./.cache)'
     )
 
     return parser

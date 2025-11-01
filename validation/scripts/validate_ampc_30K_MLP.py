@@ -45,7 +45,6 @@ from validation.lib import (
 warnings.filterwarnings('ignore')
 
 from learnm8 import setup_logging
-setup_logging(level='INFO')
 
 
 def print_header():
@@ -133,6 +132,7 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
 
 
 def main():
+    setup_logging(level='INFO')
     print_header()
 
     # Configuration
@@ -209,7 +209,7 @@ def main():
         results = run_active_learning(
             compound_pool=compound_pool,
             oracle=oracle,
-            learner='mixed_ensemble',
+            learner='fastprop',
             target_col=metadata['target_column'],
             featurizer_type='morgan',
             cycles=cycles,

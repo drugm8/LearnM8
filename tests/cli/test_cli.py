@@ -493,7 +493,6 @@ class TestValidateSubcommand:
         result = run_cli(
             'validate',
             str(minimal_compounds),
-            '--featurizer', 'morgan',
             '-o', str(output_dir)
         )
 
@@ -507,7 +506,6 @@ class TestValidateSubcommand:
         result = run_cli(
             'validate',
             str(minimal_compounds),
-            '--featurizer', 'morgan',
             '-o', str(output_dir)
         )
 
@@ -519,33 +517,10 @@ class TestValidateSubcommand:
         """Test validation with non-existent file."""
         result = run_cli(
             'validate',
-            str(tmp_path / "nonexistent.csv"),
-            '--featurizer', 'morgan'
+            str(tmp_path / "nonexistent.csv")
         )
 
         assert result.returncode != 0
-
-    def test_validate_missing_featurizer(self, minimal_compounds):
-        """Test validation without required featurizer."""
-        result = run_cli(
-            'validate',
-            str(minimal_compounds)
-        )
-
-        assert result.returncode != 0
-
-    def test_validate_with_cache_dir(self, minimal_compounds, tmp_path):
-        """Test validation with custom cache directory."""
-        cache_dir = tmp_path / "custom_cache"
-
-        result = run_cli(
-            'validate',
-            str(minimal_compounds),
-            '--featurizer', 'morgan',
-            '--cache-dir', str(cache_dir)
-        )
-
-        assert result.returncode == 0
 
 
 class TestHelpAndErrors:
