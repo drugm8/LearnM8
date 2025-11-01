@@ -29,7 +29,11 @@ class TestExtractFeatures:
         assert features.shape[1] == 2048
 
     def test_morgan_feat_featurizer(self, tmp_path):
-        pytest.skip("morgan_feat featurizer has API incompatibility with current RDKit version")
+        smiles_list = ['CCO', 'CCC', 'CCN']
+        features = extract_features(smiles_list, 'morgan_feat', tmp_path)
+
+        assert features.shape[0] == 3
+        assert features.shape[1] == 2048
 
     def test_descriptors_featurizer(self, tmp_path):
         pytest.importorskip("mordred")
