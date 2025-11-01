@@ -37,20 +37,25 @@ def smiles_to_morgan_fingerprint(smiles: str) -> np.ndarray:
 
 def smiles_to_morgan_feature_fingerprint(smiles: str) -> np.ndarray:
     """
-    Convert a single SMILES string to Morgan fingerprint.
-    
+    Convert a single SMILES string to Morgan feature fingerprint.
+
+    Uses feature-based Morgan fingerprints which encode pharmacophore features
+    rather than exact atom types.
+
     Args:
         smiles: SMILES string representation of molecule
-        
+
     Returns:
-        Morgan fingerprint as numpy array
+        Morgan feature fingerprint as numpy array (2048-bit)
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
 
-    fp = AllChem.GetMorganFingerprint(mol, radius=2, fpSize=2048, useFeatures=True)
-    return np.array(fp)
+    fp = AllChem.GetHashedMorganFingerprint(mol, radius=2, nBits=2048, useFeatures=True)
+    arr = np.zeros(2048, dtype=np.uint8)
+    DataStructs.ConvertToNumpyArray(fp, arr)
+    return arr
 
 
 
