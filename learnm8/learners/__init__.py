@@ -31,7 +31,8 @@ except ImportError:
 try:
     from .torch import (
         MLPLearner,
-        MCDropoutLearner
+        MCDropoutLearner,
+        FastpropLearner
     )
 except ImportError:
     pass
@@ -82,6 +83,7 @@ __all__ = [
     # PyTorch learners
     'MLPLearner',
     'MCDropoutLearner',
+    'FastpropLearner',
     
     # Ensemble learners
     'EnsembleLearner',
