@@ -97,6 +97,13 @@ class TestFormatDuration:
 class TestFormatCycleMetricsTable:
     """Test Rich table formatting."""
 
+    @staticmethod
+    def strip_ansi(text):
+        """Remove ANSI color codes from text."""
+        import re
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        return ansi_escape.sub('', text)
+
     def test_benchmark_mode_table(self):
         """Format table for benchmark mode (all columns)."""
         metrics = {
@@ -113,11 +120,12 @@ class TestFormatCycleMetricsTable:
         }
 
         result = format_cycle_metrics_table(metrics, oracle_type='benchmark')
+        clean_result = self.strip_ansi(result)
 
-        assert 'Cycle 1' in result
-        assert 'Selection Quality' in result
-        assert 'Discovery Metrics' in result
-        assert 'Ranking' in result
+        assert 'Cycle 1' in clean_result
+        assert 'Selection Quality' in clean_result
+        assert 'Discovery Metrics' in clean_result
+        assert 'Ranking' in clean_result
 
     def test_run_mode_table(self):
         """Format table for run mode (selection quality only)."""
@@ -130,9 +138,10 @@ class TestFormatCycleMetricsTable:
         }
 
         result = format_cycle_metrics_table(metrics, oracle_type='run')
+        clean_result = self.strip_ansi(result)
 
-        assert 'Cycle 2' in result
-        assert 'Selection Quality' in result
+        assert 'Cycle 2' in clean_result
+        assert 'Selection Quality' in clean_result
 
     def test_with_previous_metrics(self):
         """Format table with change indicators."""
@@ -155,8 +164,9 @@ class TestFormatCycleMetricsTable:
             oracle_type='run',
             previous_metrics=previous_metrics
         )
+        clean_result = self.strip_ansi(result)
 
-        assert 'Cycle 2' in result
+        assert 'Cycle 2' in clean_result
 
     def test_handles_missing_optional_metrics(self):
         """Handle missing optional metrics gracefully."""
