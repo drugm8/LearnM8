@@ -43,7 +43,6 @@ Examples:
 """
 
 import logging
-import json
 import inspect
 import time
 from datetime import datetime
@@ -60,7 +59,7 @@ from learnm8.core.interfaces import Oracle, Learner
 from learnm8.oracles import CSVOracle
 from learnm8.learners import (
     RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
-    MLPLearner, MCDropoutLearner, EnsembleLearner,
+    MLPLearner, MCDropoutLearner, FastpropLearner, EnsembleLearner,
     RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble
 )
 from learnm8.utils.logging_formatters import (
@@ -89,6 +88,7 @@ try:
     LEARNER_REGISTRY.update({
         'mlp': MLPLearner,
         'mc_dropout': MCDropoutLearner,
+        'fastprop': FastpropLearner,
     })
 except NameError:
     pass
