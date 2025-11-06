@@ -65,6 +65,7 @@ from learnm8.learners import (
 )
 
 try:
+    from learnm8.learners.torch.chemprop_learner import ChempropLearner
     from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
     CHEMPROP_AVAILABLE = True
 except ImportError:
@@ -100,9 +101,10 @@ try:
 except NameError:
     pass
 
-# Register chemprop learner (optional)
+# Register chemprop learners (optional)
 if CHEMPROP_AVAILABLE:
-    LEARNER_REGISTRY['chemprop'] = ChempropEnsemble
+    LEARNER_REGISTRY['chemprop'] = ChempropLearner
+    LEARNER_REGISTRY['chemprop_ensemble'] = ChempropEnsemble
 
 # Register ensemble learners (optional)
 try:
