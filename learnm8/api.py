@@ -60,8 +60,15 @@ from learnm8.oracles import CSVOracle
 from learnm8.learners import (
     RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
     MLPLearner, MCDropoutLearner, FastpropLearner, EnsembleLearner,
-    RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble
+    RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble,
+    FastpropEnsemble
 )
+
+try:
+    from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+    CHEMPROP_AVAILABLE = True
+except ImportError:
+    CHEMPROP_AVAILABLE = False
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
     format_duration,
@@ -93,6 +100,10 @@ try:
 except NameError:
     pass
 
+# Register chemprop learner (optional)
+if CHEMPROP_AVAILABLE:
+    LEARNER_REGISTRY['chemprop'] = ChempropEnsemble
+
 # Register ensemble learners (optional)
 try:
     LEARNER_REGISTRY.update({
@@ -101,7 +112,8 @@ try:
         'lr_ensemble': LREnsemble,
         'xgb_ensemble': XGBEnsemble,
         'dt_ensemble': DTEnsemble,
-        'mixed_ensemble': MixedEnsemble
+        'mixed_ensemble': MixedEnsemble,
+        'fastprop_ensemble': FastpropEnsemble
     })
 except NameError:
     pass
@@ -118,7 +130,12 @@ def list_available_learners():
     return sorted(LEARNER_REGISTRY.keys())
 
 
-def _create_learner(learner_str: str, random_state: int) -> Learner:
+def _create_learner(
+    learner_str: str,
+    random_state: int,
+    enable_chemprop_fine_tuning: bool = False,
+    checkpoint_dir: Optional[Path] = None
+) -> Learner:
     """Instantiate learner from string shortcut.
 
     Automatically detects whether learner accepts random_state (singular)
@@ -133,6 +150,7 @@ def _create_learner(learner_str: str, random_state: int) -> Learner:
     - 'xgb': XGBoost
     - 'mlp': Multi-Layer Perceptron
     - 'mc_dropout': Monte Carlo Dropout
+    - 'chemprop': Chemprop Ensemble (supports fine-tuning)
     - 'ensemble': Ensemble (default configuration)
     - 'rf_ensemble': Random Forest Ensemble
     - 'lr_ensemble': Linear Regression Ensemble
@@ -143,6 +161,8 @@ def _create_learner(learner_str: str, random_state: int) -> Learner:
     Args:
         learner_str: Learner shortcut string
         random_state: Random seed for reproducibility
+        enable_chemprop_fine_tuning: Enable fine-tuning for Chemprop (default: False)
+        checkpoint_dir: Checkpoint directory for Chemprop fine-tuning
 
     Returns:
         Instantiated Learner object
@@ -165,6 +185,24 @@ def _create_learner(learner_str: str, random_state: int) -> Learner:
 
     learner_class = LEARNER_REGISTRY[learner_str]
 
+    # Special handling for ChempropEnsemble with fine-tuning
+    if CHEMPROP_AVAILABLE and learner_class == ChempropEnsemble:
+        if enable_chemprop_fine_tuning:
+            if checkpoint_dir is None:
+                raise ValueError(
+                    "checkpoint_dir required when enable_chemprop_fine_tuning=True. "
+                    "This should be set automatically by run_active_learning()."
+                )
+            logger.info(f"Creating ChempropEnsemble with fine-tuning enabled (checkpoint_dir={checkpoint_dir})")
+            return ChempropEnsemble(
+                enable_fine_tuning=True,
+                checkpoint_dir=checkpoint_dir
+            )
+        else:
+            logger.debug("Creating ChempropEnsemble without fine-tuning")
+            return ChempropEnsemble()
+
+    # Standard learner instantiation
     try:
         sig = inspect.signature(learner_class.__init__)
         params = sig.parameters
@@ -271,7 +309,7 @@ def run_active_learning(
     oracle: Union[str, Path, Oracle],
     learner: Union[str, Learner],
     target_col: str,
-    featurizer_type: str,
+    featurizer_type: Optional[str] = None,
     # Advanced API
     cycles: Optional[List[CycleConfig]] = None,
     # Simple API
@@ -285,6 +323,8 @@ def run_active_learning(
     output_dir: Optional[Union[str, Path]] = None,
     cache_dir: Optional[Union[str, Path]] = None,
     random_state: int = 42,
+    # Chemprop fine-tuning
+    enable_chemprop_fine_tuning: bool = False,
     # Pruning
     pruning_fraction: Optional[float] = None,
     pruning_strategy: Optional[str] = None,
@@ -344,8 +384,9 @@ def run_active_learning(
 
         target_col: Target property column name
 
-        featurizer_type: Molecular featurizer type
-            ('morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat')
+        featurizer_type: Molecular featurizer type. Optional for SMILES-aware
+            learners (e.g., 'chemprop'). Required for feature-based learners.
+            Valid options: 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'
 
         cycles: Advanced API - List of CycleConfig objects
             If provided, overrides simple API parameters
@@ -376,6 +417,12 @@ def run_active_learning(
             If None, uses output_dir/.cache
 
         random_state: Random seed (default: 42)
+
+        enable_chemprop_fine_tuning: Enable incremental fine-tuning for Chemprop models (default: False)
+            When enabled with learner='chemprop', models are saved after each cycle and loaded
+            for fine-tuning in subsequent cycles, potentially reducing training time.
+            Checkpoints saved to: {output_dir}/.checkpoints/chemprop/
+            Ignored if learner is pre-instantiated (configure on learner instance instead).
 
         pruning_fraction: Fraction to prune per cycle (0.0-0.9)
             If provided, enables pruning with score_based strategy
@@ -450,6 +497,9 @@ def run_active_learning(
         else:
             cache_dir = Path(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Setup checkpoint directory for Chemprop fine-tuning
+        chemprop_checkpoint_dir = output_dir / '.checkpoints' / 'chemprop'
 
         log_file = output_dir / 'learnm8.log'
         if not any(isinstance(h, logging.FileHandler) and getattr(h, 'baseFilename', None) == str(log_file) for h in logger.handlers):
@@ -540,16 +590,40 @@ def run_active_learning(
 
         if isinstance(learner, str):
             learner_str = learner
-            learner = _create_learner(learner, random_state)
+            learner = _create_learner(
+                learner,
+                random_state,
+                enable_chemprop_fine_tuning=enable_chemprop_fine_tuning,
+                checkpoint_dir=chemprop_checkpoint_dir if enable_chemprop_fine_tuning else None
+            )
             logger.info(f"Using learner: {learner.__class__.__name__}")
             logger.debug(f"Instantiated learner from string: {learner_str}")
         elif isinstance(learner, Learner):
             logger.info(f"Using learner: {learner.__class__.__name__}")
             logger.debug(f"Using provided learner instance")
+            if enable_chemprop_fine_tuning:
+                logger.warning(
+                    "enable_chemprop_fine_tuning=True ignored because learner is "
+                    "pre-instantiated. Configure fine-tuning on the learner instance directly."
+                )
         else:
             raise TypeError(
                 f"learner must be str or Learner instance, got {type(learner)}"
             )
+
+        if learner.requires_smiles():
+            if featurizer_type is not None:
+                logger.info(
+                    f"{learner.get_name()} will use {featurizer_type} features as extra descriptors (x_d). "
+                    f"For pure graph-based learning, set featurizer_type=None."
+                )
+        else:
+            if featurizer_type is None:
+                raise ValueError(
+                    f"{learner.get_name()} requires a featurizer. "
+                    f"Specify featurizer_type parameter. "
+                    f"Valid options: morgan, maccs, ecfp6, descriptors, morgan_feat"
+                )
 
         oracle_desc = f"{oracle.__class__.__name__}"
         if hasattr(oracle, 'source_file'):
