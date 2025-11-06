@@ -1,0 +1,427 @@
+import pytest
+import numpy as np
+from pathlib import Path
+
+try:
+    from learnm8.learners.torch.chemprop_learner import ChempropLearner, CHEMPROP_AVAILABLE
+except ImportError:
+    CHEMPROP_AVAILABLE = False
+
+pytestmark = pytest.mark.skipif(
+    not CHEMPROP_AVAILABLE,
+    reason="Chemprop not available"
+)
+
+
+class TestChempropLearnerBasic:
+
+    def test_initialization(self):
+        learner = ChempropLearner(
+            message_hidden_dim=300,
+            depth=3,
+            max_epochs=2
+        )
+        assert learner.message_hidden_dim == 300
+        assert learner.depth == 3
+        assert learner.max_epochs == 2
+        assert learner.is_trained is False
+
+    def test_requires_smiles(self):
+        learner = ChempropLearner(max_epochs=2)
+        assert learner.requires_smiles() is True
+
+    def test_supports_uncertainty(self):
+        learner = ChempropLearner(max_epochs=2)
+        assert learner.supports_uncertainty() is False
+
+    def test_get_name(self):
+        learner = ChempropLearner(depth=5, message_hidden_dim=500)
+        name = learner.get_name()
+        assert 'Chemprop' in name
+        assert 'depth=5' in name
+        assert 'hidden=500' in name
+
+    def test_train_requires_smiles(self):
+        learner = ChempropLearner(max_epochs=2)
+        features = np.random.rand(10, 100)
+        targets = np.random.rand(10)
+
+        with pytest.raises(ValueError, match="requires SMILES"):
+            learner.train(features, targets, smiles=None)
+
+    def test_predict_requires_smiles(self, small_real_compounds):
+        learner = ChempropLearner(max_epochs=2)
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        features = np.random.rand(5, 100)
+        with pytest.raises(ValueError, match="requires SMILES"):
+            learner.predict(features, smiles=None)
+
+    def test_predict_before_training(self):
+        learner = ChempropLearner(max_epochs=2)
+
+        with pytest.raises(RuntimeError, match="must be trained"):
+            learner.predict(features=None, smiles=['CC', 'CCO'])
+
+
+class TestChempropLearnerTrainPredict:
+
+    def test_train_predict_integration(self, small_real_compounds):
+        learner = ChempropLearner(max_epochs=5)
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.model is not None
+
+        predictions, uncertainties = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+        assert uncertainties is None
+        assert np.all(np.isfinite(predictions))
+
+    def test_prediction_on_new_compounds(self, small_real_compounds):
+        learner = ChempropLearner(max_epochs=5)
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        n_train = len(compounds) // 2
+        train_smiles = compounds['SMILES'].iloc[:n_train].tolist()
+        train_targets = compounds['Activity'].iloc[:n_train].values
+        test_smiles = compounds['SMILES'].iloc[n_train:].tolist()
+
+        learner.train(features=None, targets=train_targets, smiles=train_smiles)
+        predictions, uncertainties = learner.predict(features=None, smiles=test_smiles)
+
+        assert predictions.shape == (len(test_smiles),)
+        assert uncertainties is None
+        assert np.all(np.isfinite(predictions))
+
+
+class TestChempropLearnerModelParameters:
+
+    def test_custom_architecture_params(self, small_real_compounds):
+        learner = ChempropLearner(
+            message_hidden_dim=500,
+            depth=5,
+            ffn_hidden_dim=400,
+            ffn_num_layers=2,
+            max_epochs=3
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        predictions, _ = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+        assert np.all(np.isfinite(predictions))
+
+    def test_atom_messages_mode(self, small_real_compounds):
+        learner = ChempropLearner(
+            atom_messages=True,
+            max_epochs=3,
+            early_stopping=False
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        predictions, _ = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+
+    def test_batch_norm_enabled(self, small_real_compounds):
+        learner = ChempropLearner(
+            batch_norm=True,
+            max_epochs=3,
+            early_stopping=False
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        predictions, _ = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+
+    def test_different_aggregation_modes(self, small_real_compounds):
+        for agg in ['mean', 'sum', 'norm']:
+            learner = ChempropLearner(
+                aggregation=agg,
+                max_epochs=2,
+                early_stopping=False
+            )
+
+            compounds = small_real_compounds.copy()
+            if 'Activity' not in compounds.columns:
+                compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+            smiles = compounds['SMILES'].tolist()[:10]
+            targets = compounds['Activity'].values[:10]
+
+            learner.train(features=None, targets=targets, smiles=smiles)
+            predictions, _ = learner.predict(features=None, smiles=smiles)
+
+            assert predictions.shape == (len(smiles),)
+
+
+class TestChempropLearnerEarlyStopping:
+
+    def test_early_stopping_enabled_by_default(self):
+        learner = ChempropLearner(max_epochs=50)
+        assert learner.early_stopping is True
+        assert learner.early_stopping_patience == 10
+        assert learner.val_fraction == 0.1
+
+    def test_early_stopping_stops_before_max_epochs(self, small_real_compounds):
+        learner = ChempropLearner(
+            max_epochs=100,
+            early_stopping=True,
+            early_stopping_patience=2,
+            val_fraction=0.2
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.trainer.current_epoch < 100
+
+    def test_early_stopping_disabled(self, small_real_compounds):
+        max_epochs = 5
+        learner = ChempropLearner(
+            max_epochs=max_epochs,
+            early_stopping=False
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()[:20]
+        targets = compounds['Activity'].values[:20]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.trainer.current_epoch == max_epochs
+
+    def test_validation_split_correct_size(self, small_real_compounds):
+        learner = ChempropLearner(
+            max_epochs=2,
+            early_stopping=True,
+            val_fraction=0.2
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+        n_samples = len(smiles)
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+
+    def test_early_stopping_with_custom_parameters(self, small_real_compounds):
+        learner = ChempropLearner(
+            max_epochs=50,
+            early_stopping=True,
+            early_stopping_patience=5,
+            early_stopping_min_delta=0.001,
+            val_fraction=0.15
+        )
+
+        compounds = small_real_compounds.copy()
+        if 'Activity' not in compounds.columns:
+            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+
+        smiles = compounds['SMILES'].tolist()
+        targets = compounds['Activity'].values
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.early_stopping_patience == 5
+        assert learner.early_stopping_min_delta == 0.001
+        assert learner.val_fraction == 0.15
+
+
+class TestChempropLearnerWithDescriptors:
+    """Test ChempropLearner with extra descriptors (x_d)."""
+
+    def test_train_predict_with_morgan_descriptors(self, small_real_compounds, tmp_path):
+        """Test training and prediction with Morgan fingerprints as x_d."""
+        from learnm8.features.extraction import extract_features
+
+        learner = ChempropLearner(max_epochs=5)
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        features = extract_features(smiles, 'morgan', tmp_path)
+
+        learner.train(features=features, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.training_feature_dim == 2048
+
+        predictions, uncertainty = learner.predict(features=features, smiles=smiles)
+
+        assert predictions.shape == (10,)
+        assert uncertainty is None
+        assert np.all(np.isfinite(predictions))
+
+    def test_train_predict_without_descriptors_backward_compat(self, small_real_compounds):
+        """Test backward compatibility - training without descriptors."""
+        learner = ChempropLearner(max_epochs=5)
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.training_feature_dim is None
+
+        predictions, uncertainty = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (10,)
+        assert uncertainty is None
+        assert np.all(np.isfinite(predictions))
+
+    def test_descriptor_dimension_validation_train_without_predict_with(self, small_real_compounds, tmp_path):
+        """Test error when trained without descriptors but predict with descriptors."""
+        from learnm8.features.extraction import extract_features
+
+        learner = ChempropLearner(max_epochs=5)
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        features = extract_features(smiles, 'morgan', tmp_path)
+
+        with pytest.raises(ValueError, match="trained without descriptors"):
+            learner.predict(features=features, smiles=smiles)
+
+    def test_descriptor_dimension_validation_train_with_predict_without(self, small_real_compounds, tmp_path):
+        """Test error when trained with descriptors but predict without descriptors."""
+        from learnm8.features.extraction import extract_features
+
+        learner = ChempropLearner(max_epochs=5)
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        features = extract_features(smiles, 'morgan', tmp_path)
+        learner.train(features=features, targets=targets, smiles=smiles)
+
+        with pytest.raises(ValueError, match="trained with descriptors"):
+            learner.predict(features=None, smiles=smiles)
+
+    def test_descriptor_dimension_mismatch(self, small_real_compounds, tmp_path):
+        """Test error on dimension mismatch between training and prediction."""
+        from learnm8.features.extraction import extract_features
+
+        learner = ChempropLearner(max_epochs=5)
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        train_features = extract_features(smiles, 'morgan', tmp_path)
+        learner.train(features=train_features, targets=targets, smiles=smiles)
+
+        test_features = extract_features(smiles, 'maccs', tmp_path)
+
+        with pytest.raises(ValueError, match="Feature dimension mismatch"):
+            learner.predict(features=test_features, smiles=smiles)
+
+    def test_multiple_featurizer_types(self, small_real_compounds, tmp_path):
+        """Test compatibility with different featurizer types."""
+        from learnm8.features.extraction import extract_features
+
+        compounds = small_real_compounds.copy()
+        smiles = compounds['SMILES'].tolist()[:10]
+        targets = compounds['Activity'].values[:10]
+
+        for featurizer_type in ['morgan', 'maccs', 'ecfp6']:
+            learner = ChempropLearner(max_epochs=5)
+            features = extract_features(smiles, featurizer_type, tmp_path)
+
+            learner.train(features=features, targets=targets, smiles=smiles)
+            predictions, _ = learner.predict(features=features, smiles=smiles)
+
+            assert predictions.shape == (10,)
+            assert np.all(np.isfinite(predictions))
+
+    def test_early_stopping_with_descriptors(self, small_real_compounds, tmp_path):
+        """Test early stopping works correctly with descriptors."""
+        from learnm8.features.extraction import extract_features
+
+        learner = ChempropLearner(
+            max_epochs=20,
+            early_stopping=True,
+            early_stopping_patience=3,
+            val_fraction=0.2
+        )
+        compounds = small_real_compounds.copy()
+
+        smiles = compounds['SMILES'].tolist()[:20]
+        targets = compounds['Activity'].values[:20]
+        features = extract_features(smiles, 'morgan', tmp_path)
+
+        learner.train(features=features, targets=targets, smiles=smiles)
+
+        assert learner.is_trained is True
+        assert learner.training_feature_dim == 2048
+
+        predictions, _ = learner.predict(features=features, smiles=smiles)
+        assert predictions.shape == (20,)
+        assert np.all(np.isfinite(predictions))

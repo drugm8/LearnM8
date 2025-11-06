@@ -13,7 +13,6 @@ All functions return formatted strings suitable for logging at INFO level.
 import logging
 from typing import Dict, Any, Optional, List
 import pandas as pd
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -97,162 +96,115 @@ def format_duration(seconds: float) -> str:
 
 
 def format_cycle_metrics_table(
-    metrics: Dict[str, Any],
-    oracle_type: str = 'auto',
-    previous_metrics: Optional[Dict[str, Any]] = None
+	metrics: Dict[str, Any],
+	oracle_type: str = 'auto',
+	previous_metrics: Optional[Dict[str, Any]] = None
 ) -> str:
-    """
-    Format cycle metrics in line-by-line format with colored metrics.
+	"""
+	Format cycle metrics as simple lines with optional change indicators.
 
-    Creates a clean line-by-line output with metrics highlighted in color,
-    automatically adapting for benchmark vs run modes.
+	Creates clean line-by-line output automatically adapting for benchmark vs run modes.
 
-    Args:
-        metrics: Metrics dictionary from evaluate_cycle
-        oracle_type: Oracle type for mode-specific formatting ('benchmark' or 'run')
-        previous_metrics: Previous cycle metrics for change indicators
+	Args:
+		metrics: Metrics dictionary from evaluate_cycle
+		oracle_type: Oracle type for mode-specific formatting ('benchmark' or 'run')
+		previous_metrics: Previous cycle metrics for change indicators
 
-    Returns:
-        Formatted string for console output with colored metrics
+	Returns:
+		Formatted string for console output
 
-    Note:
-        This function provides mode-aware display:
-        - Benchmark mode: Shows Selection, Discovery, and Ranking metrics
-        - Run mode: Shows only Selection Quality metrics
-    """
-    try:
-        from rich.console import Console
-        from io import StringIO
-
-        try:
-            from ..utils.environment import get_console_config, detect_jupyter_environment, format_change_indicator
-            console_config = get_console_config()
-            in_jupyter = detect_jupyter_environment()
-        except ImportError as e:
-            logger.warning(f"Could not import environment utilities: {e}. Using default configuration.")
-            console_config = {'width': 100, 'force_terminal': True}
-            in_jupyter = False
-
-            def format_change_indicator(diff, is_improvement):
-                symbol = "↑" if diff > 0 else "↓"
-                color = "green" if is_improvement else "red"
-                return symbol, color
-
-        string_io = StringIO()
-
-        import shutil
-        terminal_width = shutil.get_terminal_size(fallback=(100, 24)).columns
-
-        if console_config.get('force_jupyter', False):
-            console_config_modified = console_config.copy()
-            console_config_modified['force_jupyter'] = False
-            console_config_modified['force_terminal'] = True
-            console_config_modified['width'] = terminal_width
-            console = Console(file=string_io, **console_config_modified)
-        else:
-            console_config_modified = console_config.copy()
-            console_config_modified['width'] = terminal_width
-            console = Console(file=string_io, **console_config_modified)
-
-        cycle = metrics.get('cycle', '?')
-        batch_size = metrics.get('batch_size', '?')
-
-        is_benchmark = (oracle_type == 'benchmark')
-
-        def get_change_indicator(key: str, is_higher_better: bool = True) -> str:
-            if previous_metrics is None or key not in metrics or key not in previous_metrics:
-                return ""
-
-            current = metrics[key]
-            previous = previous_metrics[key]
-
-            if current is None or previous is None:
-                return ""
-
-            diff = current - previous
-            if abs(diff) < 0.001:
-                return ""
-
-            is_improvement = (diff > 0) if is_higher_better else (diff < 0)
-            symbol, color = format_change_indicator(diff, is_improvement)
-            return f" [{color}]{symbol}[/{color}]"
-
-        console.print(f"\n[bold cyan]📊 Cycle {cycle}[/bold cyan] [dim]({batch_size} selected)[/dim]")
-        console.print("[blue]" + "═" * min(60, terminal_width - 1) + "[/blue]")
-
-        console.print("\n[bold]Selection Quality:[/bold]")
-        console.print(f"  Batch Size: [cyan]{metrics.get('batch_size', 'N/A')}[/cyan]")
-
-        if metrics.get('avg_score_selected') is not None:
-            val = metrics['avg_score_selected']
-            change = get_change_indicator('avg_score_selected', True)
-            console.print(f"  Batch Avg: [cyan]{val:.3f}[/cyan]{change}")
-
-        if metrics.get('avg_score_ground_truth') is not None:
-            val = metrics['avg_score_ground_truth']
-            console.print(f"  GT Avg: [cyan]{val:.3f}[/cyan]")
-
-        if metrics.get('cumulative_labeled') is not None:
-            console.print(f"  Total Labeled: [cyan]{metrics['cumulative_labeled']}[/cyan]")
-
-        if metrics.get('diversity_score') is not None:
-            val = metrics['diversity_score']
-            console.print(f"  Diversity: [cyan]{val:.3f}[/cyan]")
-
-        if is_benchmark:
-            console.print("\n[bold]Discovery Metrics:[/bold]")
-
-            if metrics.get('top_10_discovery') is not None:
-                val = metrics['top_10_discovery']
-                change = get_change_indicator('top_10_discovery', True)
-                console.print(f"  Top-10: [yellow]{val:.1f}%[/yellow]{change}")
-
-            if metrics.get('top_100_discovery') is not None:
-                val = metrics['top_100_discovery']
-                change = get_change_indicator('top_100_discovery', True)
-                console.print(f"  Top-100: [yellow]{val:.1f}%[/yellow]{change}")
-
-            if metrics.get('top_1k_discovery') is not None:
-                val = metrics['top_1k_discovery']
-                change = get_change_indicator('top_1k_discovery', True)
-                console.print(f"  Top-1K: [yellow]{val:.1f}%[/yellow]{change}")
-
-            if metrics.get('enrichment_factor_10') is not None:
-                val = metrics['enrichment_factor_10']
-                change = get_change_indicator('enrichment_factor_10', True)
-                console.print(f"  EF@10: [yellow]{val:.2f}[/yellow]{change}")
-
-            if metrics.get('score_ratio') is not None:
-                val = metrics['score_ratio']
-                change = get_change_indicator('score_ratio', True)
-                console.print(f"  Score Ratio: [yellow]{val:.2f}[/yellow]{change}")
-
-            console.print("\n[bold]Ranking (Unlabeled):[/bold]")
-
-            if metrics.get('unlabeled_top_10_discovery') is not None:
-                val = metrics['unlabeled_top_10_discovery']
-                console.print(f"  Unlbl Top-10: [magenta]{val:.1f}%[/magenta]")
-
-            if metrics.get('unlabeled_enrichment_factor_10') is not None:
-                val = metrics['unlabeled_enrichment_factor_10']
-                change = get_change_indicator('unlabeled_enrichment_factor_10', True)
-                console.print(f"  Unlbl EF@10: [magenta]{val:.2f}[/magenta]{change}")
-
-            if metrics.get('spearman_correlation') is not None:
-                val = metrics['spearman_correlation']
-                change = get_change_indicator('spearman_correlation', True)
-                console.print(f"  Spearman: [magenta]{val:.3f}[/magenta]{change}")
-
-        console.print("")
-
-        return string_io.getvalue()
-
-    except ImportError as e:
-        logger.debug(f"Rich not available for table formatting: {e}")
-        return ""
-    except Exception as e:
-        logger.debug(f"Error formatting metrics table: {e}")
-        return ""
+	Note:
+		This function provides mode-aware display:
+		- Benchmark mode: Shows Selection, Discovery, and Ranking metrics
+		- Run mode: Shows only Selection Quality metrics
+	"""
+	lines = []
+	
+	cycle = metrics.get('cycle', '?')
+	batch_size = metrics.get('batch_size', '?')
+	is_benchmark = (oracle_type == 'benchmark')
+	
+	def get_change(key: str, is_higher_better: bool = True) -> str:
+		"""Return change indicator if metrics improved/worsened."""
+		if previous_metrics is None or key not in metrics or key not in previous_metrics:
+			return ""
+		
+		current = metrics[key]
+		previous = previous_metrics[key]
+		
+		if current is None or previous is None:
+			return ""
+		
+		diff = current - previous
+		if abs(diff) < 0.001:
+			return ""
+		
+		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
+		symbol = "↑" if diff > 0 else "↓"
+		return f" {symbol}" if is_improvement else f" {symbol}"
+	
+	lines.append(f"\nCycle {cycle} ({batch_size} selected)")
+	lines.append("=" * 50)
+	
+	lines.append("\nSelection Quality:")
+	if metrics.get('avg_score_selected') is not None:
+		val = metrics['avg_score_selected']
+		change = get_change('avg_score_selected', True)
+		lines.append(f"  Batch Avg: {val:.3f}{change}")
+	
+	if metrics.get('avg_score_ground_truth') is not None:
+		lines.append(f"  GT Avg: {metrics['avg_score_ground_truth']:.3f}")
+	
+	if metrics.get('cumulative_labeled') is not None:
+		lines.append(f"  Total Labeled: {metrics['cumulative_labeled']}")
+	
+	if metrics.get('diversity_score') is not None:
+		lines.append(f"  Diversity: {metrics['diversity_score']:.3f}")
+	
+	if is_benchmark:
+		lines.append("\nDiscovery Metrics:")
+		
+		if metrics.get('top_10_discovery') is not None:
+			val = metrics['top_10_discovery']
+			change = get_change('top_10_discovery', True)
+			lines.append(f"  Top-10: {val:.1f}%{change}")
+		
+		if metrics.get('top_100_discovery') is not None:
+			val = metrics['top_100_discovery']
+			change = get_change('top_100_discovery', True)
+			lines.append(f"  Top-100: {val:.1f}%{change}")
+		
+		if metrics.get('top_1k_discovery') is not None:
+			val = metrics['top_1k_discovery']
+			change = get_change('top_1k_discovery', True)
+			lines.append(f"  Top-1K: {val:.1f}%{change}")
+		
+		if metrics.get('enrichment_factor_10') is not None:
+			val = metrics['enrichment_factor_10']
+			change = get_change('enrichment_factor_10', True)
+			lines.append(f"  EF@10: {val:.2f}{change}")
+		
+		if metrics.get('score_ratio') is not None:
+			val = metrics['score_ratio']
+			change = get_change('score_ratio', True)
+			lines.append(f"  Score Ratio: {val:.2f}{change}")
+		
+		lines.append("\nRanking (Unlabeled):")
+		
+		if metrics.get('unlabeled_top_10_discovery') is not None:
+			lines.append(f"  Unlbl Top-10: {metrics['unlabeled_top_10_discovery']:.1f}%")
+		
+		if metrics.get('unlabeled_enrichment_factor_10') is not None:
+			val = metrics['unlabeled_enrichment_factor_10']
+			change = get_change('unlabeled_enrichment_factor_10', True)
+			lines.append(f"  Unlbl EF@10: {val:.2f}{change}")
+		
+		if metrics.get('spearman_correlation') is not None:
+			val = metrics['spearman_correlation']
+			change = get_change('spearman_correlation', True)
+			lines.append(f"  Spearman: {val:.3f}{change}")
+	
+	return "\n".join(lines)
 
 
 def format_experiment_summary(
