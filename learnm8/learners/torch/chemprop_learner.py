@@ -15,6 +15,7 @@ from learnm8.core.interfaces import Learner
 
 logger = logging.getLogger(__name__)
 
+warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
 
 class ChempropLearner(Learner):
 	"""Single Chemprop message passing neural network learner.
