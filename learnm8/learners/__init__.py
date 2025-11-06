@@ -37,6 +37,12 @@ try:
 except ImportError:
     pass
 
+# Chemprop learner (optional - requires chemprop library)
+try:
+    from .torch import ChempropLearner
+except ImportError:
+    pass
+
 # New architecture ensemble learners
 try:
     from .ensemble import (
@@ -45,7 +51,8 @@ try:
         LREnsemble,
         XGBEnsemble,
         DTEnsemble,
-        MixedEnsemble
+        MixedEnsemble,
+        FastpropEnsemble
     )
 except ImportError:
     pass
@@ -84,7 +91,8 @@ __all__ = [
     'MLPLearner',
     'MCDropoutLearner',
     'FastpropLearner',
-    
+    'ChempropLearner',
+
     # Ensemble learners
     'EnsembleLearner',
     'RFEnsemble',
@@ -92,6 +100,7 @@ __all__ = [
     'XGBEnsemble',
     'DTEnsemble',
     'MixedEnsemble',
+    'FastpropEnsemble',
     
     # Legacy learners
     'LegacyXGBoostLearner',
