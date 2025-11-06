@@ -43,16 +43,24 @@ class Learner(ABC):
 
     Learners work with feature matrices (numpy arrays) and are agnostic to
     the molecular domain. Feature extraction happens at the API/cycle level.
+
+    Some learners (e.g., Chemprop) work directly with SMILES strings instead
+    of pre-computed features. These learners override requires_smiles() to
+    return True and use the smiles parameter in train/predict.
     """
 
     @abstractmethod
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(self,
+              features: np.ndarray,
+              targets: np.ndarray,
+              smiles: Optional[List[str]] = None) -> None:
         """
-        Train the model on feature matrix.
+        Train the model on feature matrix or SMILES.
 
         Args:
             features: Feature matrix (n_samples, n_features)
             targets: Target values (n_samples,)
+            smiles: Optional SMILES strings (required by some learners)
 
         Raises:
             ValueError: If input shapes invalid
@@ -61,12 +69,16 @@ class Learner(ABC):
         pass
 
     @abstractmethod
-    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self,
+                features: np.ndarray,
+                smiles: Optional[List[str]] = None
+                ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """
-        Predict on feature matrix.
+        Predict on feature matrix or SMILES.
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Optional SMILES strings (required by some learners)
 
         Returns:
             Tuple of (predictions, uncertainties).
@@ -88,16 +100,27 @@ class Learner(ABC):
     
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates.
-        
+
         This method can be overridden by subclasses for efficiency.
         The default implementation attempts a test prediction to check
         if uncertainty is returned.
-        
+
         Returns:
             Boolean indicating uncertainty support
         """
         # Default implementation - can be overridden for efficiency
         # Subclasses should override this method with actual logic
+        return False
+
+    def requires_smiles(self) -> bool:
+        """Return True if this learner needs SMILES strings.
+
+        Override in subclasses that work directly with molecular structures
+        instead of pre-computed features (e.g., graph neural networks).
+
+        Returns:
+            False by default (feature-based learners)
+        """
         return False
 
 
