@@ -1077,3 +1077,58 @@ class TestLoggingBehavior:
         assert any('Phase 1:' in msg for msg in info_messages)
         assert any('Phase 2:' in msg for msg in info_messages)
         assert any('Phase 5:' in msg for msg in info_messages)
+
+
+class TestChempropWithExtraDescriptors:
+    """Test Chemprop learner with extra descriptors (x_d) integration."""
+
+    def test_chemprop_with_extra_descriptors_full_cycle(self, sample_compounds, tmp_path):
+        """Test full active learning cycle with Chemprop + extra descriptors."""
+        from learnm8 import run_active_learning
+
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.copy()
+        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
+        oracle_data.to_csv(oracle_path, index=False)
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=str(oracle_path),
+            learner='chemprop',
+            featurizer_type='morgan',
+            target_col='Activity',
+            n_cycles=2,
+            batch_fraction=0.1,
+            output_dir=tmp_path / "output",
+            cache_dir=tmp_path / "cache"
+        )
+
+        assert 'compounds_df' in results
+        assert 'cycle_metrics' in results
+        assert len(results['cycle_metrics']) == 2
+
+        compounds_df = results['compounds_df']
+        assert 'prediction_cycle_1' in compounds_df.columns
+
+    def test_chemprop_without_featurizer_backward_compat(self, sample_compounds, tmp_path):
+        """Test backward compatibility - Chemprop without featurizer (graph-only)."""
+        from learnm8 import run_active_learning
+
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.copy()
+        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
+        oracle_data.to_csv(oracle_path, index=False)
+
+        results = run_active_learning(
+            compound_pool=sample_compounds,
+            oracle=str(oracle_path),
+            learner='chemprop',
+            featurizer_type=None,
+            target_col='Activity',
+            n_cycles=2,
+            batch_fraction=0.1,
+            output_dir=tmp_path / "output"
+        )
+
+        assert 'compounds_df' in results
+        assert len(results['cycle_metrics']) == 2
