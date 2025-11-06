@@ -50,7 +50,7 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer_type: str,
+    featurizer_type: Optional[str],
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str = 'higher',
@@ -146,19 +146,55 @@ def execute_cycle(
     else:
         # Extract features and train learner
         try:
-            logger.info(f"Extracting features for {len(labeled_df)} training compounds ({featurizer_type} fingerprints)")
-            training_features = extract_features(
-                labeled_df['SMILES'].tolist(),
-                featurizer_type,
-                cache_dir=cache_dir
-            )
-            logger.debug(f"Extracting {featurizer_type} features with cache_dir={cache_dir}")
-            logger.info(f"Features extracted: {len(labeled_df)} compounds processed")
-
-            logger.info(f"Training model on {len(labeled_df)} labeled compounds")
             training_targets = labeled_df[target_col].values
-            learner.train(training_features, training_targets)
-            logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
+            training_smiles = labeled_df['SMILES'].tolist()
+
+            if learner.requires_smiles():
+                if featurizer_type is not None:
+                    logger.info(
+                        f"Extracting {featurizer_type} features as x_d descriptors "
+                        f"for {len(labeled_df)} training compounds"
+                    )
+                    training_features = extract_features(
+                        training_smiles,
+                        featurizer_type,
+                        cache_dir=cache_dir
+                    )
+                    logger.info(
+                        f"Training {learner.get_name()} with SMILES + {training_features.shape[1]}-D "
+                        f"extra descriptors on {len(labeled_df)} compounds"
+                    )
+                else:
+                    training_features = None
+                    logger.info(
+                        f"Training {learner.get_name()} with SMILES (graph-only) "
+                        f"on {len(labeled_df)} compounds"
+                    )
+
+                learner.train(
+                    features=training_features,
+                    targets=training_targets,
+                    smiles=training_smiles
+                )
+                logger.debug(f"Model trained on {len(training_smiles)} compounds")
+            else:
+                if featurizer_type is None:
+                    raise ValueError(
+                        f"featurizer_type is required for {learner.get_name()}"
+                    )
+
+                logger.info(f"Extracting features for {len(labeled_df)} training compounds ({featurizer_type} fingerprints)")
+                training_features = extract_features(
+                    training_smiles,
+                    featurizer_type,
+                    cache_dir=cache_dir
+                )
+                logger.debug(f"Extracting {featurizer_type} features with cache_dir={cache_dir}")
+                logger.info(f"Features extracted: {len(labeled_df)} compounds processed")
+
+                logger.info(f"Training model on {len(labeled_df)} labeled compounds")
+                learner.train(training_features, training_targets)
+                logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
         except Exception as e:
             logger.error(f"Training failed in cycle {cycle}: {e}")
             raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
@@ -184,20 +220,57 @@ def execute_cycle(
         return compounds_df, metrics
 
     try:
-        logger.info(f"Extracting features for {len(prediction_pool)} unlabeled compounds ({featurizer_type} fingerprints)")
-        prediction_features = extract_features(
-            prediction_pool['SMILES'].tolist(),
-            featurizer_type,
-            cache_dir=cache_dir,
-            show_progress=len(prediction_pool) > 10000
-        )
-        logger.debug(f"Extracting {featurizer_type} features for prediction pool")
-        logger.info(f"Features extracted: {len(prediction_pool)} compounds processed")
+        prediction_smiles = prediction_pool['SMILES'].tolist()
 
-        logger.info(f"Generating predictions for {len(prediction_pool)} unlabeled compounds")
-        predictions, uncertainties = learner.predict(prediction_features)
+        if learner.requires_smiles():
+            if featurizer_type is not None:
+                logger.info(
+                    f"Extracting {featurizer_type} features as x_d descriptors "
+                    f"for {len(prediction_pool)} unlabeled compounds"
+                )
+                prediction_features = extract_features(
+                    prediction_smiles,
+                    featurizer_type,
+                    cache_dir=cache_dir,
+                    show_progress=len(prediction_pool) > 10000
+                )
+                logger.info(
+                    f"Generating predictions for {len(prediction_pool)} unlabeled compounds "
+                    f"with SMILES + {prediction_features.shape[1]}-D extra descriptors"
+                )
+            else:
+                prediction_features = None
+                logger.info(
+                    f"Generating predictions for {len(prediction_pool)} unlabeled compounds "
+                    f"with SMILES (graph-only)"
+                )
+
+            predictions, uncertainties = learner.predict(
+                features=prediction_features,
+                smiles=prediction_smiles
+            )
+            logger.debug(f"Predictions generated for {len(prediction_pool)} compounds (mode={mode})")
+        else:
+            if featurizer_type is None:
+                raise ValueError(
+                    f"featurizer_type is required for {learner.get_name()}"
+                )
+
+            logger.info(f"Extracting features for {len(prediction_pool)} unlabeled compounds ({featurizer_type} fingerprints)")
+            prediction_features = extract_features(
+                prediction_smiles,
+                featurizer_type,
+                cache_dir=cache_dir,
+                show_progress=len(prediction_pool) > 10000
+            )
+            logger.debug(f"Extracting {featurizer_type} features for prediction pool")
+            logger.info(f"Features extracted: {len(prediction_pool)} compounds processed")
+
+            logger.info(f"Generating predictions for {len(prediction_pool)} unlabeled compounds")
+            predictions, uncertainties = learner.predict(prediction_features)
+            logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
+
         logger.info(f"Predictions complete: {len(predictions)} predictions generated")
-        logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
         logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
