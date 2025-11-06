@@ -19,6 +19,9 @@ from validation.lib import (
 from validation.lib.matrix_visualizations import generate_comprehensive_visualizations
 
 
+from learnm8 import setup_logging
+setup_logging(level='INFO')
+
 DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
@@ -47,7 +50,7 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
     uncertainty_acquisitions = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
 
     for learner_name in sorted(LEARNER_REGISTRY.keys()):
-        if learner_name == 'ensemble':
+        if learner_name == 'ensemble' or learner_name == 'gp':
             continue
 
         try:
@@ -85,8 +88,8 @@ def load_existing_results(learner: str, acquisition: str) -> Dict:
 
     output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}'
 
-    compounds_df = pd.read_csv(output_dir / 'compounds_final.csv')
-    cycle_metrics_df = pd.read_csv(output_dir / 'cycle_metrics.csv')
+    compounds_df = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
+    cycle_metrics_df = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
 
     cycle_metrics = cycle_metrics_df.to_dict('records')
 
@@ -275,7 +278,7 @@ def main():
         print(f"Total runtime: {total_time/60:.1f} minutes")
         print()
         print("Generated files:")
-        print(f"  - Heatmaps: {len(viz_paths['heatmaps'])} files")
+        print(f"  - Combined heatmap: {viz_paths['heatmap']}")
         print(f"  - Cycle plot: {viz_paths['cycle_plot']}")
         print(f"  - Report: {viz_paths['report']}")
         print()

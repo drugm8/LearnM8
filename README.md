@@ -110,6 +110,126 @@ LearnM8 features a **modern modular architecture** with early validation and per
 | Multi-Layer Perceptron | `MLPLearner` | ❌ | ✅ | Complex non-linear patterns |
 | MC Dropout | `MCDropoutLearner` | ✅ | ✅ | Neural nets with uncertainty |
 
+### Graph Neural Networks
+
+| Model | Class | Uncertainty | GPU | Featurizer | Best Use Case |
+|-------|-------|-------------|-----|------------|---------------|
+| Chemprop | `ChempropLearner` | ✅ | ✅ | None (SMILES) | State-of-the-art molecular property prediction |
+
+**Chemprop** uses message passing neural networks (MPNNs) to learn directly from molecular graphs. No feature extraction required - works directly with SMILES strings! Supports multiple uncertainty quantification methods with automatic calibration:
+
+- **MVE (default)**: Fast, single forward pass with mean variance estimation
+- **Dropout**: Multiple forward passes with MC dropout sampling
+- **Evidential**: Outputs distributional parameters (epistemic/total uncertainty)
+- **Quantile**: Prediction intervals with conformal calibration
+- **Ensemble**: Multiple models with MVE weighting calibration
+
+**Calibration Methods:**
+- **ZScaling** (default): Gaussian NLL minimization for variance-based methods
+- **Zelikman**: Distribution-free quantile-based calibration
+- **Conformal**: Prediction interval calibration (requires quantile method)
+- **MVE Weighting**: Ensemble variance weighting (requires ensemble_size >= 2)
+
+```python
+from learnm8 import run_active_learning
+
+# Pure graph-based learning (no featurizer needed)
+results = run_active_learning(
+    learner='chemprop',
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=10
+)
+
+# Hybrid: graph + Morgan fingerprints as extra descriptors
+results = run_active_learning(
+    learner='chemprop',
+    featurizer_type='morgan',  # Used as x_d descriptors
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=10
+)
+
+# Hybrid: graph + physicochemical descriptors
+results = run_active_learning(
+    learner='chemprop',
+    featurizer_type='descriptors',  # 1613-D Mordred descriptors
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=10
+)
+
+# Custom architecture
+from learnm8.learners.ensemble import ChempropEnsemble
+
+learner = ChempropEnsemble(
+    depth=5,
+    message_hidden_dim=500,
+    max_epochs=100
+)
+
+results = run_active_learning(
+    learner=learner,
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=10
+)
+```
+
+**Key Features:**
+- Works directly with SMILES strings (no featurizer required)
+- Optionally accepts classical molecular descriptors as extra features (x_d)
+- 3-model ensemble provides uncertainty via standard deviation
+- Hybrid approaches (graph + descriptors) often outperform either alone
+- Optional incremental fine-tuning for faster active learning cycles
+
+**Incremental Fine-Tuning (Experimental):**
+
+Chemprop supports checkpoint-based fine-tuning to reduce training time across active learning cycles. Instead of training from scratch each cycle, models fine-tune from the previous cycle's checkpoint.
+
+```python
+# Simple API with fine-tuning
+results = run_active_learning(
+    learner='chemprop',
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=15,
+    enable_chemprop_fine_tuning=True  # Enable fine-tuning
+)
+# Checkpoints saved to: {output_dir}/.checkpoints/chemprop/
+
+# Advanced API with custom checkpoint location
+from learnm8.learners.ensemble import ChempropEnsemble
+from pathlib import Path
+
+learner = ChempropEnsemble(
+    enable_fine_tuning=True,
+    checkpoint_dir=Path('./my_checkpoints')
+)
+
+results = run_active_learning(
+    learner=learner,
+    compound_pool='compounds.csv',
+    target_col='Activity',
+    n_cycles=15
+)
+```
+
+**Fine-Tuning Behavior:**
+- Cycle 0: Train fresh, save checkpoint
+- Cycle 1+: Load previous checkpoint, fine-tune on expanded dataset
+- Each ensemble member has separate checkpoints (member_0, member_1, member_2)
+- Graceful fallback to fresh training if checkpoint loading fails
+- All checkpoints retained for analysis (manual cleanup required)
+
+**When to use:**
+- ✅ Early cycles with small training sets (significant speedup)
+- ✅ Many cycles (>10)
+- ❌ Large training sets (diminishing returns)
+- ❌ Strict reproducibility required
+
+**Installation**: `pip install chemprop` (requires PyTorch)
+
 ### Ensemble Models
 
 | Model | Class | Uncertainty | Components | Best Use Case |
@@ -124,14 +244,17 @@ LearnM8 features a **modern modular architecture** with early validation and per
 ### Model Selection Guide
 
 **For Small Datasets (< 1000 compounds):**
+- `ChempropLearner` - State-of-the-art GNN with uncertainty (if GPU available)
 - `GaussianProcessLearner` - Best uncertainty quantification
-- `MCDropoutLearner` - If GPU available
+- `MCDropoutLearner` - Neural nets with uncertainty
 
 **For Medium Datasets (1000-10000 compounds):**
+- `ChempropLearner` - Best molecular property prediction (if GPU available)
 - `EnsembleLearner` - Best overall performance
 - `XGBoostLearner` - Fast and accurate
 
 **For Large Datasets (> 10000 compounds):**
+- `ChempropLearner` - State-of-the-art performance (if GPU available)
 - `XGBoostLearner` - Scalable performance
 - `MLPLearner` - If GPU available
 

@@ -3330,44 +3330,76 @@ All learners must implement:
 ```python
 class Learner(ABC):
     @abstractmethod
-    def train(self, compounds: pd.DataFrame, target_col: str, data_manager) -> None:
-        """Train on labeled compounds."""
+    def train(self, features: np.ndarray, targets: np.ndarray, smiles: Optional[List[str]] = None) -> None:
+        """Train on features or SMILES."""
 
     @abstractmethod
-    def predict(self, compounds: pd.DataFrame, data_manager) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-        """Predict on unlabeled compounds. Returns (predictions, uncertainties)."""
+    def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        """Predict on features or SMILES. Returns (predictions, uncertainties)."""
 
     @abstractmethod
+    def get_name(self) -> str:
+        """Return descriptive name."""
+
     def supports_uncertainty(self) -> bool:
         """Whether learner provides uncertainty estimates."""
+        return False
+
+    def requires_smiles(self) -> bool:
+        """Whether learner needs SMILES strings instead of features."""
+        return False
 ```
 
-**Featurizer-Agnostic Implementation:**
+**Two Learner Architectures:**
 
-Learners are completely decoupled from feature extraction. Feature extraction happens at the cycle level:
+**1. Feature-Based Learners (Default):**
+
+Most learners are completely decoupled from feature extraction. Feature extraction happens at the cycle level:
 
 ```python
 # In cycle.py - Extract features once
-training_features = extract_features(
-    labeled_df['SMILES'].tolist(),
-    featurizer_type,
-    cache_dir,
-    n_jobs=-1
-)
+if not learner.requires_smiles():
+    training_features = extract_features(
+        labeled_df['SMILES'].tolist(),
+        featurizer_type,
+        cache_dir,
+        n_jobs=-1
+    )
 
-# Train learner with numpy arrays
-learner.train(training_features, labeled_df[target_col].values)
+    # Train learner with numpy arrays
+    learner.train(training_features, labeled_df[target_col].values)
 
-# Extract features for prediction
-prediction_features = extract_features(
-    prediction_pool['SMILES'].tolist(),
-    featurizer_type,
-    cache_dir,
-    n_jobs=-1
-)
+    # Extract features for prediction
+    prediction_features = extract_features(
+        prediction_pool['SMILES'].tolist(),
+        featurizer_type,
+        cache_dir,
+        n_jobs=-1
+    )
 
-# Predict with numpy arrays
-predictions, uncertainties = learner.predict(prediction_features)
+    # Predict with numpy arrays
+    predictions, uncertainties = learner.predict(prediction_features)
+```
+
+**2. SMILES-Aware Learners (e.g., Chemprop):**
+
+Some learners work directly with molecular graphs, bypassing feature extraction:
+
+```python
+# In cycle.py - SMILES passthrough
+if learner.requires_smiles():
+    training_smiles = labeled_df['SMILES'].tolist()
+    learner.train(
+        features=None,
+        targets=labeled_df[target_col].values,
+        smiles=training_smiles
+    )
+
+    prediction_smiles = prediction_pool['SMILES'].tolist()
+    predictions, uncertainties = learner.predict(
+        features=None,
+        smiles=prediction_smiles
+    )
 ```
 
 **Benefits:**
@@ -3376,6 +3408,242 @@ predictions, uncertainties = learner.predict(prediction_features)
 - **Reusability:** Same learner works with any featurizer
 - **Performance:** Features extracted once and cached via HDF5
 - **Simplicity:** Learners follow standard scikit-learn conventions
+
+---
+
+### ChempropLearner: Molecular Graph Neural Networks
+
+ChempropLearner is a specialized SMILES-aware learner providing comprehensive uncertainty quantification through Chemprop's message-passing neural networks (MPNNs).
+
+**Architecture Overview:**
+
+ChempropLearner wraps Chemprop's MPNN architecture with:
+- Multiple uncertainty quantification methods
+- Automatic calibration support
+- Ensemble training capabilities
+- Standardized uncertainty output (σ format)
+
+**Uncertainty Quantification Methods:**
+
+1. **MVE (Mean Variance Estimation)**
+   - FFN Type: MveFFN
+   - Output: Mean + variance from network head
+   - Speed: Fast (single forward pass)
+   - Use Case: Default choice for most applications
+
+2. **Dropout (Monte Carlo Dropout)**
+   - FFN Type: RegressionFFN
+   - Output: Variance across multiple stochastic forward passes
+   - Speed: Slower (10+ forward passes typical)
+   - Use Case: Better epistemic uncertainty capture
+
+3. **Evidential Deep Learning**
+   - FFN Type: EvidentialFFN
+   - Output: Distributional parameters (γ, v, α, β)
+   - Variants: `evidential-total` (combined), `evidential-epistemic` (epistemic only)
+   - Use Case: Separating epistemic vs aleatoric uncertainty
+
+4. **Quantile Regression**
+   - FFN Type: QuantileFFN
+   - Output: Prediction intervals at specified quantiles
+   - Use Case: Distribution-free uncertainty with coverage guarantees
+
+**Calibration Methods:**
+
+1. **ZScaling (default)**
+   - Technique: Gaussian NLL minimization
+   - Compatible: All variance-based methods (mve, dropout, evidential)
+   - Output: Scaled variances
+
+2. **Zelikman (CRUDE)**
+   - Technique: Distribution-free quantile-based
+   - Compatible: All variance-based methods
+   - Output: Empirically calibrated variances
+
+3. **Conformal**
+   - Technique: Prediction interval calibration
+   - Compatible: Quantile regression only
+   - Output: Coverage-guaranteed intervals
+
+4. **MVE Weighting**
+   - Technique: Ensemble variance weighting
+   - Compatible: MVE with ensemble_size >= 2 only
+   - Output: Weighted ensemble variances
+   - Note: Requires 3D tensor (m, n, t) - special handling
+
+**Configuration System:**
+
+Class-level mappings provide automatic configuration resolution:
+
+```python
+UNCERTAINTY_TO_FFN = {
+    'mve': 'regression-mve',
+    'dropout': 'regression',
+    'evidential-total': 'regression-evidential',
+    'evidential-epistemic': 'regression-evidential',
+    'quantile': 'regression-quantile',
+    'none': 'regression'
+}
+
+UNCERTAINTY_OUTPUT_TYPE = {
+    'mve': 'variance',
+    'dropout': 'variance',
+    'evidential-*': 'variance',
+    'quantile': 'interval',
+    'none': None
+}
+```
+
+**Configuration Validation:**
+
+All compatibility rules enforced at initialization via `_validate_configuration()`:
+
+```python
+# Rule 1: MVE Weighting requires MVE + ensemble
+if calibration_method == 'mve_weighting':
+    if uncertainty_method != 'mve':
+        raise ValueError("mve_weighting requires mve")
+    if ensemble_size < 2:
+        raise ValueError("mve_weighting requires ensemble_size >= 2")
+
+# Rule 2: Conformal requires quantile
+if calibration_method == 'conformal':
+    if uncertainty_method != 'quantile':
+        raise ValueError("conformal requires quantile")
+
+# Rule 3: Variance calibrators require variance-based uncertainty
+if calibration_method in ['zscaling', 'zelikman']:
+    if uncertainty_output_type != 'variance':
+        raise ValueError("requires variance-based uncertainty")
+```
+
+**Uncertainty Conversion Pipeline:**
+
+Critical design: All uncertainties converted to standard deviation (σ) for acquisition functions.
+
+```python
+def _convert_uncertainty_to_std(self, uncertainties):
+    """Convert to σ format after calibration."""
+    if self.uncertainty_output_type == 'variance':
+        # MVE, Dropout, Evidential: variance → σ
+        return np.sqrt(np.abs(uncertainties))
+
+    elif self.uncertainty_output_type == 'interval':
+        # Quantile: interval → σ approximation
+        # For 95% CI: interval ≈ 1.96σ → σ = interval / 1.96
+        return uncertainties / 1.96
+
+    return None
+```
+
+**Execution Flow:**
+
+1. **Initialization**
+   - `_resolve_configuration()`: Map uncertainty_method → FFN type
+   - `_validate_configuration()`: Enforce compatibility rules
+
+2. **Training** (`train()`)
+   - Create models: `_create_models()` with different seeds
+   - Train each model sequentially
+   - Fit calibrator on validation set if enabled
+
+3. **Prediction** (`predict()`)
+   - Get raw predictions: `_predict_chemprop()`
+     - Select appropriate estimator (MVE, Dropout, Evidential, Quantile)
+     - Aggregate tensors based on calibrator type
+   - Apply calibration (if enabled)
+   - Convert to σ: `_convert_uncertainty_to_std()`
+   - Return (predictions, σ_uncertainties)
+
+**Ensemble Support:**
+
+Single class handles both single model and ensemble via `ensemble_size` parameter.
+
+Training strategy:
+```python
+def _create_models(self):
+    models = []
+    for i in range(self.ensemble_size):
+        seed = self.random_state + i  # Different seed per model
+        model = self._create_single_model(seed)
+        models.append(model)
+    return models
+```
+
+Prediction tensor handling:
+```python
+if self.calibration_method == 'mve_weighting':
+    # Keep 3D tensor (m, n, t) for MVEWeightingCalibrator
+    preds = predss  # (ensemble_size, n_samples, n_tasks)
+    uncs = uncss
+else:
+    # Average to 2D tensor (n, t) for other calibrators
+    preds = predss.mean(0)
+    uncs = uncss.mean(0)
+```
+
+**Integration with LearnM8:**
+
+1. **Learner Interface**
+   - `requires_smiles()` → True (bypasses feature extraction)
+   - `train(features, targets, smiles)` - ignores features, requires smiles
+   - `predict(features, smiles)` - ignores features, requires smiles
+   - `supports_uncertainty()` → True (except when method='none')
+
+2. **Cycle Integration**
+   - Features parameter always None for Chemprop
+   - SMILES strings passed directly
+   - Uncertainty output always σ format (compatible with all acquisition strategies)
+
+3. **Registry**
+   - Registered as `'chemprop'` in `LEARNER_REGISTRY`
+   - Auto-instantiated when `learner='chemprop'` in API
+
+**Performance Characteristics:**
+
+| Configuration | Forward Passes | Training Time | Prediction Time | Uncertainty Quality |
+|---------------|----------------|---------------|-----------------|---------------------|
+| MVE (single) | 1 | Fast | Fastest | Good |
+| MVE (ensemble x3) | 1 per model | 3x | Fast | Better |
+| Dropout | 10+ | Fast | Slow | Good |
+| Evidential | 1 | Fast | Fastest | Good |
+| Quantile | 1 | Fast | Fastest | Intervals |
+
+**Best Practices:**
+
+1. **Simple API**: Use defaults (`mve` + `zscaling`) for most applications
+2. **Production**: Use ensemble (`ensemble_size=3`) with `mve_weighting` calibration
+3. **Coverage guarantees**: Use `quantile` + `conformal` calibration
+4. **Active learning**: Use `evidential-epistemic` to focus on epistemic uncertainty
+
+**Complete Example:**
+
+```python
+# Default: Single MVE model
+learner = ChempropLearner()
+
+# Ensemble with MVE Weighting
+learner = ChempropLearner(
+    uncertainty_method='mve',
+    calibration_method='mve_weighting',
+    ensemble_size=3
+)
+
+# Quantile with Conformal
+learner = ChempropLearner(
+    uncertainty_method='quantile',
+    calibration_method='conformal'
+)
+
+# Evidential Epistemic
+learner = ChempropLearner(
+    uncertainty_method='evidential-epistemic',
+    calibration_method='zscaling'
+)
+```
+
+For complete compatibility matrix and validation rules, see:
+`validation/CHEMPROP_REGRESSION_COMPATIBILITY_GUIDE.md`
 
 ---
 
