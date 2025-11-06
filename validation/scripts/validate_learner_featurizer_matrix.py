@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -16,6 +16,9 @@ from validation.lib import (
     get_dataset_info
 )
 from validation.lib.featurizer_visualizations import generate_comprehensive_visualizations
+
+from learnm8 import setup_logging
+setup_logging(level='INFO')
 
 
 DATASET_NAME = 'ampc_30k'
@@ -39,7 +42,7 @@ def print_header():
     print()
 
 
-def get_compatible_combinations() -> List[Tuple[str, str]]:
+def get_compatible_combinations() -> List[Tuple[str, Optional[str]]]:
     combinations = []
 
     available_featurizers = ['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
@@ -51,8 +54,13 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
         try:
             learner = _create_learner(learner_name, RANDOM_STATE)
 
-            for featurizer_name in available_featurizers:
-                combinations.append((learner_name, featurizer_name))
+            if learner.requires_smiles():
+                combinations.append((learner_name, None))
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_name, featurizer_name))
+            else:
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_name, featurizer_name))
 
         except Exception as e:
             print(f"Warning: Could not check learner '{learner_name}': {e}")
@@ -61,8 +69,9 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
     return combinations
 
 
-def check_existing_results(learner: str, featurizer: str) -> bool:
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer}'
+def check_existing_results(learner: str, featurizer: Optional[str]) -> bool:
+    featurizer_str = featurizer if featurizer is not None else 'none'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}'
 
     required_files = [
         'compounds_final.csv',
@@ -73,13 +82,14 @@ def check_existing_results(learner: str, featurizer: str) -> bool:
     return all((output_dir / f).exists() for f in required_files)
 
 
-def load_existing_results(learner: str, featurizer: str) -> Dict:
+def load_existing_results(learner: str, featurizer: Optional[str]) -> Dict:
     import pandas as pd
 
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer}'
+    featurizer_str = featurizer if featurizer is not None else 'none'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}'
 
-    compounds_df = pd.read_csv(output_dir / 'compounds_final.csv')
-    cycle_metrics_df = pd.read_csv(output_dir / 'cycle_metrics.csv')
+    compounds_df = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
+    cycle_metrics_df = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
 
     cycle_metrics = cycle_metrics_df.to_dict('records')
 
@@ -93,15 +103,17 @@ def load_existing_results(learner: str, featurizer: str) -> Dict:
 
 def run_single_experiment(
     learner_name: str,
-    featurizer_name: str,
+    featurizer_name: Optional[str],
     compound_pool,
     oracle,
     target_col: str,
     cache_dir: Path
 ) -> Dict:
-    print(f"  Running: {learner_name} + {featurizer_name}...", end=' ', flush=True)
+    featurizer_display = featurizer_name if featurizer_name is not None else 'none'
+    print(f"  Running: {learner_name} + {featurizer_display}...", end=' ', flush=True)
 
-    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_name}'
+    featurizer_str = featurizer_name if featurizer_name is not None else 'none'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}'
 
     start_time = time.time()
 
@@ -139,7 +151,7 @@ def run_single_experiment(
         raise
 
 
-def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
+def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     print_header()
 
     print("Loading dataset...")
@@ -268,7 +280,7 @@ def main():
         print(f"Total runtime: {total_time/60:.1f} minutes")
         print()
         print("Generated files:")
-        print(f"  - Heatmaps: {len(viz_paths['heatmaps'])} files")
+        print(f"  - Combined heatmap: {viz_paths['heatmap']}")
         print(f"  - Cycle plot: {viz_paths['cycle_plot']}")
         print(f"  - Report: {viz_paths['report']}")
         print()
