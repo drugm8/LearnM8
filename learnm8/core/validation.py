@@ -101,10 +101,33 @@ def validate_compound_pool(
             errors
         )
 
-    logger.info(f"Validating {len(compound_pool)} compounds with datamol...")
+    # Check for duplicate IDs
+    duplicate_ids = compound_pool['ID'].duplicated(keep='first')
+
+    if duplicate_ids.any():
+        # Separate duplicates from unique compounds
+        dup_df = compound_pool[duplicate_ids].copy()
+        unique_pool = compound_pool[~duplicate_ids].copy()
+
+        # Build error dict for duplicates
+        dup_errors = {
+            str(row['ID']): "Duplicate ID"
+            for _, row in dup_df.iterrows()
+        }
+
+        logger.info(
+            f"Found {duplicate_ids.sum()} duplicate IDs, "
+            f"continuing validation with {len(unique_pool)} unique compounds"
+        )
+    else:
+        unique_pool = compound_pool
+        dup_df = pd.DataFrame(columns=compound_pool.columns)
+        dup_errors = {}
+
+    logger.info(f"Validating {len(unique_pool)} compounds with datamol...")
     logger.debug(f"Validating compounds using datamol.sanitize_smiles()")
 
-    smiles_list = compound_pool['SMILES'].tolist()
+    smiles_list = unique_pool['SMILES'].tolist()
 
     results = dm.parallelized(
         _validate_smiles,
@@ -116,10 +139,10 @@ def validate_compound_pool(
 
     valid_compounds = []
     invalid_compounds = []
-    errors = {}
+    smiles_errors = {}
 
     for idx, (row_tuple, (is_valid, std_smiles, error_msg)) in enumerate(
-        zip(compound_pool.iterrows(), results)
+        zip(unique_pool.iterrows(), results)
     ):
         _, compound_row = row_tuple
 
@@ -128,15 +151,28 @@ def validate_compound_pool(
         else:
             invalid_compounds.append(compound_row)
             compound_id = str(compound_row['ID']) if pd.notna(compound_row['ID']) else str(idx)
-            errors[compound_id] = error_msg
+            smiles_errors[compound_id] = error_msg
 
     valid_df = pd.DataFrame(valid_compounds) if valid_compounds else pd.DataFrame(columns=compound_pool.columns)
-    invalid_df = pd.DataFrame(invalid_compounds) if invalid_compounds else pd.DataFrame(columns=compound_pool.columns)
+    smiles_invalid_df = pd.DataFrame(invalid_compounds) if invalid_compounds else pd.DataFrame(columns=compound_pool.columns)
 
-    result = ValidationResult(valid_df, invalid_df, errors)
+    # Combine duplicate errors with SMILES validation errors
+    all_errors = {**dup_errors, **smiles_errors}
+
+    # Combine duplicate compounds with SMILES invalid compounds
+    invalid_df = pd.concat(
+        [dup_df, smiles_invalid_df],
+        ignore_index=True
+    ) if len(dup_df) > 0 or len(smiles_invalid_df) > 0 else pd.DataFrame(columns=compound_pool.columns)
+
+    result = ValidationResult(valid_df, invalid_df, all_errors)
 
     if len(invalid_df) > 0:
         logger.debug(f"Invalid compounds detected: {len(invalid_df)} failed validation")
+        if len(dup_df) > 0:
+            logger.debug(f"  - {len(dup_df)} duplicate IDs")
+        if len(smiles_invalid_df) > 0:
+            logger.debug(f"  - {len(smiles_invalid_df)} invalid SMILES")
         compound_ids = invalid_df['ID'].head(5).tolist() if 'ID' in invalid_df.columns else []
         if compound_ids:
             logger.debug(f"First few invalid IDs: {compound_ids}")
