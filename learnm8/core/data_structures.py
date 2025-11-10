@@ -1,7 +1,8 @@
-import pandas as pd
-import numpy as np
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +13,11 @@ VALID_STATUSES = [STATUS_UNLABELED, STATUS_LABELED, STATUS_PRUNED]
 
 
 def initialize_master_dataframe(
-    compound_pool: pd.DataFrame,
+    compound_pool: 'pl.DataFrame',
     initial_labeled_ids: List[str],
-    initial_target_values: pd.Series,
+    initial_target_values: 'pl.Series',
     target_column: str
-) -> pd.DataFrame:
+) -> 'pl.DataFrame':
     """Create initial master DataFrame from compound pool.
 
     .. deprecated:: 0.6.0
@@ -83,7 +84,7 @@ def initialize_master_dataframe(
 
 
 def get_prediction_columns(
-    master_df: pd.DataFrame
+    master_df: 'pl.DataFrame'
 ) -> Tuple[List[str], List[str]]:
     """Extract prediction and uncertainty column names.
 
@@ -108,7 +109,7 @@ def get_prediction_columns(
 
 
 def validate_master_dataframe(
-    master_df: pd.DataFrame
+    master_df: 'pl.DataFrame'
 ) -> bool:
     """Validate master DataFrame schema.
 
