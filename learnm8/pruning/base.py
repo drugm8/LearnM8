@@ -7,7 +7,7 @@ that reduce the unlabeled compound pool by removing unlikely candidates.
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Tuple
-import pandas as pd
+import polars as pl
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -22,10 +22,10 @@ class DesignSpacePruner(ABC):
     """
     
     @abstractmethod
-    def prune(self, 
-              compounds: pd.DataFrame, 
-              predictions: np.ndarray, 
-              uncertainties: Optional[np.ndarray] = None) -> pd.DataFrame:
+    def prune(self,
+              compounds: pl.DataFrame,
+              predictions: np.ndarray,
+              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
         """
         Prune the compound pool based on predictions.
         
@@ -71,9 +71,9 @@ class DesignSpacePruner(ABC):
         """
         return False
     
-    def validate_inputs(self, 
-                       compounds: pd.DataFrame, 
-                       predictions: np.ndarray, 
+    def validate_inputs(self,
+                       compounds: pl.DataFrame,
+                       predictions: np.ndarray,
                        uncertainties: Optional[np.ndarray] = None) -> None:
         """
         Validate inputs for pruning operation.
@@ -87,9 +87,9 @@ class DesignSpacePruner(ABC):
             PruningError: If inputs are invalid
         """
         # Check DataFrame structure
-        if compounds.empty:
+        if len(compounds) == 0:
             raise PruningError("compounds DataFrame is empty")
-        
+
         required_cols = ['ID', 'SMILES']
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
@@ -133,9 +133,9 @@ class DesignSpacePruner(ABC):
         removed_count = original_count - pruned_count
         return removed_count / original_count
     
-    def _safe_prune_by_indices(self, 
-                              compounds: pd.DataFrame, 
-                              keep_indices: np.ndarray) -> pd.DataFrame:
+    def _safe_prune_by_indices(self,
+                              compounds: pl.DataFrame,
+                              keep_indices: np.ndarray) -> pl.DataFrame:
         """Safely prune compounds by keeping specified indices.
         
         Args:
@@ -151,24 +151,21 @@ class DesignSpacePruner(ABC):
         try:
             if len(keep_indices) == 0:
                 logger.warning("No compounds selected for retention during pruning")
-                return compounds.iloc[:0].copy()  # Return empty DataFrame with same structure
-            
+                return compounds.head(0)  # Return empty DataFrame with same structure
+
             # Handle boolean indexing
             if keep_indices.dtype == bool:
                 if len(keep_indices) != len(compounds):
                     raise PruningError(f"Boolean index length ({len(keep_indices)}) doesn't match compounds length ({len(compounds)})")
-                pruned_compounds = compounds[keep_indices].copy()
+                pruned_compounds = compounds.filter(pl.Series(keep_indices))
             else:
                 # Handle integer indexing
                 if np.any(keep_indices >= len(compounds)) or np.any(keep_indices < 0):
                     raise PruningError("Invalid compound indices for pruning")
-                pruned_compounds = compounds.iloc[keep_indices].copy()
-            
-            # Reset index to maintain clean indexing
-            pruned_compounds = pruned_compounds.reset_index(drop=True)
-            
+                pruned_compounds = compounds[keep_indices]
+
             return pruned_compounds
-            
+
         except Exception as e:
             raise PruningError(f"Failed to prune compounds: {e}") from e
 
