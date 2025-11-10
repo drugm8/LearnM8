@@ -5,7 +5,7 @@ Tests for virtual screening enrichment metrics using real molecular data.
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.enrichment import (
@@ -24,12 +24,12 @@ class TestEnrichmentMetrics:
     def test_top_k_overlap(self):
         """Test top-K overlap calculation."""
         # Test data - create predictions DataFrame
-        predictions_df = pd.DataFrame({
+        predictions_df = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_4', 'mol_5'],
             'prediction': [9.5, 8.5, 7.5, 6.5, 5.5]  # mol_1, mol_2, mol_3 should be top 3
         })
 
-        ground_truth_data = pd.DataFrame({
+        ground_truth_data = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_6', 'mol_7', 'mol_8'],
             'Activity': [10, 9, 8, 7, 6, 5]  # mol_1, mol_2, mol_3 are top 3
         })
@@ -66,12 +66,12 @@ class TestEnrichmentMetrics:
     def test_top_k_overlap_lower_direction(self):
         """Test top-K overlap with score_direction='lower' (for docking scores)."""
         # Test data where LOWER scores are better (like docking scores)
-        predictions_df = pd.DataFrame({
+        predictions_df = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_4', 'mol_5'],
             'prediction': [-15.5, -12.3, -8.7, -5.1, -2.4]  # mol_1 has best (lowest) score
         })
 
-        ground_truth_data = pd.DataFrame({
+        ground_truth_data = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_4', 'mol_5'],
             'dockscore': [-16.0, -13.2, -9.1, -4.8, -1.9]  # mol_1 has best (lowest) score
         })
@@ -111,12 +111,12 @@ class TestEnrichmentMetrics:
     def test_score_direction_consistency(self):
         """Test that score_direction parameter affects results consistently."""
         # Create test case where direction should matter
-        predictions_df = pd.DataFrame({
+        predictions_df = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_4', 'mol_5', 'mol_6'],
             'prediction': [1, 2, 3, 4, 5, 6]  # Simple ascending order
         })
 
-        ground_truth_data = pd.DataFrame({
+        ground_truth_data = pl.DataFrame({
             'ID': ['mol_1', 'mol_2', 'mol_3', 'mol_4', 'mol_5', 'mol_6'],
             'activity': [1, 2, 3, 4, 5, 6]  # Same pattern - perfect correlation
         })
@@ -150,14 +150,14 @@ class TestEnrichmentMetrics:
 
     def test_multiple_top_k_overlaps_lower_direction(self):
         """Test calculate_multiple_top_k_overlaps with score_direction='lower'."""
-        predictions_df = pd.DataFrame({
+        predictions_df = pl.DataFrame({
             'ID': [f'mol_{i}' for i in range(1000)],
             'prediction': np.random.uniform(-20, 0, 1000)  # Random docking-like scores
         })
 
-        ground_truth_data = pd.DataFrame({
+        ground_truth_data = pl.DataFrame({
             'ID': [f'mol_{i}' for i in range(1000)],
-            'dockscore': predictions_df['prediction'] + np.random.normal(0, 1, 1000)  # Correlated
+            'dockscore': predictions_df.get_column('prediction').to_numpy() + np.random.normal(0, 1, 1000)  # Correlated
         })
 
         # Test multiple top-K overlaps with lower direction
@@ -205,12 +205,12 @@ class TestEnrichmentMetrics:
 
     def test_invalid_score_direction(self):
         """Test error handling for invalid score_direction values."""
-        predictions_df = pd.DataFrame({
+        predictions_df = pl.DataFrame({
             'ID': ['mol_1', 'mol_2'],
             'prediction': [1.0, 2.0]
         })
 
-        ground_truth_data = pd.DataFrame({
+        ground_truth_data = pl.DataFrame({
             'ID': ['mol_1', 'mol_2'],
             'activity': [1.5, 2.5]
         })

@@ -6,8 +6,14 @@ Tests core functionality for the most commonly used acquisition methods.
 
 import pytest
 import numpy as np
+import polars as pl
 import pandas as pd
 from learnm8.acquisition.basic import GreedyAcquisition, RandomAcquisition, TopKAcquisition
+
+
+def pd_to_pl(df: pd.DataFrame) -> pl.DataFrame:
+    """Convert pandas DataFrame to polars DataFrame for tests."""
+    return pl.from_pandas(df)
 
 
 class TestGreedyAcquisition:
@@ -15,20 +21,22 @@ class TestGreedyAcquisition:
     
     def test_greedy_basic_functionality(self, small_real_compounds):
         """Test basic greedy acquisition with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = pd_to_pl(small_real_compounds)
         # Add synthetic predictions
         np.random.seed(42)
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
-        
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
+
         acq = GreedyAcquisition()
         selected = acq.select(compounds, n_select=5)
-        
+
         # Should select compounds with highest predictions
         assert len(selected) == 5
         assert 'acquisition_score' in selected.columns
-        
+
         # Verify greedy selection (highest scores first)
-        selected_scores = selected['prediction'].values
+        selected_scores = selected.get_column('prediction').to_numpy()
         assert np.all(selected_scores[:-1] >= selected_scores[1:])
     
     def test_greedy_with_activity_scores(self, small_real_compounds):

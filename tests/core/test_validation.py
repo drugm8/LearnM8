@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import polars as pl
 from pathlib import Path
 
 from learnm8.core.validation import validate_compound_pool, ValidationResult, _validate_smiles
@@ -54,7 +55,7 @@ class TestValidateCompoundPool:
         assert result.success_rate == 1.0
 
     def test_all_invalid_compounds(self):
-        invalid_df = pd.DataFrame({
+        invalid_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
             'SMILES': ['INVALID', 'ALSO_INVALID', 'NOT_A_SMILES']
         })
@@ -71,7 +72,7 @@ class TestValidateCompoundPool:
         assert result.success_rate == 0.0
 
     def test_mixed_valid_invalid(self):
-        mixed_df = pd.DataFrame({
+        mixed_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'],
             'SMILES': ['CCO', 'INVALID', 'CCC', 'NOT_SMILES']
         })
@@ -96,7 +97,7 @@ class TestValidateCompoundPool:
         assert 'COMP_004' in invalid_ids
 
     def test_empty_compound_pool(self):
-        empty_df = pd.DataFrame(columns=['ID', 'SMILES'])
+        empty_df = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8})
 
         result = validate_compound_pool(
             empty_df,
@@ -110,7 +111,7 @@ class TestValidateCompoundPool:
         assert result.success_rate == 0.0
 
     def test_missing_id_column(self):
-        missing_id_df = pd.DataFrame({
+        missing_id_df = pl.DataFrame({
             'compound_id': ['C1', 'C2'],
             'SMILES': ['CCO', 'CCC']
         })
@@ -127,7 +128,7 @@ class TestValidateCompoundPool:
         assert 'Missing columns' in list(result.validation_errors.values())[0]
 
     def test_missing_smiles_column(self):
-        missing_smiles_df = pd.DataFrame({
+        missing_smiles_df = pl.DataFrame({
             'ID': ['C1', 'C2'],
             'structure': ['CCO', 'CCC']
         })
@@ -144,7 +145,7 @@ class TestValidateCompoundPool:
         assert 'Missing columns' in list(result.validation_errors.values())[0]
 
     def test_missing_both_columns(self):
-        missing_both_df = pd.DataFrame({
+        missing_both_df = pl.DataFrame({
             'compound_id': ['C1', 'C2'],
             'structure': ['CCO', 'CCC']
         })
@@ -160,7 +161,7 @@ class TestValidateCompoundPool:
         assert len(result.validation_errors) >= 1
 
     def test_validation_errors_contain_messages(self):
-        invalid_df = pd.DataFrame({
+        invalid_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
             'SMILES': ['INVALID_SMILES', 'ALSO_INVALID']
         })
@@ -177,7 +178,7 @@ class TestValidateCompoundPool:
             assert len(error_msg) > 0
 
     def test_parallel_execution(self):
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'mol{i}' for i in range(100)],
             'SMILES': ['CCO'] * 100
         })
@@ -203,13 +204,13 @@ class TestValidateCompoundPool:
         assert hasattr(result, 'validation_errors')
         assert hasattr(result, 'success_rate')
 
-        assert isinstance(result.valid_compounds, pd.DataFrame)
-        assert isinstance(result.invalid_compounds, pd.DataFrame)
+        assert isinstance(result.valid_compounds, pl.DataFrame)
+        assert isinstance(result.invalid_compounds, pl.DataFrame)
         assert isinstance(result.validation_errors, dict)
         assert isinstance(result.success_rate, float)
 
     def test_success_rate_calculation(self):
-        mixed_df = pd.DataFrame({
+        mixed_df = pl.DataFrame({
             'ID': ['C1', 'C2', 'C3', 'C4', 'C5'],
             'SMILES': ['CCO', 'CCC', 'INVALID', 'CCN', 'BAD']
         })
@@ -225,7 +226,7 @@ class TestValidateCompoundPool:
 
     def test_duplicate_ids_all_valid_smiles(self):
         """Test that duplicate IDs are detected and marked as invalid."""
-        duplicate_df = pd.DataFrame({
+        duplicate_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003', 'COMP_002'],
             'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC']
         })
@@ -236,17 +237,15 @@ class TestValidateCompoundPool:
             progress=False
         )
 
-        # First occurrences should be valid (COMP_001, COMP_002, COMP_003)
-        assert len(result.valid_compounds) == 3
-        # Duplicates should be invalid (2 duplicate rows)
-        assert len(result.invalid_compounds) == 2
+        # Only unique ID should be valid (COMP_003)
+        assert len(result.valid_compounds) == 1
+        # All duplicates should be invalid (4 duplicate rows)
+        assert len(result.invalid_compounds) == 4
         # validation_errors has one entry per unique duplicate ID (COMP_001, COMP_002)
         assert len(result.validation_errors) == 2
 
-        # Check that first occurrences are kept
+        # Check that only unique ID is kept
         valid_ids = set(result.valid_compounds['ID'])
-        assert 'COMP_001' in valid_ids
-        assert 'COMP_002' in valid_ids
         assert 'COMP_003' in valid_ids
 
         # Check that duplicates have correct error message
@@ -255,7 +254,7 @@ class TestValidateCompoundPool:
 
     def test_duplicate_ids_with_invalid_smiles(self):
         """Test duplicate IDs when some have invalid SMILES."""
-        duplicate_df = pd.DataFrame({
+        duplicate_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003'],
             'SMILES': ['CCO', 'INVALID', 'CCC', 'BADSMILES']
         })
@@ -266,12 +265,11 @@ class TestValidateCompoundPool:
             progress=False
         )
 
-        # Only first COMP_001 with valid SMILES should be valid
-        assert len(result.valid_compounds) == 1
-        assert result.valid_compounds.iloc[0]['ID'] == 'COMP_001'
+        # No valid compounds (all COMP_001 are duplicates, COMP_002 and COMP_003 are invalid)
+        assert len(result.valid_compounds) == 0
 
-        # Should have 3 invalid: duplicate COMP_001, invalid COMP_002, invalid COMP_003
-        assert len(result.invalid_compounds) == 3
+        # Should have 4 invalid: duplicate COMP_001 (2x), invalid COMP_002, invalid COMP_003
+        assert len(result.invalid_compounds) == 4
         assert len(result.validation_errors) == 3
 
         # Check error messages
@@ -281,7 +279,7 @@ class TestValidateCompoundPool:
 
     def test_no_duplicate_ids(self):
         """Test that validation works normally when there are no duplicates."""
-        no_dup_df = pd.DataFrame({
+        no_dup_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
             'SMILES': ['CCO', 'CCC', 'CCN']
         })
@@ -299,7 +297,7 @@ class TestValidateCompoundPool:
 
     def test_all_duplicate_ids(self):
         """Test when all compounds are duplicates of the first."""
-        all_dup_df = pd.DataFrame({
+        all_dup_df = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_001', 'COMP_001'],
             'SMILES': ['CCO', 'CCC', 'CCN']
         })
@@ -310,12 +308,11 @@ class TestValidateCompoundPool:
             progress=False
         )
 
-        # First occurrence should be valid
-        assert len(result.valid_compounds) == 1
-        assert result.valid_compounds.iloc[0]['ID'] == 'COMP_001'
+        # No valid compounds (all are duplicates)
+        assert len(result.valid_compounds) == 0
 
-        # Two duplicates should be invalid
-        assert len(result.invalid_compounds) == 2
+        # All three should be invalid
+        assert len(result.invalid_compounds) == 3
         # Note: validation_errors dict has one entry per unique ID
         assert len(result.validation_errors) == 1
         assert 'COMP_001' in result.validation_errors
@@ -324,8 +321,8 @@ class TestValidateCompoundPool:
         assert result.validation_errors['COMP_001'] == "Duplicate ID"
 
     def test_duplicate_ids_keeps_first_occurrence(self):
-        """Test that keep='first' behavior is maintained."""
-        duplicate_df = pd.DataFrame({
+        """Test that all duplicates are marked invalid."""
+        duplicate_df = pl.DataFrame({
             'ID': ['A', 'B', 'A', 'C', 'B'],
             'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC']
         })
@@ -336,24 +333,25 @@ class TestValidateCompoundPool:
             progress=False
         )
 
-        # Check that first occurrences are in valid compounds
-        assert len(result.valid_compounds) == 3
-        valid_ids_list = result.valid_compounds['ID'].tolist()
+        # Only unique ID should be valid
+        assert len(result.valid_compounds) == 1
+        valid_ids_list = result.valid_compounds['ID'].to_list()
 
-        # First A should be kept (index 0)
-        assert valid_ids_list[0] == 'A'
-        assert result.valid_compounds.iloc[0]['SMILES'] == 'CCO'
-
-        # First B should be kept (index 1)
-        assert valid_ids_list[1] == 'B'
-        assert result.valid_compounds.iloc[1]['SMILES'] == 'CCC'
-
-        # C should be kept
+        # C should be kept (only non-duplicate)
         assert 'C' in valid_ids_list
+
+        # All duplicates should be invalid (A twice, B twice)
+        assert len(result.invalid_compounds) == 4
+
+        # Should have errors for A and B
+        assert 'A' in result.validation_errors
+        assert 'B' in result.validation_errors
+        assert result.validation_errors['A'] == "Duplicate ID"
+        assert result.validation_errors['B'] == "Duplicate ID"
 
     def test_single_compound_no_duplicates(self):
         """Test edge case with single compound."""
-        single_df = pd.DataFrame({
+        single_df = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO']
         })
@@ -374,32 +372,32 @@ class TestValidationResult:
 
     def test_success_rate_all_valid(self):
         result = ValidationResult(
-            valid_compounds=pd.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['CCO', 'CCC']}),
-            invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+            valid_compounds=pl.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['CCO', 'CCC']}),
+            invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
             validation_errors={}
         )
         assert result.success_rate == 1.0
 
     def test_success_rate_all_invalid(self):
         result = ValidationResult(
-            valid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
-            invalid_compounds=pd.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['BAD', 'INVALID']}),
+            valid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
+            invalid_compounds=pl.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['BAD', 'INVALID']}),
             validation_errors={'C1': 'error1', 'C2': 'error2'}
         )
         assert result.success_rate == 0.0
 
     def test_success_rate_mixed(self):
         result = ValidationResult(
-            valid_compounds=pd.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
-            invalid_compounds=pd.DataFrame({'ID': ['C2'], 'SMILES': ['BAD']}),
+            valid_compounds=pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
+            invalid_compounds=pl.DataFrame({'ID': ['C2'], 'SMILES': ['BAD']}),
             validation_errors={'C2': 'error'}
         )
         assert result.success_rate == 0.5
 
     def test_success_rate_empty(self):
         result = ValidationResult(
-            valid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
-            invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+            valid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
+            invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
             validation_errors={}
         )
         assert result.success_rate == 0.0
