@@ -7,7 +7,6 @@ quantification for molecular property prediction tasks.
 import logging
 from typing import Tuple, Optional, List
 import numpy as np
-import pandas as pd
 
 # Base class import
 from ..base import SklearnLearner
