@@ -16,7 +16,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-import pandas as pd
+import polars as pl
 import numpy as np
 
 from .validation import ValidationResult
@@ -59,7 +59,7 @@ def _add_csv_metadata(file_path: Path, metadata: Dict[str, Any]) -> None:
         logger.warning(f"Failed to add metadata to {file_path}: {e}")
 
 
-def _organize_columns(df: pd.DataFrame, column_groups: List[List[str]]) -> pd.DataFrame:
+def _organize_columns(df: pl.DataFrame, column_groups: List[List[str]]) -> pl.DataFrame:
     """
     Reorder DataFrame columns into logical groups for readability.
 
@@ -68,7 +68,7 @@ def _organize_columns(df: pd.DataFrame, column_groups: List[List[str]]) -> pd.Da
 
     Parameters
     ----------
-    df : pd.DataFrame
+    df : pl.DataFrame
         DataFrame to reorder
     column_groups : List[List[str]]
         Nested list of column names in desired order.
@@ -76,7 +76,7 @@ def _organize_columns(df: pd.DataFrame, column_groups: List[List[str]]) -> pd.Da
 
     Returns
     -------
-    pd.DataFrame
+    pl.DataFrame
         DataFrame with reordered columns
     """
     ordered_columns = []
@@ -89,11 +89,11 @@ def _organize_columns(df: pd.DataFrame, column_groups: List[List[str]]) -> pd.Da
     remaining = sorted(remaining)
     ordered_columns.extend(remaining)
 
-    return df[ordered_columns]
+    return df.select(ordered_columns)
 
 
 def save_results(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     cycle_metrics: List[Dict[str, Any]],
     validation_result: ValidationResult,
     config: Dict[str, Any],
@@ -132,7 +132,7 @@ def save_results(
 
     Parameters
     ----------
-    compounds_df : pd.DataFrame
+    compounds_df : pl.DataFrame
         Master DataFrame with all compound data and predictions
     cycle_metrics : List[Dict[str, Any]]
         List of per-cycle metric dictionaries
@@ -176,7 +176,7 @@ def save_results(
     score_direction = config.get('score_direction', 'higher')
 
     try:
-        compounds_final = compounds_df.copy()
+        compounds_final = compounds_df.clone()
         base_cols = ['ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle', target_col]
         pred_cols = sorted([c for c in compounds_df.columns if c.startswith('prediction_cycle_')],
                           key=lambda x: int(x.split('_')[-1]))
@@ -185,11 +185,11 @@ def save_results(
         compounds_final = _organize_columns(compounds_final, [base_cols, pred_cols, unc_cols])
 
         final_path = output_dir / 'compounds_final.csv'
-        compounds_final.to_csv(final_path, index=False)
+        compounds_final.write_csv(final_path)
 
-        n_labeled = (compounds_df['status'] == 'labeled').sum()
-        n_unlabeled = (compounds_df['status'] == 'unlabeled').sum()
-        n_pruned = (compounds_df['status'] == 'pruned').sum()
+        n_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
+        n_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
+        n_pruned = compounds_df.filter(pl.col('status') == 'pruned').height
 
         metadata = {
             'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
@@ -224,9 +224,11 @@ def save_results(
         raise RuntimeError(f"Failed to save compounds_final.csv: {e}")
 
     try:
-        metrics_df = pd.DataFrame(cycle_metrics)
+        metrics_df = pl.DataFrame(cycle_metrics)
         list_cols = ['selected_ids', 'pruned_ids']
-        metrics_df = metrics_df.drop(columns=[c for c in list_cols if c in metrics_df.columns])
+        cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
+        if cols_to_drop:
+            metrics_df = metrics_df.drop(cols_to_drop)
 
         core_cols = ['cycle', 'strategy', 'batch_size', 'selected_count', 'remaining_unlabeled',
                     'cumulative_labeled', 'cumulative_pruned']
@@ -237,7 +239,7 @@ def save_results(
         metrics_df = _organize_columns(metrics_df, [core_cols, pred_cols, unc_cols, measured_cols])
 
         metrics_path = output_dir / 'cycle_metrics.csv'
-        metrics_df.to_csv(metrics_path, index=False)
+        metrics_df.write_csv(metrics_path)
 
         metadata = {
             'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
@@ -272,10 +274,9 @@ def save_results(
             cycle = cycle_data['cycle']
             strategy = cycle_data['strategy']
 
-            selected_mask = (compounds_df['selected_cycle'] == cycle)
-            selected_compounds = compounds_df[selected_mask]
+            selected_compounds = compounds_df.filter(pl.col('selected_cycle') == cycle)
 
-            for _, compound in selected_compounds.iterrows():
+            for compound in selected_compounds.iter_rows(named=True):
                 sel = int(compound['selected_cycle'])
                 pred_col = f'prediction_cycle_{sel}'
                 unc_col = f'uncertainty_cycle_{sel}'
@@ -297,15 +298,20 @@ def save_results(
                 selection_history.append(record)
 
         if selection_history:
-            selection_df = pd.DataFrame(selection_history)
+            selection_df = pl.DataFrame(selection_history)
         else:
-            selection_df = pd.DataFrame(columns=[
-                'cycle', 'strategy', 'ID', 'SMILES', 'measured_value',
-                'prediction_at_selection', 'uncertainty_at_selection'
-            ])
+            selection_df = pl.DataFrame(schema={
+                'cycle': pl.Int64,
+                'strategy': pl.Utf8,
+                'ID': pl.Utf8,
+                'SMILES': pl.Utf8,
+                'measured_value': pl.Float64,
+                'prediction_at_selection': pl.Float64,
+                'uncertainty_at_selection': pl.Float64
+            })
 
         selection_path = output_dir / 'selection_history.csv'
-        selection_df.to_csv(selection_path, index=False)
+        selection_df.write_csv(selection_path)
 
         metadata = {
             'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
@@ -330,13 +336,15 @@ def save_results(
         logger.error(f"Failed to save selection_history.csv: {e}")
         raise RuntimeError(f"Failed to save selection_history.csv: {e}")
 
-    if len(validation_result.invalid_compounds) > 0:
+    if validation_result.invalid_compounds.height > 0:
         try:
-            invalid_df = validation_result.invalid_compounds.copy()
-            invalid_df['error'] = invalid_df['ID'].map(validation_result.validation_errors)
+            invalid_df = validation_result.invalid_compounds.clone()
+            # Map errors using join
+            from learnm8.utils.polars_utils import map_values_via_join
+            invalid_df = map_values_via_join(invalid_df, validation_result.validation_errors, 'ID', 'error')
 
             validation_path = output_dir / 'validation_report.csv'
-            invalid_df.to_csv(validation_path, index=False)
+            invalid_df.write_csv(validation_path)
 
             success_rate = validation_result.success_rate
             metadata = {
