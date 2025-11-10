@@ -1,7 +1,7 @@
 """Enrichment metrics for virtual screening evaluation."""
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from learnm8.utils.logging import get_logger, log_warning
 
 
@@ -49,7 +49,7 @@ def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
     return round(ef, 3)
 
 
-def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.DataFrame,
+def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.DataFrame,
                            k: int, target_col: str, score_direction: str = 'higher') -> float:
     """
     Calculate percentage overlap between top-k predicted and true compounds.
@@ -65,7 +65,11 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
         Percentage overlap (0-100)
     """
     # Merge predictions with ground truth
-    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_col]], on='ID')
+    merged = predictions_df.join(
+        ground_truth_df.select(['ID', target_col]),
+        on='ID',
+        how='inner'
+    )
 
     # Handle empty data case
     if len(merged) == 0:
@@ -77,24 +81,32 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
         k = len(merged)
 
     # Ensure prediction column is numeric
-    if merged['prediction'].dtype == 'object':
-        merged['prediction'] = pd.to_numeric(merged['prediction'], errors='coerce')
-        merged = merged.dropna(subset=['prediction'])
+    if merged.get_column('prediction').dtype != pl.Float64 and merged.get_column('prediction').dtype != pl.Float32:
+        merged = merged.with_columns(
+            pl.col('prediction').cast(pl.Float64, strict=False)
+        )
+        merged = merged.filter(pl.col('prediction').is_not_null())
         if len(merged) == 0:
             return 0.0
 
     # Sort by scores
-    ascending = (score_direction == 'lower')
+    descending = (score_direction == 'higher')
 
     # Get top k by predictions
-    top_k_predicted = set(merged.nlargest(k, 'prediction', keep='first')['ID'].values) \
-                      if not ascending else \
-                      set(merged.nsmallest(k, 'prediction', keep='first')['ID'].values)
+    top_k_predicted = set(
+        merged.sort('prediction', descending=descending)
+        .head(k)
+        .get_column('ID')
+        .to_list()
+    )
 
     # Get top k by ground truth
-    top_k_true = set(merged.nlargest(k, target_col, keep='first')['ID'].values) \
-                 if not ascending else \
-                 set(merged.nsmallest(k, target_col, keep='first')['ID'].values)
+    top_k_true = set(
+        merged.sort(target_col, descending=descending)
+        .head(k)
+        .get_column('ID')
+        .to_list()
+    )
 
     # Calculate overlap
     overlap_count = len(top_k_predicted & top_k_true)
@@ -103,7 +115,7 @@ def calculate_top_k_overlap(predictions_df: pd.DataFrame, ground_truth_df: pd.Da
     return round(overlap_percentage, 2)
 
 
-def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth_df: pd.DataFrame,
+def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth_df: pl.DataFrame,
                                     target_col: str, score_direction: str = 'higher') -> dict:
     """
     Calculate multiple top-K overlaps for different K values.
@@ -118,7 +130,11 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
         Dictionary with keys: top_100_overlap, top_1000_overlap, top_0_1_percent_overlap, top_1_percent_overlap, top_10_percent_overlap
     """
     # Merge predictions with ground truth
-    merged = pd.merge(predictions_df, ground_truth_df[['ID', target_col]], on='ID')
+    merged = predictions_df.join(
+        ground_truth_df.select(['ID', target_col]),
+        on='ID',
+        how='inner'
+    )
     n_total = len(merged)
 
     if n_total == 0:
@@ -131,9 +147,11 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
         }
 
     # Ensure prediction column is numeric
-    if merged['prediction'].dtype == 'object':
-        merged['prediction'] = pd.to_numeric(merged['prediction'], errors='coerce')
-        merged = merged.dropna(subset=['prediction'])
+    if merged.get_column('prediction').dtype != pl.Float64 and merged.get_column('prediction').dtype != pl.Float32:
+        merged = merged.with_columns(
+            pl.col('prediction').cast(pl.Float64, strict=False)
+        )
+        merged = merged.filter(pl.col('prediction').is_not_null())
         n_total = len(merged)
         if n_total == 0:
             return {
@@ -154,21 +172,27 @@ def calculate_multiple_top_k_overlaps(predictions_df: pd.DataFrame, ground_truth
     }
 
     results = {}
-    ascending = (score_direction == 'lower')
+    descending = (score_direction == 'higher')
 
     for key, k in k_values.items():
         if k > n_total:
             k = n_total
 
         # Get top k by predictions
-        top_k_predicted = set(merged.nlargest(k, 'prediction', keep='first')['ID'].values) \
-                          if not ascending else \
-                          set(merged.nsmallest(k, 'prediction', keep='first')['ID'].values)
+        top_k_predicted = set(
+            merged.sort('prediction', descending=descending)
+            .head(k)
+            .get_column('ID')
+            .to_list()
+        )
 
         # Get top k by ground truth
-        top_k_true = set(merged.nlargest(k, target_col, keep='first')['ID'].values) \
-                     if not ascending else \
-                     set(merged.nsmallest(k, target_col, keep='first')['ID'].values)
+        top_k_true = set(
+            merged.sort(target_col, descending=descending)
+            .head(k)
+            .get_column('ID')
+            .to_list()
+        )
 
         # Calculate overlap
         overlap_count = len(top_k_predicted & top_k_true)
@@ -208,7 +232,7 @@ def calculate_multiple_enrichment_factors(scores: np.ndarray, labels: np.ndarray
     return results
 
 
-def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
+def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
                                             target_col: str,
                                             score_direction: str = 'higher') -> dict:
     """
@@ -234,7 +258,9 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
         }
 
     # Remove any NaN values for calculation
-    valid_data = ground_truth_df.dropna(subset=[target_col, 'Activity'])
+    valid_data = ground_truth_df.filter(
+        pl.col(target_col).is_not_null() & pl.col('Activity').is_not_null()
+    )
 
     if len(valid_data) == 0:
         return {
@@ -245,8 +271,8 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
         }
 
     # Use target scores as screening scores and Activity as binary labels
-    scores = valid_data[target_col].values
-    labels = valid_data['Activity'].values
+    scores = valid_data.get_column(target_col).to_numpy()
+    labels = valid_data.get_column('Activity').to_numpy()
 
     # Calculate enrichment factors at fixed percentiles
     percentiles = [5.0, 1.0, 0.5, 0.1]
@@ -268,7 +294,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pd.DataFrame,
 
 def calculate_multiple_top_k_discovery_rates(
     selected_ids: set,
-    ground_truth_df: pd.DataFrame,
+    ground_truth_df: pl.DataFrame,
     target_column: str,
     score_direction: str = 'higher'
 ) -> dict:
@@ -294,7 +320,7 @@ def calculate_multiple_top_k_discovery_rates(
         - top_10_pct_discovery: Discovery rate for top-10% compounds (%)
     """
     n_total = len(ground_truth_df)
-    ascending = (score_direction == 'lower')
+    descending = (score_direction == 'higher')
 
     # Define K values: fixed numbers and percentages
     k_values = {
@@ -309,10 +335,12 @@ def calculate_multiple_top_k_discovery_rates(
     results = {}
     for key, k in k_values.items():
         # Get true top-K compounds
-        if ascending:
-            true_top_k = set(ground_truth_df.nsmallest(k, target_column)['ID'].values)
-        else:
-            true_top_k = set(ground_truth_df.nlargest(k, target_column)['ID'].values)
+        true_top_k = set(
+            ground_truth_df.sort(target_column, descending=descending)
+            .head(k)
+            .get_column('ID')
+            .to_list()
+        )
 
         # Calculate discovery: how many of true top-K have we selected?
         discovered = selected_ids & true_top_k
@@ -324,7 +352,7 @@ def calculate_multiple_top_k_discovery_rates(
 
 def calculate_cumulative_enrichment_factor(
     selected_ids: set,
-    ground_truth_df: pd.DataFrame,
+    ground_truth_df: pl.DataFrame,
     activity_column: str = 'Activity'
 ) -> float:
     """
@@ -345,16 +373,16 @@ def calculate_cumulative_enrichment_factor(
         return None
 
     # Selected compounds
-    selected_df = ground_truth_df[ground_truth_df['ID'].isin(selected_ids)]
+    selected_df = ground_truth_df.filter(pl.col('ID').is_in(list(selected_ids)))
     n_selected = len(selected_df)
     if n_selected == 0:
         return None
 
-    n_actives_found = (selected_df[activity_column] == 1).sum()
+    n_actives_found = selected_df.filter(pl.col(activity_column) == 1).height
 
     # Population
     n_total = len(ground_truth_df)
-    n_actives_total = (ground_truth_df[activity_column] == 1).sum()
+    n_actives_total = ground_truth_df.filter(pl.col(activity_column) == 1).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -369,7 +397,7 @@ def calculate_cumulative_enrichment_factor(
 
 
 def calculate_batch_hit_rate(
-    newly_selected_df: pd.DataFrame,
+    newly_selected_df: pl.DataFrame,
     activity_column: str = 'Activity'
 ) -> float:
     """
@@ -391,7 +419,7 @@ def calculate_batch_hit_rate(
     if n_batch == 0:
         return None
 
-    n_actives_batch = (newly_selected_df[activity_column] == 1).sum()
+    n_actives_batch = newly_selected_df.filter(pl.col(activity_column) == 1).height
 
     batch_hit_rate = n_actives_batch / n_batch
 
@@ -399,8 +427,8 @@ def calculate_batch_hit_rate(
 
 
 def calculate_batch_enrichment_factor(
-    newly_selected_df: pd.DataFrame,
-    ground_truth_df: pd.DataFrame,
+    newly_selected_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
     activity_column: str = 'Activity'
 ) -> float:
     """
@@ -426,11 +454,11 @@ def calculate_batch_enrichment_factor(
     if n_batch == 0:
         return None
 
-    n_actives_batch = (newly_selected_df[activity_column] == 1).sum()
+    n_actives_batch = newly_selected_df.filter(pl.col(activity_column) == 1).height
 
     # Population statistics
     n_total = len(ground_truth_df)
-    n_actives_total = (ground_truth_df[activity_column] == 1).sum()
+    n_actives_total = ground_truth_df.filter(pl.col(activity_column) == 1).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -446,7 +474,7 @@ def calculate_batch_enrichment_factor(
 
 def calculate_average_score_ratio(
     selected_ids: set,
-    ground_truth_df: pd.DataFrame,
+    ground_truth_df: pl.DataFrame,
     target_column: str,
     score_direction: str = 'higher'
 ) -> float:
@@ -471,30 +499,34 @@ def calculate_average_score_ratio(
         Score ratio (>1.0 means selections better than average)
     """
     # Selected compounds
-    selected_df = ground_truth_df[ground_truth_df['ID'].isin(selected_ids)]
+    selected_df = ground_truth_df.filter(pl.col('ID').is_in(list(selected_ids)))
     if len(selected_df) == 0:
         return 1.0
 
-    avg_score_selected = selected_df[target_column].mean()
+    avg_score_selected = selected_df.get_column(target_column).mean()
 
     # Population
-    avg_score_population = ground_truth_df[target_column].mean()
+    avg_score_population = ground_truth_df.get_column(target_column).mean()
 
     # Calculate ratio based on direction
     if score_direction == 'higher':
         # Higher scores are better
+        if avg_score_population == 0:
+            return 1.0 if avg_score_selected == 0 else float('inf')
         score_ratio = avg_score_selected / avg_score_population
     else:
         # Lower scores are better (e.g., docking scores, energies)
         # Use absolute values for magnitude comparison to handle negative scores
+        if abs(avg_score_population) == 0:
+            return 1.0 if abs(avg_score_selected) == 0 else float('inf')
         score_ratio = abs(avg_score_selected) / abs(avg_score_population)
 
     return round(score_ratio, 3)
 
 
 def calculate_batch_average_score_ratio(
-    newly_selected_df: pd.DataFrame,
-    ground_truth_df: pd.DataFrame,
+    newly_selected_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
     target_column: str,
     score_direction: str = 'higher'
 ) -> float:
@@ -518,23 +550,27 @@ def calculate_batch_average_score_ratio(
     if len(newly_selected_df) == 0:
         return 1.0
 
-    avg_score_batch = newly_selected_df[target_column].mean()
-    avg_score_population = ground_truth_df[target_column].mean()
+    avg_score_batch = newly_selected_df.get_column(target_column).mean()
+    avg_score_population = ground_truth_df.get_column(target_column).mean()
 
     # Calculate ratio based on direction
     if score_direction == 'higher':
+        if avg_score_population == 0:
+            return 1.0 if avg_score_batch == 0 else float('inf')
         score_ratio = avg_score_batch / avg_score_population
     else:
         # Lower scores are better (e.g., docking scores, energies)
         # Use absolute values for magnitude comparison to handle negative scores
+        if abs(avg_score_population) == 0:
+            return 1.0 if abs(avg_score_batch) == 0 else float('inf')
         score_ratio = abs(avg_score_batch) / abs(avg_score_population)
 
     return round(score_ratio, 3)
 
 
 def calculate_multiple_unlabeled_top_k_overlaps(
-    unlabeled_predictions_df: pd.DataFrame,
-    ground_truth_df: pd.DataFrame,
+    unlabeled_predictions_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
     target_column: str,
     score_direction: str = 'higher'
 ) -> dict:
@@ -563,14 +599,14 @@ def calculate_multiple_unlabeled_top_k_overlaps(
     }
 
     # Merge predictions with ground truth (unlabeled only)
-    merged = pd.merge(
-        unlabeled_predictions_df,
-        ground_truth_df[['ID', target_column]],
-        on='ID'
+    merged = unlabeled_predictions_df.join(
+        ground_truth_df.select(['ID', target_column]),
+        on='ID',
+        how='inner'
     )
 
     results = {}
-    ascending = (score_direction == 'lower')
+    descending = (score_direction == 'higher')
 
     for key, k in k_values.items():
         # Adjust k if unlabeled pool smaller
@@ -580,16 +616,20 @@ def calculate_multiple_unlabeled_top_k_overlaps(
             continue
 
         # Get top-K by MODEL predictions (on unlabeled)
-        if ascending:
-            model_top_k = set(merged.nsmallest(k_actual, 'prediction')['ID'].values)
-        else:
-            model_top_k = set(merged.nlargest(k_actual, 'prediction')['ID'].values)
+        model_top_k = set(
+            merged.sort('prediction', descending=descending)
+            .head(k_actual)
+            .get_column('ID')
+            .to_list()
+        )
 
         # Get top-K by TRUTH (within unlabeled)
-        if ascending:
-            true_top_k = set(merged.nsmallest(k_actual, target_column)['ID'].values)
-        else:
-            true_top_k = set(merged.nlargest(k_actual, target_column)['ID'].values)
+        true_top_k = set(
+            merged.sort(target_column, descending=descending)
+            .head(k_actual)
+            .get_column('ID')
+            .to_list()
+        )
 
         # Calculate overlap
         overlap = len(model_top_k & true_top_k)
@@ -600,8 +640,8 @@ def calculate_multiple_unlabeled_top_k_overlaps(
 
 
 def calculate_multiple_unlabeled_enrichment_factors(
-    unlabeled_predictions_df: pd.DataFrame,
-    ground_truth_df: pd.DataFrame,
+    unlabeled_predictions_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
     activity_column: str,
     score_direction: str = 'higher'
 ) -> dict:
@@ -631,10 +671,10 @@ def calculate_multiple_unlabeled_enrichment_factors(
         }
 
     # Merge unlabeled predictions with Activity labels
-    merged = pd.merge(
-        unlabeled_predictions_df,
-        ground_truth_df[['ID', activity_column]],
-        on='ID'
+    merged = unlabeled_predictions_df.join(
+        ground_truth_df.select(['ID', activity_column]),
+        on='ID',
+        how='inner'
     )
 
     if len(merged) == 0:
@@ -645,11 +685,11 @@ def calculate_multiple_unlabeled_enrichment_factors(
 
     percentiles = [1.0, 5.0]
     results = {}
-    ascending = (score_direction == 'lower')
+    descending = (score_direction == 'higher')
 
     for p in percentiles:
         # Sort by model predictions
-        sorted_df = merged.sort_values('prediction', ascending=ascending)
+        sorted_df = merged.sort('prediction', descending=descending)
 
         # Select top percentile
         n_total = len(sorted_df)
@@ -657,8 +697,8 @@ def calculate_multiple_unlabeled_enrichment_factors(
         top_percentile = sorted_df.head(n_select)
 
         # Calculate EF
-        n_actives_selected = (top_percentile[activity_column] == 1).sum()
-        n_actives_total = (merged[activity_column] == 1).sum()
+        n_actives_selected = top_percentile.filter(pl.col(activity_column) == 1).height
+        n_actives_total = merged.filter(pl.col(activity_column) == 1).height
 
         if n_select == 0 or n_actives_total == 0:
             ef = 0.0
@@ -675,8 +715,8 @@ def calculate_multiple_unlabeled_enrichment_factors(
 
 
 def calculate_unlabeled_ranking_correlation(
-    unlabeled_predictions_df: pd.DataFrame,
-    ground_truth_df: pd.DataFrame,
+    unlabeled_predictions_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
     target_column: str
 ) -> float:
     """
@@ -692,15 +732,18 @@ def calculate_unlabeled_ranking_correlation(
     """
     from scipy.stats import spearmanr
 
-    merged = pd.merge(
-        unlabeled_predictions_df,
-        ground_truth_df[['ID', target_column]],
-        on='ID'
+    merged = unlabeled_predictions_df.join(
+        ground_truth_df.select(['ID', target_column]),
+        on='ID',
+        how='inner'
     )
 
     if len(merged) < 2:
         return 0.0
 
-    correlation, _ = spearmanr(merged['prediction'], merged[target_column])
+    predictions = merged.get_column('prediction').to_numpy()
+    ground_truth_vals = merged.get_column(target_column).to_numpy()
+
+    correlation, _ = spearmanr(predictions, ground_truth_vals)
 
     return round(correlation, 4) if not np.isnan(correlation) else 0.0
