@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Comprehensive validation script for ChempropLearner testing all combinations of:
-- Early stopping (enabled/disabled)
 - Featurization options (none, morgan, maccs, ecfp6, morgan_feat, descriptors)
-- Model configurations (baseline, deep, wide)
+- Model configurations (baseline, deep, wide, baseline_ft, baseline_no_early_stopping)
 
-Reports both performance metrics and timing data.
+Each model configuration includes all hyperparameters (depth, width, early_stopping, fine_tuning).
+Reports both performance metrics and timing data with multi-seed aggregation.
 """
 import argparse
 import sys
@@ -28,6 +28,10 @@ from learnm8 import run_active_learning
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
 from learnm8.oracles.csv_oracle import CSVOracle
 from validation.lib import load_validation_dataset, get_dataset_info, get_dataset_path
+from validation.lib.seed_aggregation import (
+    aggregate_seed_results,
+    save_aggregated_results
+)
 
 console = Console()
 warnings.filterwarnings('ignore')
@@ -35,9 +39,10 @@ warnings.filterwarnings('ignore')
 from learnm8 import setup_logging
 setup_logging(level='INFO')
 
+RANDOM_SEEDS = [42, 123, 456]
+
 MODEL_CONFIGS = {
     'baseline': {
-        'name': 'baseline',
         'depth': 3,
         'message_hidden_dim': 300,
         'ffn_hidden_dim': 300,
@@ -45,19 +50,23 @@ MODEL_CONFIGS = {
         'dropout': 0.0,
         'batch_norm': False,
         'atom_messages': False,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
     },
     'deep': {
-        'name': 'deep',
         'depth': 5,
         'message_hidden_dim': 300,
         'ffn_hidden_dim': 300,
-        'ffn_num_layers': 1,
+        'ffn_num_layers': 2,
         'dropout': 0.0,
         'batch_norm': False,
         'atom_messages': False,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
     },
     'wide': {
-        'name': 'wide',
         'depth': 3,
         'message_hidden_dim': 500,
         'ffn_hidden_dim': 500,
@@ -65,6 +74,57 @@ MODEL_CONFIGS = {
         'dropout': 0.0,
         'batch_norm': False,
         'atom_messages': False,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
+    },
+    'baseline_ft': {
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        'dropout': 0.0,
+        'batch_norm': False,
+        'atom_messages': False,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': True,
+    },
+    'baseline_early_stopping': {
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        'dropout': 0.0,
+        'batch_norm': False,
+        'atom_messages': False,
+        'early_stopping': True,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
+    },
+    'baseline_dropout': {
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        'dropout': 0.1,
+        'batch_norm': False,
+        'atom_messages': False,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
+    },
+    'baseline_atom': {
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        'dropout': 0.0,
+        'batch_norm': False,
+        'atom_messages': True,
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'enable_fine_tuning': False,
     },
 }
 
@@ -76,8 +136,6 @@ FEATURIZERS = [
     'morgan_feat',
     'descriptors',
 ]
-
-EARLY_STOPPING_OPTIONS = [True, False]
 
 
 def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
@@ -96,33 +154,58 @@ def load_existing_results(
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
-    early_stopping: bool,
 ) -> Dict[str, Any]:
-    """Load results from existing experiment directory."""
+    """Load results from existing experiment directory with multi-seed support."""
     featurizer_name = featurizer if featurizer else 'none'
 
-    cycle_metrics_df = pd.read_csv(exp_dir / 'cycle_metrics.csv')
-    final_metrics = cycle_metrics_df.iloc[-1]
+    seed_results = {}
+    for seed in RANDOM_SEEDS:
+        seed_dir = exp_dir / f'seed_{seed}'
+        cycle_metrics_path = seed_dir / 'cycle_metrics.csv'
 
-    cycle_metrics = cycle_metrics_df.to_dict('records')
-    training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
-    prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+        if not cycle_metrics_path.exists():
+            continue
+
+        cycle_metrics_df = pd.read_csv(cycle_metrics_path)
+        cycle_metrics = cycle_metrics_df.to_dict('records')
+
+        seed_results[seed] = {
+            'cycle_metrics': cycle_metrics,
+            'elapsed_time': 0
+        }
+
+    if not seed_results:
+        raise FileNotFoundError(f"No seed results found in {exp_dir}")
+
+    aggregated = aggregate_seed_results(seed_results)
+
+    final_metrics_mean = aggregated['cycle_metrics_mean'][-1]
+    final_metrics_std = aggregated['cycle_metrics_std'][-1]
+
+    all_training_times = []
+    all_prediction_times = []
+    for seed_data in seed_results.values():
+        training_times = [m.get('training_time', 0) for m in seed_data['cycle_metrics'][1:]]
+        prediction_times = [m.get('prediction_time', 0) for m in seed_data['cycle_metrics'][1:]]
+        all_training_times.extend(training_times)
+        all_prediction_times.extend(prediction_times)
 
     return {
         'config_name': config_name,
         'featurizer': featurizer_name,
-        'early_stopping': early_stopping,
         'depth': config['depth'],
         'message_hidden_dim': config['message_hidden_dim'],
-        'top_10_recovery': final_metrics.get('top_10_discovery', 0),
-        'top_100_recovery': final_metrics.get('top_100_discovery', 0),
-        'final_discovery_rate': final_metrics.get('discovery_rate', 0),
-        'avg_training_time': np.mean(training_times) if training_times else 0,
-        'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-        'total_training_time': np.sum(training_times) if training_times else 0,
+        'top_10_recovery': final_metrics_mean.get('top_10_discovery', 0),
+        'top_10_recovery_std': final_metrics_std.get('top_10_discovery', 0),
+        'top_100_recovery': final_metrics_mean.get('top_100_discovery', 0),
+        'top_100_recovery_std': final_metrics_std.get('top_100_discovery', 0),
+        'final_discovery_rate': final_metrics_mean.get('discovery_rate', 0),
+        'avg_training_time': np.mean(all_training_times) if all_training_times else 0,
+        'avg_prediction_time': np.mean(all_prediction_times) if all_prediction_times else 0,
+        'total_training_time': np.sum(all_training_times) if all_training_times else 0,
         'total_time': 0,
-        'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
-        'final_discovery_count': final_metrics.get('discovery_count', 0),
+        'final_labeled_count': final_metrics_mean.get('cumulative_labeled', 0),
+        'final_discovery_count': final_metrics_mean.get('discovery_count', 0),
         'success': True,
         'error': None,
     }
@@ -135,114 +218,116 @@ def run_single_experiment(
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
-    early_stopping: bool,
     n_cycles: int,
     batch_fraction: float,
     random_state: int,
     output_dir: Path,
     debug: bool = False,
 ) -> Dict[str, Any]:
-    """Run a single experiment configuration."""
+    """Run experiment across all random seeds and aggregate results."""
     featurizer_name = featurizer if featurizer else 'none'
-    early_stop_str = 'early_stop' if early_stopping else 'no_early_stop'
-    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}"
+    exp_name = f"{config_name}_{featurizer_name}"
 
     exp_output_dir = output_dir / 'data' / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
 
     if debug:
-        console.print(f"[cyan]Starting experiment: {exp_name}[/cyan]")
+        console.print(f"[cyan]Starting experiment: {exp_name} (seeds: {RANDOM_SEEDS})[/cyan]")
 
-    learner = ChempropLearner(
-        depth=config['depth'],
-        message_hidden_dim=config['message_hidden_dim'],
-        ffn_hidden_dim=config['ffn_hidden_dim'],
-        ffn_num_layers=config['ffn_num_layers'],
-        dropout=config['dropout'],
-        batch_norm=config['batch_norm'],
-        atom_messages=config['atom_messages'],
-        early_stopping=early_stopping,
-        early_stopping_patience=10,
-        max_epochs=50,
-        random_state=random_state,
-    )
+    seed_results = {}
+    all_training_times = []
+    all_prediction_times = []
+    total_experiment_time = 0
 
-    start_time = time.time()
+    for seed in RANDOM_SEEDS:
+        seed_output_dir = exp_output_dir / f'seed_{seed}'
+        seed_output_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        results = run_active_learning(
-            compound_pool=compound_pool.copy(),
-            oracle=oracle,
-            learner=learner,
-            target_col=target_col,
-            featurizer_type=featurizer,
-            n_cycles=n_cycles,
-            batch_fraction=batch_fraction,
-            random_state=random_state,
-            output_dir=exp_output_dir,
-            mode='benchmark',
+        checkpoint_dir = seed_output_dir / '.checkpoints' if config['enable_fine_tuning'] else None
+
+        learner = ChempropLearner(
+            depth=config['depth'],
+            message_hidden_dim=config['message_hidden_dim'],
+            ffn_hidden_dim=config['ffn_hidden_dim'],
+            ffn_num_layers=config['ffn_num_layers'],
+            dropout=config['dropout'],
+            batch_norm=config['batch_norm'],
+            atom_messages=config['atom_messages'],
+            early_stopping=config['early_stopping'],
+            early_stopping_patience=config['early_stopping_patience'],
+            max_epochs=50,
+            random_state=seed,
+            enable_fine_tuning=config['enable_fine_tuning'],
+            checkpoint_dir=checkpoint_dir,
         )
 
-        total_time = time.time() - start_time
+        start_time = time.time()
 
-        compounds_df = results['compounds_df']
-        cycle_metrics = results['cycle_metrics']
+        try:
+            results = run_active_learning(
+                compound_pool=compound_pool.copy(),
+                oracle=oracle,
+                learner=learner,
+                target_col=target_col,
+                featurizer_type=featurizer,
+                n_cycles=n_cycles,
+                batch_fraction=batch_fraction,
+                random_state=seed,
+                output_dir=seed_output_dir,
+                mode='benchmark',
+            )
 
-        compounds_df.to_csv(exp_output_dir / 'compounds_final.csv', index=False)
-        pd.DataFrame(cycle_metrics).to_csv(exp_output_dir / 'cycle_metrics.csv', index=False)
+            elapsed_time = time.time() - start_time
+            total_experiment_time += elapsed_time
 
-        training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
-        prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+            cycle_metrics = results['cycle_metrics']
 
-        final_metrics = cycle_metrics[-1]
+            seed_results[seed] = {
+                'cycle_metrics': cycle_metrics,
+                'elapsed_time': elapsed_time
+            }
 
-        result = {
-            'config_name': config_name,
-            'featurizer': featurizer_name,
-            'early_stopping': early_stopping,
-            'depth': config['depth'],
-            'message_hidden_dim': config['message_hidden_dim'],
-            'top_10_recovery': final_metrics.get('top_10_discovery', 0),
-            'top_100_recovery': final_metrics.get('top_100_discovery', 0),
-            'final_discovery_rate': final_metrics.get('discovery_rate', 0),
-            'avg_training_time': np.mean(training_times) if training_times else 0,
-            'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-            'total_training_time': np.sum(training_times) if training_times else 0,
-            'total_time': total_time,
-            'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
-            'final_discovery_count': final_metrics.get('discovery_count', 0),
-            'success': True,
-            'error': None,
-        }
+            training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
+            prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+            all_training_times.extend(training_times)
+            all_prediction_times.extend(prediction_times)
 
-        if debug:
-            console.print(f"[green]✓ {exp_name}: top_10={result['top_10_recovery']:.3f}, "
-                         f"time={total_time:.1f}s[/green]")
+        except Exception as e:
+            if debug:
+                console.print(f"[red]✗ Seed {seed} failed: {str(e)}[/red]")
+            raise
 
-        return result
+    aggregated = aggregate_seed_results(seed_results)
+    save_aggregated_results(seed_results, aggregated, exp_output_dir)
 
-    except Exception as e:
-        if debug:
-            console.print(f"[red]✗ {exp_name}: {str(e)}[/red]")
+    final_metrics_mean = aggregated['cycle_metrics_mean'][-1]
+    final_metrics_std = aggregated['cycle_metrics_std'][-1]
 
-        return {
-            'config_name': config_name,
-            'featurizer': featurizer_name,
-            'early_stopping': early_stopping,
-            'depth': config['depth'],
-            'message_hidden_dim': config['message_hidden_dim'],
-            'top_10_recovery': 0,
-            'top_100_recovery': 0,
-            'final_discovery_rate': 0,
-            'avg_training_time': 0,
-            'avg_prediction_time': 0,
-            'total_training_time': 0,
-            'total_time': 0,
-            'final_labeled_count': 0,
-            'final_discovery_count': 0,
-            'success': False,
-            'error': str(e),
-        }
+    result = {
+        'config_name': config_name,
+        'featurizer': featurizer_name,
+        'depth': config['depth'],
+        'message_hidden_dim': config['message_hidden_dim'],
+        'top_10_recovery': final_metrics_mean.get('top_10_discovery', 0),
+        'top_10_recovery_std': final_metrics_std.get('top_10_discovery', 0),
+        'top_100_recovery': final_metrics_mean.get('top_100_discovery', 0),
+        'top_100_recovery_std': final_metrics_std.get('top_100_discovery', 0),
+        'final_discovery_rate': final_metrics_mean.get('discovery_rate', 0),
+        'avg_training_time': np.mean(all_training_times) if all_training_times else 0,
+        'avg_prediction_time': np.mean(all_prediction_times) if all_prediction_times else 0,
+        'total_training_time': np.sum(all_training_times) if all_training_times else 0,
+        'total_time': total_experiment_time,
+        'final_labeled_count': final_metrics_mean.get('cumulative_labeled', 0),
+        'final_discovery_count': final_metrics_mean.get('discovery_count', 0),
+        'success': True,
+        'error': None,
+    }
+
+    if debug:
+        console.print(f"[green]✓ {exp_name}: top_10={result['top_10_recovery']:.3f}±{result['top_10_recovery_std']:.3f}, "
+                     f"time={total_experiment_time:.1f}s[/green]")
+
+    return result
 
 
 def create_visualizations(df: pd.DataFrame, output_dir: Path):
@@ -271,24 +356,27 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
     ax.set_ylabel('Model Configuration')
 
     ax = axes[0, 1]
-    early_stop_comparison = df_success.groupby(['config_name', 'early_stopping']).agg({
-        'top_10_recovery': 'mean',
-        'top_100_recovery': 'mean',
+    config_comparison = df_success.groupby('config_name').agg({
+        'top_10_recovery': ['mean', 'std'],
+        'top_100_recovery': ['mean', 'std'],
     }).reset_index()
 
-    x_pos = np.arange(len(early_stop_comparison['config_name'].unique()))
+    config_comparison.columns = ['config_name', 'top_10_mean', 'top_10_std', 'top_100_mean', 'top_100_std']
+    config_comparison = config_comparison.sort_values('top_10_mean', ascending=False)
+
+    x_pos = np.arange(len(config_comparison))
     width = 0.35
 
-    for idx, (early_stop, group) in enumerate(early_stop_comparison.groupby('early_stopping')):
-        offset = width * (idx - 0.5)
-        label = 'Early Stopping' if early_stop else 'No Early Stopping'
-        ax.bar(x_pos + offset, group['top_10_recovery'].values, width, label=label, alpha=0.8)
+    ax.bar(x_pos - width/2, config_comparison['top_10_mean'], width,
+           yerr=config_comparison['top_10_std'], label='Top-10', alpha=0.8, capsize=5)
+    ax.bar(x_pos + width/2, config_comparison['top_100_mean'], width,
+           yerr=config_comparison['top_100_std'], label='Top-100', alpha=0.8, capsize=5)
 
     ax.set_xlabel('Model Configuration')
-    ax.set_ylabel('Top-10 Recovery')
-    ax.set_title('Early Stopping Impact on Performance', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Recovery Rate (mean ± std)')
+    ax.set_title('Configuration Performance Comparison', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(early_stop_comparison['config_name'].unique())
+    ax.set_xticklabels(config_comparison['config_name'], rotation=45, ha='right')
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
@@ -353,23 +441,20 @@ def print_summary_table(df: pd.DataFrame):
 
     table = Table(title="Top 10 Configurations by Performance", show_header=True, header_style="bold magenta")
     table.add_column("Rank", justify="right", style="cyan", width=6)
-    table.add_column("Config", justify="left", style="green", width=10)
+    table.add_column("Config", justify="left", style="green", width=20)
     table.add_column("Featurizer", justify="left", style="yellow", width=12)
-    table.add_column("Early Stop", justify="center", width=11)
-    table.add_column("Top-10", justify="right", style="bold", width=8)
-    table.add_column("Top-100", justify="right", width=8)
+    table.add_column("Top-10", justify="right", style="bold", width=10)
+    table.add_column("Top-100", justify="right", width=10)
     table.add_column("Train Time", justify="right", width=11)
     table.add_column("Total Time", justify="right", width=11)
 
     for idx, row in enumerate(df_sorted.itertuples(), 1):
-        early_stop_icon = "✓" if row.early_stopping else "✗"
         table.add_row(
             str(idx),
             row.config_name,
             row.featurizer,
-            early_stop_icon,
-            f"{row.top_10_recovery:.3f}",
-            f"{row.top_100_recovery:.3f}",
+            f"{row.top_10_recovery:.3f}±{row.top_10_recovery_std:.3f}",
+            f"{row.top_100_recovery:.3f}±{row.top_100_recovery_std:.3f}",
             f"{row.avg_training_time:.1f}s",
             f"{row.total_time:.1f}s",
         )
@@ -387,7 +472,7 @@ def print_summary_table(df: pd.DataFrame):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Comprehensive Chemprop validation testing early stopping, featurizers, and model configs'
+        description='Comprehensive Chemprop validation testing model configs (baseline, deep, wide, baseline_ft, baseline_no_early_stopping) with featurizers'
     )
     parser.add_argument('--dataset', type=str, default='ampc_30k',
                        help='Dataset to use (default: ampc_30k)')
@@ -429,13 +514,11 @@ def main():
     experiments = []
     for config_name, config in MODEL_CONFIGS.items():
         for featurizer in FEATURIZERS:
-            for early_stopping in EARLY_STOPPING_OPTIONS:
-                experiments.append({
-                    'config_name': config_name,
-                    'config': config,
-                    'featurizer': featurizer,
-                    'early_stopping': early_stopping,
-                })
+            experiments.append({
+                'config_name': config_name,
+                'config': config,
+                'featurizer': featurizer,
+            })
 
     console.print(f"[cyan]Total experiments to run: {len(experiments)}[/cyan]\n")
 
@@ -452,18 +535,16 @@ def main():
 
         for exp in experiments:
             featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
-            early_stop_str = 'early_stop' if exp['early_stopping'] else 'no_early_stop'
-            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}"
+            exp_name = f"{exp['config_name']}_{featurizer_name}"
 
             exp_dir = args.output_dir / 'data' / exp_name
-            if args.skip_existing and exp_dir.exists() and (exp_dir / 'cycle_metrics.csv').exists():
+            if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
                 try:
                     result = load_existing_results(
                         exp_dir=exp_dir,
                         config_name=exp['config_name'],
                         config=exp['config'],
                         featurizer=exp['featurizer'],
-                        early_stopping=exp['early_stopping'],
                     )
                     results.append(result)
                     if args.debug:
@@ -483,7 +564,6 @@ def main():
                 config_name=exp['config_name'],
                 config=exp['config'],
                 featurizer=exp['featurizer'],
-                early_stopping=exp['early_stopping'],
                 n_cycles=args.n_cycles,
                 batch_fraction=args.batch_fraction,
                 random_state=args.random_state,
