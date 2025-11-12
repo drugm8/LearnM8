@@ -107,6 +107,7 @@ def run_single_experiment(
     compound_pool,
     oracle,
     target_col: str,
+    score_direction: str,
     cache_dir: Path
 ) -> Dict:
     featurizer_display = featurizer_name if featurizer_name is not None else 'none'
@@ -127,6 +128,7 @@ def run_single_experiment(
             n_cycles=N_CYCLES,
             batch_fraction=BATCH_FRACTION,
             strategy=ACQUISITION,
+            score_direction=score_direction,
             random_state=RANDOM_STATE,
             cache_dir=cache_dir,
             output_dir=output_dir,
@@ -161,8 +163,10 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
         random_state=RANDOM_STATE
     )
     target_col = metadata['target_column']
+    score_direction = metadata['score_direction']
     n_compounds = len(compound_pool)
     print(f"✓ Loaded {n_compounds:,} compounds")
+    print(f"  Score direction: {score_direction}")
     print()
 
     print("Creating oracle...")
@@ -219,6 +223,7 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
                 compound_pool,
                 oracle,
                 target_col,
+                score_direction,
                 cache_dir
             )
             all_results[(learner_name, featurizer_name)] = result_data

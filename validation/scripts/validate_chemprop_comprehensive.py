@@ -80,17 +80,6 @@ FEATURIZERS = [
 EARLY_STOPPING_OPTIONS = [True, False]
 
 
-def load_dataset(dataset_name: str) -> tuple[pl.DataFrame, str, CSVOracle]:
-    """Load dataset using validation library and create oracle."""
-    df, metadata = load_validation_dataset(dataset_name, clean_invalid_scores=True)
-    target_col = metadata['target_column']
-
-    dataset_path = get_dataset_path(dataset_name)
-    oracle = CSVOracle(str(dataset_path), id_column='ID')
-
-    return df, target_col, oracle
-
-
 def load_existing_results(
     exp_dir: Path,
     config_name: str,
@@ -132,6 +121,7 @@ def run_single_experiment(
     compound_pool: pl.DataFrame,
     oracle: CSVOracle,
     target_col: str,
+    score_direction: str,
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
@@ -162,7 +152,7 @@ def run_single_experiment(
         batch_norm=config['batch_norm'],
         atom_messages=config['atom_messages'],
         early_stopping=early_stopping,
-        early_stopping_patience=10,
+        early_stopping_patience=3,
         max_epochs=50,
         random_state=random_state,
     )
@@ -178,6 +168,7 @@ def run_single_experiment(
             featurizer_type=featurizer,
             n_cycles=n_cycles,
             batch_fraction=batch_fraction,
+            score_direction=score_direction,
             random_state=random_state,
             output_dir=exp_output_dir,
             mode='benchmark',
@@ -433,9 +424,16 @@ def main():
     console.print(f"Output: {args.output_dir}")
     console.print()
 
-    compound_pool, target_col, oracle = load_dataset(args.dataset)
+    compound_pool, metadata = load_validation_dataset(args.dataset, clean_invalid_scores=True)
+    target_col = metadata['target_column']
+    score_direction = metadata['score_direction']
+
+    dataset_path = get_dataset_path(args.dataset)
+    oracle = CSVOracle(str(dataset_path), id_column='ID')
+
     console.print(f"[green]✓ Loaded {len(compound_pool)} compounds[/green]")
     console.print(f"[cyan]Target column: {target_col}[/cyan]")
+    console.print(f"[cyan]Score direction: {score_direction}[/cyan]")
 
     experiments = []
     for config_name, config in MODEL_CONFIGS.items():
@@ -491,6 +489,7 @@ def main():
                 compound_pool=compound_pool,
                 oracle=oracle,
                 target_col=target_col,
+                score_direction=score_direction,
                 config_name=exp['config_name'],
                 config=exp['config'],
                 featurizer=exp['featurizer'],
