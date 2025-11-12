@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import warnings
 
-import pandas as pd
+import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -80,7 +80,7 @@ FEATURIZERS = [
 EARLY_STOPPING_OPTIONS = [True, False]
 
 
-def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
+def load_dataset(dataset_name: str) -> tuple[pl.DataFrame, str, CSVOracle]:
     """Load dataset using validation library and create oracle."""
     df, metadata = load_validation_dataset(dataset_name, clean_invalid_scores=True)
     target_col = metadata['target_column']
@@ -101,10 +101,10 @@ def load_existing_results(
     """Load results from existing experiment directory."""
     featurizer_name = featurizer if featurizer else 'none'
 
-    cycle_metrics_df = pd.read_csv(exp_dir / 'cycle_metrics.csv')
-    final_metrics = cycle_metrics_df.iloc[-1]
+    cycle_metrics_df = pl.read_csv(exp_dir / 'cycle_metrics.csv')
+    final_metrics = cycle_metrics_df[-1]
 
-    cycle_metrics = cycle_metrics_df.to_dict('records')
+    cycle_metrics = cycle_metrics_df.to_dicts()
     training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
     prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
 
@@ -129,7 +129,7 @@ def load_existing_results(
 
 
 def run_single_experiment(
-    compound_pool: pd.DataFrame,
+    compound_pool: pl.DataFrame,
     oracle: CSVOracle,
     target_col: str,
     config_name: str,
@@ -171,7 +171,7 @@ def run_single_experiment(
 
     try:
         results = run_active_learning(
-            compound_pool=compound_pool.copy(),
+            compound_pool=compound_pool.clone(),
             oracle=oracle,
             learner=learner,
             target_col=target_col,
@@ -188,8 +188,8 @@ def run_single_experiment(
         compounds_df = results['compounds_df']
         cycle_metrics = results['cycle_metrics']
 
-        compounds_df.to_csv(exp_output_dir / 'compounds_final.csv', index=False)
-        pd.DataFrame(cycle_metrics).to_csv(exp_output_dir / 'cycle_metrics.csv', index=False)
+        compounds_df.write_csv(exp_output_dir / 'compounds_final.csv')
+        pl.DataFrame(cycle_metrics).write_csv(exp_output_dir / 'cycle_metrics.csv')
 
         training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
         prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
@@ -245,12 +245,12 @@ def run_single_experiment(
         }
 
 
-def create_visualizations(df: pd.DataFrame, output_dir: Path):
-    """Create comprehensive visualization plots."""
+def create_visualizations(df: pl.DataFrame, output_dir: Path):
+    """Create comprehensive visualization plots using Polars."""
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    df_success = df[df['success'] == True].copy()
+    df_success = df.filter(pl.col('success') == True)
 
     if len(df_success) == 0:
         console.print("[yellow]Warning: No successful experiments to visualize[/yellow]")
@@ -258,81 +258,92 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
 
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
+    # Plot 1: Heatmap of Top-10 Recovery by Configuration and Featurizer
     ax = axes[0, 0]
-    performance_data = df_success.pivot_table(
+    performance_pivot = df_success.pivot(
         values='top_10_recovery',
         index='config_name',
         columns='featurizer',
-        aggfunc='mean'
+        aggregate_function='mean'
     )
+    # Convert to pandas for seaborn heatmap compatibility
+    performance_data = performance_pivot.to_pandas()
+    performance_data.index.name = 'config_name'
     sns.heatmap(performance_data, annot=True, fmt='.3f', cmap='RdYlGn', ax=ax, vmin=0, vmax=1)
     ax.set_title('Top-10 Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
     ax.set_xlabel('Featurizer')
     ax.set_ylabel('Model Configuration')
 
+    # Plot 2: Early Stopping Impact on Performance
     ax = axes[0, 1]
-    early_stop_comparison = df_success.groupby(['config_name', 'early_stopping']).agg({
-        'top_10_recovery': 'mean',
-        'top_100_recovery': 'mean',
-    }).reset_index()
+    early_stop_comparison = df_success.group_by(['config_name', 'early_stopping']).agg([
+        pl.col('top_10_recovery').mean().alias('top_10_recovery'),
+        pl.col('top_100_recovery').mean().alias('top_100_recovery'),
+    ]).sort(['config_name', 'early_stopping'])
 
-    x_pos = np.arange(len(early_stop_comparison['config_name'].unique()))
+    config_names = early_stop_comparison['config_name'].unique().sort().to_list()
+    x_pos = np.arange(len(config_names))
     width = 0.35
 
-    for idx, (early_stop, group) in enumerate(early_stop_comparison.groupby('early_stopping')):
+    for idx, early_stop in enumerate([False, True]):
+        group = early_stop_comparison.filter(pl.col('early_stopping') == early_stop)
         offset = width * (idx - 0.5)
         label = 'Early Stopping' if early_stop else 'No Early Stopping'
-        ax.bar(x_pos + offset, group['top_10_recovery'].values, width, label=label, alpha=0.8)
+        values = group['top_10_recovery'].to_numpy()
+        ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
 
     ax.set_xlabel('Model Configuration')
     ax.set_ylabel('Top-10 Recovery')
     ax.set_title('Early Stopping Impact on Performance', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(early_stop_comparison['config_name'].unique())
+    ax.set_xticklabels(config_names)
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
+    # Plot 3: Timing Comparison
     ax = axes[1, 0]
-    timing_data = df_success.groupby('config_name').agg({
-        'avg_training_time': 'mean',
-        'avg_prediction_time': 'mean',
-    }).reset_index()
+    timing_data = df_success.group_by('config_name').agg([
+        pl.col('avg_training_time').mean().alias('avg_training_time'),
+        pl.col('avg_prediction_time').mean().alias('avg_prediction_time'),
+    ]).sort('config_name')
 
     x_pos = np.arange(len(timing_data))
     width = 0.35
 
-    ax.bar(x_pos - width/2, timing_data['avg_training_time'], width, label='Training Time', alpha=0.8)
-    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'], width, label='Prediction Time', alpha=0.8)
+    ax.bar(x_pos - width/2, timing_data['avg_training_time'].to_numpy(), width, label='Training Time', alpha=0.8)
+    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'].to_numpy(), width, label='Prediction Time', alpha=0.8)
 
     ax.set_xlabel('Model Configuration')
     ax.set_ylabel('Time (seconds)')
     ax.set_title('Average Training vs Prediction Time', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(timing_data['config_name'])
+    ax.set_xticklabels(timing_data['config_name'].to_list())
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
+    # Plot 4: Featurizer Performance Comparison
     ax = axes[1, 1]
-    featurizer_comparison = df_success.groupby('featurizer').agg({
-        'top_10_recovery': ['mean', 'std'],
-        'total_time': 'mean',
-    }).reset_index()
-
-    featurizer_comparison.columns = ['featurizer', 'mean_recovery', 'std_recovery', 'mean_time']
-    featurizer_comparison = featurizer_comparison.sort_values('mean_recovery', ascending=False)
+    featurizer_comparison = df_success.group_by('featurizer').agg([
+        pl.col('top_10_recovery').mean().alias('mean_recovery'),
+        pl.col('top_10_recovery').std().alias('std_recovery'),
+        pl.col('total_time').mean().alias('mean_time'),
+    ]).sort('mean_recovery', descending=True)
 
     colors = plt.cm.viridis(np.linspace(0.2, 0.8, len(featurizer_comparison)))
-    bars = ax.barh(featurizer_comparison['featurizer'], featurizer_comparison['mean_recovery'],
-                   xerr=featurizer_comparison['std_recovery'], capsize=5, color=colors, alpha=0.8)
+    bars = ax.barh(
+        featurizer_comparison['featurizer'].to_list(),
+        featurizer_comparison['mean_recovery'].to_numpy(),
+        xerr=featurizer_comparison['std_recovery'].to_numpy(),
+        capsize=5, color=colors, alpha=0.8
+    )
 
     ax.set_xlabel('Top-10 Recovery (mean ± std)')
     ax.set_ylabel('Featurizer')
     ax.set_title('Featurizer Performance Comparison', fontsize=14, fontweight='bold')
     ax.grid(axis='x', alpha=0.3)
 
-    for i, (feat, time_val) in enumerate(zip(featurizer_comparison['featurizer'],
-                                              featurizer_comparison['mean_time'])):
-        ax.text(0.02, i, f'{time_val:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
+    for i, row in enumerate(featurizer_comparison.iter_rows(named=True)):
+        ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
 
     plt.tight_layout()
     plt.savefig(plots_dir / 'comprehensive_analysis.png', dpi=300, bbox_inches='tight')
@@ -341,15 +352,15 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
     console.print(f"[green]✓ Saved visualizations to {plots_dir}[/green]")
 
 
-def print_summary_table(df: pd.DataFrame):
+def print_summary_table(df: pl.DataFrame):
     """Print a rich summary table of results."""
-    df_success = df[df['success'] == True].copy()
+    df_success = df.filter(pl.col('success') == True)
 
     if len(df_success) == 0:
         console.print("[red]No successful experiments to summarize[/red]")
         return
 
-    df_sorted = df_success.sort_values('top_10_recovery', ascending=False).head(10)
+    df_sorted = df_success.sort('top_10_recovery', descending=True).head(10).to_pandas()
 
     table = Table(title="Top 10 Configurations by Performance", show_header=True, header_style="bold magenta")
     table.add_column("Rank", justify="right", style="cyan", width=6)
@@ -494,9 +505,9 @@ def main():
             results.append(result)
             progress.advance(task)
 
-    results_df = pd.DataFrame(results)
+    results_df = pl.DataFrame(results)
     summary_path = args.output_dir / 'summary.csv'
-    results_df.to_csv(summary_path, index=False)
+    results_df.write_csv(summary_path)
     console.print(f"\n[green]✓ Saved summary to {summary_path}[/green]")
 
     create_visualizations(results_df, args.output_dir)

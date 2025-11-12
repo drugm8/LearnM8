@@ -84,14 +84,14 @@ def check_existing_results(learner: str, acquisition: str) -> bool:
 
 
 def load_existing_results(learner: str, acquisition: str) -> Dict:
-    import pandas as pd
+    import polars as pl
 
     output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}'
 
-    compounds_df = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
-    cycle_metrics_df = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
+    compounds_df = pl.read_csv(output_dir / 'compounds_final.csv', comment_prefix='#')
+    cycle_metrics_df = pl.read_csv(output_dir / 'cycle_metrics.csv', comment_prefix='#')
 
-    cycle_metrics = cycle_metrics_df.to_dict('records')
+    cycle_metrics = cycle_metrics_df.to_dicts()
 
     return {
         'compounds_df': compounds_df,
@@ -117,7 +117,7 @@ def run_single_experiment(
 
     try:
         results = run_active_learning(
-            compound_pool=compound_pool.copy(),
+            compound_pool=compound_pool.clone(),
             oracle=oracle,
             learner=learner_name,
             target_col=target_col,
