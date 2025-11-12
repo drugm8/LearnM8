@@ -394,9 +394,14 @@ def execute_cycle(
     logger.debug(f"{config.strategy.upper()} acquisition selected {len(selected_ids)} compounds")
 
     # Step 12: Measure Selected Compounds
+    # Create temporary mapping to preserve selected_ids order
+    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+
     selected_compounds = compounds_df.filter(
         pl.col('ID').is_in(selected_ids)
-    ).select(['ID', 'SMILES']).clone()
+    ).select(['ID', 'SMILES']).with_columns(
+        pl.col('ID').map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64).alias('_order')
+    ).sort('_order').drop('_order')
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
@@ -411,8 +416,8 @@ def execute_cycle(
     logger.debug(f"Measured {len(measurements)} compounds")
 
     # Step 13: Update Master DataFrame with Measurements
-    # Convert to pandas Series for compatibility with update_status
-    target_series = measurements.select(['ID', target_col]).to_pandas().set_index('ID')[target_col]
+    # Create Polars Series with target values indexed by ID
+    target_series = measurements.select([target_col]).to_series()
 
     compounds_df = update_status(
         compounds_df,

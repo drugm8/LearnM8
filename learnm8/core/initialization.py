@@ -163,11 +163,11 @@ def calculate_initialization_metrics(
             # Focus on discovery metrics (what was found) not ranking metrics
             labeled_for_eval = compounds_df.filter(
                 pl.col('status') == 'labeled'
-            ).select(['ID', 'SMILES', target_col]).to_pandas()
+            ).select(['ID', 'SMILES', target_col])
 
             selected_for_eval = compounds_df.filter(
                 pl.col('ID').is_in(selected_ids)
-            ).select(['ID', 'SMILES', target_col]).to_pandas()
+            ).select(['ID', 'SMILES', target_col])
 
             if cumulative_selected_ids is None:
                 cumulative_selected_ids = set(selected_ids)
@@ -180,7 +180,7 @@ def calculate_initialization_metrics(
                 selected_compounds=selected_for_eval,
                 target_col=target_col,
                 oracle_type='benchmark',
-                ground_truth_data=original_pool.to_pandas() if hasattr(original_pool, 'to_pandas') else original_pool,
+                ground_truth_data=original_pool,
                 pool_predictions=None,
                 pool_ids=None,
                 uncertainties=None,
@@ -310,9 +310,14 @@ def select_initial_batch(
 
     logger.info(f"Measuring {len(selected_ids)} selected compounds...")
 
+    # Create temporary mapping to preserve selected_ids order
+    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+
     selected_compounds = compounds_df.filter(
         pl.col('ID').is_in(selected_ids)
-    ).select(['ID', 'SMILES']).to_pandas()
+    ).select(['ID', 'SMILES']).with_columns(
+        pl.col('ID').map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64).alias('_order')
+    ).sort('_order').drop('_order')
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
@@ -320,8 +325,9 @@ def select_initial_batch(
         logger.error(f"Oracle measurement failed during initialization: {e}")
         raise RuntimeError(f"Initialization failed - oracle measurement error: {e}")
 
-    if not all(sid in measurements['ID'].values for sid in selected_ids):
-        missing = set(selected_ids) - set(measurements['ID'].values)
+    measurement_ids = measurements['ID'].to_list()
+    if not all(sid in measurement_ids for sid in selected_ids):
+        missing = set(selected_ids) - set(measurement_ids)
         raise RuntimeError(
             f"Oracle did not return measurements for {len(missing)} compounds"
         )
@@ -329,11 +335,8 @@ def select_initial_batch(
     logger.debug(f"Oracle measured {len(selected_ids)} compounds")
     logger.debug(f"Updating DataFrame: status=labeled, labeled_cycle=0")
 
-    # Convert measurements to Polars Series for update_status
-    import pandas as pd
-    measurements_pd = measurements.set_index('ID')[target_col]
-    measurements_pl = pl.from_pandas(measurements_pd.reset_index())
-    target_values = measurements_pl.rename({'index': 'ID'})[target_col]
+    # Extract target values from measurements
+    target_values = measurements.get_column(target_col)
 
     compounds_df = update_status(
         compounds_df,

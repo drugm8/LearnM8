@@ -1,8 +1,6 @@
 from typing import List, Optional, Tuple, TYPE_CHECKING
 import logging
-
-if TYPE_CHECKING:
-    import polars as pl
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +21,10 @@ def initialize_master_dataframe(
     .. deprecated:: 0.6.0
         This function is deprecated. Import from learnm8.core.initialization instead.
         This copy will be removed in a future version.
+
+    .. note::
+        This function uses pandas internally for backwards compatibility.
+        Type hints indicate Polars but implementation is pandas-based.
 
     Uses vectorized operations for efficient initialization. Initial compounds are
     marked with labeled_cycle=-1 and selected_cycle=-1 to distinguish them from
@@ -145,18 +147,18 @@ def validate_master_dataframe(
     if missing_cols:
         raise ValueError(f"Master DataFrame missing required columns: {missing_cols}")
 
-    if master_df['ID'].duplicated().any():
-        dupes = master_df.loc[master_df['ID'].duplicated(), 'ID'].unique().tolist()
+    if master_df['ID'].is_duplicated().any():
+        dupes = master_df.filter(pl.col('ID').is_duplicated())['ID'].unique().to_list()
         raise ValueError(f"Duplicate IDs found: {dupes[:5]}{'...' if len(dupes)>5 else ''}")
 
-    if master_df['status'].dtype.name == 'category':
-        current_categories = list(master_df['status'].cat.categories)
+    if master_df['status'].dtype == pl.Categorical:
+        current_categories = master_df['status'].cat.get_categories().to_list()
         if set(current_categories) != set(VALID_STATUSES):
             logger.warning(f"Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}")
-    elif master_df['status'].dtype.name not in ['category', 'object']:
-        raise ValueError(f"Status column must be categorical or string type, got {master_df['status'].dtype.name}")
+    elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
+        raise ValueError(f"Status column must be categorical or string type, got {master_df['status'].dtype}")
 
-    invalid_statuses = set(master_df['status'].dropna().unique()) - set(VALID_STATUSES)
+    invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(VALID_STATUSES)
     if invalid_statuses:
         raise ValueError(f"Invalid status values found: {invalid_statuses}. "
                         f"Must be one of {VALID_STATUSES}")
