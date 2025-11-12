@@ -2,7 +2,6 @@
 
 import logging
 import pytest
-import pandas as pd
 import polars as pl
 import numpy as np
 from pathlib import Path
@@ -484,22 +483,15 @@ class MockOracle(Oracle):
         self.noise_level = noise_level
         self.call_count = 0
 
-    def measure(self, compounds, properties: list):
-        """Mock measurement implementation that accepts pandas or polars DataFrames."""
+    def measure(self, compounds: pl.DataFrame, properties: list) -> pl.DataFrame:
+        """Mock measurement implementation using pure Polars."""
         self.call_count += 1
 
-        # Convert to pandas if polars for processing
-        is_polars = isinstance(compounds, pl.DataFrame)
-        if is_polars:
-            compounds_pd = compounds.to_pandas()
-        else:
-            compounds_pd = compounds
+        if len(compounds) == 0:
+            schema = {'ID': pl.Utf8, **{prop: pl.Float64 for prop in properties}}
+            return pl.DataFrame(schema=schema)
 
-        if len(compounds_pd) == 0:
-            result_pd = pd.DataFrame(columns=['ID'] + properties)
-            return pl.from_pandas(result_pd) if is_polars else result_pd
-
-        result = compounds_pd[['ID']].copy()
+        result = compounds.select(['ID'])
 
         # Generate mock measurements for each property
         for prop in properties:
@@ -508,17 +500,18 @@ class MockOracle(Oracle):
             if prop == 'Activity':
                 # Generate activity values based on SMILES hash for consistency
                 activities = []
-                for smiles in compounds_pd['SMILES']:
+                for smiles in compounds['SMILES'].to_list():
                     base_value = (hash(smiles) % 1000) / 1000.0
                     noise = np.random.normal(0, self.noise_level)
                     activities.append(base_value + noise)
-                result[prop] = activities
+                result = result.with_columns(pl.Series(prop, activities))
             else:
                 # Generic property
-                result[prop] = np.random.uniform(0, 1, len(compounds_pd))
+                result = result.with_columns(
+                    pl.Series(prop, np.random.uniform(0, 1, len(compounds)))
+                )
 
-        # Return polars if input was polars
-        return pl.from_pandas(result) if is_polars else result
+        return result
 
 
 # ==============================================================================

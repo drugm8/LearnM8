@@ -4,8 +4,8 @@ Focused tests for critical error conditions and edge cases using real molecular 
 """
 
 import pytest
+import polars as pl
 import numpy as np
-import pandas as pd
 import tempfile
 from pathlib import Path
 
@@ -21,7 +21,7 @@ class TestDataValidationErrors:
     
     def test_empty_dataframe_handling(self, tmp_path):
         """Test handling of empty DataFrames."""
-        empty_compounds = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
+        empty_compounds = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8, 'Activity': pl.Float64})
 
         # Feature extraction should handle empty data gracefully
         features = extract_features([], 'morgan', tmp_path)
@@ -35,10 +35,10 @@ class TestDataValidationErrors:
     
     def test_missing_required_columns(self, small_real_compounds, tmp_path):
         """Test handling of missing required columns."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         # Feature extraction only requires SMILES
         # Missing SMILES column - feature extraction should fail
-        compounds_no_smiles = compounds.drop(columns=['SMILES'])
+        compounds_no_smiles = compounds.drop('SMILES')
 
         # Since we need SMILES for feature extraction, this should fail
         # Test would need DataFrame with SMILES column
@@ -54,16 +54,21 @@ class TestDataValidationErrors:
     
     def test_mismatched_array_lengths(self, small_real_compounds):
         """Test handling of mismatched array lengths."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         # Add predictions with wrong length
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
         wrong_length_predictions = np.random.uniform(0, 1, len(compounds) + 2)  # Too long
         
         acq = GreedyAcquisition()
         
         # Should detect length mismatch
-        compounds_wrong = compounds.copy()
-        compounds_wrong['prediction'] = wrong_length_predictions[:len(compounds)]  # Truncate to fit
+        compounds_wrong = compounds.clone()
+        # Truncate to fit
+        compounds_wrong = compounds_wrong.with_columns(
+            pl.Series('prediction', wrong_length_predictions[:len(compounds)])
+        )
         
         # This should work (same length after truncation)
         selected = acq.select(compounds_wrong, n_select=3)
@@ -71,11 +76,20 @@ class TestDataValidationErrors:
     
     def test_nan_value_handling(self, small_real_compounds):
         """Test handling of NaN values in data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         # Add NaN values
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
-        compounds.loc[0, 'prediction'] = np.nan
-        compounds.loc[1, 'Activity'] = np.nan
+        prediction_values = np.random.uniform(0, 1, len(compounds))
+        prediction_values[0] = np.nan
+        compounds = compounds.with_columns(
+            pl.Series('prediction', prediction_values)
+        )
+        # Set Activity to NaN for second compound
+        compounds = compounds.with_columns(
+            pl.when(pl.int_range(pl.len()) == 1)
+              .then(pl.lit(None))
+              .otherwise(pl.col('Activity'))
+              .alias('Activity')
+        )
         
         acq = GreedyAcquisition()
         
@@ -84,7 +98,7 @@ class TestDataValidationErrors:
             selected = acq.select(compounds, n_select=3)
             
             # If it succeeds, should not include NaN predictions
-            assert not selected['prediction'].isna().any()
+            assert not selected['prediction'].is_null().any()
             
         except (ValueError, RuntimeError):
             # This is also acceptable behavior for NaN values
@@ -96,8 +110,10 @@ class TestAcquisitionErrors:
     
     def test_invalid_n_select_values(self, small_real_compounds):
         """Test handling of invalid n_select parameters."""
-        compounds = small_real_compounds.copy()
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
+        compounds = small_real_compounds.clone()
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
         acq = GreedyAcquisition()
         
         # Test negative n_select
@@ -114,8 +130,10 @@ class TestAcquisitionErrors:
     
     def test_missing_uncertainty_for_ucb(self, small_real_compounds):
         """Test UCB acquisition without uncertainty column."""
-        compounds = small_real_compounds.copy()
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
+        compounds = small_real_compounds.clone()
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
         # No uncertainty column
         
         ucb_acq = get_acquisition_function('ucb')()
@@ -130,10 +148,12 @@ class TestAcquisitionErrors:
     
     def test_acquisition_with_duplicate_ids(self, small_real_compounds):
         """Test acquisition with duplicate compound IDs."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         # Create duplicates
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
-        compounds_with_dups = pd.concat([compounds, compounds.head(2)], ignore_index=True)
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
+        compounds_with_dups = pl.concat([compounds, compounds.head(2)], how='vertical')
         
         acq = GreedyAcquisition()
         
@@ -170,7 +190,7 @@ class TestOracleErrors:
             oracle = CSVOracle(str(invalid_csv))
             
             # If creation succeeds, measurement should fail
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': ['mol_1'],
                 'SMILES': ['CCO']
             })
@@ -206,12 +226,12 @@ class TestOracleErrors:
             f.write("mol_1,0.5\n")
         
         oracle = CSVOracle(str(csv_file))
-        empty_compounds = pd.DataFrame(columns=['ID', 'SMILES'])
+        empty_compounds = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8})
         
         # Should handle empty input gracefully
         result = oracle.measure(empty_compounds, ['Activity'])
         
-        assert isinstance(result, pd.DataFrame)
+        assert isinstance(result, pl.DataFrame)
         assert len(result) == 0
         assert 'ID' in result.columns
         assert 'Activity' in result.columns
@@ -253,23 +273,23 @@ class TestIntegrationErrors:
     
     def test_incomplete_workflow_recovery(self, small_real_compounds, tmp_path):
         """Test recovery from incomplete workflow execution."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         # Create CSV oracle
         csv_file = tmp_path / "oracle.csv"
-        oracle_data = compounds[['ID', 'Activity']].copy()
-        oracle_data.to_csv(csv_file, index=False)
+        oracle_data = compounds[['ID', 'Activity']].clone()
+        oracle_data.write_csv(csv_file)
 
         oracle = CSVOracle(str(csv_file))
 
         # Start workflow
         labeled_compounds = compounds.head(3)
         measurements = oracle.measure(labeled_compounds, ['Activity'])
-        labeled_with_activity = labeled_compounds.merge(measurements, on='ID')
+        labeled_with_activity = labeled_compounds.join(measurements, on='ID', how='left')
 
         # Simulate interrupted workflow - try to use incomplete data
         # Drop SMILES columns (could be SMILES_x or SMILES_y after merge)
         smiles_cols = [col for col in labeled_with_activity.columns if 'SMILES' in col]
-        incomplete_data = labeled_with_activity.drop(columns=smiles_cols)
+        incomplete_data = labeled_with_activity.drop(smiles_cols)
 
         # Should fail because missing SMILES column
         assert 'SMILES' not in incomplete_data.columns
@@ -308,12 +328,12 @@ class TestErrorRecovery:
     
     def test_partial_failure_recovery(self, medium_real_compounds, tmp_path):
         """Test recovery from partial failures in batch operations."""
-        compounds = medium_real_compounds.copy()
+        compounds = medium_real_compounds.clone()
         # Use subset
         compounds = compounds.head(10)
 
         # Add some invalid SMILES to create partial failure scenario
-        smiles_list = compounds['SMILES'].tolist()
+        smiles_list = compounds['SMILES'].to_list()
         smiles_list[2] = 'invalid'
         smiles_list[5] = ''
 
@@ -339,11 +359,11 @@ class TestErrorRecovery:
     
     def test_error_message_clarity(self, small_real_compounds):
         """Test that error messages are clear and informative."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         acq = GreedyAcquisition()
         
         # Test clear error message for missing column
-        compounds_no_pred = compounds.drop(columns=['Activity'])
+        compounds_no_pred = compounds.drop('Activity')
         
         try:
             acq.select(compounds_no_pred, n_select=3)
@@ -354,7 +374,9 @@ class TestErrorRecovery:
             assert any(keyword in error_msg for keyword in ['column', 'prediction', 'missing', 'required'])
         
         # Test clear error message for invalid n_select
-        compounds['prediction'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.uniform(0, 1, len(compounds)))
+        )
         
         try:
             acq.select(compounds, n_select=-1)

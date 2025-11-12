@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import polars as pl
 import numpy as np
 from learnm8.core.initialization import initialize_master_dataframe_empty
 from learnm8.core.dataframe_ops import (
@@ -20,7 +21,7 @@ from conftest import create_initialized_master_df
 @pytest.fixture
 def sample_compound_pool():
     """Create sample compound pool for testing."""
-    return pd.DataFrame({
+    return pl.DataFrame({
         'ID': [f'COMP_{i:03d}' for i in range(100)],
         'SMILES': [f'C{i}' for i in range(100)]
     })
@@ -33,7 +34,7 @@ def sample_master_df(sample_compound_pool):
         valid_compounds=sample_compound_pool,
         target_col='Activity',
         initial_labeled_ids=['COMP_000', 'COMP_001', 'COMP_002'],
-        initial_measurements=pd.Series([0.5, 0.7, 0.9], index=['COMP_000', 'COMP_001', 'COMP_002'])
+        initial_measurements={'COMP_000': 0.5, 'COMP_001': 0.7, 'COMP_002': 0.9}
     )
 
 
@@ -54,8 +55,8 @@ def test_initialize_master_dataframe(sample_compound_pool):
                                                       'selected_cycle', 'pruned_cycle', 'Activity'])
 
     # Verify status values
-    assert (master_df[master_df['ID'].isin(initial_ids)]['status'] == STATUS_LABELED).all()
-    assert (master_df[~master_df['ID'].isin(initial_ids)]['status'] == STATUS_UNLABELED).all()
+    assert (master_df[master_df['ID'].is_in(initial_ids)]['status'] == STATUS_LABELED).all()
+    assert (master_df[~master_df['ID'].is_in(initial_ids)]['status'] == STATUS_UNLABELED).all()
 
     # Verify target values set for initial compounds
     for comp_id in initial_ids:
@@ -76,7 +77,7 @@ def test_initialize_master_dataframe_empty_initial(sample_compound_pool):
     assert (master_df['status'] == STATUS_UNLABELED).all()
 
     # No target values set (uses actual column name 'Activity', not 'target_value')
-    assert master_df['Activity'].isna().all()
+    assert master_df['Activity'].is_null().all()
 
 
 def test_get_labeled_compounds(sample_master_df):
@@ -111,7 +112,7 @@ def test_get_unlabeled_compounds(sample_master_df):
 
 def test_update_compound_status_to_labeled(sample_master_df):
     """Test status update to labeled."""
-    original_df = sample_master_df.copy()
+    original_df = sample_master_df.clone()
     compound_ids = ['COMP_010', 'COMP_011']
     target_values = pd.Series([0.8, 0.9], index=compound_ids)
 
@@ -268,7 +269,7 @@ def test_add_predictions_multiple_cycles(sample_master_df):
 def test_get_prediction_columns(sample_master_df):
     """Test prediction column extraction."""
     # Add predictions for multiple cycles
-    updated_df = sample_master_df.copy()
+    updated_df = sample_master_df.clone()
     for cycle in [0, 1, 2]:
         updated_df = add_predictions(
             df=updated_df,
@@ -309,9 +310,11 @@ def test_validate_master_dataframe_missing_columns():
 
 def test_validate_master_dataframe_invalid_status(sample_master_df):
     """Test validation with invalid status values."""
-    invalid_df = sample_master_df.copy()
+    invalid_df = sample_master_df.clone()
     # Set invalid status by converting to object dtype first
-    invalid_df['status'] = invalid_df['status'].astype('object')
+    invalid_df = invalid_df.with_columns(
+        pl.Series('status', invalid_df['status'].cast(pl.Utf8))
+    )
     invalid_df.loc[0, 'status'] = 'invalid_status'
 
     with pytest.raises(ValueError, match="Invalid status values found"):
@@ -320,7 +323,7 @@ def test_validate_master_dataframe_invalid_status(sample_master_df):
 
 def test_immutability(sample_master_df):
     """Test that all functions return new DataFrames."""
-    original_df = sample_master_df.copy()
+    original_df = sample_master_df.clone()
 
     # Call update functions
     _ = update_status(
