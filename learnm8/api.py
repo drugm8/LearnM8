@@ -48,7 +48,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any, Literal
-import pandas as pd
+import polars as pl
 
 from learnm8.core.validation import validate_compound_pool, ValidationResult
 from learnm8.core.initialization import initialize_master_dataframe_empty, select_initial_batch
@@ -233,7 +233,7 @@ def _create_learner(
 
 def _calculate_aggregate_metrics(
     all_metrics: List[Dict[str, Any]],
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     mode: str
 ) -> Dict[str, Any]:
     """Calculate aggregate metrics across all cycles.
@@ -300,14 +300,14 @@ def _calculate_aggregate_metrics(
             agg['avg_unlabeled_ef_1_0'] = float(np.mean(unlabeled_ef_values))
 
     agg['total_cycles'] = len(all_metrics)
-    agg['total_labeled'] = int((compounds_df['status'] == 'labeled').sum())
-    agg['total_pruned'] = int((compounds_df['status'] == 'pruned').sum())
+    agg['total_labeled'] = int(compounds_df.filter(pl.col('status') == 'labeled').height)
+    agg['total_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
 
     return agg
 
 
 def run_active_learning(
-    compound_pool: Union[str, Path, pd.DataFrame],
+    compound_pool: Union[str, Path, pl.DataFrame],
     oracle: Union[str, Path, Oracle],
     learner: Union[str, Learner],
     target_col: str,
@@ -372,7 +372,7 @@ def run_active_learning(
     Args:
         compound_pool: Compound pool specification:
             - str/Path: Path to CSV file (must have 'ID' and 'SMILES' columns)
-            - pd.DataFrame: DataFrame with 'ID' and 'SMILES' columns
+            - pl.DataFrame: DataFrame with 'ID' and 'SMILES' columns
 
         oracle: Oracle specification:
             - None: Auto-detect from compound_pool (benchmark mode)
@@ -469,24 +469,6 @@ def run_active_learning(
     start_time = time.time()
 
     try:
-        DEPRECATED_PARAMS = {
-            'export_csv': 'CSV export is now automatic via save_results(). This parameter has no effect.',
-            'console_output': 'Console output is controlled by Python logging configuration.',
-            'target_column': "Use 'target_col' instead (renamed in v1.0.0).",
-            'featurizer': "Use 'featurizer_type' instead (renamed in v1.0.0)."
-        }
-
-        for param, message in DEPRECATED_PARAMS.items():
-            if param in kwargs:
-                import warnings
-                warnings.warn(
-                    f"Parameter '{param}' is deprecated: {message}",
-                    DeprecationWarning,
-                    stacklevel=2
-                )
-                logger.warning(f"Deprecated parameter '{param}' passed: {message}")
-                kwargs.pop(param)
-
         original_compound_pool_path = None
 
         if output_dir is None:
@@ -523,13 +505,13 @@ def run_active_learning(
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
                 raise FileNotFoundError(f"Compound pool file not found: {compound_pool_path}")
-            compound_pool = pd.read_csv(compound_pool_path)
+            compound_pool = pl.read_csv(compound_pool_path)
             logger.debug(f"Loading DataFrame from CSV: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
-        elif isinstance(compound_pool, pd.DataFrame):
+        elif isinstance(compound_pool, pl.DataFrame):
             logger.debug("Using provided DataFrame as compound pool")
         else:
             raise TypeError(
-                f"compound_pool must be str, Path, or pd.DataFrame, got {type(compound_pool)}"
+                f"compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool)}"
             )
 
         if 'ID' not in compound_pool.columns or 'SMILES' not in compound_pool.columns:
@@ -714,7 +696,7 @@ def run_active_learning(
             f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
         )
 
-        original_pool = validation_result.valid_compounds.copy() if mode == 'benchmark' else None
+        original_pool = validation_result.valid_compounds.clone() if mode == 'benchmark' else None
         original_pool_size = len(validation_result.valid_compounds)
 
         compounds_df, cycle_0_metrics = select_initial_batch(
@@ -733,7 +715,7 @@ def run_active_learning(
             original_pool=original_pool
         )
 
-        labeled_count = (compounds_df['status'] == 'labeled').sum()
+        labeled_count = compounds_df.filter(pl.col('status') == 'labeled').height
         logger.info(
             f"Cycle 0 (initialization) complete: {labeled_count} compounds labeled "
             f"(strategy={init_config.strategy})"
@@ -766,7 +748,7 @@ def run_active_learning(
         logger.info("Phase 4: Active Learning Cycles")
         logger.info("═══════════════════════════════════════════════════════════════")
 
-        cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
+        cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
 
         for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
             logger.info("─────────────────────────────────────────────────────────────")
@@ -792,7 +774,7 @@ def run_active_learning(
                 all_metrics.append(metrics)
 
                 # Update cumulative_selected_ids after cycle
-                cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
+                cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
 
                 logger.info(
                     f"Cycle {cycle_num} complete: "
@@ -856,8 +838,8 @@ def run_active_learning(
             'validation_result': validation_result,
             'output_dir': output_dir,
             'saved_files': saved_files,
-            'labeled_data': compounds_df[compounds_df['status'] == 'labeled'],
-            'unlabeled_data': compounds_df[compounds_df['status'] == 'unlabeled']
+            'labeled_data': compounds_df.filter(pl.col('status') == 'labeled'),
+            'unlabeled_data': compounds_df.filter(pl.col('status') == 'unlabeled')
         }
 
     except Exception as e:
