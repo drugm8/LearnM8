@@ -6,6 +6,8 @@ Tests execute_cycle function with real molecular data, focusing on integration a
 
 import pytest
 import numpy as np
+import pandas as pd
+import polars as pl
 from unittest.mock import Mock
 
 from learnm8.core.cycle import execute_cycle
@@ -16,7 +18,7 @@ def create_test_master_df(compounds, initial_labeled_count=3):
     """Helper to create master DataFrame for testing."""
     from conftest import create_initialized_master_df as initialize_master_dataframe
 
-    initial_compounds = compounds.iloc[:initial_labeled_count]
+    initial_compounds = compounds.slice(0, initial_labeled_count)
     initial_ids = initial_compounds['ID'].to_list()
     initial_values = pd.Series(
         np.random.uniform(0.1, 0.9, initial_labeled_count),
@@ -165,7 +167,7 @@ class TestCycleExecution:
         # Validate full dataset predictions (benchmark mode specific)
         assert 'prediction_cycle_0' in updated_master_df.columns
         # In benchmark mode, predictions should exist for more compounds (full dataset)
-        pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
+        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
         assert pred_count > 0
 
         assert metrics['strategy'] == 'greedy'
@@ -507,8 +509,7 @@ class TestMasterDataFrameCycleIntegration:
         assert 'prediction_cycle_1' in master_df_after_1.columns
 
         # Check that predictions are NaN for labeled compounds
-        labeled_mask = master_df_after_1['status'] == 'labeled'
-        labeled_data = master_df_after_1[labeled_mask]
+        labeled_data = master_df_after_1.filter(pl.col('status') == 'labeled')
 
         # Initially labeled compounds should have NaN in cycle 0 predictions
         assert labeled_data['prediction_cycle_0'].is_null().any()
@@ -547,7 +548,7 @@ class TestMasterDataFrameCycleIntegration:
         assert labeled_count > 2
 
         # Check labeled_cycle is set correctly
-        newly_labeled = updated_master_df[updated_master_df['labeled_cycle'] == 0]
+        newly_labeled = updated_master_df.filter(pl.col('labeled_cycle') == 0)
         assert len(newly_labeled) > 0
 
         # Validate selected_cycle is populated
@@ -586,7 +587,7 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Verify original master_df unchanged (functional update)
-        pd.testing.assert_frame_equal(master_df_original, master_df_copy)
+        assert master_df_original.equals(master_df_copy)
 
         # Confirm returned master_df is different object
         assert updated_master_df is not master_df_original
@@ -641,7 +642,7 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Verify unlabeled-only predictions are stored
-        pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
+        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         # Benchmark mode now predicts on unlabeled only (same as run mode)
@@ -698,7 +699,7 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Verify predictions only exist for unlabeled compounds (run mode behavior)
-        pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
+        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
         assert pred_count == unlabeled_count, \
             f"Run mode should predict only {unlabeled_count} unlabeled compounds, got {pred_count} predictions"
 
@@ -753,7 +754,7 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Verify predictions exist only for unlabeled (same as run mode)
-        pred_count = updated_master_df['prediction_cycle_0'].notna().sum()
+        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
         assert pred_count == unlabeled_count, \
             f"Benchmark mode should predict {unlabeled_count} unlabeled (same as run mode), got {pred_count} predictions"
 
@@ -823,8 +824,8 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Verify both modes predicted on the same number of compounds
-        pred_count_run = updated_df_run['prediction_cycle_0'].notna().sum()
-        pred_count_benchmark = updated_df_benchmark['prediction_cycle_0'].notna().sum()
+        pred_count_run = updated_df_run['prediction_cycle_0'].is_not_null().sum()
+        pred_count_benchmark = updated_df_benchmark['prediction_cycle_0'].is_not_null().sum()
 
         assert pred_count_run == pred_count_benchmark, \
             f"Run and benchmark modes should predict on same compounds: run={pred_count_run}, benchmark={pred_count_benchmark}"
@@ -880,13 +881,13 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Get compounds selected in cycle 0 (newly labeled, excluding initially labeled)
-        newly_labeled_cycle_0 = master_df_0[
-            (master_df_0['labeled_cycle'] == 0) &
-            (~master_df_0['ID'].is_in(initial_ids))
-        ]
+        newly_labeled_cycle_0 = master_df_0.filter(
+            (pl.col('labeled_cycle') == 0) &
+            (~pl.col('ID').is_in(initial_ids))
+        )
 
         # Verify selected_cycle and labeled_cycle are both 0 for newly selected compounds
-        for _, row in newly_labeled_cycle_0.iterrows():
+        for row in newly_labeled_cycle_0.to_dicts():
             assert row['selected_cycle'] == 0, \
                 f"Compound {row['ID']} should have selected_cycle=0"
             assert row['labeled_cycle'] == 0, \
@@ -914,18 +915,18 @@ class TestMasterDataFrameCycleIntegration:
 
         # Verify compounds from cycle 0 still have their original selected_cycle and labeled_cycle
         for cid in cycle_0_ids:
-            row = master_df_1[master_df_1['ID'] == cid].iloc[0]
+            row = master_df_1.filter(pl.col('ID') == cid).to_dicts()[0]
             assert row['selected_cycle'] == 0, \
                 f"Compound {cid} selected in cycle 0 should retain selected_cycle=0, got {row['selected_cycle']}"
             assert row['labeled_cycle'] == 0, \
                 f"Compound {cid} labeled in cycle 0 should retain labeled_cycle=0, got {row['labeled_cycle']}"
 
         # Verify new compounds selected in cycle 1 have selected_cycle=1
-        newly_labeled_cycle_1 = master_df_1[
-            (master_df_1['labeled_cycle'] == 1)
-        ]
+        newly_labeled_cycle_1 = master_df_1.filter(
+            pl.col('labeled_cycle') == 1
+        )
 
-        for _, row in newly_labeled_cycle_1.iterrows():
+        for row in newly_labeled_cycle_1.to_dicts():
             assert row['selected_cycle'] == 1, \
                 f"Compound {row['ID']} selected in cycle 1 should have selected_cycle=1"
             assert row['labeled_cycle'] == 1, \
