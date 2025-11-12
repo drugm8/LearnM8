@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 from unittest.mock import Mock
 
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
@@ -26,12 +26,12 @@ class TestGaussianProcessLearner:
     
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
 
         predictions, uncertainty = learner.predict(features)
@@ -43,26 +43,26 @@ class TestGaussianProcessLearner:
     
     def test_uncertainty_quality(self, learner, small_real_compounds, tmp_path):
         """Test that uncertainty estimates are reasonable."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        train_compounds = compounds.iloc[:len(compounds)//2]
-        test_compounds = compounds.iloc[len(compounds)//2:]
+        train_compounds = compounds[:len(compounds)//2]
+        test_compounds = compounds[len(compounds)//2:]
 
-        train_features = extract_features(train_compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(train_features, train_compounds['Activity'].values)
+        train_features = extract_features(train_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(train_features, train_compounds['Activity'].to_numpy())
 
         train_pred, train_unc = learner.predict(train_features)
 
         if len(test_compounds) > 0:
-            test_features = extract_features(test_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+            test_features = extract_features(test_compounds['SMILES'].to_list(), 'morgan', tmp_path)
             test_pred, test_unc = learner.predict(test_features)
             assert np.mean(train_unc) <= np.mean(test_unc) * 2
     
     def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
     
@@ -74,14 +74,14 @@ class TestGaussianProcessLearner:
     
     def test_learned_hyperparameters(self, learner, small_real_compounds, tmp_path):
         """Test hyperparameter learning."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
         assert learner.get_learned_hyperparameters() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         hyperparams = learner.get_learned_hyperparameters()
         assert hyperparams is not None
         assert 'kernel' in hyperparams
@@ -91,12 +91,12 @@ class TestGaussianProcessLearner:
         """Test learner with custom kernel configuration."""
         learner = GaussianProcessLearner(alpha=1e-6, random_state=42)
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert learner.alpha == 1e-6
@@ -105,14 +105,14 @@ class TestGaussianProcessLearner:
 
     def test_edge_case_single_compound(self, learner, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert len(predictions) == 1
@@ -122,14 +122,14 @@ class TestGaussianProcessLearner:
 
     def test_numerical_stability(self, learner, tmp_path):
         """Test numerical stability with extreme values."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
             'SMILES': ['CCO', 'CCC', 'CCN'],
             'Activity': [0.0, 1000.0, 0.001]
         })
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert np.all(np.isfinite(predictions))
@@ -138,33 +138,33 @@ class TestGaussianProcessLearner:
     
     def test_uncertainty_ordering(self, learner, tmp_path):
         """Test that uncertainty estimates have reasonable ordering."""
-        train_compounds = pd.DataFrame({
+        train_compounds = pl.DataFrame({
             'ID': ['TRAIN_001', 'TRAIN_002'],
             'SMILES': ['CCO', 'CCC'],
             'Activity': [0.5, 0.6]
         })
 
-        test_compounds = pd.DataFrame({
+        test_compounds = pl.DataFrame({
             'ID': ['TEST_001', 'TEST_002'],
             'SMILES': ['CCCO', 'c1ccccc1'],
         })
 
-        train_features = extract_features(train_compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(train_features, train_compounds['Activity'].values)
+        train_features = extract_features(train_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(train_features, train_compounds['Activity'].to_numpy())
 
-        test_features = extract_features(test_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        test_features = extract_features(test_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         _, uncertainties = learner.predict(test_features)
 
         assert np.all(uncertainties >= 0)
         assert len(uncertainties) == len(test_compounds)
 
     def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = learner.predict(features)
 

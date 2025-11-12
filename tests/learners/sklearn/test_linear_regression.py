@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
 from learnm8.features.extraction import extract_features
@@ -43,12 +43,14 @@ class TestLinearRegressionLearner:
 
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features, targets)
         assert learner.is_trained
@@ -60,12 +62,14 @@ class TestLinearRegressionLearner:
 
     def test_ridge_vs_linear_mode(self, small_real_compounds, tmp_path):
         """Test both Ridge and Linear modes produce valid predictions."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         linear_learner = LinearRegressionLearner(alpha=None, random_state=42)
         linear_learner.train(features, targets)
@@ -82,14 +86,16 @@ class TestLinearRegressionLearner:
 
     def test_get_coefficients(self, learner, small_real_compounds, tmp_path):
         """Test coefficient retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert learner.get_coefficients() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         coefficients = learner.get_coefficients()
 
         assert coefficients is not None
@@ -98,14 +104,16 @@ class TestLinearRegressionLearner:
 
     def test_get_intercept(self, learner, small_real_compounds, tmp_path):
         """Test intercept retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert learner.get_intercept() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         intercept = learner.get_intercept()
 
         assert intercept is not None
@@ -114,13 +122,15 @@ class TestLinearRegressionLearner:
 
     def test_get_intercept_no_intercept_mode(self, small_real_compounds, tmp_path):
         """Test intercept retrieval when fit_intercept=False."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = LinearRegressionLearner(fit_intercept=False, random_state=42)
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         intercept = learner.get_intercept()
 
         assert intercept is not None
@@ -174,12 +184,14 @@ class TestLinearRegressionLearner:
 
     def test_different_alpha_values(self, tmp_path, small_real_compounds):
         """Test Ridge regression with different alpha values."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         alphas = [0.1, 1.0, 10.0]
         predictions_dict = {}
@@ -197,14 +209,14 @@ class TestLinearRegressionLearner:
 
     def test_edge_case_single_compound(self, learner, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 1
@@ -212,12 +224,14 @@ class TestLinearRegressionLearner:
 
     def test_coefficients_ridge_vs_linear(self, small_real_compounds, tmp_path):
         """Test that Ridge produces smaller coefficients than Linear (regularization effect)."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         linear_learner = LinearRegressionLearner(alpha=None, random_state=42)
         linear_learner.train(features, targets)
@@ -234,12 +248,14 @@ class TestLinearRegressionLearner:
 
     def test_n_jobs_parameter(self, small_real_compounds, tmp_path):
         """Test that n_jobs parameter is respected for LinearRegression mode."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         learner_parallel = LinearRegressionLearner(n_jobs=-1, random_state=42)
         assert learner_parallel.n_jobs == -1

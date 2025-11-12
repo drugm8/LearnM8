@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 from unittest.mock import Mock
 
 from learnm8.learners.torch.mlp import MLPLearner
@@ -33,12 +33,14 @@ class TestMLPLearner:
     
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
         assert learner.model is not None
 
@@ -49,7 +51,7 @@ class TestMLPLearner:
 
     def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
     
@@ -63,9 +65,11 @@ class TestMLPLearner:
     
     def test_different_architectures(self, tmp_path, small_real_compounds):
         """Test learner with different architectures."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = MLPLearner(
             hidden_sizes=(128, 64, 32, 16),
@@ -75,8 +79,8 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert learner.hidden_sizes == (128, 64, 32, 16)
@@ -85,9 +89,11 @@ class TestMLPLearner:
 
     def test_activation_functions(self, tmp_path, small_real_compounds):
         """Test different activation functions."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for activation in ['relu', 'tanh', 'gelu']:
             learner = MLPLearner(
@@ -97,8 +103,8 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-            learner.train(features, compounds['Activity'].values)
+            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert predictions.shape[0] == len(compounds)
@@ -106,9 +112,11 @@ class TestMLPLearner:
 
     def test_batch_normalization(self, tmp_path, small_real_compounds):
         """Test with and without batch normalization."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for batch_norm in [True, False]:
             learner = MLPLearner(
@@ -118,17 +126,19 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-            learner.train(features, compounds['Activity'].values)
+            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert predictions.shape[0] == len(compounds)
 
     def test_dropout_regularization(self, tmp_path, small_real_compounds):
         """Test different dropout rates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for dropout_rate in [0.0, 0.1, 0.5]:
             learner = MLPLearner(
@@ -138,8 +148,8 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-            learner.train(features, compounds['Activity'].values)
+            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert learner.dropout_rate == dropout_rate
@@ -147,7 +157,7 @@ class TestMLPLearner:
 
     def test_edge_case_single_compound(self, tmp_path):
         """Test with single compound using learner without batch norm."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
@@ -160,8 +170,8 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 1
@@ -169,14 +179,16 @@ class TestMLPLearner:
     
     def test_training_history(self, learner, small_real_compounds, tmp_path):
         """Test training history tracking."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert len(learner.get_training_history()) == 0
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         history = learner.get_training_history()
 
         assert len(history) > 0
@@ -186,9 +198,11 @@ class TestMLPLearner:
 
     def test_early_stopping(self, tmp_path, small_real_compounds):
         """Test early stopping mechanism."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = MLPLearner(
             hidden_sizes=(32,),
@@ -197,17 +211,19 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         history = learner.get_training_history()
 
         assert len(history) < 100
 
     def test_gpu_cpu_compatibility(self, tmp_path, small_real_compounds):
         """Test device compatibility."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = MLPLearner(
             hidden_sizes=(16,),
@@ -216,20 +232,22 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert str(learner.device) == 'cpu'
         assert predictions.shape[0] == len(compounds)
 
     def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = learner.predict(features)
 

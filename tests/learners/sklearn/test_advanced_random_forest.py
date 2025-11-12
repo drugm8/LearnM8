@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.sklearn.advanced_random_forest import AdvancedRandomForestLearner
 from learnm8.features.extraction import extract_features
@@ -28,12 +28,14 @@ class TestAdvancedRandomForestLearner:
 
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features, targets)
         assert learner.is_trained
@@ -45,14 +47,16 @@ class TestAdvancedRandomForestLearner:
 
     def test_oob_score_enabled(self, learner, small_real_compounds, tmp_path):
         """Test out-of-bag scoring functionality."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert learner.get_oob_score() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         oob_score = learner.get_oob_score()
         assert oob_score is not None
@@ -61,14 +65,16 @@ class TestAdvancedRandomForestLearner:
 
     def test_feature_importance(self, learner, small_real_compounds, tmp_path):
         """Test feature importance retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert learner.get_feature_importance() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         importance = learner.get_feature_importance()
         assert importance is not None
@@ -110,28 +116,30 @@ class TestAdvancedRandomForestLearner:
         """Test that AdvancedRandomForestLearner does not support uncertainty."""
         assert learner.supports_uncertainty() is False
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
             'SMILES': ['CCO', 'CCC'],
             'Activity': [0.3, 0.7]
         })
 
         features = np.random.randn(2, 10)
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert uncertainty is None
 
     def test_get_tree_stats(self, learner, small_real_compounds, tmp_path):
         """Test tree statistics retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         assert learner.get_tree_stats() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         stats = learner.get_tree_stats()
         assert stats is not None
@@ -149,9 +157,11 @@ class TestAdvancedRandomForestLearner:
 
     def test_advanced_hyperparameters(self, tmp_path, small_real_compounds):
         """Test learner with advanced hyperparameters configuration."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = AdvancedRandomForestLearner(
             n_estimators=50,
@@ -165,8 +175,8 @@ class TestAdvancedRandomForestLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert learner.n_estimators == 50
@@ -177,14 +187,14 @@ class TestAdvancedRandomForestLearner:
 
     def test_edge_case_single_compound(self, learner, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 1
@@ -192,9 +202,11 @@ class TestAdvancedRandomForestLearner:
 
     def test_regularization_effect(self, tmp_path, small_real_compounds):
         """Test that regularization parameters affect model behavior."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner_no_pruning = AdvancedRandomForestLearner(
             n_estimators=10,
@@ -210,10 +222,10 @@ class TestAdvancedRandomForestLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
-        learner_no_pruning.train(features, compounds['Activity'].values)
-        learner_with_pruning.train(features, compounds['Activity'].values)
+        learner_no_pruning.train(features, compounds['Activity'].to_numpy())
+        learner_with_pruning.train(features, compounds['Activity'].to_numpy())
 
         stats_no_pruning = learner_no_pruning.get_tree_stats()
         stats_with_pruning = learner_with_pruning.get_tree_stats()
@@ -222,9 +234,11 @@ class TestAdvancedRandomForestLearner:
 
     def test_bootstrap_sampling(self, tmp_path, small_real_compounds):
         """Test that bootstrap sampling affects model training."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = AdvancedRandomForestLearner(
             n_estimators=10,
@@ -234,8 +248,8 @@ class TestAdvancedRandomForestLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         assert learner.get_oob_score() is not None
         stats = learner.get_tree_stats()
