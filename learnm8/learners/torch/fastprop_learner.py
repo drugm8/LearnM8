@@ -64,7 +64,8 @@ class FastpropLearner(Learner):
                  clamp_input: bool = True,
                  early_stopping_patience: int = 5,
                  random_state: int = 42,
-                 device: str = 'auto'):
+                 device: str = 'auto',
+                 enable_aggressive_gc: bool = True):
         """Initialize Fastprop learner with conservative defaults.
 
         Args:
@@ -77,6 +78,9 @@ class FastpropLearner(Learner):
             early_stopping_patience: Patience for early stopping
             random_state: Random seed for reproducibility
             device: Device for computation ('auto', 'cpu', 'cuda')
+            enable_aggressive_gc: Enable automatic GPU memory cleanup after
+                training and prediction. Recommended for active learning.
+                Default: True.
 
         Raises:
             ImportError: If fastprop or PyTorch Lightning not available
@@ -100,6 +104,8 @@ class FastpropLearner(Learner):
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device(device)
+
+        self.enable_aggressive_gc = enable_aggressive_gc
 
         self.model = None
         self.trainer = None
@@ -197,6 +203,8 @@ class FastpropLearner(Learner):
             self.is_trained = True
             logger.info(f"Trained {self.get_name()} on {len(features)} samples")
 
+            self._cleanup_gpu_memory("after training")
+
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
             raise RuntimeError(f"Training failed: {e}") from e
@@ -238,6 +246,8 @@ class FastpropLearner(Learner):
             elif np.isscalar(predictions):
                 predictions = np.array([predictions])
 
+            self._cleanup_gpu_memory("after prediction")
+
             logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
 
             return predictions, None
@@ -257,3 +267,44 @@ class FastpropLearner(Learner):
         For uncertainty, use FastpropEnsemble (future implementation).
         """
         return False
+
+    def _cleanup_gpu_memory(self, context: str = "") -> None:
+        """Force garbage collection and clear GPU cache if enabled.
+
+        This method performs two cleanup operations:
+        1. torch.cuda.empty_cache() - Releases cached GPU memory
+        2. gc.collect() - Forces Python garbage collection
+
+        This is particularly important in active learning scenarios where
+        models are trained repeatedly over many cycles, which can lead to
+        GPU memory accumulation from unreferenced tensors and PyTorch's
+        caching allocator.
+
+        The cleanup is a best-effort operation that won't raise exceptions
+        if it fails. It only runs if enable_aggressive_gc=True.
+
+        Args:
+            context: Optional description of when cleanup is being called,
+                    used for debug logging (e.g., "after training")
+
+        Note:
+            This is safe to call after predictions have been moved to CPU
+            memory via .cpu().numpy(), as it only affects unreferenced
+            GPU tensors and Python objects.
+        """
+        if not self.enable_aggressive_gc:
+            return
+
+        try:
+            import gc
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+
+            if context:
+                logger.debug(f"GPU memory cleanup: {context}")
+
+        except Exception as e:
+            logger.warning(f"GPU memory cleanup failed ({context}): {e}")
