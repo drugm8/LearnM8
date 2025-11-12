@@ -133,9 +133,16 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer_type: str = "morga
 
 
 def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
-    """Compute Mordred descriptors for a list of SMILES."""
+    """Compute Mordred descriptors for a list of SMILES.
+
+    Note:
+        The Mordred library only provides a pandas API (Calculator.pandas()).
+        We convert the pandas DataFrame to Polars immediately after computation
+        for consistency with the rest of the LearnM8 codebase. This conversion
+        overhead is acceptable as descriptor computation is cached.
+    """
     from mordred import Calculator, descriptors
-    import pandas as pd
+    import pandas as pd  # Required by Mordred library
 
     # Create calculator
     calc = Calculator(descriptors, ignore_3D=True)
@@ -164,9 +171,9 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
         for _ in range(len(smiles_list)):
             empty_df.loc[len(empty_df)] = 0
         empty_df = empty_df.astype(np.float32)
-        return pl.from_pandas(empty_df)
+        return pl.from_pandas(empty_df)  # Convert to Polars for consistency
 
-    # Calculate descriptors for valid molecules
+    # Calculate descriptors for valid molecules (Mordred returns pandas)
     descriptors_df = calc.pandas(mols)
 
     # Fill NaN values for molecules that couldn't be processed
@@ -177,7 +184,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
 
     # Create final dataframe with all input molecules
     if len(valid_indices) == len(smiles_list):
-        # All molecules were valid
+        # All molecules were valid - convert to Polars
         return pl.from_pandas(descriptors_df)
     else:
         # Some molecules were invalid, need to insert zero rows
@@ -194,7 +201,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
                 final_df.loc[len(final_df)] = 0
 
         final_df = final_df.astype(np.float32)
-        return pl.from_pandas(final_df)
+        return pl.from_pandas(final_df)  # Convert to Polars for consistency
 
 
 def _get_representation_file(results_dir: Path, featurizer_type: str) -> Path:
