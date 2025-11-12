@@ -15,9 +15,9 @@ from learnm8.evaluation.core import evaluate_cycle
 class TestFeatureExtractionEdgeCases:
     """Edge cases for feature extraction functionality."""
     
-    def test_single_compound_dataset(self, edge_case_compounds, tmp_path):
+    def test_single_compound_dataset(self, valid_edge_case_compounds, tmp_path):
         """Test feature extraction with single compound."""
-        single_compound = edge_case_compounds.head(1)
+        single_compound = valid_edge_case_compounds.head(1)
 
         features = extract_features(
             single_compound['SMILES'].to_list(),
@@ -105,9 +105,9 @@ class TestAcquisitionEdgeCases:
 class TestEvaluationEdgeCases:
     """Edge cases for evaluation functionality."""
     
-    def test_evaluation_with_single_compound(self, edge_case_compounds):
+    def test_evaluation_with_single_compound(self, valid_edge_case_compounds):
         """Test evaluation with single compound."""
-        single_compound = edge_case_compounds.head(1)
+        single_compound = valid_edge_case_compounds.head(1)
         
         predictions = single_compound['Activity'].to_numpy()
         ground_truth = single_compound['Activity'].to_numpy()
@@ -173,9 +173,9 @@ class TestEvaluationEdgeCases:
 class TestIntegratedEdgeCases:
     """Edge cases that span multiple components."""
     
-    def test_workflow_with_edge_case_molecules(self, edge_case_compounds, tmp_path):
+    def test_workflow_with_edge_case_molecules(self, valid_edge_case_compounds, tmp_path):
         """Test complete workflow with edge case molecular structures."""
-        compounds = edge_case_compounds.clone()
+        compounds = valid_edge_case_compounds.clone()
 
         if len(compounds) == 0:
             pytest.skip("No edge case compounds available")
@@ -202,10 +202,10 @@ class TestIntegratedEdgeCases:
             # Some edge cases may legitimately fail
             pytest.skip(f"Edge case molecules caused expected failure: {e}")
     
-    def test_workflow_with_minimal_data(self, edge_case_compounds, tmp_path):
+    def test_workflow_with_minimal_data(self, valid_edge_case_compounds, tmp_path):
         """Test workflow with minimal viable dataset."""
         # Use just 2 compounds
-        minimal_data = edge_case_compounds.head(2)
+        minimal_data = valid_edge_case_compounds.head(2)
 
         if len(minimal_data) < 2:
             pytest.skip("Insufficient compounds for minimal test")

@@ -55,12 +55,12 @@ def test_initialize_master_dataframe(sample_compound_pool):
                                                       'selected_cycle', 'pruned_cycle', 'Activity'])
 
     # Verify status values
-    assert (master_df[master_df['ID'].is_in(initial_ids)]['status'] == STATUS_LABELED).all()
-    assert (master_df[~master_df['ID'].is_in(initial_ids)]['status'] == STATUS_UNLABELED).all()
+    assert (master_df.filter(pl.col('ID').is_in(initial_ids))['status'] == STATUS_LABELED).all()
+    assert (master_df.filter(~pl.col('ID').is_in(initial_ids))['status'] == STATUS_UNLABELED).all()
 
     # Verify target values set for initial compounds
     for comp_id in initial_ids:
-        target_val = master_df[master_df['ID'] == comp_id]['Activity'].iloc[0]
+        target_val = master_df.filter(pl.col('ID') == comp_id)['Activity'][0]
         assert target_val == initial_values[comp_id]
 
 
@@ -127,22 +127,22 @@ def test_update_compound_status_to_labeled(sample_master_df):
 
     # Verify status changed
     for comp_id in compound_ids:
-        assert updated_df[updated_df['ID'] == comp_id]['status'].iloc[0] == STATUS_LABELED
+        assert updated_df.filter(pl.col('ID') == comp_id)['status'][0] == STATUS_LABELED
 
     # Verify labeled_cycle set
     for comp_id in compound_ids:
-        assert updated_df[updated_df['ID'] == comp_id]['labeled_cycle'].iloc[0] == 0
+        assert updated_df.filter(pl.col('ID') == comp_id)['labeled_cycle'][0] == 0
 
     # Verify Activity column set (not 'target_value')
     for comp_id in compound_ids:
-        assert updated_df[updated_df['ID'] == comp_id]['Activity'].iloc[0] == target_values[comp_id]
+        assert updated_df.filter(pl.col('ID') == comp_id)['Activity'][0] == target_values[comp_id]
 
     # Verify original DataFrame unchanged (immutability)
     # Compare non-categorical columns separately due to dtype differences
     for col in original_df.columns:
         if col == 'status':
             # Categorical column comparison
-            assert (original_df[col].astype(str) == sample_master_df[col].astype(str)).all()
+            assert (original_df[col].cast(pl.Utf8) == sample_master_df[col].cast(pl.Utf8)).all()
         else:
             assert original_df[col].equals(sample_master_df[col])
 
@@ -161,11 +161,11 @@ def test_update_compound_status_to_pruned(sample_master_df):
 
     # Verify status changed
     for comp_id in compound_ids:
-        assert updated_df[updated_df['ID'] == comp_id]['status'].iloc[0] == STATUS_PRUNED
+        assert updated_df.filter(pl.col('ID') == comp_id)['status'][0] == STATUS_PRUNED
 
     # Verify pruned_cycle set
     for comp_id in compound_ids:
-        assert updated_df[updated_df['ID'] == comp_id]['pruned_cycle'].iloc[0] == 1
+        assert updated_df.filter(pl.col('ID') == comp_id)['pruned_cycle'][0] == 1
 
 
 def test_update_compound_status_invalid_status(sample_master_df):
@@ -197,11 +197,11 @@ def test_add_predictions_to_master(sample_master_df):
 
     # Verify values set correctly
     for i, comp_id in enumerate(compound_ids):
-        pred_val = updated_df[updated_df['ID'] == comp_id]['prediction_cycle_0'].iloc[0]
+        pred_val = updated_df.filter(pl.col('ID') == comp_id)['prediction_cycle_0'][0]
         assert pred_val == predictions[i]
 
     # Verify NaN for compounds not predicted
-    other_compound = updated_df[updated_df['ID'] == 'COMP_050']['prediction_cycle_0'].iloc[0]
+    other_compound = updated_df.filter(pl.col('ID') == 'COMP_050')['prediction_cycle_0'][0]
     assert pd.isna(other_compound)
 
 
@@ -225,7 +225,7 @@ def test_add_predictions_with_uncertainties(sample_master_df):
 
     # Verify uncertainty values set correctly
     for i, comp_id in enumerate(compound_ids):
-        unc_val = updated_df[updated_df['ID'] == comp_id]['uncertainty_cycle_0'].iloc[0]
+        unc_val = updated_df.filter(pl.col('ID') == comp_id)['uncertainty_cycle_0'][0]
         assert unc_val == uncertainties[i]
 
 
@@ -261,9 +261,9 @@ def test_add_predictions_multiple_cycles(sample_master_df):
     assert 'prediction_cycle_2' in updated_df.columns
 
     # Verify prediction values for all cycles
-    assert updated_df[updated_df['ID'] == 'COMP_010']['prediction_cycle_0'].iloc[0] == 0.5
-    assert updated_df[updated_df['ID'] == 'COMP_010']['prediction_cycle_1'].iloc[0] == 0.6
-    assert updated_df[updated_df['ID'] == 'COMP_010']['prediction_cycle_2'].iloc[0] == 0.7
+    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_0'][0] == 0.5
+    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_1'][0] == 0.6
+    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_2'][0] == 0.7
 
 
 def test_get_prediction_columns(sample_master_df):
@@ -311,11 +311,17 @@ def test_validate_master_dataframe_missing_columns():
 def test_validate_master_dataframe_invalid_status(sample_master_df):
     """Test validation with invalid status values."""
     invalid_df = sample_master_df.clone()
-    # Set invalid status by converting to object dtype first
+    # Set invalid status by converting to object dtype first and modifying first row
     invalid_df = invalid_df.with_columns(
         pl.Series('status', invalid_df['status'].cast(pl.Utf8))
     )
-    invalid_df.loc[0, 'status'] = 'invalid_status'
+    # Update first row to have invalid status
+    invalid_df = invalid_df.with_row_index('__row_idx').with_columns(
+        pl.when(pl.col('__row_idx') == 0)
+          .then(pl.lit('invalid_status'))
+          .otherwise(pl.col('status'))
+          .alias('status')
+    ).drop('__row_idx')
 
     with pytest.raises(ValueError, match="Invalid status values found"):
         validate_master_dataframe(invalid_df)
@@ -346,7 +352,7 @@ def test_immutability(sample_master_df):
     for col in original_df.columns:
         if col == 'status':
             # Categorical column comparison
-            assert (original_df[col].astype(str) == sample_master_df[col].astype(str)).all()
+            assert (original_df[col].cast(pl.Utf8) == sample_master_df[col].cast(pl.Utf8)).all()
         else:
             assert original_df[col].equals(sample_master_df[col])
 

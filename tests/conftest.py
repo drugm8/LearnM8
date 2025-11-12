@@ -295,6 +295,17 @@ def edge_case_compounds() -> pl.DataFrame:
 
 
 @pytest.fixture
+def valid_edge_case_compounds() -> pl.DataFrame:
+    """Valid edge case compounds only (filters out intentionally invalid SMILES).
+
+    Contains valid compounds with unusual but chemically correct structures.
+    Use for testing feature extraction and workflow with edge cases.
+    """
+    df = _load_test_data("edge_case_molecules.csv")
+    return df.filter(~pl.col('Edge_Case_Type').str.starts_with('invalid_smiles'))
+
+
+@pytest.fixture
 def multi_target_compounds() -> pl.DataFrame:
     """90 compounds from multiple targets for cross-validation testing.
 
