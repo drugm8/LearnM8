@@ -219,7 +219,7 @@ class TestSimulatedAnnealingAcquisition:
 
         # Test NaN predictions
         compounds_nan = compounds.clone()
-        pred_with_nan = compounds_nan.get_column('prediction').to_numpy().clone()
+        pred_with_nan = compounds_nan.get_column('prediction').to_numpy().copy()
         pred_with_nan[0] = np.nan
         compounds_nan = compounds_nan.with_columns(pl.Series('prediction', pred_with_nan))
         with pytest.raises(ValueError, match="Predictions contain NaN values"):
