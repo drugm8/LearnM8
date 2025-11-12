@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
+import polars as pl
 from joblib import Parallel, delayed
 
 from learnm8.utils.featurizers import (
@@ -102,9 +103,19 @@ def _extract_single_feature(smiles: str, featurizer_type: str) -> np.ndarray:
         return smiles_to_morgan_feature_fingerprint(smiles)
     elif featurizer_type == 'descriptors':
         desc_df = _compute_mordred_descriptors([smiles])
-        numeric_cols = desc_df.select_dtypes(include=[np.number]).columns
-        desc = desc_df[numeric_cols].replace([np.inf, -np.inf], 0).fillna(0)
-        return desc.iloc[0].astype(np.float32).values
+        numeric_cols = [col for col, dtype in desc_df.schema.items()
+                        if dtype in [pl.Int64, pl.Int32, pl.Int16, pl.Int8,
+                                    pl.Float64, pl.Float32, pl.UInt64, pl.UInt32,
+                                    pl.UInt16, pl.UInt8]]
+        desc = desc_df.select([
+            pl.when(pl.col(c).is_infinite())
+              .then(0.0)
+              .otherwise(pl.col(c))
+              .fill_null(0.0)
+              .alias(c)
+            for c in numeric_cols
+        ])
+        return desc.cast(pl.Float32).row(0, named=False)
     else:
         raise ValueError(f"Unknown featurizer type: {featurizer_type}")
 
@@ -137,9 +148,19 @@ def _extract_features_parallel(
 
     if featurizer_type == 'descriptors':
         desc_df = _compute_mordred_descriptors(smiles_list)
-        numeric_cols = desc_df.select_dtypes(include=[np.number]).columns
-        desc = desc_df[numeric_cols].replace([np.inf, -np.inf], 0).fillna(0)
-        return desc.astype(np.float32).values
+        numeric_cols = [col for col, dtype in desc_df.schema.items()
+                        if dtype in [pl.Int64, pl.Int32, pl.Int16, pl.Int8,
+                                    pl.Float64, pl.Float32, pl.UInt64, pl.UInt32,
+                                    pl.UInt16, pl.UInt8]]
+        desc = desc_df.select([
+            pl.when(pl.col(c).is_infinite())
+              .then(0.0)
+              .otherwise(pl.col(c))
+              .fill_null(0.0)
+              .alias(c)
+            for c in numeric_cols
+        ])
+        return desc.cast(pl.Float32).to_numpy()
 
     smiles_iterator = smiles_list
     if show_progress:
