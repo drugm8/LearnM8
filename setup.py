@@ -21,6 +21,7 @@ setup(
         "hdf5plugin>=3.0.0",
         "pyyaml>=5.0.0",
         "datamol>=0.12.0",
+        "matplotlib>=3.5.0",
     ],
     extras_require={
         "test": [
