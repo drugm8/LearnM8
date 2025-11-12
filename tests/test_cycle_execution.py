@@ -5,7 +5,6 @@ Tests execute_cycle function with real molecular data, focusing on integration a
 """
 
 import pytest
-import pandas as pd
 import numpy as np
 from unittest.mock import Mock
 
@@ -18,7 +17,7 @@ def create_test_master_df(compounds, initial_labeled_count=3):
     from conftest import create_initialized_master_df as initialize_master_dataframe
 
     initial_compounds = compounds.iloc[:initial_labeled_count]
-    initial_ids = initial_compounds['ID'].tolist()
+    initial_ids = initial_compounds['ID'].to_list()
     initial_values = pd.Series(
         np.random.uniform(0.1, 0.9, initial_labeled_count),
         index=initial_ids
@@ -38,10 +37,10 @@ class TestCycleExecution:
 
     def test_execute_single_cycle_basic(self, small_real_compounds, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test basic single cycle execution with master DataFrame."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(10)],
                 'SMILES': ['CCO'] * 10
             })
@@ -86,10 +85,10 @@ class TestCycleExecution:
     
     def test_execute_run_mode_cycle(self, small_real_compounds, tmp_path, mock_oracle, mock_learner):
         """Test run mode cycle execution with master DataFrame."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(8)],
                 'SMILES': ['CCO'] * 8
             })
@@ -128,16 +127,18 @@ class TestCycleExecution:
     
     def test_execute_benchmark_mode_cycle(self, small_real_compounds, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test benchmark mode cycle execution with master DataFrame."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(6)],
                 'SMILES': ['CCC'] * 6
             })
 
         # Add ground truth
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame
         master_df = create_test_master_df(compounds, initial_labeled_count=2)
@@ -171,7 +172,7 @@ class TestCycleExecution:
     
     def test_empty_unlabeled_pool_handling(self, tmp_path, mock_oracle, mock_learner):
         """Test handling of empty unlabeled pool with master DataFrame."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO']
         })
@@ -206,7 +207,7 @@ class TestCycleExecution:
     
     def test_batch_size_calculation(self, tmp_path, mock_oracle, mock_learner):
         """Test correct batch size calculation from batch_fraction with master DataFrame."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(20)],
             'SMILES': ['CCO'] * 20
         })
@@ -227,7 +228,7 @@ class TestCycleExecution:
         for batch_fraction, expected_selected in test_cases:
             config = CycleConfig(strategy='random', batch_fraction=batch_fraction)
             updated_master_df, metrics = execute_cycle(
-                compounds_df=master_df.copy(),
+                compounds_df=master_df.clone(),
                 cycle=0,
                 config=config,
                 learner=learner,
@@ -246,12 +247,12 @@ class TestCycleExecution:
         """Test cycle execution with 'lower' score direction."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(8)],
             'SMILES': ['CCN'] * 8
         })
 
-        initial_ids = compounds['ID'].iloc[:2].tolist()
+        initial_ids = compounds['ID'].head(2).to_list()
         initial_values = pd.Series([0.9, 0.1], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -287,12 +288,12 @@ class TestCycleExecution:
         """Test cycle execution with CSV export enabled."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(6)],
             'SMILES': ['CCO'] * 6
         })
 
-        initial_ids = compounds['ID'].iloc[:2].tolist()
+        initial_ids = compounds['ID'].head(2).to_list()
         initial_values = pd.Series([0.3, 0.7], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -328,7 +329,7 @@ class TestCycleExecution:
         """Test handling of cycle with no labeled compounds raises error."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
             'SMILES': ['CCO', 'CCC']
         })
@@ -366,12 +367,12 @@ class TestCycleExecution:
         """Test calculation of prediction statistics in cycle metrics."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
 
-        initial_ids = compounds['ID'].iloc[:3].tolist()
+        initial_ids = compounds['ID'].head(3).to_list()
         initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -411,12 +412,12 @@ class TestCycleExecution:
         """Test cycle execution with different acquisition strategies."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
             'SMILES': ['CCO'] * 12
         })
 
-        initial_ids = compounds['ID'].iloc[:3].tolist()
+        initial_ids = compounds['ID'].head(3).to_list()
         initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
 
         oracle = mock_oracle
@@ -459,7 +460,7 @@ class TestMasterDataFrameCycleIntegration:
 
     def test_master_df_prediction_columns(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test prediction columns created in master DataFrame."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
@@ -510,11 +511,11 @@ class TestMasterDataFrameCycleIntegration:
         labeled_data = master_df_after_1[labeled_mask]
 
         # Initially labeled compounds should have NaN in cycle 0 predictions
-        assert labeled_data['prediction_cycle_0'].isna().any()
+        assert labeled_data['prediction_cycle_0'].is_null().any()
 
     def test_master_df_status_updates(self, tmp_path, mock_oracle, mock_learner):
         """Test status updates in master DataFrame."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
@@ -554,7 +555,7 @@ class TestMasterDataFrameCycleIntegration:
 
     def test_master_df_immutability(self, tmp_path, mock_oracle, mock_learner):
         """Test that cycle execution doesn't mutate input master_df."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(8)],
             'SMILES': ['CCO'] * 8
         })
@@ -563,7 +564,7 @@ class TestMasterDataFrameCycleIntegration:
         master_df_original = create_test_master_df(compounds, initial_labeled_count=2)
 
         # Store copy of original
-        master_df_copy = master_df_original.copy()
+        master_df_copy = master_df_original.clone()
 
         oracle = mock_oracle
         learner = mock_learner
@@ -598,16 +599,18 @@ class TestMasterDataFrameCycleIntegration:
         """
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
             'SMILES': ['CCO'] * 12
         })
 
         # Add ground truth for benchmark mode
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame with 3 labeled
-        initial_ids = compounds['ID'].iloc[:3].tolist()
+        initial_ids = compounds['ID'].head(3).to_list()
         initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -653,15 +656,17 @@ class TestMasterDataFrameCycleIntegration:
         """
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
 
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame with 3 labeled
-        initial_ids = compounds['ID'].iloc[:3].tolist()
+        initial_ids = compounds['ID'].head(3).to_list()
         initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -705,15 +710,17 @@ class TestMasterDataFrameCycleIntegration:
         """
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
 
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame with 3 labeled
-        initial_ids = compounds['ID'].iloc[:3].tolist()
+        initial_ids = compounds['ID'].head(3).to_list()
         initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -758,14 +765,16 @@ class TestMasterDataFrameCycleIntegration:
         """
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(15)],
             'SMILES': ['CCO'] * 15
         })
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame with 5 labeled
-        initial_ids = compounds['ID'].iloc[:5].tolist()
+        initial_ids = compounds['ID'].head(5).to_list()
         initial_values = pd.Series([0.2, 0.4, 0.6, 0.8, 1.0], index=initial_ids)
         master_df_run = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -774,7 +783,7 @@ class TestMasterDataFrameCycleIntegration:
         initial_labeled_ids=initial_ids,
         initial_measurements=initial_values
     )
-        master_df_benchmark = master_df_run.copy()
+        master_df_benchmark = master_df_run.clone()
 
         oracle = mock_oracle
         learner_run = mock_learner_with_uncertainty
@@ -831,15 +840,17 @@ class TestMasterDataFrameCycleIntegration:
         """Test selected_cycle and labeled_cycle are set correctly and remain unchanged."""
         from conftest import create_initialized_master_df as initialize_master_dataframe
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
 
-        compounds['Activity'] = np.random.uniform(0, 1, len(compounds))
+        compounds = compounds.with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(compounds)))
+        )
 
         # Create master DataFrame with 2 labeled initially
-        initial_ids = compounds['ID'].iloc[:2].tolist()
+        initial_ids = compounds['ID'].head(2).to_list()
         initial_values = pd.Series([0.3, 0.7], index=initial_ids)
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
@@ -871,7 +882,7 @@ class TestMasterDataFrameCycleIntegration:
         # Get compounds selected in cycle 0 (newly labeled, excluding initially labeled)
         newly_labeled_cycle_0 = master_df_0[
             (master_df_0['labeled_cycle'] == 0) &
-            (~master_df_0['ID'].isin(initial_ids))
+            (~master_df_0['ID'].is_in(initial_ids))
         ]
 
         # Verify selected_cycle and labeled_cycle are both 0 for newly selected compounds
@@ -882,7 +893,7 @@ class TestMasterDataFrameCycleIntegration:
                 f"Compound {row['ID']} should have labeled_cycle=0"
 
         # Store IDs selected in cycle 0
-        cycle_0_ids = newly_labeled_cycle_0['ID'].tolist()
+        cycle_0_ids = newly_labeled_cycle_0['ID'].to_list()
         assert len(cycle_0_ids) > 0, "Should have selected compounds in cycle 0"
 
         # Execute cycle 1

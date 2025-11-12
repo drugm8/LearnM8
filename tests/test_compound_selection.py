@@ -6,7 +6,7 @@ focusing on different strategies, error handling, and data validation.
 """
 
 import pytest
-import pandas as pd
+import polars as pl
 import numpy as np
 from unittest.mock import Mock, patch
 
@@ -18,10 +18,10 @@ class TestSelectCompoundsByStrategy:
 
     def test_greedy_selection_higher(self, small_real_compounds, tmp_path):
         """Test greedy selection with 'higher' score direction."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(10)],
                 'SMILES': ['CCO'] * 10
             })
@@ -31,8 +31,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0, 1, len(compounds))
 
         # Prepare pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Get acquisition function and select
         acq_class = get_acquisition_function('greedy')
@@ -44,7 +46,10 @@ class TestSelectCompoundsByStrategy:
         assert 'SMILES' in selected.columns
 
         # Should select compounds with highest predictions
-        selected_indices = [compounds[compounds['ID'] == id_val].index[0] for id_val in selected['ID']]
+        # Get indices by matching IDs
+        selected_ids = selected['ID'].to_list()
+        id_to_index = {id_val: i for i, id_val in enumerate(compounds['ID'].to_list())}
+        selected_indices = [id_to_index[id_val] for id_val in selected_ids]
         selected_predictions = predictions[selected_indices]
 
         # Verify they are among the top predictions
@@ -53,10 +58,10 @@ class TestSelectCompoundsByStrategy:
 
     def test_greedy_selection_lower(self, small_real_compounds, tmp_path):
         """Test greedy selection with 'lower' score direction."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(8)],
                 'SMILES': ['CCC'] * 8
             })
@@ -65,8 +70,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0, 1, len(compounds))
 
         # Prepare pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Get acquisition function and select
         acq_class = get_acquisition_function('greedy')
@@ -76,7 +83,9 @@ class TestSelectCompoundsByStrategy:
         assert len(selected) == 2
 
         # Should select compounds with lowest predictions
-        selected_indices = [compounds[compounds['ID'] == id_val].index[0] for id_val in selected['ID']]
+        selected_ids = selected['ID'].to_list()
+        id_to_index = {id_val: i for i, id_val in enumerate(compounds['ID'].to_list())}
+        selected_indices = [id_to_index[id_val] for id_val in selected_ids]
         selected_predictions = predictions[selected_indices]
 
         # With 'lower' direction, it should prefer lower predictions
@@ -85,10 +94,10 @@ class TestSelectCompoundsByStrategy:
 
     def test_random_selection(self, small_real_compounds, tmp_path):
         """Test random selection strategy."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(6)],
                 'SMILES': ['CCN'] * 6
             })
@@ -96,8 +105,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0, 1, len(compounds))
 
         # Prepare pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Get acquisition function and select
         acq_class = get_acquisition_function('random')
@@ -109,14 +120,14 @@ class TestSelectCompoundsByStrategy:
         assert 'SMILES' in selected.columns
 
         # Should be a subset of original compounds
-        assert selected['ID'].isin(compounds['ID']).all()
+        assert selected['ID'].is_in(compounds['ID']).all()
 
     def test_uncertainty_based_selection(self, small_real_compounds, tmp_path):
         """Test uncertainty-based selection strategies."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(8)],
                 'SMILES': ['CCO'] * 8
             })
@@ -125,9 +136,13 @@ class TestSelectCompoundsByStrategy:
         uncertainties = np.random.uniform(0.1, 0.9, len(compounds))
 
         # Prepare pool with predictions and uncertainties
-        pool = compounds.copy()
-        pool['prediction'] = predictions
-        pool['uncertainty'] = uncertainties
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
+        pool = pool.with_columns(
+            pl.Series('uncertainty', uncertainties)
+        )
 
         # Test strategies that use uncertainty
         uncertainty_strategies = ['ucb']  # Start with basic ones that should work
@@ -140,20 +155,20 @@ class TestSelectCompoundsByStrategy:
 
                 assert len(selected) == 3
                 assert 'ID' in selected.columns
-                assert selected['ID'].isin(compounds['ID']).all()
+                assert selected['ID'].is_in(compounds['ID']).all()
 
             except Exception as e:
                 pytest.skip(f"Strategy {strategy} not available or failed: {e}")
 
     def test_batch_size_constraints(self, small_real_compounds, tmp_path):
         """Test batch size constraint handling."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         # Use a small subset for predictable testing
         if len(compounds) >= 2:
-            compounds = compounds.iloc[:2].copy()
+            compounds = compounds.head(2).clone()
         else:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': ['COMP_001', 'COMP_002'],
                 'SMILES': ['CCO', 'CCC']
             })
@@ -161,8 +176,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.array([0.3, 0.7])
 
         # Prepare pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Test batch size larger than pool
         acq_class = get_acquisition_function('greedy')
@@ -178,16 +195,16 @@ class TestSelectCompoundsByStrategy:
 
     def test_missing_predictions_handling(self, small_real_compounds, tmp_path):
         """Test handling when predictions are missing."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(5)],
                 'SMILES': ['CCC'] * 5
             })
 
         # Pool without predictions column
-        pool = compounds.copy()
+        pool = compounds.clone()
 
         # Should raise ValueError when predictions are missing
         acq_class = get_acquisition_function('greedy')
@@ -198,10 +215,10 @@ class TestSelectCompoundsByStrategy:
 
     def test_missing_uncertainties_handling(self, small_real_compounds, tmp_path):
         """Test handling when uncertainties are None for uncertainty-based strategies."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(6)],
                 'SMILES': ['CCN'] * 6
             })
@@ -209,8 +226,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0, 1, len(compounds))
 
         # Prepare pool without uncertainties
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Should raise ValueError when uncertainties are required but not provided
         acq_class = get_acquisition_function('ucb')
@@ -221,20 +240,22 @@ class TestSelectCompoundsByStrategy:
 
     def test_dataframe_predictions(self, small_real_compounds, tmp_path):
         """Test handling of DataFrame predictions."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         # Use a small subset for predictable testing
         if len(compounds) >= 4:
-            compounds = compounds.iloc[:4].copy()
+            compounds = compounds.head(4).clone()
         else:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(4)],
                 'SMILES': ['CCO'] * 4
             })
 
         # Create DataFrame with predictions
-        pool = compounds.copy()
-        pool['prediction'] = [0.2, 0.8, 0.5, 0.9][:len(compounds)]
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', [0.2, 0.8, 0.5, 0.9][:len(compounds)])
+        )
 
         acq_class = get_acquisition_function('greedy')
         acq = acq_class(score_direction='higher')
@@ -245,30 +266,32 @@ class TestSelectCompoundsByStrategy:
 
     def test_invalid_strategy_error(self, small_real_compounds, tmp_path):
         """Test error handling for invalid strategy names."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         # Use a single compound for predictable testing
         if len(compounds) >= 1:
-            compounds = compounds.iloc[:1].copy()
+            compounds = compounds.head(1).clone()
         else:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': ['COMP_001'],
                 'SMILES': ['CCO']
             })
 
         # Pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = np.array([0.5])
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.array([0.5]))
+        )
 
         with pytest.raises(KeyError):
             get_acquisition_function('invalid_strategy')
 
     def test_acquisition_params_passing(self, small_real_compounds, tmp_path):
         """Test passing of acquisition parameters."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
         if len(compounds) == 0:
-            compounds = pd.DataFrame({
+            compounds = pl.DataFrame({
                 'ID': [f'COMP_{i:03d}' for i in range(5)],
                 'SMILES': ['CCC'] * 5
             })
@@ -276,8 +299,10 @@ class TestSelectCompoundsByStrategy:
         predictions = np.random.uniform(0, 1, len(compounds))
 
         # Prepare pool with predictions
-        pool = compounds.copy()
-        pool['prediction'] = predictions
+        pool = compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', predictions)
+        )
 
         # Test with acquisition parameters
         acq_class = get_acquisition_function('greedy')

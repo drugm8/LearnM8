@@ -68,8 +68,10 @@ class TestAPIWithEnsembles:
         """Test Pattern 1: String-based ensemble creation."""
         from learnm8 import run_active_learning
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
         oracle_df.to_csv(oracle_path, index=False)
 
@@ -95,8 +97,10 @@ class TestAPIWithEnsembles:
         from learnm8 import run_active_learning
         from learnm8.learners.ensemble import RFEnsemble
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
         oracle_df.to_csv(oracle_path, index=False)
 
@@ -124,8 +128,10 @@ class TestAPIWithEnsembles:
         """Test that same random_state produces reproducible results."""
         from learnm8 import run_active_learning
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
         oracle_df.to_csv(oracle_path, index=False)
 
