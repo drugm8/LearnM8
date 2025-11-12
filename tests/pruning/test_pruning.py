@@ -7,6 +7,7 @@ Uses only public API (create_pruning_strategy) rather than internal validators.
 import pytest
 import numpy as np
 import pandas as pd
+import polars as pl
 import json
 
 from learnm8.pruning import create_pruning_strategy
