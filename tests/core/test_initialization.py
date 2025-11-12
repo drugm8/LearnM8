@@ -1,5 +1,4 @@
 import pytest
-import pandas as pd
 import polars as pl
 import numpy as np
 from pathlib import Path
@@ -165,7 +164,7 @@ class TestSelectInitialBatch:
         from learnm8.oracles import CSVOracle
 
         oracle_df = sample_compounds.clone().with_columns(
-            pl.lit(np.random.uniform(0, 1, len(sample_compounds))).alias('Activity')
+            pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds)))
         )
         oracle_path = tmp_path / 'oracle.csv'
         oracle_df.write_csv(oracle_path)
@@ -221,9 +220,9 @@ class TestSelectInitialBatch:
 
         empty_df = pl.DataFrame(
             schema={
-                'ID': pl.String,
-                'SMILES': pl.String,
-                'status': pl.Categorical(['unlabeled', 'labeled', 'pruned']),
+                'ID': pl.Utf8,
+                'SMILES': pl.Utf8,
+                'status': pl.Categorical,
                 'labeled_cycle': pl.Int64,
                 'Activity': pl.Float64
             }

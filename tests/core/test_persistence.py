@@ -35,8 +35,8 @@ def test_organize_columns():
 
 def test_add_csv_metadata(tmp_path):
     csv_file = tmp_path / 'test.csv'
-    df = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
-    df.to_csv(csv_file, index=False)
+    df = pl.DataFrame({'A': [1, 2], 'B': [3, 4]})
+    df.write_csv(csv_file)
 
     metadata = {
         'Description': 'Test file',
