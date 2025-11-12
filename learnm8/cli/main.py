@@ -26,7 +26,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.traceback import install
-import pandas as pd
+import polars as pl
 
 try:
     import yaml
@@ -611,7 +611,7 @@ def cmd_validate(args: argparse.Namespace):
             sys.exit(1)
 
         console.print(f"[cyan]Validating:[/cyan] {args.compound_pool}")
-        compounds = pd.read_csv(args.compound_pool)
+        compounds = pl.read_csv(args.compound_pool)
         console.print(f"Total compounds: {len(compounds)}")
 
         with Progress(
@@ -641,16 +641,26 @@ def cmd_validate(args: argparse.Namespace):
             output_dir = Path(args.output)
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            invalid_df = result.invalid_compounds.copy()
+            invalid_df = result.invalid_compounds.clone()
             # Map errors robustly: use ID if available, otherwise use index
-            if 'ID' in invalid_df.columns and not invalid_df['ID'].isna().all():
-                invalid_df['error'] = invalid_df['ID'].astype(str).map(result.validation_errors)
+            if 'ID' in invalid_df.columns and not invalid_df['ID'].is_null().all():
+                error_dict = result.validation_errors
+                invalid_df = invalid_df.with_columns(
+                    pl.col('ID').cast(pl.Utf8).map_elements(
+                        lambda x: error_dict.get(x, "Unknown error"), return_dtype=pl.Utf8
+                    ).alias('error')
+                )
             else:
-                # Use index if ID not available
-                invalid_df['error'] = invalid_df.index.astype(str).map(result.validation_errors)
+                # Use index if ID not available - create index column first
+                error_dict = result.validation_errors
+                invalid_df = invalid_df.with_row_count('__index__').with_columns(
+                    pl.col('__index__').cast(pl.Utf8).map_elements(
+                        lambda x: error_dict.get(str(x), "Unknown error"), return_dtype=pl.Utf8
+                    ).alias('error')
+                ).drop('__index__')
 
             report_path = output_dir / 'validation_report.csv'
-            invalid_df.to_csv(report_path, index=False)
+            invalid_df.write_csv(report_path)
 
             console.print(f"\n[green]Report saved to:[/green] {report_path}")
 
