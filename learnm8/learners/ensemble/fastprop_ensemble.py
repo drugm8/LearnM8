@@ -18,6 +18,7 @@ class FastpropEnsemble(EnsembleLearner):
                  early_stopping_patience: int = 5,
                  random_states: Optional[List[int]] = None,
                  device: str = 'auto',
+                 enable_aggressive_gc: bool = True,
                  **kwargs):
         """Initialize Fastprop ensemble.
 
@@ -31,6 +32,8 @@ class FastpropEnsemble(EnsembleLearner):
             early_stopping_patience: Early stopping patience per learner (default: 5)
             random_states: List of random states for diversity (default: [42, 123, 456])
             device: Device for computation ('auto', 'cpu', 'cuda') (default: 'auto')
+            enable_aggressive_gc: Enable automatic GPU memory cleanup for all
+                ensemble members (default: True)
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if random_states is None:
@@ -47,7 +50,8 @@ class FastpropEnsemble(EnsembleLearner):
                 clamp_input=clamp_input,
                 early_stopping_patience=early_stopping_patience,
                 random_state=rs,
-                device=device
+                device=device,
+                enable_aggressive_gc=enable_aggressive_gc
             )
             learners.append(fastprop)
 
@@ -65,6 +69,7 @@ class FastpropEnsemble(EnsembleLearner):
         self.early_stopping_patience = early_stopping_patience
         self.random_states = random_states
         self.device = device
+        self.enable_aggressive_gc = enable_aggressive_gc
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""

@@ -52,6 +52,11 @@ class ChempropLearner(Learner):
 		- enable_fine_tuning: Enable checkpoint-based fine-tuning (default: False)
 		- checkpoint_dir: Directory for checkpoint storage (required if fine-tuning enabled)
 
+	Memory Management Configuration:
+		- enable_aggressive_gc: Enable automatic GPU memory cleanup after training
+			and prediction. Recommended for active learning with many cycles.
+			Default: True. Disable for maximum performance if GPU memory is abundant.
+
 	Example:
 		# Pure graph-based learning
 		learner = ChempropLearner(depth=5, message_hidden_dim=500)
@@ -92,11 +97,12 @@ class ChempropLearner(Learner):
 				 random_state: int = 42,
 				 accelerator: str = 'auto',
 				 early_stopping: bool = True,
-				 early_stopping_patience: int = 10,
+				 early_stopping_patience: int = 3,
 				 early_stopping_min_delta: float = 0.0,
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,
-				 checkpoint_dir: Optional[Path] = None):
+				 checkpoint_dir: Optional[Path] = None,
+				 enable_aggressive_gc: bool = True):
 		if not CHEMPROP_AVAILABLE:
 			raise ImportError(
 				"Chemprop is required for ChempropLearner. "
@@ -134,6 +140,9 @@ class ChempropLearner(Learner):
 		self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
 		self.current_checkpoint_path: Optional[Path] = None
 		self.cycle_counter = 0
+
+		# Memory management configuration
+		self.enable_aggressive_gc = enable_aggressive_gc
 
 		if self.enable_fine_tuning:
 			if self.checkpoint_dir is None:
@@ -318,6 +327,8 @@ class ChempropLearner(Learner):
 
 		logger.info("Training complete")
 
+		self._cleanup_gpu_memory("after training")
+
 	def predict(self,
 				features: Optional[np.ndarray],
 				smiles: Optional[List[str]] = None
@@ -363,6 +374,47 @@ class ChempropLearner(Learner):
 	def get_name(self) -> str:
 		"""Return descriptive learner name."""
 		return f"Chemprop(depth={self.depth},hidden={self.message_hidden_dim})"
+
+	def _cleanup_gpu_memory(self, context: str = "") -> None:
+		"""Force garbage collection and clear GPU cache if enabled.
+
+		This method performs two cleanup operations:
+		1. torch.cuda.empty_cache() - Releases cached GPU memory
+		2. gc.collect() - Forces Python garbage collection
+
+		This is particularly important in active learning scenarios where
+		models are trained repeatedly over many cycles, which can lead to
+		GPU memory accumulation from unreferenced tensors and PyTorch's
+		caching allocator.
+
+		The cleanup is a best-effort operation that won't raise exceptions
+		if it fails. It only runs if enable_aggressive_gc=True.
+
+		Args:
+			context: Optional description of when cleanup is being called,
+					used for debug logging (e.g., "after training")
+
+		Note:
+			This is safe to call after predictions have been moved to CPU
+			memory via .cpu().numpy(), as it only affects unreferenced
+			GPU tensors and Python objects.
+		"""
+		if not self.enable_aggressive_gc:
+			return
+
+		try:
+			import gc
+			import torch
+
+			if torch.cuda.is_available():
+				torch.cuda.empty_cache()
+			gc.collect()
+
+			if context:
+				logger.debug(f"GPU memory cleanup: {context}")
+
+		except Exception as e:
+			logger.warning(f"GPU memory cleanup failed ({context}): {e}")
 
 	def _create_dataset(self,
 					   smiles: List[str],
@@ -502,5 +554,7 @@ class ChempropLearner(Learner):
 		predictions = self.trainer.predict(self.model, test_loader)
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()
+
+		self._cleanup_gpu_memory("after prediction")
 
 		return predictions
