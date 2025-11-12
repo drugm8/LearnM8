@@ -260,7 +260,7 @@ class TestMorganFeatureFingerprintWithRealMolecularData:
         if len(small_real_compounds) == 0:
             pytest.skip("No real compounds available in fixture")
 
-        smiles = small_real_compounds['SMILES'].iloc[0]
+        smiles = small_real_compounds['SMILES'][0]
         fp = smiles_to_morgan_feature_fingerprint(smiles)
 
         assert isinstance(fp, np.ndarray)
@@ -271,7 +271,7 @@ class TestMorganFeatureFingerprintWithRealMolecularData:
         if len(small_real_compounds) == 0:
             pytest.skip("No real compounds available in fixture")
 
-        smiles_list = small_real_compounds['SMILES'].tolist()[:10]
+        smiles_list = small_real_compounds['SMILES'].to_list()[:10]
         fingerprints = [smiles_to_morgan_feature_fingerprint(s) for s in smiles_list]
 
         assert len(fingerprints) == len(smiles_list)
@@ -285,7 +285,7 @@ class TestMorganFeatureFingerprintWithRealMolecularData:
             pytest.skip("No edge case compounds available in fixture")
 
         for idx in range(min(5, len(edge_case_compounds))):
-            smiles = edge_case_compounds['SMILES'].iloc[idx]
+            smiles = edge_case_compounds['SMILES'][idx]
             try:
                 fp = smiles_to_morgan_feature_fingerprint(smiles)
                 assert isinstance(fp, np.ndarray)
@@ -297,7 +297,7 @@ class TestMorganFeatureFingerprintWithRealMolecularData:
         if len(diverse_real_compounds) == 0:
             pytest.skip("No diverse compounds available in fixture")
 
-        smiles_list = diverse_real_compounds['SMILES'].tolist()[:5]
+        smiles_list = diverse_real_compounds['SMILES'].to_list()[:5]
         fingerprints = [smiles_to_morgan_feature_fingerprint(s) for s in smiles_list]
 
         assert len(fingerprints) == len(smiles_list)
