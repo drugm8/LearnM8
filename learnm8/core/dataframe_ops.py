@@ -18,6 +18,7 @@ Performance characteristics:
 """
 
 import polars as pl
+import pandas as pd
 import numpy as np
 from typing import List, Optional, Dict, Any, Union
 import logging
@@ -191,8 +192,11 @@ def _update_status_inplace(
             elif isinstance(target_values, pl.Series):
                 # For Series, zip IDs with values
                 id_to_value = dict(zip(compound_ids, target_values.to_list()))
+            elif isinstance(target_values, pd.Series):
+                # For pandas Series, use to_dict() for index-value mapping
+                id_to_value = target_values.to_dict()
             else:
-                raise TypeError(f"target_values must be dict or pl.Series, got {type(target_values)}")
+                raise TypeError(f"target_values must be dict, pl.Series, or pd.Series, got {type(target_values)}")
 
             df = map_values_via_join(df, id_to_value, 'ID', target_col)
 
@@ -215,7 +219,7 @@ def update_status(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: Optional[Union[pl.Series, Dict]] = None
+    target_values: Optional[Union[pl.Series, pd.Series, Dict]] = None
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
@@ -228,7 +232,7 @@ def update_status(
         new_status: New status ('labeled', 'unlabeled', or 'pruned')
         cycle: Current cycle number
         target_col: Name of target column (e.g., 'Activity')
-        target_values: Optional Series with target values indexed by compound ID
+        target_values: Optional Series (Polars or Pandas) or dict with target values indexed by compound ID
 
     Returns:
         Updated DataFrame (new copy)
