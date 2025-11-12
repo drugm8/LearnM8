@@ -447,3 +447,109 @@ class TestChempropLearnerWithDescriptors:
         predictions, _ = learner.predict(features=features, smiles=smiles)
         assert predictions.shape == (20,)
         assert np.all(np.isfinite(predictions))
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        learner = ChempropLearner()
+        assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        learner = ChempropLearner(enable_aggressive_gc=False)
+        assert learner.enable_aggressive_gc is False
+
+    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after training when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after training' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after prediction when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        cleanup_called.clear()
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        learner.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after prediction' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=False
+        )
+
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        learner.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) == 0
+
+    def test_predictions_unaffected_by_gc(self, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner_gc_on = ChempropLearner(
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=True
+        )
+        learner_gc_on.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_on, _ = learner_gc_on.predict(features=None, smiles=smiles)
+
+        learner_gc_off = ChempropLearner(
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=False
+        )
+        learner_gc_off.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_off, _ = learner_gc_off.predict(features=None, smiles=smiles)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)

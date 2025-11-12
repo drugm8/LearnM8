@@ -370,3 +370,152 @@ class TestFastpropLearner:
 
         assert learner.supports_uncertainty() is False
         assert uncertainty is None
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        learner = FastpropLearner()
+        assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        learner = FastpropLearner(enable_aggressive_gc=False)
+        assert learner.enable_aggressive_gc is False
+
+    def test_cleanup_gpu_memory_called_after_training(self, tmp_path, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after training when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = FastpropLearner(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        features = extract_features(
+            compounds['SMILES'].to_list(),
+            'morgan',
+            tmp_path
+        )
+
+        learner.train(features, compounds['Activity'].to_numpy())
+
+        assert len(cleanup_called) > 0
+        assert any('after training' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_gpu_memory_called_after_prediction(self, tmp_path, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after prediction when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = FastpropLearner(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        features = extract_features(
+            compounds['SMILES'].to_list(),
+            'morgan',
+            tmp_path
+        )
+
+        learner.train(features, compounds['Activity'].to_numpy())
+
+        cleanup_called.clear()
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        learner.predict(features)
+
+        assert len(cleanup_called) > 0
+        assert any('after prediction' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_not_called_when_disabled(self, tmp_path, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = FastpropLearner(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            enable_aggressive_gc=False
+        )
+
+        real_cleanup = learner._cleanup_gpu_memory
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        features = extract_features(
+            compounds['SMILES'].to_list(),
+            'morgan',
+            tmp_path
+        )
+
+        learner.train(features, compounds['Activity'].to_numpy())
+        learner.predict(features)
+
+        assert len(cleanup_called) == 0
+
+    def test_predictions_unaffected_by_gc(self, tmp_path, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        features = extract_features(
+            compounds['SMILES'].to_list(),
+            'morgan',
+            tmp_path
+        )
+
+        learner_gc_on = FastpropLearner(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=True
+        )
+        learner_gc_on.train(features, compounds['Activity'].to_numpy())
+        pred_gc_on, _ = learner_gc_on.predict(features)
+
+        learner_gc_off = FastpropLearner(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=False
+        )
+        learner_gc_off.train(features, compounds['Activity'].to_numpy())
+        pred_gc_off, _ = learner_gc_off.predict(features)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
