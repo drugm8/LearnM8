@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.torch.fastprop_learner import FastpropLearner
 from learnm8.features.extraction import extract_features
@@ -36,17 +36,19 @@ class TestFastpropLearner:
 
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
         assert learner.model is not None
         assert learner.trainer is not None
@@ -59,7 +61,7 @@ class TestFastpropLearner:
     def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
         features = extract_features(
-            small_real_compounds['SMILES'].tolist(),
+            small_real_compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
@@ -80,9 +82,11 @@ class TestFastpropLearner:
 
     def test_morgan_features(self, tmp_path, small_real_compounds):
         """Test with morgan fingerprints (2048-bit)."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -92,12 +96,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert features.shape[1] == 2048
@@ -106,9 +110,11 @@ class TestFastpropLearner:
 
     def test_maccs_features(self, tmp_path, small_real_compounds):
         """Test with maccs fingerprints (167-bit)."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -118,12 +124,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'maccs',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert features.shape[1] == 167
@@ -132,9 +138,11 @@ class TestFastpropLearner:
 
     def test_descriptors_features(self, tmp_path, small_real_compounds):
         """Test with Mordred descriptors (1613-dim)."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -144,12 +152,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'descriptors',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert features.shape[1] == 1613
@@ -158,9 +166,11 @@ class TestFastpropLearner:
 
     def test_different_architectures(self, tmp_path, small_real_compounds):
         """Test with different fnn_layers and hidden_size."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for fnn_layers, hidden_size in [(2, 128), (3, 256), (4, 512)]:
             learner = FastpropLearner(
@@ -171,12 +181,12 @@ class TestFastpropLearner:
             )
 
             features = extract_features(
-                compounds['SMILES'].tolist(),
+                compounds['SMILES'].to_list(),
                 'morgan',
                 tmp_path
             )
 
-            learner.train(features, compounds['Activity'].values)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert learner.fnn_layers == fnn_layers
@@ -185,9 +195,11 @@ class TestFastpropLearner:
 
     def test_clamp_input_flag(self, tmp_path, small_real_compounds):
         """Test clamp_input=True vs False."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for clamp_input in [True, False]:
             learner = FastpropLearner(
@@ -199,12 +211,12 @@ class TestFastpropLearner:
             )
 
             features = extract_features(
-                compounds['SMILES'].tolist(),
+                compounds['SMILES'].to_list(),
                 'morgan',
                 tmp_path
             )
 
-            learner.train(features, compounds['Activity'].values)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert learner.clamp_input == clamp_input
@@ -212,9 +224,11 @@ class TestFastpropLearner:
 
     def test_early_stopping(self, tmp_path, small_real_compounds):
         """Verify early stopping prevents full epoch training."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -225,20 +239,22 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         assert learner.is_trained
 
     def test_cpu_device(self, tmp_path, small_real_compounds):
         """Test explicit CPU device."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -249,12 +265,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert str(learner.device) == 'cpu'
@@ -262,9 +278,11 @@ class TestFastpropLearner:
 
     def test_auto_device(self, tmp_path, small_real_compounds):
         """Test auto device detection."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = FastpropLearner(
             fnn_layers=2,
@@ -275,12 +293,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert str(learner.device) in ['cpu', 'cuda', 'cuda:0']
@@ -292,7 +310,7 @@ class TestFastpropLearner:
         Note: Single compound training may produce NaN due to variance
         calculation issues in standard_scale with n=1. This is expected.
         """
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
@@ -307,12 +325,12 @@ class TestFastpropLearner:
         )
 
         features = extract_features(
-            single_compound['SMILES'].tolist(),
+            single_compound['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, single_compound['Activity'].values)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 1
@@ -335,17 +353,19 @@ class TestFastpropLearner:
 
     def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
         """Verify uncertainty is always None for single model."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = extract_features(
-            compounds['SMILES'].tolist(),
+            compounds['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
 
-        learner.train(features, compounds['Activity'].values)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert learner.supports_uncertainty() is False

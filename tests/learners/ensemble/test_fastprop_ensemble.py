@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
 from learnm8.features.extraction import extract_features
@@ -66,12 +66,14 @@ class TestFastpropEnsemble:
 
     def test_train_predict_integration(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
         assert fastprop_ensemble.is_trained
 
         predictions, uncertainty = fastprop_ensemble.predict(features)
@@ -83,12 +85,14 @@ class TestFastpropEnsemble:
 
     def test_uncertainty_estimation(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test that ensemble provides uncertainty estimates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = fastprop_ensemble.predict(features)
 
@@ -106,12 +110,14 @@ class TestFastpropEnsemble:
         assert len(set(random_states)) == 3
         assert random_states == [42, 123, 456]
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
 
         individual_preds = fastprop_ensemble.get_individual_predictions(features)
         assert len(individual_preds) == 3
@@ -133,7 +139,7 @@ class TestFastpropEnsemble:
 
     def test_predict_without_training(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             fastprop_ensemble.predict(features)
 
@@ -164,11 +170,13 @@ class TestFastpropEnsemble:
 
     def test_aggregation_methods(self, small_real_compounds, tmp_path):
         """Test different aggregation methods with Fastprop ensemble."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         for method in ['mean', 'median']:
             ensemble = FastpropEnsemble(
@@ -178,7 +186,7 @@ class TestFastpropEnsemble:
                 aggregation_method=method,
                 device='cpu'
             )
-            ensemble.train(features, compounds['Activity'].values)
+            ensemble.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = ensemble.predict(features)
 
             assert predictions.shape[0] == len(compounds)
@@ -187,11 +195,13 @@ class TestFastpropEnsemble:
 
     def test_uncertainty_methods(self, small_real_compounds, tmp_path):
         """Test different uncertainty estimation methods."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         for method in ['std', 'mad', 'quantile']:
             ensemble = FastpropEnsemble(
@@ -201,7 +211,7 @@ class TestFastpropEnsemble:
                 uncertainty_method=method,
                 device='cpu'
             )
-            ensemble.train(features, compounds['Activity'].values)
+            ensemble.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = ensemble.predict(features)
 
             assert predictions.shape[0] == len(compounds)
@@ -210,9 +220,11 @@ class TestFastpropEnsemble:
 
     def test_weighted_ensemble(self, small_real_compounds, tmp_path):
         """Test weighted ensemble aggregation."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         weights = [0.6, 0.3, 0.1]
         ensemble = FastpropEnsemble(
@@ -223,8 +235,8 @@ class TestFastpropEnsemble:
             device='cpu'
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = ensemble.predict(features)
 
         assert predictions.shape[0] == len(compounds)
@@ -232,16 +244,18 @@ class TestFastpropEnsemble:
 
     def test_ensemble_statistics(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         stats = fastprop_ensemble.get_ensemble_statistics()
         assert stats['n_learners'] == 3
         assert stats['is_trained'] is False
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
         stats = fastprop_ensemble.get_ensemble_statistics()
         assert stats['is_trained'] is True
         assert 'learner_names' in stats
@@ -250,12 +264,14 @@ class TestFastpropEnsemble:
 
     def test_individual_predictions(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test individual learner predictions retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
         individual_preds = fastprop_ensemble.get_individual_predictions(features)
 
         assert len(individual_preds) == 3
@@ -273,14 +289,14 @@ class TestFastpropEnsemble:
             device='cpu'
         )
 
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        ensemble.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        ensemble.train(features, single_compound['Activity'].to_numpy())
         predictions, uncertainty = ensemble.predict(features)
 
         assert len(predictions) == 1
@@ -290,12 +306,14 @@ class TestFastpropEnsemble:
 
     def test_uncertainty_diversity(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = fastprop_ensemble.predict(features)
 
         assert np.std(uncertainty) > 0
@@ -311,12 +329,14 @@ class TestFastpropEnsemble:
 
     def test_prediction_consistency(self, fastprop_ensemble, small_real_compounds, tmp_path):
         """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        fastprop_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions1, uncertainty1 = fastprop_ensemble.predict(features)
         predictions2, uncertainty2 = fastprop_ensemble.predict(features)
@@ -326,11 +346,13 @@ class TestFastpropEnsemble:
 
     def test_different_architectures(self, small_real_compounds, tmp_path):
         """Test ensemble with different architecture configurations."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         architectures = [
             {'fnn_layers': 0, 'hidden_size': 64},
@@ -345,7 +367,7 @@ class TestFastpropEnsemble:
                 max_epochs=3,
                 device='cpu'
             )
-            ensemble.train(features, compounds['Activity'].values)
+            ensemble.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = ensemble.predict(features)
 
             assert predictions.shape[0] == len(compounds)
