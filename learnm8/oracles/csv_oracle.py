@@ -77,8 +77,8 @@ class CSVOracle(Oracle):
         if 'SMILES' in compounds.columns:
             preserve_cols.append('SMILES')
 
-        # Extract compound data to preserve
-        compound_data = compounds.select(preserve_cols)
+        # Extract compound data to preserve with row order tracking
+        compound_data = compounds.select(preserve_cols).with_row_index('_input_order')
 
         # Determine which columns to get from ground truth
         ground_truth_cols = ['ID'] + properties
@@ -92,6 +92,9 @@ class CSVOracle(Oracle):
             on='ID',
             how='inner'
         )
+
+        # Preserve input order by sorting on temporary order column, then remove it
+        result = result.sort('_input_order').drop('_input_order')
 
         # Check if any compounds were not found
         if result.height < compounds.height:
