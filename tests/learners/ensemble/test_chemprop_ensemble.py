@@ -454,3 +454,113 @@ class TestChempropEnsembleWithDescriptors:
         assert unc_without.shape == (10,)
         assert np.all(unc_with >= 0)
         assert np.all(unc_without >= 0)
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        ensemble = ChempropEnsemble()
+        assert ensemble.enable_aggressive_gc is True
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        ensemble = ChempropEnsemble(enable_aggressive_gc=False)
+        assert ensemble.enable_aggressive_gc is False
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is False
+
+    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after training when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after ensemble training' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after prediction when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+
+        cleanup_called.clear()
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        ensemble.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after ensemble prediction' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=False
+        )
+
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+        ensemble.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) == 0
+
+    def test_predictions_unaffected_by_gc(self, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble_gc_on = ChempropEnsemble(
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=True
+        )
+        ensemble_gc_on.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_on, _ = ensemble_gc_on.predict(features=None, smiles=smiles)
+
+        ensemble_gc_off = ChempropEnsemble(
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=False
+        )
+        ensemble_gc_off.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_off, _ = ensemble_gc_off.predict(features=None, smiles=smiles)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)

@@ -373,3 +373,53 @@ class TestFastpropEnsemble:
             assert predictions.shape[0] == len(compounds)
             assert uncertainty.shape[0] == len(compounds)
             assert np.all(np.isfinite(predictions))
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        ensemble = FastpropEnsemble()
+        assert ensemble.enable_aggressive_gc is True
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        ensemble = FastpropEnsemble(enable_aggressive_gc=False)
+        assert ensemble.enable_aggressive_gc is False
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is False
+
+    def test_predictions_unaffected_by_gc(self, tmp_path, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        features = extract_features(
+            compounds['SMILES'].to_list(),
+            'morgan',
+            tmp_path
+        )
+
+        ensemble_gc_on = FastpropEnsemble(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=True
+        )
+        ensemble_gc_on.train(features, compounds['Activity'].to_numpy())
+        pred_gc_on, _ = ensemble_gc_on.predict(features)
+
+        ensemble_gc_off = FastpropEnsemble(
+            fnn_layers=2,
+            hidden_size=64,
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=False
+        )
+        ensemble_gc_off.train(features, compounds['Activity'].to_numpy())
+        pred_gc_off, _ = ensemble_gc_off.predict(features)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)

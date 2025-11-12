@@ -293,4 +293,6 @@ class TestXGBEnsemble:
         assert predictions.min() >= compounds['Activity'].min() - 0.5
         assert predictions.max() <= compounds['Activity'].max() + 0.5
 
-        assert uncertainty.max() < 1.0
+        activity_std = compounds['Activity'].std()
+        assert np.mean(uncertainty) < activity_std
+        assert np.max(uncertainty) < 5 * activity_std
