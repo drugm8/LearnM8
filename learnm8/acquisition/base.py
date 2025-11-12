@@ -108,8 +108,9 @@ class AcquisitionFunction(ABC):
             logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
                          f"will select all {len(compounds)} available compounds")
 
-        # Check for NaN values in predictions
-        if compounds.get_column('prediction').is_null().any():
+        # Check for NaN/null values in predictions
+        pred_col = compounds.get_column('prediction')
+        if pred_col.is_null().any() or pred_col.is_nan().any():
             raise ValueError("Predictions contain NaN values")
 
         # Check for duplicate IDs
@@ -118,10 +119,11 @@ class AcquisitionFunction(ABC):
 
         # Check uncertainty values if present
         if 'uncertainty' in compounds.columns:
-            if compounds.get_column('uncertainty').is_null().any():
+            unc_col = compounds.get_column('uncertainty')
+            if unc_col.is_null().any() or unc_col.is_nan().any():
                 raise ValueError("Uncertainties contain NaN values")
 
-            if (compounds.get_column('uncertainty') < 0).any():
+            if (unc_col < 0).any():
                 raise ValueError("Uncertainties must be non-negative")
 
     def _safe_select_top_k(self, compounds: pl.DataFrame, scores: np.ndarray,
@@ -170,6 +172,9 @@ class AcquisitionFunction(ABC):
         selected_compounds = selected_compounds.with_columns(
             pl.col('ID').replace_strict(score_dict).alias('acquisition_score')
         )
+
+        # Sort by acquisition score to preserve selection order
+        selected_compounds = selected_compounds.sort('acquisition_score', descending=not ascending)
 
         return selected_compounds
 
