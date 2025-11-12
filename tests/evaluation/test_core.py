@@ -6,6 +6,7 @@ Focused tests for core evaluation functions using real molecular data.
 import pytest
 import numpy as np
 import pandas as pd
+import polars as pl
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.core import (
@@ -21,18 +22,18 @@ class TestEvaluateCore:
     def test_evaluate_cycle_basic_functionality(self, small_real_compounds, tmp_path):
         """Test basic evaluate_cycle function with real compounds."""
         # Create test data from real compounds
-        labeled_data = small_real_compounds.copy()
-        selected_compounds = small_real_compounds.head(10).copy()
+        labeled_data = small_real_compounds.clone()
+        selected_compounds = small_real_compounds.head(10).clone()
         
         # Generate realistic predictions (add noise to actual activities)
         np.random.seed(42)
-        predictions = labeled_data['Activity'].values + np.random.normal(0, 0.1, len(labeled_data))
+        predictions = labeled_data['Activity'].to_list() + np.random.normal(0, 0.1, len(labeled_data))
         
         # Run evaluation
         result = evaluate_cycle(
             cycle=0,
             predictions=predictions,
-            ground_truth=labeled_data['Activity'].values,
+            ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='Activity'
@@ -52,19 +53,19 @@ class TestEvaluateCore:
     
     def test_evaluate_cycle_benchmark_mode(self, diverse_real_compounds):
         """Test evaluate_cycle in benchmark mode with ground truth data."""
-        labeled_data = diverse_real_compounds.copy()
-        selected_compounds = diverse_real_compounds.head(15).copy()
+        labeled_data = diverse_real_compounds.clone()
+        selected_compounds = diverse_real_compounds.head(15).clone()
         
         # Use actual activities as ground truth
-        ground_truth_data = diverse_real_compounds[['ID', 'Activity']].copy()
+        ground_truth_data = diverse_real_compounds[['ID', 'Activity']].clone()
         
         np.random.seed(42)
-        predictions = labeled_data['Activity'].values + np.random.normal(0, 0.2, len(labeled_data))
+        predictions = labeled_data['Activity'].to_list() + np.random.normal(0, 0.2, len(labeled_data))
         
         result = evaluate_cycle(
             cycle=1,
             predictions=predictions,
-            ground_truth=labeled_data['Activity'].values,
+            ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='Activity',
@@ -78,13 +79,13 @@ class TestEvaluateCore:
     
     def test_evaluate_cycle_with_uncertainty(self, compounds_with_uncertainty):
         """Test evaluation with uncertainty estimates."""
-        compounds = compounds_with_uncertainty.copy()
+        compounds = compounds_with_uncertainty.clone()
         labeled_data = compounds
         selected_compounds = compounds.head(8)
         
-        predictions = compounds['prediction'].values
-        ground_truth = compounds['Activity'].values if 'Activity' in compounds.columns else predictions
-        uncertainty = compounds['uncertainty'].values
+        predictions = compounds['prediction'].to_list()
+        ground_truth = compounds['Activity'].to_list() if 'Activity' in compounds.columns else predictions
+        uncertainty = compounds['uncertainty'].to_list()
         
         result = evaluate_cycle(
             cycle=2,
@@ -104,11 +105,11 @@ class TestEvaluateCore:
     
     def test_evaluate_cycle_empty_selection(self, small_real_compounds):
         """Test evaluation with empty selected compounds."""
-        labeled_data = small_real_compounds.copy()
+        labeled_data = small_real_compounds.clone()
         empty_selection = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
         
-        predictions = labeled_data['Activity'].values
-        ground_truth = labeled_data['Activity'].values
+        predictions = labeled_data['Activity'].to_list()
+        ground_truth = labeled_data['Activity'].to_list()
         
         result = evaluate_cycle(
             cycle=0,
@@ -125,7 +126,7 @@ class TestEvaluateCore:
     
     def test_evaluate_cycle_missing_target_col(self, small_real_compounds):
         """Test error handling when target column is missing."""
-        labeled_data = small_real_compounds.drop(columns=['Activity'])
+        labeled_data = small_real_compounds.drop('Activity')
         selected_compounds = small_real_compounds.head(5)
         
         predictions = np.random.random(len(labeled_data))
@@ -185,13 +186,13 @@ class TestEvaluationIntegration:
         assert len(df) == 3
         assert 'cycle' in df.columns
         assert 'batch_size' in df.columns
-        assert df['cycle'].tolist() == [0, 1, 2]
-        assert df['batch_size'].tolist() == [10, 10, 10]
+        assert df['cycle'].to_list() == [0, 1, 2]
+        assert df['batch_size'].to_list() == [10, 10, 10]
     
     def test_evaluation_with_real_molecular_workflow(self, medium_real_compounds):
         """Test complete evaluation workflow with real molecular data."""
         # Use subset for faster testing
-        compounds = medium_real_compounds.head(50).copy()
+        compounds = medium_real_compounds.head(50).clone()
         
         # Simulate active learning cycle
         labeled_data = compounds.head(30)  # Training set
@@ -199,7 +200,7 @@ class TestEvaluationIntegration:
         
         # Simulate model predictions (add noise to actual activities)
         np.random.seed(42)
-        base_predictions = labeled_data['Activity'].values
+        base_predictions = labeled_data['Activity'].to_list()
         predictions = base_predictions + np.random.normal(0, 0.2, len(base_predictions))
         ground_truth = base_predictions
         
@@ -224,14 +225,14 @@ class TestEvaluationIntegration:
     
     def test_evaluation_error_handling(self, small_real_compounds):
         """Test error handling in evaluation functions."""
-        labeled_data = small_real_compounds.copy()
+        labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
         
         # Mismatched array lengths - function handles this gracefully by setting metrics to None
         result = evaluate_cycle(
             cycle=0,
             predictions=np.array([1, 2, 3]),  # Wrong length
-            ground_truth=labeled_data['Activity'].values,
+            ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='Activity'
@@ -243,8 +244,8 @@ class TestEvaluationIntegration:
         # Invalid target column - function handles gracefully
         result = evaluate_cycle(
             cycle=0,
-            predictions=labeled_data['Activity'].values,
-            ground_truth=labeled_data['Activity'].values,
+            predictions=labeled_data['Activity'].to_list(),
+            ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='NonexistentColumn'
@@ -260,15 +261,15 @@ class TestEvaluationEdgeCases:
     
     def test_evaluation_with_nan_predictions(self, small_real_compounds):
         """Test evaluation handling NaN predictions."""
-        labeled_data = small_real_compounds.copy()
+        labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
         
         # Create predictions with NaN values
-        predictions = labeled_data['Activity'].values.copy()
+        predictions = list(labeled_data['Activity'].to_list())
         predictions[0] = np.nan
         predictions[5] = np.nan
-        
-        ground_truth = labeled_data['Activity'].values
+
+        ground_truth = list(labeled_data['Activity'].to_list())
         
         # Should handle NaN values gracefully or raise appropriate error
         try:
@@ -289,12 +290,12 @@ class TestEvaluationEdgeCases:
     
     def test_evaluation_with_constant_predictions(self, small_real_compounds):
         """Test evaluation with constant predictions."""
-        labeled_data = small_real_compounds.copy()
+        labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
         
         # All predictions are the same
         predictions = np.full(len(labeled_data), 0.5)
-        ground_truth = labeled_data['Activity'].values
+        ground_truth = labeled_data['Activity'].to_list()
         
         result = evaluate_cycle(
             cycle=0,
@@ -312,7 +313,7 @@ class TestEvaluationEdgeCases:
     
     def test_evaluation_single_compound(self):
         """Test evaluation with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['mol_1'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
