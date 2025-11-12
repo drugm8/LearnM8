@@ -7,7 +7,7 @@ for all major components in the LearnM8 system.
 from abc import ABC, abstractmethod
 from typing import Tuple, Optional, List, Dict, Any
 from pathlib import Path
-import pandas as pd
+import polars as pl
 import numpy as np
 
 
@@ -20,20 +20,27 @@ class Oracle(ABC):
     """
     
     @abstractmethod
-    def measure(self, compounds: pd.DataFrame, properties: List[str]) -> pd.DataFrame:
+    def measure(self, compounds: pl.DataFrame, properties: List[str]) -> pl.DataFrame:
         """
         Measure properties for given compounds.
-        
+
         Args:
-            compounds: DataFrame with 'ID' and 'SMILES' columns
+            compounds: Polars DataFrame with 'ID' and 'SMILES' columns
             properties: List of property names to measure
-            
+
         Returns:
-            DataFrame with 'ID' column and measured property columns
-            
+            Polars DataFrame with 'ID' column and measured property columns.
+            The returned DataFrame MUST preserve the row order of the input
+            compounds DataFrame to ensure correct value-to-compound alignment.
+
         Raises:
             ValueError: If compounds DataFrame is malformed
             RuntimeError: If measurement fails
+
+        Note:
+            Implementations must preserve input row order. The calling code
+            relies on positional correspondence between input compound IDs
+            and returned measured values.
         """
         pass
 
@@ -133,18 +140,18 @@ class AcquisitionFunction(ABC):
     """
     
     @abstractmethod
-    def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
+    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
         """
         Select compounds for labeling.
-        
+
         Args:
-            compounds: DataFrame with 'ID', 'SMILES', 'prediction' columns
+            compounds: Polars DataFrame with 'ID', 'SMILES', 'prediction' columns
                       May also contain 'uncertainty' column if available
             n_select: Number of compounds to select
-            
+
         Returns:
-            DataFrame subset with selected compounds
-            
+            Polars DataFrame subset with selected compounds
+
         Raises:
             ValueError: If required columns are missing or n_select is invalid
             RuntimeError: If selection fails

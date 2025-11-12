@@ -19,7 +19,7 @@ Performance characteristics:
 
 import polars as pl
 import numpy as np
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import logging
 from .data_structures import VALID_STATUSES
 from learnm8.utils.polars_utils import map_values_via_join
@@ -135,7 +135,7 @@ def _update_status_inplace(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: Optional[pl.Series] = None
+    target_values: Optional[Union[pl.Series, Dict]] = None
 ) -> pl.DataFrame:
     """Update compound status in-place (modifies df).
 
@@ -185,12 +185,16 @@ def _update_status_inplace(
         )
 
         if target_values is not None:
-            id_to_value = dict(zip(target_values.to_list(), target_values.to_list()))
-            if hasattr(target_values, 'name'):
-                id_col_name = target_values.name
+            # Handle both dict and Series input for backward compatibility
+            if isinstance(target_values, dict):
+                id_to_value = target_values
+            elif isinstance(target_values, pl.Series):
+                # For Series, zip IDs with values
+                id_to_value = dict(zip(compound_ids, target_values.to_list()))
             else:
-                id_col_name = 'ID'
-            df = map_values_via_join(df, id_to_value, id_col_name, target_col)
+                raise TypeError(f"target_values must be dict or pl.Series, got {type(target_values)}")
+
+            df = map_values_via_join(df, id_to_value, 'ID', target_col)
 
     elif new_status == 'pruned':
         df = df.with_columns(
@@ -211,7 +215,7 @@ def update_status(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: Optional[pl.Series] = None
+    target_values: Optional[Union[pl.Series, Dict]] = None
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
