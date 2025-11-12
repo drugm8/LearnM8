@@ -203,7 +203,7 @@ class TestCacheFeaturesDecorator:
         from learnm8.features.cache import cache_features
 
         cache_dir = tmp_path / "real_cache"
-        smiles_list = small_real_compounds['SMILES'].tolist()
+        smiles_list = small_real_compounds['SMILES'].to_list()
 
         features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
         assert features1.shape[0] == len(smiles_list)
