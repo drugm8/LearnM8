@@ -229,7 +229,7 @@ def create_summary_report(
         f"| Cycles | {config['n_cycles']} |",
         f"| Batch Fraction | {config['batch_fraction']} (≈{config.get('batch_size', 'N/A')} compounds/cycle) |",
         f"| Featurizer | {config['featurizer_type']} |",
-        f"| Random State | {config['random_state']} |",
+        f"| Random Seeds | {config['random_seeds']} |",
         f"| Total Experiments | {len(results_df)} |",
         "",
         "## Summary Statistics",
