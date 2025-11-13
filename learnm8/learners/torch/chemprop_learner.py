@@ -172,9 +172,19 @@ class ChempropLearner(Learner):
 		if smiles is None:
 			raise ValueError("ChempropLearner requires SMILES strings")
 
-		logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
-		logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
-		warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
+		# Check if root logger is at DEBUG level to enable detailed logging
+		root_level = logging.getLogger().level
+		if root_level <= logging.DEBUG:
+			# Enable detailed logging for Chemprop/Lightning
+			logging.getLogger("lightning.pytorch").setLevel(logging.DEBUG)
+			logging.getLogger("pytorch_lightning").setLevel(logging.DEBUG)
+			logging.getLogger("chemprop").setLevel(logging.DEBUG)
+			logger.info("DEBUG logging enabled for Chemprop and PyTorch Lightning")
+		else:
+			# Default: suppress Lightning logging
+			logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+			logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+			warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
 
 		n_samples = len(targets)
 		use_descriptors = features is not None
@@ -300,16 +310,21 @@ class ChempropLearner(Learner):
 			callbacks.append(early_stop_callback)
 			logger.info(f"Early stopping enabled (patience={self.early_stopping_patience})")
 
+		# Enable progress bar and model summary if DEBUG logging is active
+		enable_verbose = logging.getLogger().level <= logging.DEBUG
+
 		self.trainer = pl.Trainer(
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
-			enable_progress_bar=False,
-			enable_model_summary=False,
+			enable_progress_bar=enable_verbose,
+			enable_model_summary=enable_verbose,
 			logger=False,
 			callbacks=callbacks
 		)
 
+		logger.info(f"Starting Chemprop training: {n_samples} samples, {self.max_epochs} max epochs")
 		self.trainer.fit(self.model, train_loader, val_loader)
+		logger.info("Chemprop training completed successfully")
 		self.is_trained = True
 
 		# Save checkpoint if fine-tuning enabled
@@ -551,10 +566,13 @@ class ChempropLearner(Learner):
 			num_workers=0
 		)
 
+		logger.info(f"Starting Chemprop prediction on {len(smiles)} samples")
 		predictions = self.trainer.predict(self.model, test_loader)
+		logger.info("Chemprop prediction completed, processing results")
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()
 
 		self._cleanup_gpu_memory("after prediction")
+		logger.info(f"Chemprop prediction finalized: {len(predictions)} predictions")
 
 		return predictions
