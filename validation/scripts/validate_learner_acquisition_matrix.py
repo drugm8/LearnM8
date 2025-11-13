@@ -17,6 +17,12 @@ from validation.lib import (
     get_dataset_info
 )
 from validation.lib.matrix_visualizations import generate_comprehensive_visualizations
+from validation.lib.seed_aggregation import (
+    aggregate_seed_results,
+    check_existing_seed_results,
+    save_aggregated_results,
+    load_existing_seed_results
+)
 
 
 from learnm8 import setup_logging
@@ -26,7 +32,7 @@ DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
 FEATURIZER_TYPE = 'morgan'
-RANDOM_STATE = 42
+RANDOM_SEEDS = [42, 123, 456]
 OUTPUT_BASE = Path('validation/reports/learner_acquisition_matrix')
 
 
@@ -38,7 +44,7 @@ def print_header():
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION}")
     print(f"Featurizer: {FEATURIZER_TYPE}")
-    print(f"Random State: {RANDOM_STATE}")
+    print(f"Random Seeds: {RANDOM_SEEDS}")
     print("=" * 80)
     print()
 
@@ -54,7 +60,7 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
             continue
 
         try:
-            learner = _create_learner(learner_name, RANDOM_STATE)
+            learner = _create_learner(learner_name, RANDOM_SEEDS[0])
             supports_uncertainty = learner.supports_uncertainty()
 
             for acquisition_name in basic_acquisitions:
@@ -71,8 +77,8 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
     return combinations
 
 
-def check_existing_results(learner: str, acquisition: str) -> bool:
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}'
+def check_existing_results(learner: str, acquisition: str, seed: int) -> bool:
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}' / f'seed_{seed}'
 
     required_files = [
         'compounds_final.csv',
@@ -83,10 +89,10 @@ def check_existing_results(learner: str, acquisition: str) -> bool:
     return all((output_dir / f).exists() for f in required_files)
 
 
-def load_existing_results(learner: str, acquisition: str) -> Dict:
+def load_existing_results(learner: str, acquisition: str, seed: int) -> Dict:
     import polars as pl
 
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{acquisition}' / f'seed_{seed}'
 
     compounds_df = pl.read_csv(output_dir / 'compounds_final.csv', comment_prefix='#')
     cycle_metrics_df = pl.read_csv(output_dir / 'cycle_metrics.csv', comment_prefix='#')
@@ -108,11 +114,12 @@ def run_single_experiment(
     oracle,
     target_col: str,
     score_direction: str,
-    cache_dir: Path
+    cache_dir: Path,
+    seed: int
 ) -> Dict:
-    print(f"  Running: {learner_name} + {acquisition_name}...", end=' ', flush=True)
+    print(f"  Running seed {seed}: {learner_name} + {acquisition_name}...", end=' ', flush=True)
 
-    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}' / f'seed_{seed}'
 
     start_time = time.time()
 
@@ -127,7 +134,7 @@ def run_single_experiment(
             batch_fraction=BATCH_FRACTION,
             strategy=acquisition_name,
             score_direction=score_direction,
-            random_state=RANDOM_STATE,
+            random_state=seed,
             cache_dir=cache_dir,
             output_dir=output_dir,
             mode='benchmark'
@@ -194,50 +201,69 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
     skipped = 0
     failed = 0
 
-    print(f"Starting experiments ({len(combinations)} total)...")
+    total_experiments = len(combinations) * len(RANDOM_SEEDS)
+    print(f"Starting experiments ({len(combinations)} combinations × {len(RANDOM_SEEDS)} seeds = {total_experiments} total)...")
     print("=" * 80)
     print()
 
     for idx, (learner_name, acquisition_name) in enumerate(combinations, 1):
         print(f"[{idx}/{len(combinations)}] {learner_name} + {acquisition_name}")
 
-        if check_existing_results(learner_name, acquisition_name):
-            print(f"  Skipping: Results already exist")
-            try:
-                result_data = load_existing_results(learner_name, acquisition_name)
-                all_results[(learner_name, acquisition_name)] = result_data
-                skipped += 1
-            except Exception as e:
-                print(f"  Warning: Could not load existing results: {e}")
-                print(f"  Will re-run experiment...")
-            else:
-                print()
-                continue
+        seed_results = {}
 
-        try:
-            result_data = run_single_experiment(
-                learner_name,
-                acquisition_name,
-                compound_pool,
-                oracle,
-                target_col,
-                score_direction,
-                cache_dir
-            )
-            all_results[(learner_name, acquisition_name)] = result_data
-            completed += 1
+        for seed in RANDOM_SEEDS:
+            if check_existing_results(learner_name, acquisition_name, seed):
+                print(f"  Seed {seed}: Skipping (results already exist)")
+                try:
+                    result_data = load_existing_results(learner_name, acquisition_name, seed)
+                    seed_results[seed] = result_data
+                    skipped += 1
+                except Exception as e:
+                    print(f"  Warning: Could not load existing results for seed {seed}: {e}")
+                    print(f"  Will re-run experiment...")
 
-        except Exception as e:
-            print(f"  Failed to complete experiment: {e}")
-            failed += 1
+            if seed not in seed_results:
+                try:
+                    result_data = run_single_experiment(
+                        learner_name,
+                        acquisition_name,
+                        compound_pool,
+                        oracle,
+                        target_col,
+                        score_direction,
+                        cache_dir,
+                        seed
+                    )
+                    seed_results[seed] = result_data
+                    completed += 1
+
+                except Exception as e:
+                    print(f"  Seed {seed}: Failed - {e}")
+                    failed += 1
+
+        if len(seed_results) > 0:
+            print(f"  Aggregating results across {len(seed_results)} seeds...")
+            aggregated = aggregate_seed_results(seed_results)
+
+            combination_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}'
+            save_aggregated_results(seed_results, aggregated, combination_dir)
+
+            all_results[(learner_name, acquisition_name)] = {
+                'seed_results': seed_results,
+                'aggregated': aggregated,
+                'cycle_metrics': aggregated['cycle_metrics_mean'],
+                'compounds_df': seed_results[RANDOM_SEEDS[0]]['compounds_df'],
+                'output_dir': combination_dir
+            }
+            print(f"  ✓ Aggregation complete")
 
         print()
 
     print("=" * 80)
-    print(f"Experiments completed: {completed}")
-    print(f"Experiments skipped (existing): {skipped}")
-    print(f"Experiments failed: {failed}")
-    print(f"Total results: {len(all_results)}")
+    print(f"Individual experiments completed: {completed}")
+    print(f"Individual experiments skipped (existing): {skipped}")
+    print(f"Individual experiments failed: {failed}")
+    print(f"Total combinations with results: {len(all_results)}")
     print()
 
     return all_results, metadata, n_compounds
