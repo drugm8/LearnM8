@@ -62,8 +62,8 @@ def create_top_k_heatmap(
     ax.set_ylabel('Learner', fontsize=13, labelpad=8)
 
     ax.tick_params(axis='both', labelsize=11)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
-    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
+    ax.set_yticklabels(mean_pd.index, rotation=0)
 
     return ax
 
@@ -241,8 +241,8 @@ def create_summary_report(
     for metric in ['top_0_1_pct_discovery', 'top_1_pct_discovery', 'top_10_discovery', 'top_100_discovery']:
         mean_col = f'{metric}_mean'
         std_col = f'{metric}_std'
-        best_idx = results_df[mean_col].idxmax()
-        best_row = results_df.loc[best_idx]
+        best_idx = results_df[mean_col].arg_max()
+        best_row = results_df.row(best_idx, named=True)
         metric_name = metric.replace('_', ' ').title()
         lines.append(f"**{metric_name}:** {best_row['learner']} + {best_row['featurizer']} "
                     f"({best_row[mean_col]:.1f}±{best_row[std_col]:.1f}%)")
@@ -582,8 +582,8 @@ def create_cost_performance_heatmaps(
         ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
         ax.set_ylabel('Learner', fontsize=13, labelpad=8)
         ax.tick_params(axis='both', labelsize=11)
-        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
-        ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+        ax.set_xticklabels(cost_pivot.columns, rotation=45, ha='right')
+        ax.set_yticklabels(cost_pd.index, rotation=0)
 
     output_filename = f'cost_performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename

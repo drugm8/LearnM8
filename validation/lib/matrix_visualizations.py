@@ -241,8 +241,8 @@ def create_summary_report(
     for metric in ['top_0_1_pct_discovery', 'top_1_pct_discovery', 'top_10_discovery', 'top_100_discovery']:
         mean_col = f'{metric}_mean'
         std_col = f'{metric}_std'
-        best_idx = results_df[mean_col].idxmax()
-        best_row = results_df.loc[best_idx]
+        best_idx = results_df[mean_col].arg_max()
+        best_row = results_df.row(best_idx, named=True)
         metric_name = metric.replace('_', ' ').title()
         lines.append(f"**{metric_name}:** {best_row['learner']} + {best_row['acquisition']} "
                     f"({best_row[mean_col]:.1f}±{best_row[std_col]:.1f}%)")
