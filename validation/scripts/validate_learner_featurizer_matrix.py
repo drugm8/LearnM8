@@ -167,7 +167,7 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     compound_pool, metadata = load_validation_dataset(
         dataset_name=DATASET_NAME,
         clean_invalid_scores=True,
-        random_state=RANDOM_STATE
+        random_state=RANDOM_SEEDS[0]
     )
     target_col = metadata['target_column']
     score_direction = metadata['score_direction']
@@ -294,7 +294,7 @@ def main():
             'batch_fraction': BATCH_FRACTION,
             'batch_size': int(n_compounds * BATCH_FRACTION),
             'acquisition': ACQUISITION,
-            'random_state': RANDOM_STATE
+            'random_seeds': RANDOM_SEEDS
         }
 
         viz_paths = generate_comprehensive_visualizations(
