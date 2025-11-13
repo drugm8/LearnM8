@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """
-Validation script to assess uncertainty-error correlations for ensemble learners.
+Validation script to assess uncertainty-error correlations for learners with uncertainty support.
 
-This script runs active learning experiments with different ensemble types on the
+This script runs active learning experiments with different learner types on the
 AMP 30K dataset and analyzes the correlation between predicted uncertainties and
 actual prediction errors. This helps assess the quality of uncalibrated uncertainties.
 
-Ensembles tested:
-- RF Ensemble (Random Forest)
-- XGB Ensemble (XGBoost)
-- LR Ensemble (Linear Regression)
-- DT Ensemble (Decision Tree)
+Learners tested:
+- RF Ensemble (Random Forest ensemble)
+- XGB Ensemble (XGBoost ensemble)
+- LR Ensemble (Linear Regression ensemble)
+- DT Ensemble (Decision Tree ensemble)
 - Mixed Ensemble (Multiple model types)
+- GP (Gaussian Process - gold standard for uncertainty)
+- MC Dropout (Monte Carlo Dropout)
+- Fastprop Ensemble (Fastprop ensemble)
+- Chemprop Ensemble (Chemprop ensemble, if available)
+
+Note: Single Fastprop and Chemprop models do NOT provide uncertainty estimates
+and are excluded from this validation. Use their ensemble variants instead.
 
 Configuration:
 - N_ENSEMBLE_MEMBERS: Number of models in each ensemble (default: 3)
@@ -31,8 +38,9 @@ Outputs:
 Usage:
     python validation/scripts/validate_uncertainty_correlations.py
 
-Expected Runtime: ~3-5 hours (all 5 ensembles with cache, N_ENSEMBLE_MEMBERS=3)
-                 Runtime scales linearly with N_ENSEMBLE_MEMBERS
+Expected Runtime: ~5-8 hours (all 8 learners with cache, N_ENSEMBLE_MEMBERS=10)
+                 Runtime scales with N_ENSEMBLE_MEMBERS and number of learners
+                 GPU acceleration significantly speeds up torch-based models
 """
 
 import sys
@@ -52,8 +60,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from learnm8 import run_active_learning, extract_features
 from learnm8.oracles import CSVOracle
 from learnm8.learners import (
-    RFEnsemble, XGBEnsemble, LREnsemble, DTEnsemble, MixedEnsemble
+    RFEnsemble, XGBEnsemble, LREnsemble, DTEnsemble, MixedEnsemble,
+    GaussianProcessLearner, MCDropoutLearner, FastpropEnsemble
 )
+
+# Check for Chemprop availability
+try:
+    from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+    CHEMPROP_AVAILABLE = True
+except ImportError:
+    CHEMPROP_AVAILABLE = False
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
@@ -68,7 +84,7 @@ DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
 RANDOM_STATE = 42
-N_ENSEMBLE_MEMBERS = 10  # Number of models in each ensemble
+N_ENSEMBLE_MEMBERS = 3  # Number of models in each ensemble
 
 # Ensemble configurations
 ENSEMBLES = {
@@ -96,8 +112,31 @@ ENSEMBLES = {
         'name': 'Mixed Ensemble',
         'class': MixedEnsemble,
         'color': '#9467bd'
+    },
+    'gp': {
+        'name': 'Gaussian Process',
+        'class': GaussianProcessLearner,
+        'color': '#8c564b'
+    },
+    'mc_dropout': {
+        'name': 'MC Dropout',
+        'class': MCDropoutLearner,
+        'color': '#e377c2'
+    },
+    'fastprop_ensemble': {
+        'name': 'Fastprop Ensemble',
+        'class': FastpropEnsemble,
+        'color': '#bcbd22'
     }
 }
+
+# Add Chemprop ensemble if available (single Chemprop does not support uncertainty)
+if CHEMPROP_AVAILABLE:
+    ENSEMBLES['chemprop_ensemble'] = {
+        'name': 'Chemprop Ensemble',
+        'class': ChempropEnsemble,
+        'color': '#17becf'
+    }
 
 
 def print_header():
@@ -107,10 +146,14 @@ def print_header():
     print("=" * 80)
     print()
     print(f"Dataset: AMP 30K")
-    print(f"Ensembles: {len(ENSEMBLES)}")
-    print(f"Ensemble Members: {N_ENSEMBLE_MEMBERS}")
+    print(f"Learners: {len(ENSEMBLES)}")
+    print(f"Ensemble Members (for ensembles): {N_ENSEMBLE_MEMBERS}")
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION:.1%}")
+    if CHEMPROP_AVAILABLE:
+        print(f"Chemprop: Available")
+    else:
+        print(f"Chemprop: Not available (1 learner will be skipped)")
     print()
 
 
@@ -222,7 +265,7 @@ def analyze_uncertainty_error_correlation(results, ensemble_key, ensemble_config
     # Generate random states for ensemble members
     random_states = [RANDOM_STATE + i * 123 for i in range(N_ENSEMBLE_MEMBERS)]
 
-    # Handle different ensemble initialization patterns
+    # Handle different learner initialization patterns
     if ensemble_key == 'mixed_ensemble':
         # MixedEnsemble: Create ensemble of MixedEnsemble instances with different random states
         from learnm8.learners.ensemble import EnsembleLearner, MixedEnsemble
@@ -259,11 +302,44 @@ def analyze_uncertainty_error_correlation(results, ensemble_key, ensemble_config
             max_depths=max_depths,
             random_states=random_states
         )
-    else:
-        # Fallback to default initialization
+
+    elif ensemble_key == 'fastprop_ensemble':
+        # FastpropEnsemble: Multiple fastprop models with different random states
         learner = ENSEMBLES[ensemble_key]['class'](
             random_states=random_states
         )
+
+    elif ensemble_key == 'chemprop_ensemble':
+        # Chemprop ensemble: multiple graph neural networks with different random states
+        learner = ENSEMBLES[ensemble_key]['class'](
+            random_state=RANDOM_STATE
+        )
+
+    # Single learners (non-ensemble)
+    elif ensemble_key == 'gp':
+        # Gaussian Process: single model with random state
+        learner = ENSEMBLES[ensemble_key]['class'](
+            random_state=RANDOM_STATE
+        )
+
+    elif ensemble_key == 'mc_dropout':
+        # MC Dropout: single model with random state
+        learner = ENSEMBLES[ensemble_key]['class'](
+            random_state=RANDOM_STATE,
+            n_samples=50  # Number of MC dropout samples for uncertainty
+        )
+
+    else:
+        # Fallback to default initialization with random_states
+        try:
+            learner = ENSEMBLES[ensemble_key]['class'](
+                random_states=random_states
+            )
+        except TypeError:
+            # If random_states not accepted, try random_state
+            learner = ENSEMBLES[ensemble_key]['class'](
+                random_state=RANDOM_STATE
+            )
 
     # Extract features for labeled compounds
     labeled_smiles = labeled_df['SMILES'].to_list()
@@ -434,8 +510,9 @@ def generate_summary_report(all_results, output_dir):
         f.write(f"Dataset: AMP 30K\n")
         f.write(f"Cycles: {N_CYCLES}\n")
         f.write(f"Batch Fraction: {BATCH_FRACTION:.1%}\n")
-        f.write(f"Ensemble Members: {N_ENSEMBLE_MEMBERS}\n")
-        f.write(f"Ensembles Tested: {len(ENSEMBLES)}\n\n")
+        f.write(f"Ensemble Members (for ensembles): {N_ENSEMBLE_MEMBERS}\n")
+        f.write(f"Learners Tested: {len(all_results)}\n")
+        f.write(f"Total Learners Available: {len(ENSEMBLES)}\n\n")
 
         f.write("-" * 80 + "\n")
         f.write("Overall Correlation Results\n")

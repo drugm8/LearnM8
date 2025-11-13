@@ -15,7 +15,10 @@ from validation.lib import (
     get_dataset_path,
     get_dataset_info
 )
-from validation.lib.featurizer_visualizations import generate_comprehensive_visualizations
+from validation.lib.featurizer_visualizations import (
+    generate_comprehensive_visualizations,
+    create_all_cost_performance_plots
+)
 from validation.lib.seed_aggregation import (
     aggregate_seed_results,
     check_existing_seed_results,
@@ -303,6 +306,13 @@ def main():
             config
         )
 
+        # Generate cost/performance analysis
+        cost_perf_paths = create_all_cost_performance_plots(
+            all_results,
+            OUTPUT_BASE,
+            config
+        )
+
         total_time = time.time() - start_time
 
         print()
@@ -316,6 +326,14 @@ def main():
         print(f"  - Combined heatmap: {viz_paths['heatmap']}")
         print(f"  - Cycle plot: {viz_paths['cycle_plot']}")
         print(f"  - Report: {viz_paths['report']}")
+        print()
+        print("Cost/Performance Analysis:")
+        print(f"  - Heatmaps ({len(cost_perf_paths['heatmaps'])} files):")
+        for heatmap_path in cost_perf_paths['heatmaps']:
+            print(f"      {heatmap_path}")
+        print(f"  - Pareto plots ({len(cost_perf_paths['pareto_plots'])} files):")
+        for pareto_path in cost_perf_paths['pareto_plots']:
+            print(f"      {pareto_path}")
         print()
         print(f"All results saved to: {OUTPUT_BASE}")
         print("=" * 80)
