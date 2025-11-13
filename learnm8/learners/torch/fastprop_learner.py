@@ -148,9 +148,19 @@ class FastpropLearner(Learner):
             f"targets shape: {targets.shape}"
         )
 
-        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
-        logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
-        warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
+        # Check if root logger is at DEBUG level to enable detailed logging
+        root_level = logging.getLogger().level
+        if root_level <= logging.DEBUG:
+            # Enable detailed logging for Fastprop/Lightning
+            logging.getLogger("lightning.pytorch").setLevel(logging.DEBUG)
+            logging.getLogger("pytorch_lightning").setLevel(logging.DEBUG)
+            logging.getLogger("fastprop").setLevel(logging.DEBUG)
+            logger.info("DEBUG logging enabled for Fastprop and PyTorch Lightning")
+        else:
+            # Default: suppress Lightning logging
+            logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+            logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+            warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
 
         try:
             X = torch.tensor(features, dtype=torch.float32)
@@ -187,18 +197,22 @@ class FastpropLearner(Learner):
                 )
             ]
 
+            # Enable progress bar and model summary if DEBUG logging is active
+            enable_verbose = logging.getLogger().level <= logging.DEBUG
+
             self.trainer = Trainer(
                 max_epochs=self.max_epochs,
-                enable_progress_bar=False,
-                enable_model_summary=False,
+                enable_progress_bar=enable_verbose,
+                enable_model_summary=enable_verbose,
                 callbacks=callbacks,
                 accelerator='auto',
                 devices=1,
                 logger=False
             )
 
-            logger.info(f"Training {self.get_name()} for up to {self.max_epochs} epochs")
+            logger.info(f"Training {self.get_name()} for up to {self.max_epochs} epochs on {len(features)} samples")
             self.trainer.fit(self.model, train_dataloader)
+            logger.info(f"{self.get_name()} training completed successfully")
 
             self.is_trained = True
             logger.info(f"Trained {self.get_name()} on {len(features)} samples")
@@ -238,7 +252,9 @@ class FastpropLearner(Learner):
                 batch_size=self.batch_size
             )
 
+            logger.info(f"Starting {self.get_name()} prediction on {len(features)} samples")
             predictions = self.trainer.predict(self.model, predict_dataloader)
+            logger.info(f"{self.get_name()} prediction completed, processing results")
             predictions = torch.cat(predictions).cpu().numpy().squeeze()
 
             if predictions.ndim == 0:
@@ -248,7 +264,7 @@ class FastpropLearner(Learner):
 
             self._cleanup_gpu_memory("after prediction")
 
-            logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
+            logger.info(f"Predicted {len(predictions)} samples with {self.get_name()}")
 
             return predictions, None
 

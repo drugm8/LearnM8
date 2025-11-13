@@ -18,7 +18,7 @@ from validation.lib import (
 from validation.lib.featurizer_visualizations import generate_comprehensive_visualizations
 
 from learnm8 import setup_logging
-setup_logging(level='INFO')
+setup_logging(level='DEBUG')
 
 
 DATASET_NAME = 'ampc_30k'
