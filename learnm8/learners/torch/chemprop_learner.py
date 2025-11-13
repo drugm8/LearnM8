@@ -301,6 +301,9 @@ class ChempropLearner(Learner):
 		# Enable progress bar and model summary if DEBUG logging is active
 		enable_verbose = logging.getLogger().level <= logging.DEBUG
 
+		# Suppress PyTorch Lightning's internal DEBUG logging
+		logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
+
 		self.trainer = pl.Trainer(
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
