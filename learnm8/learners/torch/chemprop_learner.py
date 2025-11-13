@@ -172,19 +172,7 @@ class ChempropLearner(Learner):
 		if smiles is None:
 			raise ValueError("ChempropLearner requires SMILES strings")
 
-		# Check if root logger is at DEBUG level to enable detailed logging
-		root_level = logging.getLogger().level
-		if root_level <= logging.DEBUG:
-			# Enable detailed logging for Chemprop/Lightning
-			logging.getLogger("lightning.pytorch").setLevel(logging.DEBUG)
-			logging.getLogger("pytorch_lightning").setLevel(logging.DEBUG)
-			logging.getLogger("chemprop").setLevel(logging.DEBUG)
-			logger.info("DEBUG logging enabled for Chemprop and PyTorch Lightning")
-		else:
-			# Default: suppress Lightning logging
-			logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
-			logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
-			warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
+		warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
 
 		n_samples = len(targets)
 		use_descriptors = features is not None
