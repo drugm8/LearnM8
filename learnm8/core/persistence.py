@@ -297,18 +297,20 @@ def save_results(
                 }
                 selection_history.append(record)
 
+        selection_schema = {
+            'cycle': pl.Int64,
+            'strategy': pl.Utf8,
+            'ID': pl.Utf8,
+            'SMILES': pl.Utf8,
+            'measured_value': pl.Float64,
+            'prediction_at_selection': pl.Float64,
+            'uncertainty_at_selection': pl.Float64
+        }
+
         if selection_history:
-            selection_df = pl.DataFrame(selection_history)
+            selection_df = pl.DataFrame(selection_history, schema=selection_schema)
         else:
-            selection_df = pl.DataFrame(schema={
-                'cycle': pl.Int64,
-                'strategy': pl.Utf8,
-                'ID': pl.Utf8,
-                'SMILES': pl.Utf8,
-                'measured_value': pl.Float64,
-                'prediction_at_selection': pl.Float64,
-                'uncertainty_at_selection': pl.Float64
-            })
+            selection_df = pl.DataFrame(schema=selection_schema)
 
         selection_path = output_dir / 'selection_history.csv'
         selection_df.write_csv(selection_path)
