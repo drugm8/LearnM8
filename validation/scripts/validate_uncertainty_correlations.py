@@ -13,6 +13,16 @@ Ensembles tested:
 - DT Ensemble (Decision Tree)
 - Mixed Ensemble (Multiple model types)
 
+Configuration:
+- N_ENSEMBLE_MEMBERS: Number of models in each ensemble (default: 3)
+  Increase this to test if larger ensembles improve uncertainty quality.
+  Each ensemble type creates diversity differently:
+    * RF: Different random states
+    * XGB: Different learning rates (0.05, 0.10, 0.15, ...)
+    * LR: Different regularization strengths (0.1, 1.0, 10.0, ...)
+    * DT: Different max depths (5, 10, 15, ...)
+    * Mixed: Multiple MixedEnsemble instances with different random states
+
 Outputs:
 - Correlation plots for each ensemble (all cycles + sample cycles)
 - Summary report with correlation statistics
@@ -21,7 +31,8 @@ Outputs:
 Usage:
     python validation/scripts/validate_uncertainty_correlations.py
 
-Expected Runtime: ~3-5 hours (all 5 ensembles with cache)
+Expected Runtime: ~3-5 hours (all 5 ensembles with cache, N_ENSEMBLE_MEMBERS=3)
+                 Runtime scales linearly with N_ENSEMBLE_MEMBERS
 """
 
 import sys
@@ -57,6 +68,7 @@ DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
 RANDOM_STATE = 42
+N_ENSEMBLE_MEMBERS = 10  # Number of models in each ensemble
 
 # Ensemble configurations
 ENSEMBLES = {
@@ -96,6 +108,7 @@ def print_header():
     print()
     print(f"Dataset: AMP 30K")
     print(f"Ensembles: {len(ENSEMBLES)}")
+    print(f"Ensemble Members: {N_ENSEMBLE_MEMBERS}")
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION:.1%}")
     print()
@@ -205,15 +218,58 @@ def analyze_uncertainty_error_correlation(results, ensemble_key, ensemble_config
 
     # Re-create learner and train on all labeled data
     print(f"  Re-training learner on {len(labeled_df)} labeled compounds...")
-    learner = ENSEMBLES[ensemble_key]['class'](
-        random_states=[RANDOM_STATE, RANDOM_STATE+81, RANDOM_STATE+314]
-    )
+
+    # Generate random states for ensemble members
+    random_states = [RANDOM_STATE + i * 123 for i in range(N_ENSEMBLE_MEMBERS)]
+
+    # Handle different ensemble initialization patterns
+    if ensemble_key == 'mixed_ensemble':
+        # MixedEnsemble: Create ensemble of MixedEnsemble instances with different random states
+        from learnm8.learners.ensemble import EnsembleLearner, MixedEnsemble
+        mixed_learners = [MixedEnsemble(random_state=rs) for rs in random_states]
+        learner = EnsembleLearner(mixed_learners)
+
+    elif ensemble_key == 'rf_ensemble':
+        # RFEnsemble: Random Forest variants with different random states
+        learner = ENSEMBLES[ensemble_key]['class'](
+            n_estimators=100,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'xgb_ensemble':
+        # XGBEnsemble: Different learning rates and random states
+        learning_rates = [0.05 + i * 0.05 for i in range(N_ENSEMBLE_MEMBERS)]
+        learner = ENSEMBLES[ensemble_key]['class'](
+            learning_rates=learning_rates,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'lr_ensemble':
+        # LREnsemble: Different regularization strengths
+        alphas = [0.1 * (10 ** i) for i in range(N_ENSEMBLE_MEMBERS)]
+        learner = ENSEMBLES[ensemble_key]['class'](
+            regularization_strengths=alphas,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'dt_ensemble':
+        # DTEnsemble: Different max depths
+        max_depths = [5 + i * 5 for i in range(N_ENSEMBLE_MEMBERS)]
+        learner = ENSEMBLES[ensemble_key]['class'](
+            max_depths=max_depths,
+            random_states=random_states
+        )
+    else:
+        # Fallback to default initialization
+        learner = ENSEMBLES[ensemble_key]['class'](
+            random_states=random_states
+        )
 
     # Extract features for labeled compounds
     labeled_smiles = labeled_df['SMILES'].to_list()
     labeled_ids = labeled_df['ID'].to_list()
 
-    from learnm8.utils.featurizers import extract_features
+    from learnm8.features import extract_features
     features = extract_features(
         smiles_list=labeled_smiles,
         featurizer_type='morgan',
@@ -378,6 +434,7 @@ def generate_summary_report(all_results, output_dir):
         f.write(f"Dataset: AMP 30K\n")
         f.write(f"Cycles: {N_CYCLES}\n")
         f.write(f"Batch Fraction: {BATCH_FRACTION:.1%}\n")
+        f.write(f"Ensemble Members: {N_ENSEMBLE_MEMBERS}\n")
         f.write(f"Ensembles Tested: {len(ENSEMBLES)}\n\n")
 
         f.write("-" * 80 + "\n")
@@ -441,10 +498,9 @@ def main():
     print_header()
 
     # Setup output directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_base = Path('validation/reports/uncertainty_correlation_validation')
-    data_dir = output_base / 'data' / timestamp
-    plots_dir = output_base / 'plots' / timestamp
+    data_dir = output_base / 'data'
+    plots_dir = output_base / 'plots'
     data_dir.mkdir(parents=True, exist_ok=True)
     plots_dir.mkdir(parents=True, exist_ok=True)
 
