@@ -317,7 +317,7 @@ class ChempropLearner(Learner):
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
 			enable_progress_bar=enable_verbose,
-			enable_model_summary=enable_verbose,
+			enable_model_summary=False,
 			logger=False,
 			callbacks=callbacks
 		)

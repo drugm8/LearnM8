@@ -205,7 +205,7 @@ class FastpropLearner(Learner):
             self.trainer = Trainer(
                 max_epochs=self.max_epochs,
                 enable_progress_bar=enable_verbose,
-                enable_model_summary=enable_verbose,
+                enable_model_summary=False,
                 callbacks=callbacks,
                 accelerator='auto',
                 devices=1,
