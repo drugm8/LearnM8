@@ -179,6 +179,17 @@ def save_aggregated_results(
 
     if all_rows:
         df = pl.DataFrame(all_rows)
+
+        # Drop columns with nested data (lists/structs) that CSV can't handle
+        nested_cols = []
+        for col in df.columns:
+            dtype = df[col].dtype
+            if dtype in [pl.List, pl.Struct] or dtype.base_type() in [pl.List, pl.Struct]:
+                nested_cols.append(col)
+
+        if nested_cols:
+            df = df.drop(nested_cols)
+
         df.write_csv(output_dir / 'aggregated_cycle_metrics.csv')
 
     mean_df = pl.DataFrame(aggregated['cycle_metrics_mean'])
