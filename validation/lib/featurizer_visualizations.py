@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns
 from datetime import datetime
+from matplotlib.patches import Polygon
 
 
 def create_top_k_heatmap(
@@ -373,3 +374,97 @@ def generate_comprehensive_visualizations(
         'cycle_plot': cycle_plot_path,
         'report': report_path
     }
+
+
+def _format_time_label(seconds: float) -> str:
+    """Format time values for axis labels."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{seconds/60:.1f}m"
+    else:
+        return f"{seconds/3600:.1f}h"
+
+
+def _identify_pareto_frontier(x_values: np.ndarray, y_values: np.ndarray, maximize_y: bool = True) -> np.ndarray:
+    """Identify Pareto-optimal points (non-dominated solutions).
+
+    Args:
+        x_values: Cost values (minimize)
+        y_values: Performance values
+        maximize_y: If True, maximize y_values; if False, minimize
+
+    Returns:
+        Boolean mask of Pareto-optimal points
+    """
+    n_points = len(x_values)
+    is_pareto = np.ones(n_points, dtype=bool)
+
+    for i in range(n_points):
+        if not is_pareto[i]:
+            continue
+
+        for j in range(n_points):
+            if i == j:
+                continue
+
+            # Check if j dominates i
+            if maximize_y:
+                # j dominates i if: x[j] <= x[i] AND y[j] >= y[i] with at least one strict inequality
+                if x_values[j] <= x_values[i] and y_values[j] >= y_values[i]:
+                    if x_values[j] < x_values[i] or y_values[j] > y_values[i]:
+                        is_pareto[i] = False
+                        break
+            else:
+                # j dominates i if: x[j] <= x[i] AND y[j] <= y[i] with at least one strict inequality
+                if x_values[j] <= x_values[i] and y_values[j] <= y_values[i]:
+                    if x_values[j] < x_values[i] or y_values[j] < y_values[i]:
+                        is_pareto[i] = False
+                        break
+
+    return is_pareto
+
+
+def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.DataFrame:
+    """Calculate cumulative timing metrics from cycle results.
+
+    Args:
+        all_results: Dictionary mapping (learner, featurizer) → result data
+
+    Returns:
+        DataFrame with cumulative timing columns
+    """
+    timing_data = []
+
+    for (learner, featurizer), result_data in all_results.items():
+        aggregated = result_data['aggregated']
+        cycle_metrics_mean = aggregated['cycle_metrics_mean']
+
+        # Calculate cumulative timing
+        cumulative_training = 0.0
+        cumulative_prediction = 0.0
+        cumulative_total = 0.0
+
+        for cycle_metric in cycle_metrics_mean:
+            cumulative_training += cycle_metric.get('training_time', 0.0)
+            cumulative_prediction += cycle_metric.get('prediction_time', 0.0)
+            cumulative_total += cycle_metric.get('total_time', 0.0)
+
+        cumulative_training_prediction = cumulative_training + cumulative_prediction
+
+        # Get final discovery rates
+        final_metrics = cycle_metrics_mean[-1]
+
+        timing_data.append({
+            'learner': learner,
+            'featurizer': featurizer if featurizer else 'none',
+            'cumulative_training_time': cumulative_training,
+            'cumulative_prediction_time': cumulative_prediction,
+            'cumulative_total_time': cumulative_total,
+            'cumulative_training_prediction_time': cumulative_training_prediction,
+            'elapsed_time': aggregated.get('elapsed_time_mean', cumulative_total),
+            'top_1_pct_discovery': final_metrics.get('top_1_pct_discovery', 0.0),
+            'top_0_1_pct_discovery': final_metrics.get('top_0_1_pct_discovery', 0.0)
+        })
+
+    return pl.DataFrame(timing_data)
