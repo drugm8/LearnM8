@@ -205,12 +205,13 @@ def save_aggregated_results(
             mean_val = mean_df[cycle_idx, col]
             std_val = std_df[cycle_idx, col]
 
-            if mean_val is not None and std_val is not None:
+            # Convert None to NaN for consistent float typing
+            if mean_val is not None or std_val is not None:
                 summary_rows.append({
                     'cycle': cycle_num,
                     'metric': col,
-                    'mean': mean_val,
-                    'std': std_val
+                    'mean': float(mean_val) if mean_val is not None else float('nan'),
+                    'std': float(std_val) if std_val is not None else float('nan')
                 })
 
     if summary_rows:
