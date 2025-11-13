@@ -126,7 +126,6 @@ def validate_compound_pool(
         dup_df = pl.DataFrame(schema=compound_pool.schema)
         dup_errors = {}
 
-    logger.info(f"Validating {len(unique_pool)} compounds with datamol...")
     logger.debug(f"Validating compounds using datamol.sanitize_smiles()")
 
     smiles_list = unique_pool['SMILES'].to_list()

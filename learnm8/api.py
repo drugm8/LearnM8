@@ -629,12 +629,6 @@ def run_active_learning(
                 "No valid compounds after validation. Check validation_report for details."
             )
 
-        logger.info(
-            f"Validation complete: {len(validation_result.valid_compounds)} valid "
-            f"({validation_result.success_rate:.1%}), "
-            f"{len(validation_result.invalid_compounds)} invalid"
-        )
-
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
@@ -651,8 +645,6 @@ def run_active_learning(
         if not expected_cols.issubset(compounds_df.columns):
             missing = expected_cols - set(compounds_df.columns)
             raise ValueError(f"Master DataFrame missing columns: {missing}")
-
-        logger.info(f"Master DataFrame initialized: {len(compounds_df)} compounds (all unlabeled)")
 
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
@@ -715,12 +707,6 @@ def run_active_learning(
             original_pool=original_pool
         )
 
-        labeled_count = compounds_df.filter(pl.col('status') == 'labeled').height
-        logger.info(
-            f"Cycle 0 (initialization) complete: {labeled_count} compounds labeled "
-            f"(strategy={init_config.strategy})"
-        )
-
         # Initialize metrics list with cycle 0
         all_metrics = [cycle_0_metrics]
         logger.info(
@@ -775,12 +761,6 @@ def run_active_learning(
 
                 # Update cumulative_selected_ids after cycle
                 cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
-
-                logger.info(
-                    f"Cycle {cycle_num} complete: "
-                    f"{metrics['selected_count']} selected, "
-                    f"{metrics['remaining_unlabeled']} remaining"
-                )
 
                 if metrics['remaining_unlabeled'] == 0:
                     logger.info("Pool exhausted, stopping early")
