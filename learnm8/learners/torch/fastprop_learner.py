@@ -174,7 +174,8 @@ class FastpropLearner(Learner):
                 dataset,
                 shuffle=True,
                 batch_size=self.batch_size,
-                num_workers=0
+                num_workers=0,
+                persistent_workers=False
             )
 
             self.model = fastprop(
@@ -251,7 +252,8 @@ class FastpropLearner(Learner):
             predict_dataloader = fastpropDataLoader(
                 dataset,
                 batch_size=self.batch_size,
-                num_workers=0
+                num_workers=0,
+                persistent_workers=False
             )
 
             logger.info(f"Starting {self.get_name()} prediction on {len(features)} samples")
