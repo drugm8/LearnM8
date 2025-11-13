@@ -173,7 +173,8 @@ class FastpropLearner(Learner):
             train_dataloader = fastpropDataLoader(
                 dataset,
                 shuffle=True,
-                batch_size=self.batch_size
+                batch_size=self.batch_size,
+                num_workers=0
             )
 
             self.model = fastprop(
@@ -249,7 +250,8 @@ class FastpropLearner(Learner):
             dataset = TensorDataset(X)
             predict_dataloader = fastpropDataLoader(
                 dataset,
-                batch_size=self.batch_size
+                batch_size=self.batch_size,
+                num_workers=0
             )
 
             logger.info(f"Starting {self.get_name()} prediction on {len(features)} samples")
