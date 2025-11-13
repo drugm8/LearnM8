@@ -183,14 +183,13 @@ def execute_cycle(
                         f"featurizer_type is required for {learner.get_name()}"
                     )
 
-                logger.info(f"Extracting features for {len(labeled_df)} training compounds ({featurizer_type} fingerprints)")
                 training_features = extract_features(
                     training_smiles,
                     featurizer_type,
                     cache_dir=cache_dir
                 )
+                logger.info(f"Extracted {featurizer_type} features: {len(labeled_df)} training compounds")
                 logger.debug(f"Extracting {featurizer_type} features with cache_dir={cache_dir}")
-                logger.info(f"Features extracted: {len(labeled_df)} compounds processed")
 
                 logger.info(f"Training model on {len(labeled_df)} labeled compounds")
                 learner.train(training_features, training_targets)
@@ -256,22 +255,19 @@ def execute_cycle(
                     f"featurizer_type is required for {learner.get_name()}"
                 )
 
-            logger.info(f"Extracting features for {len(prediction_pool)} unlabeled compounds ({featurizer_type} fingerprints)")
             prediction_features = extract_features(
                 prediction_smiles,
                 featurizer_type,
                 cache_dir=cache_dir,
                 show_progress=len(prediction_pool) > 10000
             )
+            logger.info(f"Extracted {featurizer_type} features: {len(prediction_pool)} unlabeled compounds")
             logger.debug(f"Extracting {featurizer_type} features for prediction pool")
-            logger.info(f"Features extracted: {len(prediction_pool)} compounds processed")
 
-            logger.info(f"Generating predictions for {len(prediction_pool)} unlabeled compounds")
             predictions, uncertainties = learner.predict(prediction_features)
+            logger.info(f"Generated predictions: {len(predictions)} compounds")
             logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
-
-        logger.info(f"Predictions complete: {len(predictions)} predictions generated")
-        logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
+            logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
