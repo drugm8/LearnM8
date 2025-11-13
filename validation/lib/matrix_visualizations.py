@@ -73,8 +73,8 @@ def create_top_k_heatmap(
     ax.set_ylabel('Learner', fontsize=13, labelpad=8)
 
     ax.tick_params(axis='both', labelsize=11)
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
-    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
+    ax.set_yticklabels(mean_pd.index, rotation=0)
 
     return ax
 
