@@ -30,6 +30,7 @@ All other logic is identical, eliminating code duplication.
 
 import logging
 import math
+import time
 from pathlib import Path
 from typing import Tuple, Dict, Any, List, Optional, Literal
 import polars as pl
@@ -124,6 +125,9 @@ def execute_cycle(
     if cumulative_selected_ids is None:
         cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
 
+    # Start overall cycle timing
+    cycle_start_time = time.time()
+
     # Step 2 & 3: Training
     # Get Labeled Compounds for Training
     labeled_df = get_compounds_by_status(
@@ -145,6 +149,7 @@ def execute_cycle(
         )
     else:
         # Extract features and train learner
+        training_start_time = time.time()
         try:
             training_targets = labeled_df[target_col].to_numpy()
             training_smiles = labeled_df['SMILES'].to_list()
@@ -198,8 +203,11 @@ def execute_cycle(
             logger.error(f"Training failed in cycle {cycle}: {e}")
             raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
 
-        logger.info("Training complete")
+        training_time = time.time() - training_start_time
+        logger.info(f"Training complete ({training_time:.2f}s)")
 
+    # Step 4: Prediction on unlabeled compounds
+    prediction_start_time = time.time()
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
     ).clone()
@@ -272,10 +280,12 @@ def execute_cycle(
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
 
+    prediction_time = time.time() - prediction_start_time
+
     if len(predictions) == 0:
         raise RuntimeError(f"Prediction returned 0 results in cycle {cycle}")
 
-    logger.debug(f"Generated {len(predictions)} predictions")
+    logger.debug(f"Generated {len(predictions)} predictions ({prediction_time:.2f}s)")
 
     valid_compound_ids = prediction_pool['ID'].to_list()
     compounds_df = add_predictions(
@@ -366,6 +376,7 @@ def execute_cycle(
             )
 
     # Step 11: Select Compounds Using Acquisition Strategy
+    acquisition_start_time = time.time()
     if config.pruning_strategy and pruning_stats['pruned_count'] > 0:
         logger.info(f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} remaining candidates")
     else:
@@ -380,6 +391,7 @@ def execute_cycle(
     )
 
     selected_ids = selected_df['ID'].to_list()
+    acquisition_time = time.time() - acquisition_start_time
 
     if len(selected_ids) == 0:
         raise RuntimeError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
@@ -390,6 +402,7 @@ def execute_cycle(
     logger.debug(f"{config.strategy.upper()} acquisition selected {len(selected_ids)} compounds")
 
     # Step 12: Measure Selected Compounds
+    oracle_start_time = time.time()
     # Create temporary mapping to preserve selected_ids order
     id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
 
@@ -404,6 +417,8 @@ def execute_cycle(
     except Exception as e:
         logger.error(f"Oracle measurement failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Oracle measurement failed in cycle {cycle}: {e}")
+
+    oracle_time = time.time() - oracle_start_time
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
@@ -425,6 +440,7 @@ def execute_cycle(
     )
 
     # Step 14: Calculate Cycle Metrics
+    evaluation_start_time = time.time()
     metrics = _calculate_cycle_metrics(
         compounds_df,
         cycle,
@@ -492,6 +508,19 @@ def execute_cycle(
                     logger.debug(f"Enhanced metrics with evaluation (Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%)")
     except Exception as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
+
+    evaluation_time = time.time() - evaluation_start_time
+
+    # Calculate total cycle time
+    total_time = time.time() - cycle_start_time
+
+    # Add timing metrics
+    metrics['training_time'] = training_time
+    metrics['prediction_time'] = prediction_time
+    metrics['acquisition_time'] = acquisition_time
+    metrics['oracle_time'] = oracle_time
+    metrics['evaluation_time'] = evaluation_time
+    metrics['total_time'] = total_time
 
     # Step 15: Display Rich Metrics Table
     try:
