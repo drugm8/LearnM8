@@ -329,9 +329,9 @@ def create_pruning_efficiency_timeline(
         result = all_results[pruning_frac]
         cycle_metrics = pl.DataFrame(result['cycle_metrics'])
 
-        cycles = cycle_metrics['cycle'].values
-        pool_sizes = cycle_metrics['pool_size'].values
-        discovery = cycle_metrics.get('top_0_1_pct_discovery', cycle_metrics.get('top_100_discovery', [0]*len(cycles))).values
+        cycles = cycle_metrics['cycle'].to_numpy()
+        pool_sizes = cycle_metrics['pool_size'].to_numpy()
+        discovery = cycle_metrics.get('top_0_1_pct_discovery', cycle_metrics.get('top_100_discovery', [0]*len(cycles))).to_numpy()
 
         label = strategy_labels[pruning_frac]
         color = strategy_colors.get(pruning_frac, '#95a5a6')
@@ -384,9 +384,9 @@ def create_discovery_efficiency_scatter(
         result = all_results[pruning_frac]
         cycle_metrics = pl.DataFrame(result['cycle_metrics'])
 
-        cumulative_labeled = cycle_metrics['cumulative_labeled'].values
-        discovery = cycle_metrics['top_100_discovery'].values
-        cycles = cycle_metrics['cycle'].values
+        cumulative_labeled = cycle_metrics['cumulative_labeled'].to_numpy()
+        discovery = cycle_metrics['top_100_discovery'].to_numpy()
+        cycles = cycle_metrics['cycle'].to_numpy()
 
         label = strategy_labels[pruning_frac]
         color = strategy_colors.get(pruning_frac, '#95a5a6')
@@ -450,8 +450,8 @@ def create_model_quality_facets(
             if metric_name not in cycle_metrics.columns:
                 continue
 
-            cycles = cycle_metrics['cycle'].values
-            values = cycle_metrics[metric_name].values
+            cycles = cycle_metrics['cycle'].to_numpy()
+            values = cycle_metrics[metric_name].to_numpy()
 
             label = strategy_labels[pruning_frac]
             color = strategy_colors.get(pruning_frac, '#95a5a6')
@@ -590,9 +590,9 @@ def create_score_ratio_evolution(
         result = all_results[pruning_frac]
         cycle_metrics = pl.DataFrame(result['cycle_metrics'])
 
-        cycles = cycle_metrics['cycle'].values
-        cumulative_ratio = cycle_metrics.get('cumulative_avg_score_ratio', [1.0]*len(cycles)).values
-        batch_ratio = cycle_metrics.get('batch_avg_score_ratio', [1.0]*len(cycles)).values
+        cycles = cycle_metrics['cycle'].to_numpy()
+        cumulative_ratio = cycle_metrics.get('cumulative_avg_score_ratio', [1.0]*len(cycles)).to_numpy()
+        batch_ratio = cycle_metrics.get('batch_avg_score_ratio', [1.0]*len(cycles)).to_numpy()
 
         label = strategy_labels[pruning_frac]
         color = strategy_colors.get(pruning_frac, '#95a5a6')

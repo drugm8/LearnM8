@@ -290,8 +290,8 @@ def create_summary_report(
     featurizer_counts = results_df['featurizer'].nunique()
 
     lines.extend([
-        f"- **Learners tested:** {learner_counts} ({', '.join(sorted(results_df['learner'].unique()))})",
-        f"- **Featurizers tested:** {featurizer_counts} ({', '.join(sorted(results_df['featurizer'].unique()))})",
+        f"- **Learners tested:** {learner_counts} ({', '.join(sorted(results_df['learner'].unique().to_list()))})",
+        f"- **Featurizers tested:** {featurizer_counts} ({', '.join(sorted(results_df['featurizer'].unique().to_list()))})",
         f"- **Total experiments completed:** {len(results_df)}",
         f"- **Acquisition strategy:** {config['acquisition']}",
         "",
@@ -641,7 +641,7 @@ def create_pareto_frontiers(
     )
 
     # Color mapping for learners
-    unique_learners = sorted(timing_df['learner'].unique())
+    unique_learners = sorted(timing_df['learner'].unique().to_list())
     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_learners)))
     learner_colors = dict(zip(unique_learners, colors))
 
@@ -711,7 +711,7 @@ def create_pareto_frontiers(
                                          label=learner))
 
     for featurizer, marker in featurizer_markers.items():
-        if featurizer in timing_df['featurizer'].unique():
+        if featurizer in timing_df['featurizer'].unique().to_list():
             legend_elements.append(plt.Line2D([0], [0], marker=marker, color='w',
                                              markerfacecolor='gray', markersize=8,
                                              label=f'Feat: {featurizer}'))
