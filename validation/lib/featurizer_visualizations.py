@@ -448,9 +448,9 @@ def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.
         cumulative_total = 0.0
 
         for cycle_metric in cycle_metrics_mean:
-            cumulative_training += cycle_metric.get('training_time', 0.0)
-            cumulative_prediction += cycle_metric.get('prediction_time', 0.0)
-            cumulative_total += cycle_metric.get('total_time', 0.0)
+            cumulative_training += cycle_metric.get('training_time') or 0.0
+            cumulative_prediction += cycle_metric.get('prediction_time') or 0.0
+            cumulative_total += cycle_metric.get('total_time') or 0.0
 
         cumulative_training_prediction = cumulative_training + cumulative_prediction
 
