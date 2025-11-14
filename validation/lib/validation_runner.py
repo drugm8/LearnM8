@@ -69,6 +69,9 @@ class ValidationRunner:
         param_name = self.strategy_config['param_name']
 
         for param_value in self.strategy_config['param_values']:
+            # Convert list to tuple for use as dictionary key (lists are unhashable)
+            dict_key = tuple(param_value) if isinstance(param_value, list) else param_value
+
             print(f"\n{'-'*60}")
             print(f"Parameter: {param_name}={param_value}")
             print(f"{'-'*60}")
@@ -77,12 +80,21 @@ class ValidationRunner:
 
             if self._check_existing_outputs(output_dir):
                 print(f"  ✓ Using existing data from {output_dir}")
-                results[param_value] = self._load_existing_results(output_dir, target_column)
+                results[dict_key] = self._load_existing_results(output_dir, target_column)
             else:
                 print(f"  Generating new data...")
                 start_time = time.time()
 
-                acquisition_params = {param_name: param_value}
+                # Handle special case for multi-parameter configs
+                if param_name == 'config' and isinstance(param_value, (list, tuple)):
+                    # For simulated_annealing: [initial_temp, cooling_schedule]
+                    acquisition_params = {
+                        'initial_temp': param_value[0],
+                        'cooling_schedule': param_value[1],
+                        'max_iterations': 500  # Fixed for validation
+                    }
+                else:
+                    acquisition_params = {param_name: param_value}
 
                 al_results = run_active_learning(
                     compound_pool=compound_pool,
@@ -104,7 +116,7 @@ class ValidationRunner:
                 elapsed = time.time() - start_time
                 print(f"  ✓ Completed in {elapsed:.1f}s")
 
-                results[param_value] = {
+                results[dict_key] = {
                     'output_dir': output_dir,
                     'cycle_metrics': al_results['cycle_metrics'],
                     'compounds_df': al_results['compounds_df'],
@@ -122,7 +134,14 @@ class ValidationRunner:
     def _get_output_dir(self, param_value) -> Path:
         param_name = self.strategy_config['param_name']
         strategy_name = self.strategy_config['name']
-        dir_name = f"{strategy_name}_validation_{param_name}_{param_value}"
+
+        # Format param_value for directory name
+        if isinstance(param_value, (list, tuple)):
+            param_str = '_'.join(str(v) for v in param_value)
+        else:
+            param_str = str(param_value)
+
+        dir_name = f"{strategy_name}_validation_{param_name}_{param_str}"
         return Path(self.global_config['output_base_dir']) / self.strategy_name / 'data' / dir_name
 
     def _check_existing_outputs(self, output_dir: Path) -> bool:
