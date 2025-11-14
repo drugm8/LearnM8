@@ -15,7 +15,8 @@ def create_top_k_heatmap(
     std_matrix: pl.DataFrame,
     k_label: str,
     metric_col: str,
-    ax: plt.Axes
+    ax: plt.Axes,
+    learner_names: List[str] = None
 ) -> plt.Axes:
     cmap = mcolors.LinearSegmentedColormap.from_list(
         'red_blue',
@@ -64,7 +65,11 @@ def create_top_k_heatmap(
 
     ax.tick_params(axis='both', labelsize=11)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
-    display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
+
+    if learner_names is not None:
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in learner_names]
+    else:
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
     ax.set_yticklabels(display_names, rotation=0)
 
     return ax
@@ -72,7 +77,8 @@ def create_top_k_heatmap(
 
 def create_all_heatmaps(
     results_df: pl.DataFrame,
-    output_dir: Path
+    output_dir: Path,
+    dataset_name: str = None
 ) -> Path:
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
@@ -88,13 +94,17 @@ def create_all_heatmaps(
     fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
     axes = axes.flatten()
 
-    fig.suptitle('Learner-Featurizer Performance Matrix: Discovery Rates',
+    title = 'Learner-Featurizer Performance Matrix: Discovery Rates'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title,
                  fontsize=24, fontweight='bold', y=0.995)
 
     plt.subplots_adjust(
         left=0.08,
         right=0.98,
-        top=0.96,
+        top=0.94,
         bottom=0.06,
         wspace=0.25,
         hspace=0.28
@@ -118,12 +128,15 @@ def create_all_heatmaps(
             aggregate_function='first'
         )
 
+        # Extract learner names before selecting columns
+        learner_names = mean_pivot.get_column('learner').to_list()
+
         desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
         existing_cols = [col for col in desired_order if col in mean_pivot.columns]
         mean_pivot = mean_pivot.select(existing_cols)
         std_pivot = std_pivot.select(existing_cols)
 
-        create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx])
+        create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx], learner_names)
 
     output_path = plots_dir / 'heatmap_combined.png'
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -347,7 +360,7 @@ def generate_comprehensive_visualizations(
 
     results_df = pl.DataFrame(results_list)
 
-    heatmap_path = create_all_heatmaps(results_df, output_dir)
+    heatmap_path = create_all_heatmaps(results_df, output_dir, config.get('dataset_name'))
 
     learner_results = {}
     for (learner, featurizer), result_data in all_results.items():
