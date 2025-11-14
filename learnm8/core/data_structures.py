@@ -155,8 +155,12 @@ def validate_master_dataframe(
         current_categories = master_df['status'].cat.get_categories().to_list()
         if set(current_categories) != set(VALID_STATUSES):
             logger.warning(f"Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}")
+    elif master_df['status'].dtype == pl.Enum:
+        current_categories = master_df['status'].dtype.categories
+        if set(current_categories) != set(VALID_STATUSES):
+            logger.warning(f"Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}")
     elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
-        raise ValueError(f"Status column must be categorical or string type, got {master_df['status'].dtype}")
+        raise ValueError(f"Status column must be categorical, enum, or string type, got {master_df['status'].dtype}")
 
     invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(VALID_STATUSES)
     if invalid_statuses:

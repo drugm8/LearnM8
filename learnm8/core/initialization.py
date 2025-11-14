@@ -55,7 +55,7 @@ def initialize_master_dataframe_empty(
 
     # All compounds start unlabeled
     master_df = master_df.with_columns([
-        pl.lit(STATUS_UNLABELED).cast(pl.Categorical).alias('status')
+        pl.lit(STATUS_UNLABELED).cast(pl.Enum(VALID_STATUSES)).alias('status')
     ])
 
     # Initialize empty tracking columns
