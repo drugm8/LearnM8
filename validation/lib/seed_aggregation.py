@@ -195,27 +195,35 @@ def save_aggregated_results(
     mean_df = pl.DataFrame(aggregated['cycle_metrics_mean'])
     std_df = pl.DataFrame(aggregated['cycle_metrics_std'])
 
-    summary_rows = []
-    for cycle_idx in range(len(mean_df)):
-        cycle_num = mean_df[cycle_idx, 'cycle'].item()
-        for col in mean_df.columns:
-            if col in ['cycle', 'strategy']:
-                continue
+    # Vectorized approach: unpivot both DataFrames and join
+    metric_cols = [col for col in mean_df.columns if col not in ['cycle', 'strategy']]
 
-            mean_val = mean_df[cycle_idx, col].item()
-            std_val = std_df[cycle_idx, col].item()
+    if metric_cols:
+        # Unpivot mean values (wide -> long format)
+        mean_long = mean_df.select(['cycle'] + metric_cols).unpivot(
+            index='cycle',
+            on=metric_cols,
+            variable_name='metric',
+            value_name='mean'
+        )
 
-            # Convert None to NaN for consistent float typing
-            if mean_val is not None or std_val is not None:
-                summary_rows.append({
-                    'cycle': cycle_num,
-                    'metric': col,
-                    'mean': float(mean_val) if mean_val is not None else float('nan'),
-                    'std': float(std_val) if std_val is not None else float('nan')
-                })
+        # Unpivot std values
+        std_long = std_df.select(['cycle'] + metric_cols).unpivot(
+            index='cycle',
+            on=metric_cols,
+            variable_name='metric',
+            value_name='std'
+        )
 
-    if summary_rows:
-        summary_df = pl.DataFrame(summary_rows)
+        # Join mean and std on cycle + metric
+        summary_df = mean_long.join(std_long, on=['cycle', 'metric'], how='inner')
+
+        # Convert None to NaN for consistent float typing
+        summary_df = summary_df.with_columns([
+            pl.col('mean').fill_null(float('nan')),
+            pl.col('std').fill_null(float('nan'))
+        ])
+
         summary_df.write_csv(output_dir / 'summary_statistics.csv')
 
 
