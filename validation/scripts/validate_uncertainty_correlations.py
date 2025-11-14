@@ -7,28 +7,37 @@ AMP 30K dataset and analyzes the correlation between predicted uncertainties and
 actual prediction errors. This helps assess the quality of uncalibrated uncertainties.
 
 Learners tested:
-- RF Ensemble (Random Forest ensemble)
-- XGB Ensemble (XGBoost ensemble)
-- LR Ensemble (Linear Regression ensemble)
-- DT Ensemble (Decision Tree ensemble)
-- Mixed Ensemble (Multiple model types)
-- GP (Gaussian Process - gold standard for uncertainty)
-- MC Dropout (Monte Carlo Dropout)
-- Fastprop Ensemble (Fastprop ensemble)
-- Chemprop Ensemble (Chemprop ensemble, if available)
+- RF Ensemble (Random Forest ensemble) ✓ Scalable
+- XGB Ensemble (XGBoost ensemble) ✓ Scalable
+- LR Ensemble (Linear Regression ensemble) ✓ Scalable
+- DT Ensemble (Decision Tree ensemble) ✓ Scalable
+- Mixed Ensemble (Multiple model types) - Fixed at 3 models (RF+LR+XGB)
+- GP (Gaussian Process - gold standard for uncertainty) - Single model
+- MC Dropout (Monte Carlo Dropout) - Single model
+- Fastprop Ensemble (Fastprop ensemble) ✓ Scalable
+- Chemprop Ensemble (Chemprop ensemble, if available) ✓ Scalable
 
 Note: Single Fastprop and Chemprop models do NOT provide uncertainty estimates
 and are excluded from this validation. Use their ensemble variants instead.
 
 Configuration:
-- N_ENSEMBLE_MEMBERS: Number of models in each ensemble (default: 3)
+- N_ENSEMBLE_MEMBERS: Number of models in each scalable ensemble (default: 3)
   Increase this to test if larger ensembles improve uncertainty quality.
-  Each ensemble type creates diversity differently:
-    * RF: Different random states
-    * XGB: Different learning rates (0.05, 0.10, 0.15, ...)
-    * LR: Different regularization strengths (0.1, 1.0, 10.0, ...)
-    * DT: Different max depths (5, 10, 15, ...)
-    * Mixed: Multiple MixedEnsemble instances with different random states
+
+  This parameter now ACTUALLY controls ensemble sizes for scalable ensembles.
+  Each ensemble type creates diversity using sensible parameter ranges:
+
+    ✓ RF Ensemble: Different random states
+    ✓ XGB Ensemble: Learning rates (0.01 to 0.3) + random states
+    ✓ LR Ensemble: Regularization strengths (0.01 to 100, log scale) + random states
+    ✓ DT Ensemble: Max depths (5 to 30) + random states
+    ✓ Fastprop Ensemble: Different random states
+    ✓ Chemprop Ensemble: Different random states
+
+    Non-scalable learners (not affected by N_ENSEMBLE_MEMBERS):
+    - Mixed Ensemble: Always 3 models (RF + LR + XGB)
+    - GP: Single Gaussian Process model
+    - MC Dropout: Single model with dropout sampling
 
 Outputs:
 - Correlation plots for each ensemble (all cycles + sample cycles)
@@ -59,8 +68,20 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from learnm8 import run_active_learning
 from learnm8.oracles import CSVOracle
+from learnm8.learners import (
+    GaussianProcessLearner,
+    MCDropoutLearner
+)
+from learnm8.learners.ensemble import (
+    RFEnsemble,
+    XGBEnsemble,
+    LREnsemble,
+    DTEnsemble,
+    MixedEnsemble,
+    FastpropEnsemble
+)
 
-# Check for Chemprop availability (for ensemble configuration only)
+# Check for Chemprop availability
 try:
     from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
     CHEMPROP_AVAILABLE = True
@@ -82,39 +103,55 @@ BATCH_FRACTION = 0.01
 RANDOM_STATE = 42
 N_ENSEMBLE_MEMBERS = 3  # Number of models in each ensemble
 
-# Ensemble configurations (no longer need class references)
+# Ensemble configurations with scalability metadata
 ENSEMBLES = {
     'rf_ensemble': {
         'name': 'Random Forest Ensemble',
-        'color': '#1f77b4'
+        'color': '#1f77b4',
+        'scalable': True,
+        'type': 'ensemble'
     },
     'xgb_ensemble': {
         'name': 'XGBoost Ensemble',
-        'color': '#ff7f0e'
+        'color': '#ff7f0e',
+        'scalable': True,
+        'type': 'ensemble'
     },
     'lr_ensemble': {
         'name': 'Linear Regression Ensemble',
-        'color': '#2ca02c'
+        'color': '#2ca02c',
+        'scalable': True,
+        'type': 'ensemble'
     },
     'dt_ensemble': {
         'name': 'Decision Tree Ensemble',
-        'color': '#d62728'
+        'color': '#d62728',
+        'scalable': True,
+        'type': 'ensemble'
     },
     'mixed_ensemble': {
         'name': 'Mixed Ensemble',
-        'color': '#9467bd'
+        'color': '#9467bd',
+        'scalable': False,
+        'type': 'ensemble'
     },
     'gp': {
         'name': 'Gaussian Process',
-        'color': '#8c564b'
+        'color': '#8c564b',
+        'scalable': False,
+        'type': 'single'
     },
     'mc_dropout': {
         'name': 'MC Dropout',
-        'color': '#e377c2'
+        'color': '#e377c2',
+        'scalable': False,
+        'type': 'single'
     },
     'fastprop_ensemble': {
         'name': 'Fastprop Ensemble',
-        'color': '#bcbd22'
+        'color': '#bcbd22',
+        'scalable': True,
+        'type': 'ensemble'
     }
 }
 
@@ -122,8 +159,96 @@ ENSEMBLES = {
 if CHEMPROP_AVAILABLE:
     ENSEMBLES['chemprop_ensemble'] = {
         'name': 'Chemprop Ensemble',
-        'color': '#17becf'
+        'color': '#17becf',
+        'scalable': True,
+        'type': 'ensemble'
     }
+
+
+def create_configured_ensemble(ensemble_key, n_members, random_state):
+    """
+    Create ensemble learner with specified number of members.
+
+    This function instantiates ensemble learners with custom configurations
+    based on the desired number of ensemble members. Each ensemble type uses
+    appropriate diversity strategies:
+
+    - RF Ensemble: Random states for diversity
+    - XGB Ensemble: Learning rates (0.01 to 0.3) + random states
+    - LR Ensemble: Regularization strengths (0.01 to 100, log scale) + random states
+    - DT Ensemble: Max depths (5 to 30) + random states
+    - Fastprop/Chemprop: Random states for diversity
+    - GP/MC Dropout: Single models (not ensembles)
+    - Mixed Ensemble: Not scalable (returns None)
+
+    Args:
+        ensemble_key: Ensemble identifier (e.g., 'rf_ensemble')
+        n_members: Number of ensemble members to create
+        random_state: Base random seed for reproducibility
+
+    Returns:
+        Configured ensemble learner instance, or None if not scalable
+
+    Raises:
+        ValueError: If ensemble_key is unknown
+    """
+    random_states = [random_state + i * 137 for i in range(n_members)]
+
+    if ensemble_key == 'rf_ensemble':
+        return RFEnsemble(
+            n_estimators=100,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'xgb_ensemble':
+        learning_rates = np.linspace(0.01, 0.3, n_members).tolist()
+        return XGBEnsemble(
+            learning_rates=learning_rates,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'lr_ensemble':
+        alphas = np.logspace(-2, 2, n_members).tolist()
+        return LREnsemble(
+            regularization_strengths=alphas,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'dt_ensemble':
+        max_depths = np.linspace(5, 30, n_members, dtype=int).tolist()
+        return DTEnsemble(
+            max_depths=max_depths,
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'fastprop_ensemble':
+        return FastpropEnsemble(
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'chemprop_ensemble':
+        if not CHEMPROP_AVAILABLE:
+            return None
+        return ChempropEnsemble(
+            random_states=random_states
+        )
+
+    elif ensemble_key == 'gp':
+        return GaussianProcessLearner(
+            random_state=random_state
+        )
+
+    elif ensemble_key == 'mc_dropout':
+        return MCDropoutLearner(
+            random_state=random_state,
+            n_dropout_samples=50
+        )
+
+    elif ensemble_key == 'mixed_ensemble':
+        return None
+
+    else:
+        raise ValueError(f"Unknown ensemble key: {ensemble_key}")
 
 
 def print_header():
@@ -179,14 +304,28 @@ def run_ensemble_experiment(ensemble_key, ensemble_config, compound_pool, oracle
     print(f"{'='*60}")
 
     output_dir = output_base / ensemble_key
-
     start_time = time.time()
 
     try:
+        learner_instance = create_configured_ensemble(
+            ensemble_key,
+            N_ENSEMBLE_MEMBERS,
+            RANDOM_STATE
+        )
+
+        if learner_instance is None:
+            print(f"⚠ Skipping {ensemble_config['name']} (not scalable with N_ENSEMBLE_MEMBERS)")
+            return None, None
+
+        if ensemble_config.get('scalable', False):
+            print(f"  Created {ensemble_config['type']} with {N_ENSEMBLE_MEMBERS} members")
+        else:
+            print(f"  Using single model configuration")
+
         results = run_active_learning(
             compound_pool=compound_pool.clone(),
             oracle=oracle,
-            learner=ensemble_key,
+            learner=learner_instance,
             target_col=target_col,
             featurizer_type='morgan',
             n_cycles=N_CYCLES,
