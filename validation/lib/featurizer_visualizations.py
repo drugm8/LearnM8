@@ -488,7 +488,8 @@ def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.
 def create_cost_performance_heatmaps(
     timing_df: pl.DataFrame,
     output_dir: Path,
-    performance_metric: str = 'top_1_pct_discovery'
+    performance_metric: str = 'top_1_pct_discovery',
+    dataset_name: str = None
 ) -> Path:
     """Create 4-panel heatmap showing cost metrics for each learner-featurizer combination.
 
@@ -496,6 +497,7 @@ def create_cost_performance_heatmaps(
         timing_df: DataFrame with timing and performance data
         output_dir: Directory to save output
         performance_metric: Performance column name (top_1_pct_discovery or top_0_1_pct_discovery)
+        dataset_name: Optional dataset name to include in title
 
     Returns:
         Path to saved heatmap image
@@ -515,13 +517,17 @@ def create_cost_performance_heatmaps(
     axes = axes.flatten()
 
     metric_label = 'Top 1%' if 'top_1' in performance_metric else 'Top 0.1%'
-    fig.suptitle(f'Cost vs Performance Matrix: {metric_label} Discovery Rate',
+    title = f'Cost vs Performance Matrix: {metric_label} Discovery Rate'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title,
                  fontsize=24, fontweight='bold', y=0.995)
 
     plt.subplots_adjust(
         left=0.08,
         right=0.98,
-        top=0.96,
+        top=0.94,
         bottom=0.06,
         wspace=0.25,
         hspace=0.28
@@ -545,6 +551,9 @@ def create_cost_performance_heatmaps(
             columns='featurizer',
             aggregate_function='first'
         )
+
+        # Extract learner names before reordering columns
+        learner_names = cost_pivot.get_column('learner').to_list()
 
         # Reorder columns
         desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
@@ -598,7 +607,7 @@ def create_cost_performance_heatmaps(
         ax.set_ylabel('Learner', fontsize=13, labelpad=8)
         ax.tick_params(axis='both', labelsize=11)
         ax.set_xticklabels(cost_pivot.columns, rotation=45, ha='right')
-        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in cost_pd.index]
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in learner_names]
         ax.set_yticklabels(display_names, rotation=0)
 
     output_filename = f'cost_performance_heatmap_{performance_metric}.png'
@@ -614,7 +623,8 @@ def create_cost_performance_heatmaps(
 def create_pareto_frontiers(
     timing_df: pl.DataFrame,
     output_dir: Path,
-    performance_metric: str = 'top_1_pct_discovery'
+    performance_metric: str = 'top_1_pct_discovery',
+    dataset_name: str = None
 ) -> Path:
     """Create 4-panel Pareto frontier plots showing cost vs performance trade-offs.
 
@@ -622,6 +632,7 @@ def create_pareto_frontiers(
         timing_df: DataFrame with timing and performance data
         output_dir: Directory to save output
         performance_metric: Performance column name (top_1_pct_discovery or top_0_1_pct_discovery)
+        dataset_name: Optional dataset name to include in title
 
     Returns:
         Path to saved Pareto plot image
@@ -641,13 +652,17 @@ def create_pareto_frontiers(
     axes = axes.flatten()
 
     metric_label = 'Top 1%' if 'top_1' in performance_metric else 'Top 0.1%'
-    fig.suptitle(f'Pareto Frontier Analysis: {metric_label} Discovery Rate',
+    title = f'Pareto Frontier Analysis: {metric_label} Discovery Rate'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title,
                  fontsize=24, fontweight='bold', y=0.995)
 
     plt.subplots_adjust(
         left=0.08,
         right=0.98,
-        top=0.96,
+        top=0.94,
         bottom=0.06,
         wspace=0.25,
         hspace=0.28
@@ -772,7 +787,7 @@ def create_all_cost_performance_plots(
     print("Creating cost/performance heatmaps...")
     heatmap_paths = []
     for perf_metric in ['top_1_pct_discovery', 'top_0_1_pct_discovery']:
-        heatmap_path = create_cost_performance_heatmaps(timing_df, output_dir, perf_metric)
+        heatmap_path = create_cost_performance_heatmaps(timing_df, output_dir, perf_metric, config.get('dataset_name'))
         heatmap_paths.append(heatmap_path)
     print()
 
@@ -780,7 +795,7 @@ def create_all_cost_performance_plots(
     print("Creating Pareto frontier plots...")
     pareto_paths = []
     for perf_metric in ['top_1_pct_discovery', 'top_0_1_pct_discovery']:
-        pareto_path = create_pareto_frontiers(timing_df, output_dir, perf_metric)
+        pareto_path = create_pareto_frontiers(timing_df, output_dir, perf_metric, config.get('dataset_name'))
         pareto_paths.append(pareto_path)
     print()
 
