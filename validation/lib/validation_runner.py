@@ -23,9 +23,15 @@ class ValidationRunner:
         else:
             config_path = Path(config_path)
 
+        self.validation_root = Path(__file__).parent.parent
         self.config = self._load_config(config_path)
         self.global_config = self.config['global']
         self.strategy_config = self.config['strategies'][strategy_name]
+
+        # Resolve output_base_dir relative to validation root
+        output_base_dir = self.global_config['output_base_dir']
+        if not Path(output_base_dir).is_absolute():
+            self.global_config['output_base_dir'] = str(self.validation_root / output_base_dir)
 
         np.random.seed(self.global_config['numpy_seed'])
 
