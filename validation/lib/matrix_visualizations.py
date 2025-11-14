@@ -89,7 +89,8 @@ def create_top_k_heatmap(
 
 def create_all_heatmaps(
     results_df: pl.DataFrame,
-    output_dir: Path
+    output_dir: Path,
+    dataset_name: str = None
 ) -> Path:
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
@@ -105,13 +106,17 @@ def create_all_heatmaps(
     fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
     axes = axes.flatten()
 
-    fig.suptitle('Learner-Acquisition Performance Matrix: Discovery Rates',
+    title = 'Learner-Acquisition Performance Matrix: Discovery Rates'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title,
                  fontsize=24, fontweight='bold', y=0.995)
 
     plt.subplots_adjust(
         left=0.08,
         right=0.98,
-        top=0.96,
+        top=0.94,
         bottom=0.06,
         wspace=0.25,
         hspace=0.28
@@ -345,7 +350,7 @@ def generate_comprehensive_visualizations(
 
     results_df = pl.DataFrame(results_list)
 
-    heatmap_path = create_all_heatmaps(results_df, output_dir)
+    heatmap_path = create_all_heatmaps(results_df, output_dir, config.get('dataset_name'))
 
     greedy_results = {
         learner: result_data
