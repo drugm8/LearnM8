@@ -14,7 +14,8 @@ def create_top_k_heatmap(
     std_matrix: pl.DataFrame,
     k_label: str,
     metric_col: str,
-    ax: plt.Axes
+    ax: plt.Axes,
+    learner_names: List[str] = None
 ) -> plt.Axes:
     """Create heatmap with mean values and std dev annotations.
 
@@ -24,6 +25,7 @@ def create_top_k_heatmap(
         k_label: Label for top-k (e.g., 'Top 10')
         metric_col: Metric column name
         ax: Matplotlib axes
+        learner_names: List of learner names for y-axis labels (optional)
 
     Returns:
         Modified axes
@@ -75,7 +77,11 @@ def create_top_k_heatmap(
 
     ax.tick_params(axis='both', labelsize=11)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
-    display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
+
+    if learner_names is not None:
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in learner_names]
+    else:
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
     ax.set_yticklabels(display_names, rotation=0)
 
     return ax
@@ -129,12 +135,14 @@ def create_all_heatmaps(
             aggregate_function='first'
         )
 
+        learner_names = mean_pivot.get_column('learner').to_list()
+
         desired_order = ['greedy', 'random', 'ucb', 'ei', 'pi', 'thompson', 'entropy']
         existing_cols = [col for col in desired_order if col in mean_pivot.columns]
         mean_pivot = mean_pivot.select(existing_cols)
         std_pivot = std_pivot.select(existing_cols)
 
-        create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx])
+        create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx], learner_names)
 
     output_path = plots_dir / 'heatmap_combined.png'
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
