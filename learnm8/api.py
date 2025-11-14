@@ -121,6 +121,25 @@ except NameError:
     pass
 
 
+LEARNER_DISPLAY_NAMES = {
+    'rf': 'Random Forest',
+    'gp': 'Gaussian Process',
+    'xgb': 'XGBoost',
+    'mlp': 'MLP',
+    'mc_dropout': 'MC Dropout',
+    'fastprop': 'FastProp',
+    'chemprop': 'Chemprop',
+    'chemprop_ensemble': 'Chemprop Ensemble',
+    'ensemble': 'Mixed Ensemble',
+    'rf_ensemble': 'RF Ensemble',
+    'lr_ensemble': 'LR Ensemble',
+    'xgb_ensemble': 'XGBoost Ensemble',
+    'dt_ensemble': 'DT Ensemble',
+    'mixed_ensemble': 'Mixed Ensemble',
+    'fastprop_ensemble': 'FastProp Ensemble'
+}
+
+
 def list_available_learners():
     """Return list of available learner shortcuts.
 
