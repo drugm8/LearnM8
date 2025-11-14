@@ -286,8 +286,8 @@ def create_summary_report(
         ""
     ])
 
-    learner_counts = results_df['learner'].nunique()
-    featurizer_counts = results_df['featurizer'].nunique()
+    learner_counts = results_df['learner'].n_unique()
+    featurizer_counts = results_df['featurizer'].n_unique()
 
     lines.extend([
         f"- **Learners tested:** {learner_counts} ({', '.join(sorted(results_df['learner'].unique().to_list()))})",
