@@ -57,14 +57,10 @@ from scipy.stats import spearmanr, linregress
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from learnm8 import run_active_learning, extract_features
+from learnm8 import run_active_learning
 from learnm8.oracles import CSVOracle
-from learnm8.learners import (
-    RFEnsemble, XGBEnsemble, LREnsemble, DTEnsemble, MixedEnsemble,
-    GaussianProcessLearner, MCDropoutLearner, FastpropEnsemble
-)
 
-# Check for Chemprop availability
+# Check for Chemprop availability (for ensemble configuration only)
 try:
     from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
     CHEMPROP_AVAILABLE = True
@@ -86,46 +82,38 @@ BATCH_FRACTION = 0.01
 RANDOM_STATE = 42
 N_ENSEMBLE_MEMBERS = 3  # Number of models in each ensemble
 
-# Ensemble configurations
+# Ensemble configurations (no longer need class references)
 ENSEMBLES = {
     'rf_ensemble': {
         'name': 'Random Forest Ensemble',
-        'class': RFEnsemble,
         'color': '#1f77b4'
     },
     'xgb_ensemble': {
         'name': 'XGBoost Ensemble',
-        'class': XGBEnsemble,
         'color': '#ff7f0e'
     },
     'lr_ensemble': {
         'name': 'Linear Regression Ensemble',
-        'class': LREnsemble,
         'color': '#2ca02c'
     },
     'dt_ensemble': {
         'name': 'Decision Tree Ensemble',
-        'class': DTEnsemble,
         'color': '#d62728'
     },
     'mixed_ensemble': {
         'name': 'Mixed Ensemble',
-        'class': MixedEnsemble,
         'color': '#9467bd'
     },
     'gp': {
         'name': 'Gaussian Process',
-        'class': GaussianProcessLearner,
         'color': '#8c564b'
     },
     'mc_dropout': {
         'name': 'MC Dropout',
-        'class': MCDropoutLearner,
         'color': '#e377c2'
     },
     'fastprop_ensemble': {
         'name': 'Fastprop Ensemble',
-        'class': FastpropEnsemble,
         'color': '#bcbd22'
     }
 }
@@ -134,7 +122,6 @@ ENSEMBLES = {
 if CHEMPROP_AVAILABLE:
     ENSEMBLES['chemprop_ensemble'] = {
         'name': 'Chemprop Ensemble',
-        'class': ChempropEnsemble,
         'color': '#17becf'
     }
 
@@ -223,173 +210,91 @@ def run_ensemble_experiment(ensemble_key, ensemble_config, compound_pool, oracle
         return None, None
 
 
-def get_uncertainties_for_labeled(compounds_df, learner, features, target_col):
-    """Re-predict on labeled compounds to get uncertainties."""
-    labeled_df = compounds_df.filter(pl.col('status') == 'labeled')
-
-    if len(labeled_df) == 0:
-        return None, None, None
-
-    # Get labeled compound features
-    labeled_smiles = labeled_df['SMILES'].to_list()
-    labeled_ids = labeled_df['ID'].to_list()
-
-    # Get features for labeled compounds
-    labeled_features = features.filter(pl.col('ID').is_in(labeled_ids))
-    X = labeled_features.drop(['ID']).to_numpy()
-
-    # Get predictions and uncertainties
-    predictions, uncertainties = learner.predict(X)
-
-    # Get ground truth
-    ground_truth = labeled_df[target_col].to_numpy()
-
-    return predictions, uncertainties, ground_truth
-
-
 def analyze_uncertainty_error_correlation(results, ensemble_key, ensemble_config,
                                          cache_dir, target_col):
-    """Analyze uncertainty-error correlation for completed AL experiment."""
+    """Analyze uncertainty-error correlation using all predictions at each cycle."""
     print(f"\nAnalyzing {ensemble_config['name']}...")
 
     compounds_df = results['compounds_df']
-    labeled_df = compounds_df.filter(pl.col('status') == 'labeled')
 
-    if len(labeled_df) == 0:
-        print("  ⚠ No labeled compounds found")
+    # Find all prediction/uncertainty columns (cycle 1 through max cycle)
+    pred_cols = [col for col in compounds_df.columns if col.startswith('prediction_cycle_')]
+    unc_cols = [col for col in compounds_df.columns if col.startswith('uncertainty_cycle_')]
+
+    if not pred_cols or not unc_cols:
+        print("  ⚠ No prediction/uncertainty columns found")
         return None
 
-    # Re-create learner and train on all labeled data
-    print(f"  Re-training learner on {len(labeled_df)} labeled compounds...")
+    # Extract cycle numbers
+    cycles = sorted([int(col.split('_')[-1]) for col in pred_cols])
+    print(f"  Found predictions for cycles: {cycles}")
 
-    # Generate random states for ensemble members
-    random_states = [RANDOM_STATE + i * 123 for i in range(N_ENSEMBLE_MEMBERS)]
+    # Collect all predictions/uncertainties across all cycles
+    all_predictions = []
+    all_uncertainties = []
+    all_ground_truth = []
+    all_cycle_labels = []
 
-    # Handle different learner initialization patterns
-    if ensemble_key == 'mixed_ensemble':
-        # MixedEnsemble: Create ensemble of MixedEnsemble instances with different random states
-        from learnm8.learners.ensemble import EnsembleLearner, MixedEnsemble
-        mixed_learners = [MixedEnsemble(random_state=rs) for rs in random_states]
-        learner = EnsembleLearner(mixed_learners)
+    for cycle in cycles:
+        pred_col = f'prediction_cycle_{cycle}'
+        unc_col = f'uncertainty_cycle_{cycle}'
 
-    elif ensemble_key == 'rf_ensemble':
-        # RFEnsemble: Random Forest variants with different random states
-        learner = ENSEMBLES[ensemble_key]['class'](
-            n_estimators=100,
-            random_states=random_states
+        # Filter to compounds with valid predictions/uncertainties for this cycle
+        cycle_df = compounds_df.filter(
+            (pl.col(pred_col).is_not_null()) &
+            (pl.col(unc_col).is_not_null()) &
+            (pl.col(target_col).is_not_null())
         )
 
-    elif ensemble_key == 'xgb_ensemble':
-        # XGBEnsemble: Different learning rates and random states
-        learning_rates = [0.05 + i * 0.05 for i in range(N_ENSEMBLE_MEMBERS)]
-        learner = ENSEMBLES[ensemble_key]['class'](
-            learning_rates=learning_rates,
-            random_states=random_states
-        )
+        if len(cycle_df) > 0:
+            preds = cycle_df[pred_col].to_numpy()
+            uncs = cycle_df[unc_col].to_numpy()
+            truth = cycle_df[target_col].to_numpy()
 
-    elif ensemble_key == 'lr_ensemble':
-        # LREnsemble: Different regularization strengths
-        alphas = [0.1 * (10 ** i) for i in range(N_ENSEMBLE_MEMBERS)]
-        learner = ENSEMBLES[ensemble_key]['class'](
-            regularization_strengths=alphas,
-            random_states=random_states
-        )
+            all_predictions.extend(preds)
+            all_uncertainties.extend(uncs)
+            all_ground_truth.extend(truth)
+            all_cycle_labels.extend([cycle] * len(preds))
 
-    elif ensemble_key == 'dt_ensemble':
-        # DTEnsemble: Different max depths
-        max_depths = [5 + i * 5 for i in range(N_ENSEMBLE_MEMBERS)]
-        learner = ENSEMBLES[ensemble_key]['class'](
-            max_depths=max_depths,
-            random_states=random_states
-        )
+    if len(all_predictions) == 0:
+        print("  ⚠ No valid predictions/uncertainties found")
+        return None
 
-    elif ensemble_key == 'fastprop_ensemble':
-        # FastpropEnsemble: Multiple fastprop models with different random states
-        learner = ENSEMBLES[ensemble_key]['class'](
-            random_states=random_states
-        )
+    all_predictions = np.array(all_predictions)
+    all_uncertainties = np.array(all_uncertainties)
+    all_ground_truth = np.array(all_ground_truth)
+    all_cycle_labels = np.array(all_cycle_labels)
 
-    elif ensemble_key == 'chemprop_ensemble':
-        # Chemprop ensemble: multiple graph neural networks with different random states
-        learner = ENSEMBLES[ensemble_key]['class'](
-            random_state=RANDOM_STATE
-        )
-
-    # Single learners (non-ensemble)
-    elif ensemble_key == 'gp':
-        # Gaussian Process: single model with random state
-        learner = ENSEMBLES[ensemble_key]['class'](
-            random_state=RANDOM_STATE
-        )
-
-    elif ensemble_key == 'mc_dropout':
-        # MC Dropout: single model with random state
-        learner = ENSEMBLES[ensemble_key]['class'](
-            random_state=RANDOM_STATE,
-            n_samples=50  # Number of MC dropout samples for uncertainty
-        )
-
-    else:
-        # Fallback to default initialization with random_states
-        try:
-            learner = ENSEMBLES[ensemble_key]['class'](
-                random_states=random_states
-            )
-        except TypeError:
-            # If random_states not accepted, try random_state
-            learner = ENSEMBLES[ensemble_key]['class'](
-                random_state=RANDOM_STATE
-            )
-
-    # Extract features for labeled compounds
-    labeled_smiles = labeled_df['SMILES'].to_list()
-    labeled_ids = labeled_df['ID'].to_list()
-
-    from learnm8.features import extract_features
-    features = extract_features(
-        smiles_list=labeled_smiles,
-        featurizer_type='morgan',
-        cache_dir=str(cache_dir),
-        n_jobs=-1
-    )
-
-    X = features
-    y = labeled_df[target_col].to_numpy()
-
-    # Train learner
-    learner.train(X, y)
-
-    # Get predictions and uncertainties
-    print("  Getting predictions and uncertainties...")
-    predictions, uncertainties = learner.predict(X)
+    print(f"  Total predictions across all cycles: {len(all_predictions):,}")
 
     # Calculate errors
-    errors = np.abs(predictions - y)
+    all_errors = np.abs(all_predictions - all_ground_truth)
 
-    # Add to dataframe for per-cycle analysis
-    analysis_df = labeled_df.clone()
-    analysis_df = analysis_df.with_columns([
-        pl.Series('prediction', predictions),
-        pl.Series('uncertainty', uncertainties),
-        pl.Series('abs_error', errors)
-    ])
-
-    # Overall correlation
-    overall_corr, overall_p = spearmanr(uncertainties, errors)
+    # Overall correlation (across all cycles)
+    overall_corr, overall_p = spearmanr(all_uncertainties, all_errors)
     print(f"  Overall correlation: {overall_corr:.3f} (p={overall_p:.2e})")
 
-    # Per-cycle correlations (calculate for ALL cycles, not just sample)
+    # Per-cycle correlations
     cycle_correlations = {}
-    max_cycle = int(analysis_df['labeled_cycle'].max())
-    for cycle in range(1, max_cycle + 1):
-        cycle_df = analysis_df.filter(pl.col('labeled_cycle') == cycle)
-        if len(cycle_df) >= 10:  # Need enough points for correlation
-            cycle_unc = cycle_df['uncertainty'].to_numpy()
-            cycle_err = cycle_df['abs_error'].to_numpy()
+    for cycle in cycles:
+        cycle_mask = all_cycle_labels == cycle
+        cycle_unc = all_uncertainties[cycle_mask]
+        cycle_err = all_errors[cycle_mask]
+
+        if len(cycle_unc) >= 10:  # Need enough points for correlation
             corr, p = spearmanr(cycle_unc, cycle_err)
-            cycle_correlations[cycle] = (corr, p)
+            cycle_correlations[cycle] = (corr, p, len(cycle_unc))
             if cycle in [1, 3, 5, 10]:  # Only print sample cycles
-                print(f"  Cycle {cycle} correlation: {corr:.3f} (n={len(cycle_df)})")
+                print(f"  Cycle {cycle} correlation: {corr:.3f} (n={len(cycle_unc):,})")
+
+    # Create analysis dataframe for plotting
+    analysis_df = pl.DataFrame({
+        'prediction': all_predictions,
+        'uncertainty': all_uncertainties,
+        'ground_truth': all_ground_truth,
+        'abs_error': all_errors,
+        'cycle': all_cycle_labels
+    })
 
     return {
         'ensemble_key': ensemble_key,
@@ -398,7 +303,7 @@ def analyze_uncertainty_error_correlation(results, ensemble_key, ensemble_config
         'overall_correlation': overall_corr,
         'overall_p_value': overall_p,
         'cycle_correlations': cycle_correlations,
-        'n_labeled': len(analysis_df)
+        'n_predictions': len(all_predictions)
     }
 
 
@@ -453,7 +358,7 @@ def plot_uncertainty_error_correlation(analysis_result, output_dir):
     for idx, cycle in enumerate(sample_cycles):
         ax = fig.add_subplot(gs[1, idx])
 
-        cycle_df = df.filter(pl.col('labeled_cycle') == cycle)
+        cycle_df = df.filter(pl.col('cycle') == cycle)
 
         if len(cycle_df) > 0:
             cycle_unc = cycle_df['uncertainty'].to_numpy()
@@ -465,10 +370,10 @@ def plot_uncertainty_error_correlation(analysis_result, output_dir):
 
             # Get correlation for this cycle
             if cycle in analysis_result['cycle_correlations']:
-                corr, p = analysis_result['cycle_correlations'][cycle]
-                title = f'Cycle {cycle} (n={len(cycle_df)})\nρ = {corr:.3f}'
+                corr, p, n = analysis_result['cycle_correlations'][cycle]
+                title = f'Cycle {cycle} (n={n:,})\nρ = {corr:.3f}'
             else:
-                title = f'Cycle {cycle} (n={len(cycle_df)})'
+                title = f'Cycle {cycle} (n={len(cycle_df):,})'
 
             ax.set_title(title, fontsize=11, fontweight='bold')
             ax.grid(True, alpha=0.3)
@@ -523,7 +428,7 @@ def generate_summary_report(all_results, output_dir):
             if result is not None:
                 f.write(f"{result['ensemble_name']:30s}: ")
                 f.write(f"ρ = {result['overall_correlation']:6.3f} ")
-                f.write(f"(p={result['overall_p_value']:.2e}, n={result['n_labeled']})\n")
+                f.write(f"(p={result['overall_p_value']:.2e}, n={result['n_predictions']:,})\n")
                 correlations.append(result['overall_correlation'])
 
         if correlations:
@@ -538,8 +443,8 @@ def generate_summary_report(all_results, output_dir):
             f.write(f"\nCycle {cycle}:\n")
             for result in all_results:
                 if result is not None and cycle in result['cycle_correlations']:
-                    corr, p = result['cycle_correlations'][cycle]
-                    f.write(f"  {result['ensemble_name']:30s}: ρ = {corr:6.3f}\n")
+                    corr, p, n = result['cycle_correlations'][cycle]
+                    f.write(f"  {result['ensemble_name']:30s}: ρ = {corr:6.3f} (n={n:,})\n")
 
         f.write("\n" + "=" * 80 + "\n")
         f.write("Interpretation:\n")
