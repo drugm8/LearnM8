@@ -15,8 +15,7 @@ from .uncertainty_based import (
     ThompsonSamplingAcquisition,
     EntropyAcquisition
 )
-# Simulated annealing acquisition function (currently not implemented)
-# from .simulated_annealing import SimulatedAnnealingAcquisition
+from .simulated_annealing import SimulatedAnnealingAcquisition
 
 # Simplified clustering-based acquisition functions (currently not implemented)
 # from .clustering import ClusteringAcquisition
@@ -68,10 +67,9 @@ __all__ = [
     'ProbabilityImprovementAcquisition',
     'ThompsonSamplingAcquisition',
     'EntropyAcquisition',
-    
-    
-    # Optimization-based acquisition functions (currently not implemented)
-    # 'SimulatedAnnealingAcquisition',
+
+    # Optimization-based acquisition functions
+    'SimulatedAnnealingAcquisition',
     
     # Base class for clustering methods (currently not implemented)
     # 'ClusteringAcquisition',
@@ -112,10 +110,9 @@ ACQUISITION_REGISTRY = {
     'pi': ProbabilityImprovementAcquisition,
     'thompson': ThompsonSamplingAcquisition,
     'entropy': EntropyAcquisition,
-    
-    
-    # Optimization-based methods (currently not implemented)
-    # 'simulated_annealing': SimulatedAnnealingAcquisition,
+
+    # Optimization-based methods
+    'simulated_annealing': SimulatedAnnealingAcquisition,
     
     # UMAP-based diversity (currently not implemented)
     # 'umap_dbscan': UMAPDBSCANAcquisition,
