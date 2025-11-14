@@ -231,3 +231,108 @@ POLARS_MIGRATION_visualization.md
 TEST_FIXTURES_ANALYSIS.md
 TEST_FIXTURES_GENERATION_SUMMARY.md
 TEST_FIXTURES_IMPLEMENTATION_PLAN.md
+reports/ei/validation_report.md
+reports/ei/data/EI_validation_xi_0.0/compounds_final.csv
+reports/ei/data/EI_validation_xi_0.0/config.json
+reports/ei/data/EI_validation_xi_0.0/cycle_metrics.csv
+reports/ei/data/EI_validation_xi_0.0/selection_history.csv
+reports/ei/data/EI_validation_xi_0.01/compounds_final.csv
+reports/ei/data/EI_validation_xi_0.01/config.json
+reports/ei/data/EI_validation_xi_0.01/cycle_metrics.csv
+reports/ei/data/EI_validation_xi_0.01/selection_history.csv
+reports/ei/data/EI_validation_xi_0.1/compounds_final.csv
+reports/ei/data/EI_validation_xi_0.1/config.json
+reports/ei/data/EI_validation_xi_0.1/cycle_metrics.csv
+reports/ei/data/EI_validation_xi_0.1/selection_history.csv
+reports/ei/data/EI_validation_xi_1.0/compounds_final.csv
+reports/ei/data/EI_validation_xi_1.0/config.json
+reports/ei/data/EI_validation_xi_1.0/cycle_metrics.csv
+reports/ei/data/EI_validation_xi_1.0/selection_history.csv
+reports/ei/plots/validation_plot_ei_0.0.png
+reports/ei/plots/validation_plot_ei_0.01.png
+reports/ei/plots/validation_plot_ei_0.1.png
+reports/ei/plots/validation_plot_ei_1.0.png
+reports/entropy/validation_report.md
+reports/entropy/data/Entropy_validation_entropy_type_uncertainty/compounds_final.csv
+reports/entropy/data/Entropy_validation_entropy_type_uncertainty/config.json
+reports/entropy/data/Entropy_validation_entropy_type_uncertainty/cycle_metrics.csv
+reports/entropy/data/Entropy_validation_entropy_type_uncertainty/selection_history.csv
+reports/entropy/data/Entropy_validation_entropy_type_variance/compounds_final.csv
+reports/entropy/data/Entropy_validation_entropy_type_variance/config.json
+reports/entropy/data/Entropy_validation_entropy_type_variance/cycle_metrics.csv
+reports/entropy/data/Entropy_validation_entropy_type_variance/selection_history.csv
+reports/entropy/plots/validation_plot_entropy_uncertainty.png
+reports/entropy/plots/validation_plot_entropy_variance.png
+reports/pi/validation_report.md
+reports/pi/data/PI_validation_xi_0.0/compounds_final.csv
+reports/pi/data/PI_validation_xi_0.0/config.json
+reports/pi/data/PI_validation_xi_0.0/cycle_metrics.csv
+reports/pi/data/PI_validation_xi_0.0/selection_history.csv
+reports/pi/data/PI_validation_xi_0.01/compounds_final.csv
+reports/pi/data/PI_validation_xi_0.01/config.json
+reports/pi/data/PI_validation_xi_0.01/cycle_metrics.csv
+reports/pi/data/PI_validation_xi_0.01/selection_history.csv
+reports/pi/data/PI_validation_xi_0.1/compounds_final.csv
+reports/pi/data/PI_validation_xi_0.1/config.json
+reports/pi/data/PI_validation_xi_0.1/cycle_metrics.csv
+reports/pi/data/PI_validation_xi_0.1/selection_history.csv
+reports/pi/data/PI_validation_xi_1.0/compounds_final.csv
+reports/pi/data/PI_validation_xi_1.0/config.json
+reports/pi/data/PI_validation_xi_1.0/cycle_metrics.csv
+reports/pi/data/PI_validation_xi_1.0/selection_history.csv
+reports/pi/plots/validation_plot_pi_0.0.png
+reports/pi/plots/validation_plot_pi_0.01.png
+reports/pi/plots/validation_plot_pi_0.1.png
+reports/pi/plots/validation_plot_pi_1.0.png
+reports/thompson/validation_report.md
+reports/thompson/data/Thompson Sampling_validation_random_state_123/compounds_final.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_123/config.json
+reports/thompson/data/Thompson Sampling_validation_random_state_123/cycle_metrics.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_123/selection_history.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_42/compounds_final.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_42/config.json
+reports/thompson/data/Thompson Sampling_validation_random_state_42/cycle_metrics.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_42/selection_history.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_456/compounds_final.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_456/config.json
+reports/thompson/data/Thompson Sampling_validation_random_state_456/cycle_metrics.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_456/selection_history.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_789/compounds_final.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_789/config.json
+reports/thompson/data/Thompson Sampling_validation_random_state_789/cycle_metrics.csv
+reports/thompson/data/Thompson Sampling_validation_random_state_789/selection_history.csv
+reports/thompson/plots/validation_plot_thompson_42.png
+reports/thompson/plots/validation_plot_thompson_123.png
+reports/thompson/plots/validation_plot_thompson_456.png
+reports/thompson/plots/validation_plot_thompson_789.png
+reports/ucb/validation_report.md
+reports/ucb/data/UCB_validation_beta_0.1/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_0.1/config.json
+reports/ucb/data/UCB_validation_beta_0.1/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_0.1/selection_history.csv
+reports/ucb/data/UCB_validation_beta_1.0/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_1.0/config.json
+reports/ucb/data/UCB_validation_beta_1.0/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_1.0/selection_history.csv
+reports/ucb/data/UCB_validation_beta_10.0/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_10.0/config.json
+reports/ucb/data/UCB_validation_beta_10.0/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_10.0/selection_history.csv
+reports/ucb/data/UCB_validation_beta_100.0/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_100.0/config.json
+reports/ucb/data/UCB_validation_beta_100.0/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_100.0/selection_history.csv
+reports/ucb/data/UCB_validation_beta_2.0/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_2.0/config.json
+reports/ucb/data/UCB_validation_beta_2.0/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_2.0/selection_history.csv
+reports/ucb/data/UCB_validation_beta_5.0/compounds_final.csv
+reports/ucb/data/UCB_validation_beta_5.0/config.json
+reports/ucb/data/UCB_validation_beta_5.0/cycle_metrics.csv
+reports/ucb/data/UCB_validation_beta_5.0/selection_history.csv
+reports/ucb/plots/validation_plot_ucb_0.1.png
+reports/ucb/plots/validation_plot_ucb_1.0.png
+reports/ucb/plots/validation_plot_ucb_2.0.png
+reports/ucb/plots/validation_plot_ucb_5.0.png
+reports/ucb/plots/validation_plot_ucb_10.0.png
+reports/ucb/plots/validation_plot_ucb_100.0.png
