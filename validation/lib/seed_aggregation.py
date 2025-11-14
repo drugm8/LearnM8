@@ -192,38 +192,33 @@ def save_aggregated_results(
 
         df.write_csv(output_dir / 'aggregated_cycle_metrics.csv')
 
-    mean_df = pl.DataFrame(aggregated['cycle_metrics_mean'])
-    std_df = pl.DataFrame(aggregated['cycle_metrics_std'])
+    mean_dicts = aggregated['cycle_metrics_mean']
+    std_dicts = aggregated['cycle_metrics_std']
 
-    # Vectorized approach: unpivot both DataFrames and join
-    metric_cols = [col for col in mean_df.columns if col not in ['cycle', 'strategy']]
+    summary_rows = []
+    for cycle_idx in range(len(mean_dicts)):
+        mean_dict = mean_dicts[cycle_idx]
+        std_dict = std_dicts[cycle_idx]
+        cycle_num = mean_dict['cycle']
 
-    if metric_cols:
-        # Unpivot mean values (wide -> long format)
-        mean_long = mean_df.select(['cycle'] + metric_cols).unpivot(
-            index='cycle',
-            on=metric_cols,
-            variable_name='metric',
-            value_name='mean'
-        )
+        for key in mean_dict.keys():
+            if key in ['cycle', 'strategy']:
+                continue
 
-        # Unpivot std values
-        std_long = std_df.select(['cycle'] + metric_cols).unpivot(
-            index='cycle',
-            on=metric_cols,
-            variable_name='metric',
-            value_name='std'
-        )
+            mean_val = mean_dict[key]
+            std_val = std_dict[key]
 
-        # Join mean and std on cycle + metric
-        summary_df = mean_long.join(std_long, on=['cycle', 'metric'], how='inner')
+            # Only include numeric metrics (skip lists, structs, etc.)
+            if isinstance(mean_val, (int, float, np.integer, np.floating)):
+                summary_rows.append({
+                    'cycle': cycle_num,
+                    'metric': key,
+                    'mean': float(mean_val) if mean_val is not None else float('nan'),
+                    'std': float(std_val) if std_val is not None else float('nan')
+                })
 
-        # Convert None to NaN for consistent float typing
-        summary_df = summary_df.with_columns([
-            pl.col('mean').fill_null(float('nan')),
-            pl.col('std').fill_null(float('nan'))
-        ])
-
+    if summary_rows:
+        summary_df = pl.DataFrame(summary_rows)
         summary_df.write_csv(output_dir / 'summary_statistics.csv')
 
 
