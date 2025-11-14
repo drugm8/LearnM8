@@ -91,7 +91,7 @@ def load_existing_results(
     featurizer_name = featurizer if featurizer else 'none'
 
     cycle_metrics_df = pl.read_csv(exp_dir / 'cycle_metrics.csv')
-    final_metrics = cycle_metrics_df[-1]
+    final_metrics = cycle_metrics_df.row(-1, named=True)
 
     cycle_metrics = cycle_metrics_df.to_dicts()
     training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
@@ -130,6 +130,7 @@ def run_single_experiment(
     batch_fraction: float,
     random_state: int,
     output_dir: Path,
+    cache_dir: Path,
     debug: bool = False,
 ) -> Dict[str, Any]:
     """Run a single experiment configuration."""
@@ -171,6 +172,7 @@ def run_single_experiment(
             score_direction=score_direction,
             random_state=random_state,
             output_dir=exp_output_dir,
+            cache_dir=cache_dir,
             mode='benchmark',
         )
 
@@ -351,7 +353,7 @@ def print_summary_table(df: pl.DataFrame):
         console.print("[red]No successful experiments to summarize[/red]")
         return
 
-    df_sorted = df_success.sort('top_10_recovery', descending=True).head(10).to_pandas()
+    df_sorted = df_success.sort('top_10_recovery', descending=True).head(10)
 
     table = Table(title="Top 10 Configurations by Performance", show_header=True, header_style="bold magenta")
     table.add_column("Rank", justify="right", style="cyan", width=6)
@@ -363,17 +365,17 @@ def print_summary_table(df: pl.DataFrame):
     table.add_column("Train Time", justify="right", width=11)
     table.add_column("Total Time", justify="right", width=11)
 
-    for idx, row in enumerate(df_sorted.itertuples(), 1):
-        early_stop_icon = "✓" if row.early_stopping else "✗"
+    for idx, row in enumerate(df_sorted.iter_rows(named=True), 1):
+        early_stop_icon = "✓" if row['early_stopping'] else "✗"
         table.add_row(
             str(idx),
-            row.config_name,
-            row.featurizer,
+            row['config_name'],
+            row['featurizer'],
             early_stop_icon,
-            f"{row.top_10_recovery:.3f}",
-            f"{row.top_100_recovery:.3f}",
-            f"{row.avg_training_time:.1f}s",
-            f"{row.total_time:.1f}s",
+            f"{row['top_10_recovery']:.3f}",
+            f"{row['top_100_recovery']:.3f}",
+            f"{row['avg_training_time']:.1f}s",
+            f"{row['total_time']:.1f}s",
         )
 
     console.print(table)
@@ -416,6 +418,9 @@ def main():
         args.output_dir = Path(__file__).parent.parent / 'reports' / 'chemprop_comprehensive'
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    cache_dir = args.output_dir / '.cache'
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(f"[bold cyan]Chemprop Comprehensive Validation[/bold cyan]")
     console.print(f"Dataset: {args.dataset}")
@@ -498,6 +503,7 @@ def main():
                 batch_fraction=args.batch_fraction,
                 random_state=args.random_state,
                 output_dir=args.output_dir,
+                cache_dir=cache_dir,
                 debug=args.debug,
             )
 
