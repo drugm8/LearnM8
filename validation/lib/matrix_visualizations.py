@@ -275,8 +275,8 @@ def create_summary_report(
         ""
     ])
 
-    uncertainty_learners = results_df[results_df['acquisition'].isin(['ucb', 'ei', 'pi', 'thompson', 'entropy'])]['learner'].unique()
-    basic_learners = results_df[~results_df['learner'].isin(uncertainty_learners)]['learner'].unique()
+    uncertainty_learners = results_df[results_df['acquisition'].is_in(['ucb', 'ei', 'pi', 'thompson', 'entropy'])]['learner'].unique().to_list()
+    basic_learners = results_df[~results_df['learner'].is_in(uncertainty_learners)]['learner'].unique().to_list()
 
     lines.extend([
         f"- **Uncertainty-capable learners:** {', '.join(sorted(uncertainty_learners))}",
