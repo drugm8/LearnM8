@@ -82,7 +82,8 @@ def main():
 
 
 def generate_summary_index(results, elapsed):
-    output_file = Path('validation/reports/README.md')
+    project_root = Path(__file__).parent.parent.parent
+    output_file = project_root / 'validation' / 'reports' / 'README.md'
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     content = f"""# Acquisition Strategy Validation Summary
