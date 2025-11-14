@@ -7,6 +7,7 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 from datetime import datetime
 from matplotlib.patches import Polygon
+from learnm8.api import LEARNER_DISPLAY_NAMES
 
 
 def create_top_k_heatmap(
@@ -63,7 +64,8 @@ def create_top_k_heatmap(
 
     ax.tick_params(axis='both', labelsize=11)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
-    ax.set_yticklabels(mean_pd.index, rotation=0)
+    display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
+    ax.set_yticklabels(display_names, rotation=0)
 
     return ax
 
@@ -583,7 +585,8 @@ def create_cost_performance_heatmaps(
         ax.set_ylabel('Learner', fontsize=13, labelpad=8)
         ax.tick_params(axis='both', labelsize=11)
         ax.set_xticklabels(cost_pivot.columns, rotation=45, ha='right')
-        ax.set_yticklabels(cost_pd.index, rotation=0)
+        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in cost_pd.index]
+        ax.set_yticklabels(display_names, rotation=0)
 
     output_filename = f'cost_performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename

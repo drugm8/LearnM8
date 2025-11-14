@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import seaborn as sns
 from datetime import datetime
+from learnm8.api import LEARNER_DISPLAY_NAMES
 
 
 def create_top_k_heatmap(
@@ -74,7 +75,8 @@ def create_top_k_heatmap(
 
     ax.tick_params(axis='both', labelsize=11)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
-    ax.set_yticklabels(mean_pd.index, rotation=0)
+    display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in mean_pd.index]
+    ax.set_yticklabels(display_names, rotation=0)
 
     return ax
 
