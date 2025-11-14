@@ -197,13 +197,13 @@ def save_aggregated_results(
 
     summary_rows = []
     for cycle_idx in range(len(mean_df)):
-        cycle_num = mean_df[cycle_idx, 'cycle']
+        cycle_num = mean_df[cycle_idx, 'cycle'].item()
         for col in mean_df.columns:
             if col in ['cycle', 'strategy']:
                 continue
 
-            mean_val = mean_df[cycle_idx, col]
-            std_val = std_df[cycle_idx, col]
+            mean_val = mean_df[cycle_idx, col].item()
+            std_val = std_df[cycle_idx, col].item()
 
             # Convert None to NaN for consistent float typing
             if mean_val is not None or std_val is not None:
