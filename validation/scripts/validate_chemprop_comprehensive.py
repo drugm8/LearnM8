@@ -79,6 +79,8 @@ FEATURIZERS = [
 
 EARLY_STOPPING_OPTIONS = [True, False]
 
+FINE_TUNING_OPTIONS = [False, True]
+
 
 def load_existing_results(
     exp_dir: Path,
@@ -86,6 +88,7 @@ def load_existing_results(
     config: Dict[str, Any],
     featurizer: Optional[str],
     early_stopping: bool,
+    fine_tuning: bool,
 ) -> Dict[str, Any]:
     """Load results from existing experiment directory."""
     featurizer_name = featurizer if featurizer else 'none'
@@ -105,6 +108,7 @@ def load_existing_results(
         'config_name': config_name,
         'featurizer': featurizer_name,
         'early_stopping': early_stopping,
+        'fine_tuning': fine_tuning,
         'depth': config['depth'],
         'message_hidden_dim': config['message_hidden_dim'],
         'top_10_recovery': final_metrics.get('top_10_discovery', 0),
@@ -137,6 +141,7 @@ def run_single_experiment(
     config: Dict[str, Any],
     featurizer: Optional[str],
     early_stopping: bool,
+    fine_tuning: bool,
     n_cycles: int,
     batch_fraction: float,
     random_state: int,
@@ -147,13 +152,20 @@ def run_single_experiment(
     """Run a single experiment configuration."""
     featurizer_name = featurizer if featurizer else 'none'
     early_stop_str = 'early_stop' if early_stopping else 'no_early_stop'
-    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}"
+    finetune_str = '_finetune' if fine_tuning else ''
+    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}{finetune_str}"
 
     exp_output_dir = output_dir / 'data' / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
 
     if debug:
         console.print(f"[cyan]Starting experiment: {exp_name}[/cyan]")
+
+    # Setup checkpoint directory for fine-tuning
+    checkpoint_dir = None
+    if fine_tuning:
+        checkpoint_dir = output_dir / '.checkpoints' / exp_name
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     learner = ChempropLearner(
         depth=config['depth'],
@@ -167,6 +179,8 @@ def run_single_experiment(
         early_stopping_patience=3,
         max_epochs=50,
         random_state=random_state,
+        enable_fine_tuning=fine_tuning,
+        checkpoint_dir=checkpoint_dir,
     )
 
     start_time = time.time()
@@ -213,6 +227,7 @@ def run_single_experiment(
             'config_name': config_name,
             'featurizer': featurizer_name,
             'early_stopping': early_stopping,
+            'fine_tuning': fine_tuning,
             'depth': config['depth'],
             'message_hidden_dim': config['message_hidden_dim'],
             'top_10_recovery': final_metrics.get('top_10_discovery', 0),
@@ -249,6 +264,7 @@ def run_single_experiment(
             'config_name': config_name,
             'featurizer': featurizer_name,
             'early_stopping': early_stopping,
+            'fine_tuning': fine_tuning,
             'depth': config['depth'],
             'message_hidden_dim': config['message_hidden_dim'],
             'top_10_recovery': 0,
@@ -283,7 +299,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         console.print("[yellow]Warning: No successful experiments to visualize[/yellow]")
         return
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(2, 3, figsize=(24, 12))
 
     # Plot 1: Heatmap of Top-10 Recovery by Configuration and Featurizer
     ax = axes[0, 0]
@@ -377,6 +393,67 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
 
     for i, row in enumerate(featurizer_comparison.iter_rows(named=True)):
         ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
+
+    # Plot 5: Fine-Tuning Impact on Performance
+    ax = axes[0, 2]
+    if 'fine_tuning' in df_success.columns:
+        finetune_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
+            pl.col('top_10_recovery').mean().alias('top_10_recovery'),
+            pl.col('top_100_recovery').mean().alias('top_100_recovery'),
+        ]).sort(['config_name', 'fine_tuning'])
+
+        config_names = finetune_comparison['config_name'].unique().sort().to_list()
+        x_pos = np.arange(len(config_names))
+        width = 0.35
+
+        for idx, fine_tune in enumerate([False, True]):
+            group = finetune_comparison.filter(pl.col('fine_tuning') == fine_tune)
+            offset = width * (idx - 0.5)
+            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+            values = group['top_10_recovery'].to_numpy()
+            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+
+        ax.set_xlabel('Model Configuration')
+        ax.set_ylabel('Top-10 Recovery')
+        ax.set_title('Fine-Tuning Impact on Performance', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(config_names)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
+                fontsize=12, transform=ax.transAxes)
+        ax.set_title('Fine-Tuning Impact (No Data)', fontsize=14, fontweight='bold')
+
+    # Plot 6: Fine-Tuning Training Time Comparison
+    ax = axes[1, 2]
+    if 'fine_tuning' in df_success.columns:
+        timing_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
+            pl.col('avg_training_time').mean().alias('avg_training_time'),
+        ]).sort(['config_name', 'fine_tuning'])
+
+        config_names = timing_comparison['config_name'].unique().sort().to_list()
+        x_pos = np.arange(len(config_names))
+        width = 0.35
+
+        for idx, fine_tune in enumerate([False, True]):
+            group = timing_comparison.filter(pl.col('fine_tuning') == fine_tune)
+            offset = width * (idx - 0.5)
+            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+            values = group['avg_training_time'].to_numpy()
+            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+
+        ax.set_xlabel('Model Configuration')
+        ax.set_ylabel('Avg Training Time (s)')
+        ax.set_title('Fine-Tuning Training Time Comparison', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(config_names)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
+                fontsize=12, transform=ax.transAxes)
+        ax.set_title('Fine-Tuning Timing (No Data)', fontsize=14, fontweight='bold')
 
     plt.tight_layout()
     plt.savefig(plots_dir / 'comprehensive_analysis.png', dpi=300, bbox_inches='tight')
@@ -589,12 +666,14 @@ def main():
     for config_name, config in MODEL_CONFIGS.items():
         for featurizer in FEATURIZERS:
             for early_stopping in EARLY_STOPPING_OPTIONS:
-                experiments.append({
-                    'config_name': config_name,
-                    'config': config,
-                    'featurizer': featurizer,
-                    'early_stopping': early_stopping,
-                })
+                for fine_tuning in FINE_TUNING_OPTIONS:
+                    experiments.append({
+                        'config_name': config_name,
+                        'config': config,
+                        'featurizer': featurizer,
+                        'early_stopping': early_stopping,
+                        'fine_tuning': fine_tuning,
+                    })
 
     console.print(f"[cyan]Total experiments to run: {len(experiments)}[/cyan]\n")
 
@@ -612,7 +691,8 @@ def main():
         for exp in experiments:
             featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
             early_stop_str = 'early_stop' if exp['early_stopping'] else 'no_early_stop'
-            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}"
+            finetune_str = '_finetune' if exp['fine_tuning'] else ''
+            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
 
             exp_dir = args.output_dir / 'data' / exp_name
             if args.skip_existing and exp_dir.exists() and (exp_dir / 'cycle_metrics.csv').exists():
@@ -623,6 +703,7 @@ def main():
                         config=exp['config'],
                         featurizer=exp['featurizer'],
                         early_stopping=exp['early_stopping'],
+                        fine_tuning=exp['fine_tuning'],
                     )
                     results.append(result)
                     if args.debug:
@@ -644,6 +725,7 @@ def main():
                 config=exp['config'],
                 featurizer=exp['featurizer'],
                 early_stopping=exp['early_stopping'],
+                fine_tuning=exp['fine_tuning'],
                 n_cycles=args.n_cycles,
                 batch_fraction=args.batch_fraction,
                 random_state=args.random_state,
