@@ -193,7 +193,13 @@ def run_single_experiment(
         cycle_metrics = results['cycle_metrics']
 
         compounds_df.write_csv(exp_output_dir / 'compounds_final.csv')
-        pl.DataFrame(cycle_metrics).write_csv(exp_output_dir / 'cycle_metrics.csv')
+
+        metrics_df = pl.DataFrame(cycle_metrics)
+        list_cols = ['selected_ids', 'pruned_ids']
+        cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
+        if cols_to_drop:
+            metrics_df = metrics_df.drop(cols_to_drop)
+        metrics_df.write_csv(exp_output_dir / 'cycle_metrics.csv')
 
         training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
         prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
