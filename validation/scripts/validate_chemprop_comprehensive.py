@@ -506,26 +506,132 @@ def print_summary_table(df: pl.DataFrame):
     console.print(f"  Avg total time per experiment: {df_success['total_time'].mean():.1f}s")
 
 
+def create_performance_heatmap(
+    timing_df: pl.DataFrame,
+    output_dir: Path,
+    performance_metric: str = 'top_10_recovery',
+    dataset_name: str = None
+) -> Path:
+    """Create single-panel heatmap showing only performance values.
+
+    Args:
+        timing_df: DataFrame with timing and performance data
+        output_dir: Directory to save output
+        performance_metric: Performance column name (top_10_recovery or top_100_recovery)
+        dataset_name: Optional dataset name to include in title
+
+    Returns:
+        Path to saved heatmap image
+    """
+    output_dir = Path(output_dir)
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create pivot for performance
+    perf_pivot = timing_df.pivot(
+        values=performance_metric,
+        index='learner',
+        columns='featurizer',
+        aggregate_function='first'
+    )
+
+    # Extract learner names before reordering columns
+    learner_names = perf_pivot.get_column('learner').to_list()
+
+    # Reorder columns
+    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    existing_cols = [col for col in desired_order if col in perf_pivot.columns]
+    perf_pivot = perf_pivot.select(existing_cols)
+
+    # Convert to pandas for heatmap
+    perf_pd = perf_pivot.to_pandas()
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+
+    metric_label = performance_metric.replace('_', ' ').title()
+    title = f'Performance Matrix: {metric_label}'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title, fontsize=20, fontweight='bold', y=0.98)
+
+    # Create colormap for performance (higher is better - red to blue)
+    cmap = sns.color_palette("RdYlBu", as_cmap=True)
+
+    # Create heatmap
+    sns.heatmap(
+        perf_pd,
+        annot=False,
+        cmap=cmap,
+        mask=perf_pd.isna(),
+        cbar_kws={'shrink': 0.8, 'label': metric_label},
+        linewidths=0.5,
+        linecolor='white',
+        square=False,
+        vmin=0,
+        vmax=100,
+        ax=ax
+    )
+
+    # Add custom annotations with performance values
+    for i in range(perf_pivot.height):
+        for j in range(len(perf_pivot.columns)):
+            perf_val = perf_pivot.row(i)[j]
+            if perf_val is not None:
+                text = f'{perf_val:.1f}%'
+                # Use white text for dark cells, black for light cells
+                color = 'white' if perf_val < 50 else 'black'
+                ax.text(j + 0.5, i + 0.5, text,
+                       ha='center', va='center',
+                       fontsize=9, fontweight='bold',
+                       color=color)
+
+    ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
+    ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.set_xticklabels(perf_pivot.columns, rotation=45, ha='right')
+    ax.set_yticklabels(learner_names, rotation=0)
+
+    output_filename = f'performance_heatmap_{performance_metric}.png'
+    output_path = plots_dir / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    console.print(f"[green]✓ Created performance heatmap: {output_path.name}[/green]")
+
+    return output_path
+
+
 def prepare_cost_performance_data(
-    df: pl.DataFrame,
-    early_stopping_filter: Optional[bool] = None
+    df: pl.DataFrame
 ) -> pl.DataFrame:
     """Transform results DataFrame to format expected by cost-performance plotting functions.
 
+    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
+    composite learner names for unified visualization.
+
     Args:
         df: Results DataFrame from validation experiments
-        early_stopping_filter: If specified, filter to only experiments with this early_stopping value
 
     Returns:
         Transformed DataFrame with columns expected by featurizer_visualizations functions
     """
     df_filtered = df.filter(pl.col('success') == True)
 
-    if early_stopping_filter is not None:
-        df_filtered = df_filtered.filter(pl.col('early_stopping') == early_stopping_filter)
-
+    # Create composite learner names encoding all configuration dimensions
     timing_df = df_filtered.select([
-        pl.col('config_name').alias('learner'),
+        pl.when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == True))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop + fine-tune)')]))
+          .when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == False))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop)')]))
+          .when((pl.col('early_stopping') == False) & (pl.col('fine_tuning') == True))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (fine-tune)')]))
+          .otherwise(pl.col('config_name'))
+          .alias('learner'),
+        pl.col('config_name'),
+        pl.col('early_stopping'),
+        pl.col('fine_tuning'),
         pl.col('featurizer'),
         pl.col('cumulative_training_time'),
         pl.col('cumulative_prediction_time'),
@@ -537,7 +643,7 @@ def prepare_cost_performance_data(
         (pl.col('cumulative_training_time') + pl.col('cumulative_prediction_time')).alias('cumulative_training_prediction_time'),
         pl.col('top_10_recovery'),
         pl.col('top_100_recovery'),
-    ])
+    ]).sort(['config_name', 'early_stopping', 'fine_tuning'])
 
     return timing_df
 
@@ -547,9 +653,10 @@ def generate_cost_performance_plots(
     output_dir: Path,
     dataset_name: str = 'chemprop'
 ) -> Dict[str, List[Path]]:
-    """Generate cost-performance heatmaps and Pareto frontiers.
+    """Generate cost-performance heatmaps, Pareto frontiers, and performance-only heatmaps.
 
-    Creates separate plot sets for experiments with and without early stopping.
+    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
+    unified visualizations.
 
     Args:
         df: Results DataFrame from validation experiments
@@ -557,7 +664,8 @@ def generate_cost_performance_plots(
         dataset_name: Dataset name for plot titles
 
     Returns:
-        Dictionary with keys 'heatmaps' and 'pareto_plots', each containing list of Path objects
+        Dictionary with keys 'heatmaps', 'pareto_plots', and 'performance_heatmaps',
+        each containing list of Path objects
     """
     from validation.lib.featurizer_visualizations import (
         create_cost_performance_heatmaps,
@@ -567,47 +675,57 @@ def generate_cost_performance_plots(
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
+    console.print("[cyan]  Generating unified cost-performance plots...[/cyan]")
+
+    # Prepare data with composite learner names (no filtering)
+    timing_df = prepare_cost_performance_data(df)
+
+    if len(timing_df) == 0:
+        console.print("[yellow]  Warning: No successful experiments to visualize[/yellow]")
+        return {
+            'heatmaps': [],
+            'pareto_plots': [],
+            'performance_heatmaps': []
+        }
+
     all_heatmaps = []
     all_pareto_plots = []
+    all_performance_heatmaps = []
 
-    for early_stop in [True, False]:
-        early_stop_label = 'early_stop' if early_stop else 'no_early_stop'
-        console.print(f"[cyan]  Generating cost-performance plots for {early_stop_label}...[/cyan]")
+    for metric in ['top_10_recovery', 'top_100_recovery']:
+        metric_label = metric.replace('_', ' ').title()
 
-        timing_df = prepare_cost_performance_data(df, early_stopping_filter=early_stop)
+        # Cost-performance heatmap
+        heatmap_path = create_cost_performance_heatmaps(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_heatmaps.append(heatmap_path)
 
-        if len(timing_df) == 0:
-            console.print(f"[yellow]  Warning: No data for {early_stop_label}, skipping[/yellow]")
-            continue
+        # Pareto frontier
+        pareto_path = create_pareto_frontiers(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_pareto_plots.append(pareto_path)
 
-        # Create subdirectory for this early stopping configuration
-        # The plotting functions will create plots/ inside this directory
-        early_stop_output_dir = output_dir / early_stop_label
-        early_stop_output_dir.mkdir(parents=True, exist_ok=True)
-
-        for metric in ['top_10_recovery', 'top_100_recovery']:
-            metric_label = metric.replace('_', ' ').title()
-            plot_dataset_name = f"{dataset_name} ({early_stop_label})"
-
-            heatmap_path = create_cost_performance_heatmaps(
-                timing_df,
-                early_stop_output_dir,
-                performance_metric=metric,
-                dataset_name=plot_dataset_name
-            )
-            all_heatmaps.append(heatmap_path)
-
-            pareto_path = create_pareto_frontiers(
-                timing_df,
-                early_stop_output_dir,
-                performance_metric=metric,
-                dataset_name=plot_dataset_name
-            )
-            all_pareto_plots.append(pareto_path)
+        # Performance-only heatmap
+        perf_heatmap_path = create_performance_heatmap(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_performance_heatmaps.append(perf_heatmap_path)
 
     return {
         'heatmaps': all_heatmaps,
-        'pareto_plots': all_pareto_plots
+        'pareto_plots': all_pareto_plots,
+        'performance_heatmaps': all_performance_heatmaps
     }
 
 
@@ -754,6 +872,7 @@ def main():
 
         console.print(f"[green]✓ Generated {len(cost_perf_paths['heatmaps'])} cost-performance heatmaps[/green]")
         console.print(f"[green]✓ Generated {len(cost_perf_paths['pareto_plots'])} Pareto frontier plots[/green]")
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['performance_heatmaps'])} performance-only heatmaps[/green]")
 
         if cost_perf_paths['heatmaps']:
             console.print("\n[bold]Cost-Performance Heatmaps:[/bold]")
@@ -763,6 +882,11 @@ def main():
         if cost_perf_paths['pareto_plots']:
             console.print("\n[bold]Pareto Frontier Plots:[/bold]")
             for path in cost_perf_paths['pareto_plots']:
+                console.print(f"  - {path}")
+
+        if cost_perf_paths['performance_heatmaps']:
+            console.print("\n[bold]Performance-Only Heatmaps:[/bold]")
+            for path in cost_perf_paths['performance_heatmaps']:
                 console.print(f"  - {path}")
 
     except Exception as e:
