@@ -503,13 +503,18 @@ def generate_cost_performance_plots(
             console.print(f"[yellow]  Warning: No data for {early_stop_label}, skipping[/yellow]")
             continue
 
+        # Create subdirectory for this early stopping configuration
+        # The plotting functions will create plots/ inside this directory
+        early_stop_output_dir = output_dir / early_stop_label
+        early_stop_output_dir.mkdir(parents=True, exist_ok=True)
+
         for metric in ['top_10_recovery', 'top_100_recovery']:
             metric_label = metric.replace('_', ' ').title()
             plot_dataset_name = f"{dataset_name} ({early_stop_label})"
 
             heatmap_path = create_cost_performance_heatmaps(
                 timing_df,
-                plots_dir,
+                early_stop_output_dir,
                 performance_metric=metric,
                 dataset_name=plot_dataset_name
             )
@@ -517,7 +522,7 @@ def generate_cost_performance_plots(
 
             pareto_path = create_pareto_frontiers(
                 timing_df,
-                plots_dir,
+                early_stop_output_dir,
                 performance_metric=metric,
                 dataset_name=plot_dataset_name
             )
