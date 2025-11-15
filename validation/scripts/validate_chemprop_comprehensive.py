@@ -293,9 +293,15 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         columns='featurizer',
         aggregate_function='mean'
     )
-    # Convert to pandas for seaborn heatmap compatibility
-    performance_data = performance_pivot.to_pandas()
-    performance_data.index.name = 'config_name'
+
+    # Extract config names before selecting columns
+    config_names = performance_pivot.get_column('config_name').to_list()
+
+    # Select only numeric columns (featurizers), excluding config_name
+    featurizer_cols = [col for col in performance_pivot.columns if col != 'config_name']
+    performance_data = performance_pivot.select(featurizer_cols).to_pandas()
+    performance_data.index = config_names
+
     sns.heatmap(performance_data, annot=True, fmt='.3f', cmap='RdYlGn', ax=ax, vmin=0, vmax=1)
     ax.set_title('Top-10 Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
     ax.set_xlabel('Featurizer')
