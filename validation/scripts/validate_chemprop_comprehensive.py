@@ -96,6 +96,10 @@ def load_existing_results(
     cycle_metrics = cycle_metrics_df.to_dicts()
     training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
     prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+    acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
+    oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
+    evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
+    total_times = [m.get('total_time', 0) for m in cycle_metrics[1:]]
 
     return {
         'config_name': config_name,
@@ -108,8 +112,15 @@ def load_existing_results(
         'final_discovery_rate': final_metrics.get('discovery_rate', 0),
         'avg_training_time': np.mean(training_times) if training_times else 0,
         'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-        'total_training_time': np.sum(training_times) if training_times else 0,
-        'total_time': 0,
+        'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
+        'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
+        'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
+        'cumulative_training_time': np.sum(training_times) if training_times else 0,
+        'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
+        'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
+        'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
+        'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
+        'total_time': np.sum(total_times) if total_times else 0,
         'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
         'final_discovery_count': final_metrics.get('discovery_count', 0),
         'success': True,
@@ -186,6 +197,9 @@ def run_single_experiment(
 
         training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
         prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+        acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
+        oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
+        evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
 
         final_metrics = cycle_metrics[-1]
 
@@ -200,7 +214,14 @@ def run_single_experiment(
             'final_discovery_rate': final_metrics.get('discovery_rate', 0),
             'avg_training_time': np.mean(training_times) if training_times else 0,
             'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-            'total_training_time': np.sum(training_times) if training_times else 0,
+            'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
+            'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
+            'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
+            'cumulative_training_time': np.sum(training_times) if training_times else 0,
+            'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
+            'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
+            'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
+            'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
             'total_time': total_time,
             'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
             'final_discovery_count': final_metrics.get('discovery_count', 0),
@@ -229,7 +250,14 @@ def run_single_experiment(
             'final_discovery_rate': 0,
             'avg_training_time': 0,
             'avg_prediction_time': 0,
-            'total_training_time': 0,
+            'avg_acquisition_time': 0,
+            'avg_oracle_time': 0,
+            'avg_evaluation_time': 0,
+            'cumulative_training_time': 0,
+            'cumulative_prediction_time': 0,
+            'cumulative_acquisition_time': 0,
+            'cumulative_oracle_time': 0,
+            'cumulative_evaluation_time': 0,
             'total_time': 0,
             'final_labeled_count': 0,
             'final_discovery_count': 0,
@@ -389,6 +417,106 @@ def print_summary_table(df: pl.DataFrame):
     console.print(f"  Avg total time per experiment: {df_success['total_time'].mean():.1f}s")
 
 
+def prepare_cost_performance_data(
+    df: pl.DataFrame,
+    early_stopping_filter: Optional[bool] = None
+) -> pl.DataFrame:
+    """Transform results DataFrame to format expected by cost-performance plotting functions.
+
+    Args:
+        df: Results DataFrame from validation experiments
+        early_stopping_filter: If specified, filter to only experiments with this early_stopping value
+
+    Returns:
+        Transformed DataFrame with columns expected by featurizer_visualizations functions
+    """
+    df_filtered = df.filter(pl.col('success') == True)
+
+    if early_stopping_filter is not None:
+        df_filtered = df_filtered.filter(pl.col('early_stopping') == early_stopping_filter)
+
+    timing_df = df_filtered.select([
+        pl.col('config_name').alias('learner'),
+        pl.col('featurizer'),
+        pl.col('cumulative_training_time'),
+        pl.col('cumulative_prediction_time'),
+        pl.col('cumulative_acquisition_time'),
+        pl.col('cumulative_oracle_time'),
+        pl.col('cumulative_evaluation_time'),
+        pl.col('total_time').alias('cumulative_total_time'),
+        pl.col('total_time').alias('elapsed_time'),
+        (pl.col('cumulative_training_time') + pl.col('cumulative_prediction_time')).alias('cumulative_training_prediction_time'),
+        pl.col('top_10_recovery'),
+        pl.col('top_100_recovery'),
+    ])
+
+    return timing_df
+
+
+def generate_cost_performance_plots(
+    df: pl.DataFrame,
+    output_dir: Path,
+    dataset_name: str = 'chemprop'
+) -> Dict[str, List[Path]]:
+    """Generate cost-performance heatmaps and Pareto frontiers.
+
+    Creates separate plot sets for experiments with and without early stopping.
+
+    Args:
+        df: Results DataFrame from validation experiments
+        output_dir: Directory to save plots
+        dataset_name: Dataset name for plot titles
+
+    Returns:
+        Dictionary with keys 'heatmaps' and 'pareto_plots', each containing list of Path objects
+    """
+    from validation.lib.featurizer_visualizations import (
+        create_cost_performance_heatmaps,
+        create_pareto_frontiers
+    )
+
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    all_heatmaps = []
+    all_pareto_plots = []
+
+    for early_stop in [True, False]:
+        early_stop_label = 'early_stop' if early_stop else 'no_early_stop'
+        console.print(f"[cyan]  Generating cost-performance plots for {early_stop_label}...[/cyan]")
+
+        timing_df = prepare_cost_performance_data(df, early_stopping_filter=early_stop)
+
+        if len(timing_df) == 0:
+            console.print(f"[yellow]  Warning: No data for {early_stop_label}, skipping[/yellow]")
+            continue
+
+        for metric in ['top_10_recovery', 'top_100_recovery']:
+            metric_label = metric.replace('_', ' ').title()
+            plot_dataset_name = f"{dataset_name} ({early_stop_label})"
+
+            heatmap_path = create_cost_performance_heatmaps(
+                timing_df,
+                plots_dir,
+                performance_metric=metric,
+                dataset_name=plot_dataset_name
+            )
+            all_heatmaps.append(heatmap_path)
+
+            pareto_path = create_pareto_frontiers(
+                timing_df,
+                plots_dir,
+                performance_metric=metric,
+                dataset_name=plot_dataset_name
+            )
+            all_pareto_plots.append(pareto_path)
+
+    return {
+        'heatmaps': all_heatmaps,
+        'pareto_plots': all_pareto_plots
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Comprehensive Chemprop validation testing early stopping, featurizers, and model configs'
@@ -516,6 +644,33 @@ def main():
     console.print(f"\n[green]✓ Saved summary to {summary_path}[/green]")
 
     create_visualizations(results_df, args.output_dir)
+
+    console.print("\n[cyan]Generating cost-performance analysis...[/cyan]")
+    try:
+        cost_perf_paths = generate_cost_performance_plots(
+            results_df,
+            args.output_dir,
+            dataset_name=args.dataset
+        )
+
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['heatmaps'])} cost-performance heatmaps[/green]")
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['pareto_plots'])} Pareto frontier plots[/green]")
+
+        if cost_perf_paths['heatmaps']:
+            console.print("\n[bold]Cost-Performance Heatmaps:[/bold]")
+            for path in cost_perf_paths['heatmaps']:
+                console.print(f"  - {path}")
+
+        if cost_perf_paths['pareto_plots']:
+            console.print("\n[bold]Pareto Frontier Plots:[/bold]")
+            for path in cost_perf_paths['pareto_plots']:
+                console.print(f"  - {path}")
+
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not generate cost-performance plots: {e}[/yellow]")
+        import traceback
+        if args.debug:
+            traceback.print_exc()
 
     print_summary_table(results_df)
 
