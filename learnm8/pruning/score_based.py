@@ -7,7 +7,7 @@ on the most promising regions of chemical space.
 
 import logging
 from typing import Dict, Any, Optional
-import pandas as pd
+import polars as pl
 import numpy as np
 
 from .base import DesignSpacePruner, PruningError
@@ -48,10 +48,10 @@ class ScoreBasedPruner(DesignSpacePruner):
         self.score_direction = score_direction
         self._last_stats: Dict[str, Any] = {}
     
-    def prune(self, 
-              compounds: pd.DataFrame, 
-              predictions: np.ndarray, 
-              uncertainties: Optional[np.ndarray] = None) -> pd.DataFrame:
+    def prune(self,
+              compounds: pl.DataFrame,
+              predictions: np.ndarray,
+              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
         """Prune compounds based on predicted scores.
         
         Args:
@@ -79,7 +79,7 @@ class ScoreBasedPruner(DesignSpacePruner):
                 'score_direction': self.score_direction,
                 'pruning_fraction_requested': self.pruning_fraction
             }
-            return compounds.copy()
+            return compounds.clone()
         
         # Calculate how many compounds to remove
         n_to_remove = int(n_compounds * self.pruning_fraction)

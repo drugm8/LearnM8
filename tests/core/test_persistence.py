@@ -1,4 +1,5 @@
 import pytest
+import polars as pl
 import pandas as pd
 import numpy as np
 import json
@@ -9,7 +10,7 @@ from learnm8.core.validation import ValidationResult
 
 
 def test_organize_columns():
-    df = pd.DataFrame({
+    df = pl.DataFrame({
         'ID': [1, 2],
         'SMILES': ['CCO', 'CCC'],
         'status': ['labeled', 'unlabeled'],
@@ -34,8 +35,8 @@ def test_organize_columns():
 
 def test_add_csv_metadata(tmp_path):
     csv_file = tmp_path / 'test.csv'
-    df = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
-    df.to_csv(csv_file, index=False)
+    df = pl.DataFrame({'A': [1, 2], 'B': [3, 4]})
+    df.write_csv(csv_file)
 
     metadata = {
         'Description': 'Test file',
@@ -58,18 +59,18 @@ def test_add_csv_metadata(tmp_path):
 def test_save_results_basic(tmp_path):
     np.random.seed(42)
 
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': [f'COMP_{i:03d}' for i in range(10)],
         'SMILES': ['CCO'] * 10,
         'status': ['labeled'] * 3 + ['unlabeled'] * 7,
-        'labeled_cycle': [-1, -1, -1] + [pd.NA] * 7,
-        'selected_cycle': [-1, -1, -1] + [pd.NA] * 7,
-        'pruned_cycle': [pd.NA] * 10,
-        'Activity': [0.3, 0.6, 0.9] + [pd.NA] * 7,
-        'prediction_cycle_0': [pd.NA] * 3 + [0.4, 0.5, 0.6, 0.7] + [pd.NA] * 3,
-        'uncertainty_cycle_0': [pd.NA] * 3 + [0.1, 0.15, 0.2, 0.25] + [pd.NA] * 3,
-        'prediction_cycle_1': [pd.NA] * 5 + [0.65, 0.75] + [pd.NA] * 3,
-        'uncertainty_cycle_1': [pd.NA] * 5 + [0.12, 0.18] + [pd.NA] * 3
+        'labeled_cycle': [-1, -1, -1] + [None] * 7,
+        'selected_cycle': [-1, -1, -1] + [None] * 7,
+        'pruned_cycle': [None] * 10,
+        'Activity': [0.3, 0.6, 0.9] + [None] * 7,
+        'prediction_cycle_0': [None] * 3 + [0.4, 0.5, 0.6, 0.7] + [None] * 3,
+        'uncertainty_cycle_0': [None] * 3 + [0.1, 0.15, 0.2, 0.25] + [None] * 3,
+        'prediction_cycle_1': [None] * 5 + [0.65, 0.75] + [None] * 3,
+        'uncertainty_cycle_1': [None] * 5 + [0.12, 0.18] + [None] * 3
     })
 
     cycle_metrics = [
@@ -120,8 +121,8 @@ def test_save_results_basic(tmp_path):
     ]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
-        invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
+        invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
         validation_errors={}
     )
 
@@ -154,16 +155,16 @@ def test_save_results_basic(tmp_path):
 
 
 def test_save_results_compounds_final_structure(tmp_path):
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
         'SMILES': ['CCO', 'CCC', 'CCN'],
         'status': ['labeled', 'labeled', 'unlabeled'],
-        'labeled_cycle': [-1, 0, pd.NA],
-        'selected_cycle': [-1, 0, pd.NA],
-        'pruned_cycle': [pd.NA, pd.NA, pd.NA],
-        'Activity': [0.3, 0.6, pd.NA],
-        'prediction_cycle_0': [pd.NA, pd.NA, 0.5],
-        'uncertainty_cycle_0': [pd.NA, pd.NA, 0.15]
+        'labeled_cycle': [-1, 0, None],
+        'selected_cycle': [-1, 0, None],
+        'pruned_cycle': [None, None, None],
+        'Activity': [0.3, 0.6, None],
+        'prediction_cycle_0': [None, None, 0.5],
+        'uncertainty_cycle_0': [None, None, 0.15]
     })
 
     cycle_metrics = [{
@@ -173,8 +174,8 @@ def test_save_results_compounds_final_structure(tmp_path):
     }]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
-        invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
+        invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
         validation_errors={}
     )
 
@@ -199,13 +200,13 @@ def test_save_results_compounds_final_structure(tmp_path):
 
 
 def test_save_results_cycle_metrics_no_list_columns(tmp_path):
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': ['COMP_001'],
         'SMILES': ['CCO'],
         'status': ['labeled'],
         'labeled_cycle': [0],
         'selected_cycle': [0],
-        'pruned_cycle': [pd.NA],
+        'pruned_cycle': [None],
         'Activity': [0.5]
     })
 
@@ -222,8 +223,8 @@ def test_save_results_cycle_metrics_no_list_columns(tmp_path):
     }]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
-        invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
+        invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
         validation_errors={}
     )
 
@@ -238,18 +239,18 @@ def test_save_results_cycle_metrics_no_list_columns(tmp_path):
 
 
 def test_save_results_selection_history(tmp_path):
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
         'SMILES': ['CCO', 'CCC', 'CCN'],
         'status': ['labeled', 'labeled', 'labeled'],
         'labeled_cycle': [-1, 0, 1],
         'selected_cycle': [-1, 0, 1],
-        'pruned_cycle': [pd.NA, pd.NA, pd.NA],
+        'pruned_cycle': [None, None, None],
         'Activity': [0.3, 0.6, 0.9],
-        'prediction_cycle_0': [pd.NA, 0.5, 0.7],
-        'uncertainty_cycle_0': [pd.NA, 0.15, 0.2],
-        'prediction_cycle_1': [pd.NA, pd.NA, 0.85],
-        'uncertainty_cycle_1': [pd.NA, pd.NA, 0.1]
+        'prediction_cycle_0': [None, 0.5, 0.7],
+        'uncertainty_cycle_0': [None, 0.15, 0.2],
+        'prediction_cycle_1': [None, None, 0.85],
+        'uncertainty_cycle_1': [None, None, 0.1]
     })
 
     cycle_metrics = [
@@ -268,8 +269,8 @@ def test_save_results_selection_history(tmp_path):
     ]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
-        invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
+        invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
         validation_errors={}
     )
 
@@ -290,17 +291,17 @@ def test_save_results_selection_history(tmp_path):
 
 
 def test_save_results_validation_report(tmp_path):
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': ['COMP_001'],
         'SMILES': ['CCO'],
         'status': ['labeled'],
         'labeled_cycle': [0],
         'selected_cycle': [0],
-        'pruned_cycle': [pd.NA],
+        'pruned_cycle': [None],
         'Activity': [0.5]
     })
 
-    invalid_compounds = pd.DataFrame({
+    invalid_compounds = pl.DataFrame({
         'ID': ['INVALID_001', 'INVALID_002'],
         'SMILES': ['INVALID', 'BADSMILES']
     })
@@ -318,7 +319,7 @@ def test_save_results_validation_report(tmp_path):
     }]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=invalid_compounds,
         validation_errors=validation_errors
     )
@@ -340,13 +341,13 @@ def test_save_results_validation_report(tmp_path):
 
 
 def test_save_results_config_json(tmp_path):
-    compounds_df = pd.DataFrame({
+    compounds_df = pl.DataFrame({
         'ID': ['COMP_001'],
         'SMILES': ['CCO'],
         'status': ['labeled'],
         'labeled_cycle': [0],
         'selected_cycle': [0],
-        'pruned_cycle': [pd.NA],
+        'pruned_cycle': [None],
         'Activity': [0.5]
     })
 
@@ -358,8 +359,8 @@ def test_save_results_config_json(tmp_path):
     }]
 
     validation_result = ValidationResult(
-        valid_compounds=compounds_df[['ID', 'SMILES']],
-        invalid_compounds=pd.DataFrame(columns=['ID', 'SMILES']),
+        valid_compounds=compounds_df.select(['ID', 'SMILES']),
+        invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
         validation_errors={}
     )
 

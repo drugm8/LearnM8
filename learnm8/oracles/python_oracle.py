@@ -2,7 +2,7 @@
 
 import importlib.util
 import inspect
-import pandas as pd
+import polars as pl
 from pathlib import Path
 from typing import List, Callable
 from learnm8.core.interfaces import Oracle
@@ -82,39 +82,44 @@ class PythonOracle(Oracle):
         
         return oracle_function
         
-    def measure(self, compounds: pd.DataFrame, properties: List[str]) -> pd.DataFrame:
+    def measure(self, compounds: pl.DataFrame, properties: List[str]) -> pl.DataFrame:
         """
         Execute oracle function to measure compound properties.
-        
+
         Args:
             compounds: DataFrame with 'ID' column
             properties: List of property names (not used for Python oracles)
-            
+
         Returns:
             DataFrame with 'ID' and measured property columns
         """
         # Extract compound IDs
-        compound_ids = compounds['ID'].tolist()
-        
+        compound_ids = compounds.get_column('ID').to_list()
+
         # Call oracle function
         try:
             result = self.oracle_function(compound_ids)
         except Exception as e:
             raise RuntimeError(f"Oracle function failed: {e}")
-        
-        # Validate result
-        if not isinstance(result, pd.DataFrame):
-            raise ValueError(f"Oracle function must return pandas DataFrame, got {type(result)}")
-        
+
+        # Validate result - support both pandas and polars return values
+        if isinstance(result, pl.DataFrame):
+            pass  # Already Polars, no conversion needed
+        elif hasattr(result, '__dataframe__'):  # pandas DataFrame
+            # Convert pandas to Polars
+            result = pl.from_pandas(result)
+        else:
+            raise ValueError(f"Oracle function must return pandas or polars DataFrame, got {type(result)}")
+
         if 'ID' not in result.columns:
             raise ValueError("Oracle function result must contain 'ID' column")
-        
+
         # Check that all requested compounds have results
-        result_ids = set(result['ID'])
+        result_ids = set(result.get_column('ID').to_list())
         request_ids = set(compound_ids)
         missing_ids = request_ids - result_ids
-        
+
         if missing_ids:
             print(f"Warning: Oracle did not return results for {len(missing_ids)} compounds")
-        
+
         return result

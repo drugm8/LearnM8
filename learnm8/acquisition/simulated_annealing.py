@@ -1,6 +1,6 @@
 """Simulated annealing acquisition function for the LearnM8 framework.
 
-This module implements a simulated annealing-based acquisition strategy that 
+This module implements a simulated annealing-based acquisition strategy that
 balances exploration and exploitation through a temperature-based probabilistic
 selection process. The algorithm starts with high temperature allowing random
 exploration and gradually cools down to become more greedy/exploitative.
@@ -8,7 +8,7 @@ exploration and gradually cools down to become more greedy/exploitative.
 
 import logging
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import Optional, TYPE_CHECKING
 
 from .base import AcquisitionFunction
@@ -145,101 +145,118 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         
         return bool(self._rng.random() < acceptance_prob)
     
-    def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
+    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
         """Select compounds using simulated annealing.
-        
+
         Args:
             compounds: DataFrame with 'ID', 'SMILES', 'prediction' columns
             n_select: Number of compounds to select
-            
+
         Returns:
             DataFrame subset with selected compounds including 'acquisition_score' column
-            
+
         Raises:
             ValueError: If required columns are missing or n_select is invalid
         """
         # Validate input
         self.validate_input(compounds, n_select)
-        
+
         # Handle edge case where n_select >= available compounds
         actual_n_select = min(n_select, len(compounds))
-        
+
         if actual_n_select == len(compounds):
             # Return all compounds with energy-based scores
-            selected = compounds.copy()
-            energies = [self._calculate_energy(pred) for pred in compounds['prediction']]
-            selected['acquisition_score'] = -np.array(energies)  # Convert back to scores
+            selected = compounds.clone()
+            energies = np.array([self._calculate_energy(pred)
+                               for pred in compounds.get_column('prediction').to_numpy()])
+            selected = selected.with_columns(
+                pl.Series('acquisition_score', -energies)
+            )
             return selected
-        
+
+        # Extract IDs and predictions to numpy for efficient indexing
+        all_ids = compounds.get_column('ID').to_numpy()
+        predictions = compounds.get_column('prediction').to_numpy()
+
         # Initialize annealing process
         visited_indices = []
         visited_energies = []
-        
+
         # Start with a random compound
         current_idx = self._rng.randint(len(compounds))
-        current_energy = self._calculate_energy(compounds.iloc[current_idx]['prediction'])
-        
+        current_energy = self._calculate_energy(predictions[current_idx])
+
         # Track the best compound found so far
         best_idx = current_idx
         best_energy = current_energy
-        
+
         # Main annealing loop
         for iteration in range(self.max_iterations):
             # Calculate current temperature
             temperature = self._get_temperature(iteration)
-            
+
             # Propose a new compound (random selection for simplicity)
             candidate_idx = self._rng.randint(len(compounds))
-            candidate_energy = self._calculate_energy(compounds.iloc[candidate_idx]['prediction'])
-            
+            candidate_energy = self._calculate_energy(predictions[candidate_idx])
+
             # Decide whether to accept the candidate
             if self._metropolis_accept(current_energy, candidate_energy, temperature):
                 current_idx = candidate_idx
                 current_energy = candidate_energy
-                
+
                 # Update best compound if this is better
                 if candidate_energy < best_energy:
                     best_idx = candidate_idx
                     best_energy = candidate_energy
-            
+
             # Record this compound in our history
             visited_indices.append(current_idx)
             visited_energies.append(current_energy)
-        
+
         # Select the best n_select compounds from our annealing history
         # Get unique compounds and their best energies
         unique_compounds = {}
         for idx, energy in zip(visited_indices, visited_energies):
             if idx not in unique_compounds or energy < unique_compounds[idx]:
                 unique_compounds[idx] = energy
-        
+
         # Sort by energy (best first) and select top n_select
         sorted_compounds = sorted(unique_compounds.items(), key=lambda x: x[1])
         selected_indices = [idx for idx, _ in sorted_compounds[:actual_n_select]]
-        
+
         # If we don't have enough unique compounds, add more from the pool
         if len(selected_indices) < actual_n_select:
             # Add compounds not yet selected, sorted by energy
             remaining_indices = set(range(len(compounds))) - set(selected_indices)
-            remaining_with_energy = [(idx, self._calculate_energy(compounds.iloc[idx]['prediction'])) 
+            remaining_with_energy = [(idx, self._calculate_energy(predictions[idx]))
                                    for idx in remaining_indices]
             remaining_sorted = sorted(remaining_with_energy, key=lambda x: x[1])
-            
+
             # Add best remaining compounds
             needed = actual_n_select - len(selected_indices)
             selected_indices.extend([idx for idx, _ in remaining_sorted[:needed]])
-        
-        # Create result DataFrame
-        selected = compounds.iloc[selected_indices].copy()
-        
+
+        # Get IDs for selected compounds
+        selected_ids = all_ids[selected_indices]
+
+        # Filter compounds by selected IDs
+        selected = compounds.filter(pl.col('ID').is_in(selected_ids.tolist()))
+
         # Add acquisition scores (negative energy for intuitive scoring)
-        acquisition_scores = [-self._calculate_energy(pred) for pred in selected['prediction']]
-        selected['acquisition_score'] = acquisition_scores
-        
+        # Create mapping from ID to acquisition score
+        acquisition_scores = {}
+        for idx in selected_indices:
+            acquisition_scores[all_ids[idx]] = -self._calculate_energy(predictions[idx])
+
+        # Add scores using replace_strict
+        selected = selected.with_columns(
+            pl.col('ID').replace_strict(acquisition_scores).alias('acquisition_score')
+        )
+
         logger.debug(f"SimulatedAnnealingAcquisition selected {len(selected)} compounds "
                     f"using {self.cooling_schedule} cooling schedule "
                     f"(temp: {self.initial_temp:.3f} → {self.final_temp:.3f})")
-        
+
         return selected
     
     def get_name(self) -> str:

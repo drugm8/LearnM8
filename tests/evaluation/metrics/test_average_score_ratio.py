@@ -6,7 +6,7 @@ functions with positive scores, negative scores, and edge cases.
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.enrichment import (
@@ -20,7 +20,7 @@ class TestAverageScoreRatio:
 
     def test_negative_scores_lower_direction_better_selection(self):
         """Test with negative docking scores where lower is better - better selection."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'dockscore': [-50.0, -45.0, -40.0, -30.0, -25.0, -20.0]
         })
@@ -39,7 +39,7 @@ class TestAverageScoreRatio:
 
     def test_negative_scores_lower_direction_worse_selection(self):
         """Test with negative docking scores where lower is better - worse selection."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'dockscore': [-50.0, -45.0, -40.0, -30.0, -25.0, -20.0]
         })
@@ -56,7 +56,7 @@ class TestAverageScoreRatio:
 
     def test_negative_scores_lower_direction_baseline(self):
         """Test with negative scores - baseline selection similar to mean."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'dockscore': [-50.0, -40.0, -35.0, -30.0, -25.0, -20.0]
         })
@@ -71,7 +71,7 @@ class TestAverageScoreRatio:
 
     def test_positive_scores_higher_direction_better_selection(self):
         """Test with positive activity scores where higher is better - better selection."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'activity': [0.9, 0.8, 0.7, 0.5, 0.4, 0.3]
         })
@@ -88,7 +88,7 @@ class TestAverageScoreRatio:
 
     def test_positive_scores_higher_direction_worse_selection(self):
         """Test with positive activity scores where higher is better - worse selection."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'activity': [0.9, 0.8, 0.7, 0.5, 0.4, 0.3]
         })
@@ -105,7 +105,7 @@ class TestAverageScoreRatio:
 
     def test_positive_scores_lower_direction(self):
         """Test with positive scores but lower is better (e.g., RMSD)."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'rmsd': [1.2, 1.5, 2.0, 2.5, 3.0, 3.5]
         })
@@ -122,13 +122,13 @@ class TestAverageScoreRatio:
 
     def test_batch_vs_cumulative_consistency(self):
         """Test that batch and cumulative functions behave consistently."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'dockscore': [-50.0, -45.0, -40.0, -30.0, -25.0, -20.0]
         })
 
         selected_ids = {'A', 'B', 'C'}
-        selected_df = ground_truth[ground_truth['ID'].isin(selected_ids)]
+        selected_df = ground_truth.filter(pl.col('ID').is_in(list(selected_ids)))
 
         cumulative_ratio = calculate_average_score_ratio(
             selected_ids, ground_truth, 'dockscore', 'lower'
@@ -142,7 +142,7 @@ class TestAverageScoreRatio:
 
     def test_empty_selection(self):
         """Test with empty selection returns 1.0."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C'],
             'dockscore': [-50.0, -40.0, -30.0]
         })
@@ -152,7 +152,7 @@ class TestAverageScoreRatio:
         )
         assert ratio == 1.0
 
-        empty_df = pd.DataFrame({'ID': [], 'dockscore': []})
+        empty_df = pl.DataFrame({'ID': [], 'dockscore': []})
         batch_ratio = calculate_batch_average_score_ratio(
             empty_df, ground_truth, 'dockscore', 'lower'
         )
@@ -160,15 +160,15 @@ class TestAverageScoreRatio:
 
     def test_real_world_docking_example(self):
         """Test with real-world docking score scenario from validation data."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': [f'compound_{i}' for i in range(100)],
             'dockscore': np.random.uniform(-80, -20, 100)
         })
 
-        population_mean = ground_truth['dockscore'].mean()
+        population_mean = ground_truth.get_column('dockscore').mean()
 
-        better_compounds = ground_truth.nsmallest(10, 'dockscore')
-        selected_ids = set(better_compounds['ID'])
+        better_compounds = ground_truth.sort('dockscore').head(10)
+        selected_ids = set(better_compounds.get_column('ID').to_list())
 
         ratio = calculate_average_score_ratio(
             selected_ids, ground_truth, 'dockscore', 'lower'
@@ -176,13 +176,13 @@ class TestAverageScoreRatio:
 
         assert ratio > 1.0
 
-        selected_mean = better_compounds['dockscore'].mean()
+        selected_mean = better_compounds.get_column('dockscore').mean()
         expected_ratio = abs(selected_mean) / abs(population_mean)
         assert_allclose(ratio, expected_ratio, rtol=0.01)
 
     def test_near_zero_scores(self):
         """Test with scores near zero (edge case)."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D'],
             'score': [-0.1, -0.05, 0.05, 0.1]
         })
@@ -204,7 +204,7 @@ class TestAverageScoreRatio:
 
     def test_mixed_sign_scores_lower_direction(self):
         """Test with mixed positive and negative scores where lower is better."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E'],
             'score': [-10.0, -5.0, 0.0, 5.0, 10.0]
         })
@@ -222,12 +222,12 @@ class TestAverageScoreRatio:
 
     def test_batch_ratio_with_negative_scores(self):
         """Test batch ratio function specifically with negative docking scores."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D', 'E', 'F'],
             'dockscore': [-60.0, -50.0, -40.0, -30.0, -20.0, -10.0]
         })
 
-        batch_df = ground_truth[ground_truth['ID'].isin(['A', 'B', 'C'])].copy()
+        batch_df = ground_truth.filter(pl.col('ID').is_in(['A', 'B', 'C']))
 
         ratio = calculate_batch_average_score_ratio(
             batch_df, ground_truth, 'dockscore', 'lower'
@@ -242,9 +242,9 @@ class TestAverageScoreRatio:
 
     def test_score_direction_parameter_effect(self):
         """Test that score_direction parameter produces different results."""
-        ground_truth = pd.DataFrame({
+        ground_truth = pl.DataFrame({
             'ID': ['A', 'B', 'C', 'D'],
-            'score': [-10.0, -5.0, 5.0, 10.0]
+            'score': [-10.0, -5.0, 5.0, 15.0]  # Changed to avoid zero mean
         })
 
         selected_ids = {'A', 'B'}

@@ -53,9 +53,9 @@ LearnM8 v1.0.0 represents a complete architectural refactor from the monolithic 
 
 ### Migration Path
 
-v1.0.0 introduces breaking changes but provides clear migration guidance:
+v1.0.0 introduced breaking changes:
 - Updated import paths: `from learnm8 import run_active_learning`
-- Renamed parameters: `target_column` → `target_col`, `featurizer` → `featurizer_type`
+- Renamed parameters: `target_column` → `target_col`, `featurizer` → `featurizer_type` (old names no longer supported)
 - New cycle configuration: Tuple lists → `CycleConfig` dataclass
 - CLI requires 'run' subcommand: `learnm8 run compounds.csv ...`
 
@@ -4619,15 +4619,15 @@ All output files are CSV with metadata comments:
 
 ---
 
-**Issue 2: TypeError - Unexpected parameter 'target_column'**
+**Issue 2: TypeError - Unexpected parameter 'target_column' or 'featurizer'**
 
-**Cause:** Using old parameter name from v0.5.0
+**Cause:** Using old parameter names from v0.5.0 (removed in current version)
 
 **Symptoms:** TypeError when calling run_active_learning
 
-**Fix:** Rename to `target_col`
+**Fix:** Use current parameter names: `target_col` and `featurizer_type`
 
-**Also check:** `featurizer` → `featurizer_type`
+**Note:** Deprecated parameter names (`target_column`, `featurizer`, `export_csv`, `console_output`) are no longer supported
 
 ---
 

@@ -30,9 +30,10 @@ All other logic is identical, eliminating code duplication.
 
 import logging
 import math
+import time
 from pathlib import Path
 from typing import Tuple, Dict, Any, List, Optional, Literal
-import pandas as pd
+import polars as pl
 import numpy as np
 
 from learnm8.features.extraction import extract_features
@@ -44,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 def execute_cycle(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     cycle: int,
     config: 'CycleConfig',
     learner: Learner,
@@ -55,9 +56,9 @@ def execute_cycle(
     original_pool_size: int,
     score_direction: str = 'higher',
     mode: Literal['run', 'benchmark'] = 'run',
-    original_pool: Optional[pd.DataFrame] = None,
+    original_pool: Optional[pl.DataFrame] = None,
     cumulative_selected_ids: Optional[set] = None
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """
     Execute a single active learning cycle.
 
@@ -122,13 +123,16 @@ def execute_cycle(
 
     # Extract cumulative selected IDs if not provided
     if cumulative_selected_ids is None:
-        cumulative_selected_ids = set(compounds_df[compounds_df['status'] == 'labeled']['ID'].tolist())
+        cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+
+    # Start overall cycle timing
+    cycle_start_time = time.time()
 
     # Step 2 & 3: Training
     # Get Labeled Compounds for Training
     labeled_df = get_compounds_by_status(
         compounds_df, 'labeled', columns=['ID', 'SMILES', target_col]
-    ).copy()
+    ).clone()
 
     unlabeled_df = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
@@ -145,9 +149,10 @@ def execute_cycle(
         )
     else:
         # Extract features and train learner
+        training_start_time = time.time()
         try:
-            training_targets = labeled_df[target_col].values
-            training_smiles = labeled_df['SMILES'].tolist()
+            training_targets = labeled_df[target_col].to_numpy()
+            training_smiles = labeled_df['SMILES'].to_list()
 
             if learner.requires_smiles():
                 if featurizer_type is not None:
@@ -183,14 +188,13 @@ def execute_cycle(
                         f"featurizer_type is required for {learner.get_name()}"
                     )
 
-                logger.info(f"Extracting features for {len(labeled_df)} training compounds ({featurizer_type} fingerprints)")
                 training_features = extract_features(
                     training_smiles,
                     featurizer_type,
                     cache_dir=cache_dir
                 )
+                logger.info(f"Extracted {featurizer_type} features: {len(labeled_df)} training compounds")
                 logger.debug(f"Extracting {featurizer_type} features with cache_dir={cache_dir}")
-                logger.info(f"Features extracted: {len(labeled_df)} compounds processed")
 
                 logger.info(f"Training model on {len(labeled_df)} labeled compounds")
                 learner.train(training_features, training_targets)
@@ -199,11 +203,14 @@ def execute_cycle(
             logger.error(f"Training failed in cycle {cycle}: {e}")
             raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
 
-        logger.info("Training complete")
+        training_time = time.time() - training_start_time
+        logger.info(f"Training complete ({training_time:.2f}s)")
 
+    # Step 4: Prediction on unlabeled compounds
+    prediction_start_time = time.time()
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
-    ).copy()
+    ).clone()
 
     if len(prediction_pool) == 0:
         logger.warning(f"No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.")
@@ -213,14 +220,14 @@ def execute_cycle(
             'selected_count': 0,
             'remaining_pool': 0,
             'remaining_unlabeled': 0,
-            'cumulative_labeled': int((compounds_df['status'] == 'labeled').sum()),
+            'cumulative_labeled': int(compounds_df.filter(pl.col('status') == 'labeled').height),
             'cumulative_pruned': 0,
             'pruned_count': 0
         }
         return compounds_df, metrics
 
     try:
-        prediction_smiles = prediction_pool['SMILES'].tolist()
+        prediction_smiles = prediction_pool['SMILES'].to_list()
 
         if learner.requires_smiles():
             if featurizer_type is not None:
@@ -256,50 +263,49 @@ def execute_cycle(
                     f"featurizer_type is required for {learner.get_name()}"
                 )
 
-            logger.info(f"Extracting features for {len(prediction_pool)} unlabeled compounds ({featurizer_type} fingerprints)")
             prediction_features = extract_features(
                 prediction_smiles,
                 featurizer_type,
                 cache_dir=cache_dir,
                 show_progress=len(prediction_pool) > 10000
             )
+            logger.info(f"Extracted {featurizer_type} features: {len(prediction_pool)} unlabeled compounds")
             logger.debug(f"Extracting {featurizer_type} features for prediction pool")
-            logger.info(f"Features extracted: {len(prediction_pool)} compounds processed")
 
-            logger.info(f"Generating predictions for {len(prediction_pool)} unlabeled compounds")
             predictions, uncertainties = learner.predict(prediction_features)
+            logger.info(f"Generated predictions: {len(predictions)} compounds")
             logger.debug(f"Predicting on {len(prediction_pool)} unlabeled compounds (mode={mode})")
-
-        logger.info(f"Predictions complete: {len(predictions)} predictions generated")
-        logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
+            logger.debug(f"Prediction statistics: min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
 
+    prediction_time = time.time() - prediction_start_time
+
     if len(predictions) == 0:
         raise RuntimeError(f"Prediction returned 0 results in cycle {cycle}")
 
-    logger.debug(f"Generated {len(predictions)} predictions")
+    logger.debug(f"Generated {len(predictions)} predictions ({prediction_time:.2f}s)")
 
-    valid_compound_ids = prediction_pool['ID'].tolist()
+    valid_compound_ids = prediction_pool['ID'].to_list()
     compounds_df = add_predictions(
         compounds_df, cycle, valid_compound_ids, predictions, uncertainties
     )
 
-    unlabeled_mask = compounds_df['status'] == 'unlabeled'
     pred_col = f'prediction_cycle_{cycle}'
-    has_pred_mask = compounds_df[pred_col].notna()
-    selection_pool = compounds_df.loc[
-        unlabeled_mask & has_pred_mask,
-        ['ID', 'SMILES', pred_col]
-    ].copy()
-    selection_pool = selection_pool.rename(columns={pred_col: 'prediction'})
+    selection_pool = compounds_df.filter(
+        (pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null())
+    ).select(['ID', 'SMILES', pred_col]).clone()
+    selection_pool = selection_pool.rename({pred_col: 'prediction'})
 
     if uncertainties is not None:
         unc_col = f'uncertainty_cycle_{cycle}'
-        selection_pool['uncertainty'] = compounds_df.loc[
-            unlabeled_mask & has_pred_mask, unc_col
-        ].values
+        unc_values = compounds_df.filter(
+            (pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null())
+        )[unc_col].to_numpy()
+        selection_pool = selection_pool.with_columns(
+            pl.lit(unc_values).alias('uncertainty')
+        )
 
     if len(selection_pool) == 0:
         raise RuntimeError(f"No unlabeled compounds with predictions available for selection in cycle {cycle}")
@@ -315,11 +321,11 @@ def execute_cycle(
 
         uncertainty_values = None
         if 'uncertainty' in selection_pool.columns:
-            uncertainty_values = selection_pool['uncertainty'].values
+            uncertainty_values = selection_pool['uncertainty'].to_numpy()
 
         selection_pool, pruning_stats = _apply_pruning(
             selection_pool,
-            selection_pool['prediction'].values,
+            selection_pool['prediction'].to_numpy(),
             uncertainty_values,
             config.pruning_strategy,
             config.pruning_params or {},
@@ -357,7 +363,7 @@ def execute_cycle(
     # Step 10: Prepare acquisition params with current_best from labeled data
     acquisition_params = (config.acquisition_params or {}).copy()
     if 'current_best' not in acquisition_params:
-        labeled_values = compounds_df[compounds_df['status'] == 'labeled'][target_col].values
+        labeled_values = compounds_df.filter(pl.col('status') == 'labeled')[target_col].to_numpy()
         if len(labeled_values) > 0:
             acquisition_params['current_best'] = (
                 float(labeled_values.max()) if score_direction == 'higher'
@@ -370,6 +376,7 @@ def execute_cycle(
             )
 
     # Step 11: Select Compounds Using Acquisition Strategy
+    acquisition_start_time = time.time()
     if config.pruning_strategy and pruning_stats['pruned_count'] > 0:
         logger.info(f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} remaining candidates")
     else:
@@ -383,7 +390,8 @@ def execute_cycle(
         acquisition_params
     )
 
-    selected_ids = selected_df['ID'].tolist()
+    selected_ids = selected_df['ID'].to_list()
+    acquisition_time = time.time() - acquisition_start_time
 
     if len(selected_ids) == 0:
         raise RuntimeError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
@@ -394,9 +402,15 @@ def execute_cycle(
     logger.debug(f"{config.strategy.upper()} acquisition selected {len(selected_ids)} compounds")
 
     # Step 12: Measure Selected Compounds
-    selected_compounds = compounds_df[
-        compounds_df['ID'].isin(selected_ids)
-    ][['ID', 'SMILES']].copy()
+    oracle_start_time = time.time()
+    # Create temporary mapping to preserve selected_ids order
+    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+
+    selected_compounds = compounds_df.filter(
+        pl.col('ID').is_in(selected_ids)
+    ).select(['ID', 'SMILES']).with_columns(
+        pl.col('ID').map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64).alias('_order')
+    ).sort('_order').drop('_order')
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
@@ -404,22 +418,29 @@ def execute_cycle(
         logger.error(f"Oracle measurement failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Oracle measurement failed in cycle {cycle}: {e}")
 
-    if not all(sid in measurements['ID'].values for sid in selected_ids):
+    oracle_time = time.time() - oracle_start_time
+
+    measurement_ids = measurements['ID'].to_list()
+    if not all(sid in measurement_ids for sid in selected_ids):
         raise RuntimeError(f"Oracle did not return measurements for all selected compounds in cycle {cycle}")
 
     logger.debug(f"Measured {len(measurements)} compounds")
 
     # Step 13: Update Master DataFrame with Measurements
+    # Create Polars Series with target values indexed by ID
+    target_series = measurements.select([target_col]).to_series()
+
     compounds_df = update_status(
         compounds_df,
         selected_ids,
         'labeled',
         cycle,
         target_col,
-        measurements.set_index('ID')[target_col]
+        target_series
     )
 
     # Step 14: Calculate Cycle Metrics
+    evaluation_start_time = time.time()
     metrics = _calculate_cycle_metrics(
         compounds_df,
         cycle,
@@ -437,20 +458,22 @@ def execute_cycle(
         pred_col = f'prediction_cycle_{cycle}'
 
         if pred_col in compounds_df.columns:
-            labeled_mask = compounds_df['status'] == 'labeled'
-            has_pred_mask = compounds_df[pred_col].notna()
-            labeled_with_pred_mask = labeled_mask & has_pred_mask
+            labeled_with_pred = compounds_df.filter(
+                (pl.col('status') == 'labeled') & (pl.col(pred_col).is_not_null())
+            )
 
-            if labeled_with_pred_mask.sum() > 0:
-                labeled_for_eval = compounds_df[labeled_with_pred_mask][['ID', 'SMILES', target_col, pred_col]].copy()
+            if len(labeled_with_pred) > 0:
+                labeled_for_eval = labeled_with_pred.select(['ID', 'SMILES', target_col, pred_col]).clone()
 
-                eval_predictions = labeled_for_eval[pred_col].values
-                eval_ground_truth = labeled_for_eval[target_col].values
+                eval_predictions = labeled_for_eval[pred_col].to_numpy()
+                eval_ground_truth = labeled_for_eval[target_col].to_numpy()
 
                 valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
 
                 if np.sum(valid_mask) > 0:
-                    selected_for_eval = compounds_df[compounds_df['ID'].isin(selected_ids)][['ID', 'SMILES', target_col]].copy()
+                    selected_for_eval = compounds_df.filter(
+                        pl.col('ID').is_in(selected_ids)
+                    ).select(['ID', 'SMILES', target_col]).clone()
 
                     pool_predictions_for_eval = None
                     pool_ids_for_eval = None
@@ -458,7 +481,7 @@ def execute_cycle(
 
                     if mode == 'benchmark' and original_pool is not None:
                         pool_predictions_for_eval = predictions
-                        pool_ids_for_eval = prediction_pool['ID'].values
+                        pool_ids_for_eval = prediction_pool['ID'].to_numpy()
                         original_pool_for_eval = original_pool
 
                     eval_metrics = evaluate_cycle(
@@ -478,13 +501,26 @@ def execute_cycle(
                         disable_molecular_similarity=True,
                         score_direction=score_direction,
                         cumulative_selected_ids=cumulative_selected_ids,
-                        cumulative_labeled_count=int((compounds_df['status'] == 'labeled').sum())
+                        cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height)
                     )
 
                     metrics.update(eval_metrics)
                     logger.debug(f"Enhanced metrics with evaluation (Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%)")
     except Exception as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
+
+    evaluation_time = time.time() - evaluation_start_time
+
+    # Calculate total cycle time
+    total_time = time.time() - cycle_start_time
+
+    # Add timing metrics
+    metrics['training_time'] = training_time
+    metrics['prediction_time'] = prediction_time
+    metrics['acquisition_time'] = acquisition_time
+    metrics['oracle_time'] = oracle_time
+    metrics['evaluation_time'] = evaluation_time
+    metrics['total_time'] = total_time
 
     # Step 15: Display Rich Metrics Table
     try:
@@ -509,8 +545,8 @@ def execute_cycle(
         logger.debug(f"Failed to display metrics table: {e}")
 
     # Step 16: Return Results
-    total_labeled = len(compounds_df[compounds_df['status'] == 'labeled'])
-    total_unlabeled = len(compounds_df[compounds_df['status'] == 'unlabeled'])
+    total_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
+    total_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
     logger.info(f"Cycle {cycle} complete: {total_labeled} labeled, {total_unlabeled} unlabeled remaining")
 
     logger.debug(f"Oracle measured {len(selected_ids)} compounds for property: {target_col}")
@@ -519,7 +555,7 @@ def execute_cycle(
 
 
 def _calculate_cycle_metrics(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     cycle: int,
     strategy: str,
     predictions: np.ndarray,
@@ -564,10 +600,10 @@ def _calculate_cycle_metrics(
     metrics['selected_count'] = len(selected_ids)
 
     # Pool statistics
-    metrics['remaining_unlabeled'] = int((compounds_df['status'] == 'unlabeled').sum())
-    metrics['cumulative_labeled'] = int((compounds_df['status'] == 'labeled').sum())
-    metrics['cumulative_pruned'] = int((compounds_df['status'] == 'pruned').sum())
-    metrics['pool_size'] = int((compounds_df['status'] == 'unlabeled').sum())
+    metrics['remaining_unlabeled'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
+    metrics['cumulative_labeled'] = int(compounds_df.filter(pl.col('status') == 'labeled').height)
+    metrics['cumulative_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
+    metrics['pool_size'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
 
     # Pruning statistics
     metrics['pruned_count'] = len(pruned_ids)
@@ -601,9 +637,9 @@ def _calculate_cycle_metrics(
         metrics['has_uncertainty'] = False
 
     # Measured value statistics (for selected compounds this cycle, with NaN safeguards)
-    measured_values = compounds_df[
-        compounds_df['ID'].isin(selected_ids)
-    ][target_col].values
+    measured_values = compounds_df.filter(
+        pl.col('ID').is_in(selected_ids)
+    )[target_col].to_numpy()
 
     if len(measured_values) > 0:
         metrics['measured_mean'] = float(np.nanmean(measured_values)) if not np.all(np.isnan(measured_values)) else None
@@ -624,9 +660,9 @@ def _calculate_cycle_metrics(
         metrics['measured_best'] = None
 
     # Best so far (across all labeled compounds, with NaN safeguards)
-    all_labeled_values = compounds_df[
-        compounds_df['status'] == 'labeled'
-    ][target_col].values
+    all_labeled_values = compounds_df.filter(
+        pl.col('status') == 'labeled'
+    )[target_col].to_numpy()
 
     if len(all_labeled_values) > 0 and not np.all(np.isnan(all_labeled_values)):
         metrics['best_so_far'] = float(
@@ -639,13 +675,13 @@ def _calculate_cycle_metrics(
 
 
 def _apply_pruning(
-    pool: pd.DataFrame,
+    pool: pl.DataFrame,
     predictions: np.ndarray,
     uncertainties: Optional[np.ndarray],
     strategy: str,
     params: Dict[str, Any],
     score_direction: str
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """
     Apply pruning strategy to reduce selection pool.
 
@@ -706,12 +742,12 @@ def _apply_pruning(
 
 
 def _select_compounds(
-    pool: pd.DataFrame,
+    pool: pl.DataFrame,
     strategy: str,
     batch_size: int,
     score_direction: str,
     acquisition_params: Dict[str, Any]
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.
 
@@ -780,7 +816,7 @@ def _select_compounds(
             f"Acquisition strategy '{strategy}' selected {len(selected_df)} compounds, "
             f"expected {batch_size}. Truncating to batch_size."
         )
-        selected_df = selected_df.iloc[:batch_size]
+        selected_df = selected_df.head(batch_size)
 
     logger.debug(f"Selected {len(selected_df)} compounds using '{strategy}' acquisition")
 

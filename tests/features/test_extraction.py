@@ -108,7 +108,7 @@ class TestExtractFeatures:
     def test_extract_features_creates_cache_files(self, small_real_compounds, tmp_path):
         """Test that extract_features creates HDF5 cache files."""
         cache_dir = tmp_path / "cache"
-        smiles_list = small_real_compounds['SMILES'].tolist()
+        smiles_list = small_real_compounds['SMILES'].to_list()
 
         features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
 

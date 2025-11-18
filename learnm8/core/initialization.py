@@ -5,6 +5,7 @@ followed by a separate initialization phase (cycle 0) that selects the
 initial batch before active learning cycles begin.
 """
 
+import polars as pl
 import pandas as pd
 import numpy as np
 import logging
@@ -18,16 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 def initialize_master_dataframe_empty(
-    valid_compounds: pd.DataFrame,
+    valid_compounds: 'pl.DataFrame | pd.DataFrame',
     target_col: str
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     """Create master DataFrame with all compounds unlabeled.
 
     All compounds start unlabeled. The first cycle (cycle 0) will select
     and measure the initial batch as part of normal cycle execution.
 
     Args:
-        valid_compounds: DataFrame with 'ID' and 'SMILES' columns (already validated)
+        valid_compounds: Polars or Pandas DataFrame with 'ID' and 'SMILES' columns (already validated)
         target_col: Name of target column for measurements
 
     Returns:
@@ -43,22 +44,27 @@ def initialize_master_dataframe_empty(
         ... )
         >>> # All compounds unlabeled, cycle 0 will select initial batch
     """
+    # Convert pandas DataFrame to Polars for backward compatibility
+    if isinstance(valid_compounds, pd.DataFrame):
+        valid_compounds = pl.from_pandas(valid_compounds)
+
     if 'ID' not in valid_compounds.columns or 'SMILES' not in valid_compounds.columns:
         raise ValueError("valid_compounds must contain 'ID' and 'SMILES' columns")
 
-    master_df = valid_compounds[['ID', 'SMILES']].copy()
+    master_df = valid_compounds.select(['ID', 'SMILES']).clone()
 
     # All compounds start unlabeled
-    master_df['status'] = pd.Categorical(
-        [STATUS_UNLABELED] * len(master_df),
-        categories=VALID_STATUSES
-    )
+    master_df = master_df.with_columns([
+        pl.lit(STATUS_UNLABELED).cast(pl.Enum(VALID_STATUSES)).alias('status')
+    ])
 
     # Initialize empty tracking columns
-    master_df['labeled_cycle'] = pd.Series(dtype='Int64')
-    master_df['selected_cycle'] = pd.Series(dtype='Int64')
-    master_df['pruned_cycle'] = pd.Series(dtype='Int64')
-    master_df[target_col] = pd.Series(dtype='float64')
+    master_df = master_df.with_columns([
+        pl.lit(None).cast(pl.Int64).alias('labeled_cycle'),
+        pl.lit(None).cast(pl.Int64).alias('selected_cycle'),
+        pl.lit(None).cast(pl.Int64).alias('pruned_cycle'),
+        pl.lit(None).cast(pl.Float64).alias(target_col)
+    ])
 
     logger.info(
         f"Initialized master DataFrame: {len(master_df)} compounds (all unlabeled)"
@@ -68,13 +74,13 @@ def initialize_master_dataframe_empty(
 
 
 def calculate_initialization_metrics(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     selected_ids: List[str],
     target_col: str,
     strategy: str,
     score_direction: str,
     mode: str,
-    original_pool: Optional[pd.DataFrame] = None,
+    original_pool: Optional[pl.DataFrame] = None,
     cumulative_selected_ids: Optional[Set[str]] = None
 ) -> Dict[str, Any]:
     """Calculate metrics for initialization phase (cycle 0).
@@ -130,9 +136,9 @@ def calculate_initialization_metrics(
     metrics['has_uncertainty'] = False
 
     # Measured value statistics for selected compounds
-    measured_values = compounds_df[
-        compounds_df['ID'].isin(selected_ids)
-    ][target_col].values
+    measured_values = compounds_df.filter(
+        pl.col('ID').is_in(selected_ids)
+    )[target_col].to_numpy()
 
     if len(measured_values) > 0 and not np.all(np.isnan(measured_values)):
         metrics['measured_mean'] = float(np.nanmean(measured_values))
@@ -160,8 +166,13 @@ def calculate_initialization_metrics(
 
             # For cycle 0, we have measurements but no predictions
             # Focus on discovery metrics (what was found) not ranking metrics
-            labeled_for_eval = compounds_df[compounds_df['status'] == 'labeled'][['ID', 'SMILES', target_col]].copy()
-            selected_for_eval = compounds_df[compounds_df['ID'].isin(selected_ids)][['ID', 'SMILES', target_col]].copy()
+            labeled_for_eval = compounds_df.filter(
+                pl.col('status') == 'labeled'
+            ).select(['ID', 'SMILES', target_col])
+
+            selected_for_eval = compounds_df.filter(
+                pl.col('ID').is_in(selected_ids)
+            ).select(['ID', 'SMILES', target_col])
 
             if cumulative_selected_ids is None:
                 cumulative_selected_ids = set(selected_ids)
@@ -196,7 +207,7 @@ def calculate_initialization_metrics(
 
 
 def select_initial_batch(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     oracle: Oracle,
     target_col: str,
     strategy: str,
@@ -208,8 +219,8 @@ def select_initial_batch(
     acquisition_params: Optional[Dict] = None,
     score_direction: str = 'higher',
     mode: str = 'run',
-    original_pool: Optional[pd.DataFrame] = None
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    original_pool: Optional[pl.DataFrame] = None
+) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """Select and measure initial batch before active learning cycles.
 
     This is the initialization phase (cycle 0) - no model training/prediction needed.
@@ -274,7 +285,9 @@ def select_initial_batch(
 
     logger.info(f"Initialization: selecting {batch_size} compounds using '{strategy}' strategy")
 
-    unlabeled = compounds_df[compounds_df['status'] == 'unlabeled'][['ID', 'SMILES']].copy()
+    unlabeled = compounds_df.filter(
+        pl.col('status') == 'unlabeled'
+    ).select(['ID', 'SMILES'])
 
     if len(unlabeled) == 0:
         raise RuntimeError("No unlabeled compounds available for initialization")
@@ -295,16 +308,21 @@ def select_initial_batch(
 
     selected_df = acq_func.select(unlabeled, batch_size)
 
-    selected_ids = selected_df['ID'].tolist()
+    selected_ids = selected_df['ID'].to_list()
 
     if len(selected_ids) == 0:
         raise RuntimeError("Acquisition strategy selected 0 compounds")
 
     logger.info(f"Measuring {len(selected_ids)} selected compounds...")
 
-    selected_compounds = compounds_df[
-        compounds_df['ID'].isin(selected_ids)
-    ][['ID', 'SMILES']].copy()
+    # Create temporary mapping to preserve selected_ids order
+    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+
+    selected_compounds = compounds_df.filter(
+        pl.col('ID').is_in(selected_ids)
+    ).select(['ID', 'SMILES']).with_columns(
+        pl.col('ID').map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64).alias('_order')
+    ).sort('_order').drop('_order')
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
@@ -312,8 +330,9 @@ def select_initial_batch(
         logger.error(f"Oracle measurement failed during initialization: {e}")
         raise RuntimeError(f"Initialization failed - oracle measurement error: {e}")
 
-    if not all(sid in measurements['ID'].values for sid in selected_ids):
-        missing = set(selected_ids) - set(measurements['ID'].values)
+    measurement_ids = measurements['ID'].to_list()
+    if not all(sid in measurement_ids for sid in selected_ids):
+        missing = set(selected_ids) - set(measurement_ids)
         raise RuntimeError(
             f"Oracle did not return measurements for {len(missing)} compounds"
         )
@@ -321,13 +340,16 @@ def select_initial_batch(
     logger.debug(f"Oracle measured {len(selected_ids)} compounds")
     logger.debug(f"Updating DataFrame: status=labeled, labeled_cycle=0")
 
+    # Extract target values from measurements
+    target_values = measurements.get_column(target_col)
+
     compounds_df = update_status(
         compounds_df,
         selected_ids,
         'labeled',
         cycle=0,
         target_col=target_col,
-        target_values=measurements.set_index('ID')[target_col]
+        target_values=target_values
     )
 
     logger.info(

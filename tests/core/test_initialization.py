@@ -1,5 +1,5 @@
 import pytest
-import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 
@@ -40,13 +40,13 @@ class TestInitializeMasterDataframeEmpty:
         )
 
         assert (master_df['status'] == STATUS_UNLABELED).all()
-        assert pd.isna(master_df['labeled_cycle']).all()
-        assert pd.isna(master_df['selected_cycle']).all()
-        assert pd.isna(master_df['pruned_cycle']).all()
-        assert pd.isna(master_df['Activity']).all()
+        assert master_df['labeled_cycle'].is_null().all()
+        assert master_df['selected_cycle'].is_null().all()
+        assert master_df['pruned_cycle'].is_null().all()
+        assert master_df['Activity'].is_null().all()
 
     def test_missing_required_columns_raises_error(self):
-        invalid_df = pd.DataFrame({'compound_id': ['C1', 'C2'], 'structure': ['CCO', 'CCC']})
+        invalid_df = pl.DataFrame({'compound_id': ['C1', 'C2'], 'structure': ['CCO', 'CCC']})
 
         with pytest.raises(ValueError, match="must contain 'ID' and 'SMILES' columns"):
             initialize_master_dataframe_empty(
@@ -60,11 +60,11 @@ class TestInitializeMasterDataframeEmpty:
             target_col='Activity'
         )
 
-        assert list(master_df['ID']) == list(sample_compounds['ID'])
-        assert list(master_df['SMILES']) == list(sample_compounds['SMILES'])
+        assert master_df['ID'].to_list() == sample_compounds['ID'].to_list()
+        assert master_df['SMILES'].to_list() == sample_compounds['SMILES'].to_list()
 
     def test_initialize_empty_compound_pool(self):
-        empty_pool = pd.DataFrame({'ID': [], 'SMILES': []})
+        empty_pool = pl.DataFrame({'ID': [], 'SMILES': []}, schema={'ID': pl.String, 'SMILES': pl.String})
 
         master_df = initialize_master_dataframe_empty(
             valid_compounds=empty_pool,
@@ -75,7 +75,7 @@ class TestInitializeMasterDataframeEmpty:
         assert all(col in master_df.columns for col in ['ID', 'SMILES', 'status', 'Activity'])
 
     def test_duplicate_compound_ids(self):
-        duplicate_pool = pd.DataFrame({
+        duplicate_pool = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_001'],
             'SMILES': ['CCO', 'CCC', 'CCCC']
         })
@@ -86,7 +86,7 @@ class TestInitializeMasterDataframeEmpty:
         )
 
         assert len(master_df) == 3
-        assert master_df['ID'].tolist() == ['COMP_001', 'COMP_002', 'COMP_001']
+        assert master_df['ID'].to_list() == ['COMP_001', 'COMP_002', 'COMP_001']
 
 
 class TestSelectInitialBatch:
@@ -111,16 +111,16 @@ class TestSelectInitialBatch:
         )
 
         expected_batch = int(np.ceil(100 * 0.1))
-        labeled = updated_df[updated_df['status'] == STATUS_LABELED]
+        labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
         assert len(labeled) == expected_batch
 
         assert (labeled['labeled_cycle'] == 0).all()
 
         assert (labeled['selected_cycle'] == 0).all()
 
-        assert labeled['Activity'].notna().all()
+        assert (~labeled['Activity'].is_null()).all()
 
-        unlabeled = updated_df[updated_df['status'] == STATUS_UNLABELED]
+        unlabeled = updated_df.filter(pl.col('status') == STATUS_UNLABELED)
         assert len(unlabeled) == 90
 
         # Verify metrics structure
@@ -155,7 +155,7 @@ class TestSelectInitialBatch:
                 random_state=42
             )
 
-            labeled = updated_df[updated_df['status'] == STATUS_LABELED]
+            labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
             assert len(labeled) == expected, f"Fraction {fraction} should select {expected} compounds"
 
     def test_oracle_measurement_integration(self, sample_compounds, tmp_path):
@@ -163,10 +163,11 @@ class TestSelectInitialBatch:
         from learnm8.core.initialization import select_initial_batch
         from learnm8.oracles import CSVOracle
 
-        oracle_df = sample_compounds.copy()
-        oracle_df['Activity'] = np.random.uniform(0, 1, len(oracle_df))
+        oracle_df = sample_compounds.clone().with_columns(
+            pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
-        oracle_df.to_csv(oracle_path, index=False)
+        oracle_df.write_csv(oracle_path)
         oracle = CSVOracle(str(oracle_path))
 
         master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
@@ -183,11 +184,11 @@ class TestSelectInitialBatch:
             random_state=42
         )
 
-        labeled = updated_df[updated_df['status'] == STATUS_LABELED]
+        labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
 
-        for _, row in labeled.iterrows():
+        for row in labeled.iter_rows(named=True):
             compound_id = row['ID']
-            expected_activity = oracle_df[oracle_df['ID'] == compound_id]['Activity'].values[0]
+            expected_activity = oracle_df.filter(pl.col('ID') == compound_id).get_column('Activity')[0]
             assert np.isclose(row['Activity'], expected_activity)
 
     def test_unsupported_strategy_fallback(self, sample_compounds, mock_oracle, tmp_path):
@@ -210,15 +211,22 @@ class TestSelectInitialBatch:
                 random_state=42
             )
 
-        labeled = updated_df[updated_df['status'] == STATUS_LABELED]
+        labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
         assert len(labeled) == 10
 
     def test_empty_pool_raises_error(self, mock_oracle, tmp_path):
         """Test that empty compound pool raises error."""
         from learnm8.core.initialization import select_initial_batch
 
-        empty_df = pd.DataFrame(columns=['ID', 'SMILES', 'status', 'labeled_cycle', 'Activity'])
-        empty_df['status'] = pd.Categorical(empty_df['status'], categories=['unlabeled', 'labeled', 'pruned'])
+        empty_df = pl.DataFrame(
+            schema={
+                'ID': pl.Utf8,
+                'SMILES': pl.Utf8,
+                'status': pl.Categorical,
+                'labeled_cycle': pl.Int64,
+                'Activity': pl.Float64
+            }
+        )
 
         with pytest.raises(ValueError, match="Calculated batch size is 0"):
             select_initial_batch(

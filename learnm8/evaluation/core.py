@@ -6,7 +6,7 @@ metrics based on mode (benchmark vs run) and data availability.
 
 import logging
 from typing import Dict, Any, Optional
-import pandas as pd
+import polars as pl
 import numpy as np
 
 
@@ -40,15 +40,15 @@ def evaluate_cycle(
 	cycle: int,
 	predictions: np.ndarray,
 	ground_truth: np.ndarray,
-	labeled_data: pd.DataFrame,
-	selected_compounds: pd.DataFrame,
+	labeled_data: pl.DataFrame,
+	selected_compounds: pl.DataFrame,
 	target_col: str,
 	oracle_type: str = 'auto',
-	ground_truth_data: Optional[pd.DataFrame] = None,
+	ground_truth_data: Optional[pl.DataFrame] = None,
 	pool_predictions: Optional[np.ndarray] = None,
 	pool_ids: Optional[np.ndarray] = None,
 	uncertainties: Optional[np.ndarray] = None,
-	previously_selected: Optional[pd.DataFrame] = None,
+	previously_selected: Optional[pl.DataFrame] = None,
 	advanced_metrics: bool = False,
 	disable_molecular_similarity: bool = False,
 	score_direction: str = 'higher',
@@ -102,8 +102,8 @@ def evaluate_cycle(
 	
 	# Selection quality (scores of selected compounds this cycle)
 	if target_col in selected_compounds.columns and len(selected_compounds) > 0:
-		scores = selected_compounds[target_col].values
-		if len(scores) > 0 and not all(pd.isna(scores)):
+		scores = selected_compounds.get_column(target_col).to_numpy()
+		if len(scores) > 0 and not all(np.isnan(scores)):
 			metrics['avg_score_selected'] = calculate_average_score(scores)
 		else:
 			metrics['avg_score_selected'] = None
@@ -113,7 +113,7 @@ def evaluate_cycle(
 	# Ground truth average score (if available)
 	if ground_truth_data is not None and target_col in ground_truth_data.columns:
 		try:
-			gt_scores = ground_truth_data[target_col].values
+			gt_scores = ground_truth_data.get_column(target_col).to_numpy()
 			metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
 		except Exception as e:
 			logger.warning(f"Error calculating ground truth average score: {e}")
@@ -236,7 +236,7 @@ def evaluate_cycle(
 			if pool_predictions is not None and pool_ids is not None and cumulative_selected_ids is not None:
 				# Create unlabeled predictions DataFrame (EXCLUDE labeled)
 				unlabeled_mask = ~np.isin(pool_ids, list(cumulative_selected_ids))
-				unlabeled_predictions_df = pd.DataFrame({
+				unlabeled_predictions_df = pl.DataFrame({
 					'ID': pool_ids[unlabeled_mask],
 					'prediction': pool_predictions[unlabeled_mask]
 				})
@@ -542,9 +542,9 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 	if not all_cycle_metrics:
 		logger.warning("No metrics to export")
 		return
-	
+
 	try:
-		metrics_df = pd.DataFrame(all_cycle_metrics)
+		metrics_df = pl.DataFrame(all_cycle_metrics)
 		
 		# Add metadata as comments at the top
 		with open(output_path, 'w') as f:
@@ -573,21 +573,24 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 		unlabeled_ranking_cols = [col for col in metrics_df.columns if 'unlabeled_' in col]
 		ground_truth_cols = [col for col in metrics_df.columns if 'ground_truth_ef' in col]
 		other_cols = [col for col in metrics_df.columns if col not in core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols]
-		
+
 		# Reorder columns for logical grouping
 		ordered_cols = core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols + other_cols
-		metrics_df = metrics_df[[col for col in ordered_cols if col in metrics_df.columns]]
-		
+		metrics_df = metrics_df.select([col for col in ordered_cols if col in metrics_df.columns])
+
 		# Append the DataFrame (without header since we added metadata)
-		metrics_df.to_csv(output_path, mode='a', index=False)
+		# Note: Polars write_csv doesn't support append mode, so we'll use manual approach
+		csv_content = metrics_df.write_csv(include_header=True)
+		with open(output_path, 'a') as f:
+			f.write(csv_content)
 		
 		logger.info(f"Exported {len(all_cycle_metrics)} cycles of enhanced metrics to {output_path}")
 	except Exception as e:
 		logger.error(f"Error exporting enhanced metrics to CSV: {e}")
 		# Fallback to basic export
 		try:
-			metrics_df = pd.DataFrame(all_cycle_metrics)
-			metrics_df.to_csv(output_path, index=False)
+			metrics_df = pl.DataFrame(all_cycle_metrics)
+			metrics_df.write_csv(output_path)
 			logger.info(f"Exported {len(all_cycle_metrics)} cycles of basic metrics to {output_path}")
 		except Exception as fallback_e:
 			logger.error(f"Fallback CSV export also failed: {fallback_e}")

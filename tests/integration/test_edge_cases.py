@@ -5,7 +5,7 @@ Covers boundary conditions and unusual inputs for all components.
 """
 
 import pytest
-import pandas as pd
+import polars as pl
 import numpy as np
 from learnm8.features import extract_features
 from learnm8.acquisition.basic import GreedyAcquisition, RandomAcquisition
@@ -15,12 +15,12 @@ from learnm8.evaluation.core import evaluate_cycle
 class TestFeatureExtractionEdgeCases:
     """Edge cases for feature extraction functionality."""
     
-    def test_single_compound_dataset(self, edge_case_compounds, tmp_path):
+    def test_single_compound_dataset(self, valid_edge_case_compounds, tmp_path):
         """Test feature extraction with single compound."""
-        single_compound = edge_case_compounds.head(1)
+        single_compound = valid_edge_case_compounds.head(1)
 
         features = extract_features(
-            single_compound['SMILES'].tolist(),
+            single_compound['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
@@ -47,19 +47,24 @@ class TestAcquisitionEdgeCases:
     
     def test_acquisition_with_single_compound(self, small_real_compounds):
         """Test acquisition functions with single compound."""
-        single_compound = small_real_compounds.head(1).copy()
-        single_compound['prediction'] = [0.5]
+        single_compound = small_real_compounds.head(1).clone()
+        single_compound = single_compound.with_columns(
+            pl.Series('prediction', [0.5])
+        )
         
         acq = GreedyAcquisition()
         selected = acq.select(single_compound, n_select=1)
         
         assert len(selected) == 1
-        assert selected.iloc[0]['ID'] == single_compound.iloc[0]['ID']
+        assert selected[0, 'ID'] == single_compound[0, 'ID']
     
     def test_acquisition_with_identical_predictions(self, small_real_compounds):
         """Test acquisition with identical prediction values."""
-        compounds = small_real_compounds.head(10).copy()
-        compounds['prediction'] = 0.5  # All identical
+        compounds = small_real_compounds.head(10).clone()
+        # All identical predictions
+        compounds = compounds.with_columns(
+            pl.lit(0.5).alias('prediction')
+        )
         
         acq = GreedyAcquisition()
         selected = acq.select(compounds, n_select=3)
@@ -69,8 +74,10 @@ class TestAcquisitionEdgeCases:
     
     def test_acquisition_with_nan_predictions(self, small_real_compounds):
         """Test acquisition function handling of NaN predictions."""
-        compounds = small_real_compounds.head(10).copy()
-        compounds['prediction'] = [np.nan if i < 3 else 0.5 for i in range(len(compounds))]
+        compounds = small_real_compounds.head(10).clone()
+        compounds = compounds.with_columns(
+            pl.Series('prediction', [np.nan if i < 3 else 0.5 for i in range(len(compounds))])
+        )
         
         acq = GreedyAcquisition()
         
@@ -80,8 +87,10 @@ class TestAcquisitionEdgeCases:
     
     def test_random_acquisition_reproducibility(self, small_real_compounds):
         """Test random acquisition reproducibility with seed."""
-        compounds = small_real_compounds.head(20).copy()
-        compounds['prediction'] = np.random.random(len(compounds))
+        compounds = small_real_compounds.head(20).clone()
+        compounds = compounds.with_columns(
+            pl.Series('prediction', np.random.random(len(compounds)))
+        )
         
         acq1 = RandomAcquisition(random_state=42)
         acq2 = RandomAcquisition(random_state=42)
@@ -96,12 +105,12 @@ class TestAcquisitionEdgeCases:
 class TestEvaluationEdgeCases:
     """Edge cases for evaluation functionality."""
     
-    def test_evaluation_with_single_compound(self, edge_case_compounds):
+    def test_evaluation_with_single_compound(self, valid_edge_case_compounds):
         """Test evaluation with single compound."""
-        single_compound = edge_case_compounds.head(1)
+        single_compound = valid_edge_case_compounds.head(1)
         
-        predictions = single_compound['Activity'].values
-        ground_truth = single_compound['Activity'].values
+        predictions = single_compound['Activity'].to_numpy()
+        ground_truth = single_compound['Activity'].to_numpy()
         
         result = evaluate_cycle(
             cycle=0,
@@ -118,11 +127,11 @@ class TestEvaluationEdgeCases:
     
     def test_evaluation_with_empty_selection(self, small_real_compounds):
         """Test evaluation with empty selected compounds."""
-        labeled_data = small_real_compounds.copy()
-        empty_selection = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
+        labeled_data = small_real_compounds.clone()
+        empty_selection = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8, 'Activity': pl.Float64})
         
-        predictions = labeled_data['Activity'].values
-        ground_truth = labeled_data['Activity'].values
+        predictions = labeled_data['Activity'].to_numpy()
+        ground_truth = labeled_data['Activity'].to_numpy()
         
         result = evaluate_cycle(
             cycle=0,
@@ -139,12 +148,12 @@ class TestEvaluationEdgeCases:
     
     def test_evaluation_with_extreme_values(self, small_real_compounds):
         """Test evaluation with extreme prediction values."""
-        labeled_data = small_real_compounds.copy()
+        labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
         
         # Create extreme predictions
         predictions = np.array([1e10 if i % 2 == 0 else -1e10 for i in range(len(labeled_data))])
-        ground_truth = labeled_data['Activity'].values
+        ground_truth = labeled_data['Activity'].to_numpy()
         
         result = evaluate_cycle(
             cycle=0,
@@ -164,9 +173,9 @@ class TestEvaluationEdgeCases:
 class TestIntegratedEdgeCases:
     """Edge cases that span multiple components."""
     
-    def test_workflow_with_edge_case_molecules(self, edge_case_compounds, tmp_path):
+    def test_workflow_with_edge_case_molecules(self, valid_edge_case_compounds, tmp_path):
         """Test complete workflow with edge case molecular structures."""
-        compounds = edge_case_compounds.copy()
+        compounds = valid_edge_case_compounds.clone()
 
         if len(compounds) == 0:
             pytest.skip("No edge case compounds available")
@@ -174,13 +183,15 @@ class TestIntegratedEdgeCases:
         # Test feature extraction with edge cases
         try:
             features = extract_features(
-                compounds['SMILES'].tolist(),
+                compounds['SMILES'].to_list(),
                 'morgan',
                 tmp_path
             )
 
             # Test acquisition with edge case features
-            compounds['prediction'] = np.random.random(len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('prediction', np.random.random(len(compounds)))
+            )
             acq = GreedyAcquisition()
             selected = acq.select(compounds, n_select=min(3, len(compounds)))
 
@@ -191,17 +202,17 @@ class TestIntegratedEdgeCases:
             # Some edge cases may legitimately fail
             pytest.skip(f"Edge case molecules caused expected failure: {e}")
     
-    def test_workflow_with_minimal_data(self, edge_case_compounds, tmp_path):
+    def test_workflow_with_minimal_data(self, valid_edge_case_compounds, tmp_path):
         """Test workflow with minimal viable dataset."""
         # Use just 2 compounds
-        minimal_data = edge_case_compounds.head(2)
+        minimal_data = valid_edge_case_compounds.head(2)
 
         if len(minimal_data) < 2:
             pytest.skip("Insufficient compounds for minimal test")
 
         # Should handle minimal data without crashing
         features = extract_features(
-            minimal_data['SMILES'].tolist(),
+            minimal_data['SMILES'].to_list(),
             'morgan',
             tmp_path
         )
@@ -209,7 +220,9 @@ class TestIntegratedEdgeCases:
         assert features.shape[0] <= 2  # Should have at most 2 compounds
 
         # Test acquisition
-        minimal_data['prediction'] = [0.1, 0.9]
+        minimal_data = minimal_data.with_columns(
+            pl.Series('prediction', [0.1, 0.9])
+        )
         acq = GreedyAcquisition()
         selected = acq.select(minimal_data, n_select=1)
 

@@ -1,7 +1,7 @@
 """ML model performance metrics for active learning evaluation."""
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from sklearn.metrics import mean_absolute_percentage_error
 from scipy.stats import spearmanr
 
@@ -65,7 +65,7 @@ def calculate_average_score(scores: np.ndarray) -> float:
         return None
 
     # Filter out NaN values
-    valid_scores = scores[~pd.isna(scores)]
+    valid_scores = scores[~np.isnan(scores)]
     if len(valid_scores) == 0:
         return None
 

@@ -52,12 +52,14 @@ class TestChempropLearnerBasic:
     def test_predict_requires_smiles(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=2)
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
         learner.train(features=None, targets=targets, smiles=smiles)
 
         features = np.random.rand(5, 100)
@@ -76,12 +78,14 @@ class TestChempropLearnerTrainPredict:
     def test_train_predict_integration(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=5)
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -97,14 +101,16 @@ class TestChempropLearnerTrainPredict:
     def test_prediction_on_new_compounds(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=5)
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         n_train = len(compounds) // 2
-        train_smiles = compounds['SMILES'].iloc[:n_train].tolist()
-        train_targets = compounds['Activity'].iloc[:n_train].values
-        test_smiles = compounds['SMILES'].iloc[n_train:].tolist()
+        train_smiles = compounds['SMILES'][:n_train].to_list()
+        train_targets = compounds['Activity'][:n_train].to_numpy()
+        test_smiles = compounds['SMILES'][n_train:].to_list()
 
         learner.train(features=None, targets=train_targets, smiles=train_smiles)
         predictions, uncertainties = learner.predict(features=None, smiles=test_smiles)
@@ -125,12 +131,14 @@ class TestChempropLearnerModelParameters:
             max_epochs=3
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features=None, targets=targets, smiles=smiles)
         predictions, _ = learner.predict(features=None, smiles=smiles)
@@ -145,12 +153,14 @@ class TestChempropLearnerModelParameters:
             early_stopping=False
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         learner.train(features=None, targets=targets, smiles=smiles)
         predictions, _ = learner.predict(features=None, smiles=smiles)
@@ -164,12 +174,14 @@ class TestChempropLearnerModelParameters:
             early_stopping=False
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         learner.train(features=None, targets=targets, smiles=smiles)
         predictions, _ = learner.predict(features=None, smiles=smiles)
@@ -184,12 +196,14 @@ class TestChempropLearnerModelParameters:
                 early_stopping=False
             )
 
-            compounds = small_real_compounds.copy()
+            compounds = small_real_compounds.clone()
             if 'Activity' not in compounds.columns:
-                compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+                compounds = compounds.with_columns(
+                    pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+                )
 
-            smiles = compounds['SMILES'].tolist()[:10]
-            targets = compounds['Activity'].values[:10]
+            smiles = compounds['SMILES'].to_list()[:10]
+            targets = compounds['Activity'].to_numpy()[:10]
 
             learner.train(features=None, targets=targets, smiles=smiles)
             predictions, _ = learner.predict(features=None, smiles=smiles)
@@ -213,12 +227,14 @@ class TestChempropLearnerEarlyStopping:
             val_fraction=0.2
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -232,12 +248,14 @@ class TestChempropLearnerEarlyStopping:
             early_stopping=False
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()[:20]
-        targets = compounds['Activity'].values[:20]
+        smiles = compounds['SMILES'].to_list()[:20]
+        targets = compounds['Activity'].to_numpy()[:20]
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -251,12 +269,14 @@ class TestChempropLearnerEarlyStopping:
             val_fraction=0.2
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
         n_samples = len(smiles)
 
         learner.train(features=None, targets=targets, smiles=smiles)
@@ -272,12 +292,14 @@ class TestChempropLearnerEarlyStopping:
             val_fraction=0.15
         )
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -295,10 +317,10 @@ class TestChempropLearnerWithDescriptors:
         from learnm8.features.extraction import extract_features
 
         learner = ChempropLearner(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         features = extract_features(smiles, 'morgan', tmp_path)
 
@@ -316,10 +338,10 @@ class TestChempropLearnerWithDescriptors:
     def test_train_predict_without_descriptors_backward_compat(self, small_real_compounds):
         """Test backward compatibility - training without descriptors."""
         learner = ChempropLearner(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -337,10 +359,10 @@ class TestChempropLearnerWithDescriptors:
         from learnm8.features.extraction import extract_features
 
         learner = ChempropLearner(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
@@ -354,10 +376,10 @@ class TestChempropLearnerWithDescriptors:
         from learnm8.features.extraction import extract_features
 
         learner = ChempropLearner(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         features = extract_features(smiles, 'morgan', tmp_path)
         learner.train(features=features, targets=targets, smiles=smiles)
@@ -370,10 +392,10 @@ class TestChempropLearnerWithDescriptors:
         from learnm8.features.extraction import extract_features
 
         learner = ChempropLearner(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         train_features = extract_features(smiles, 'morgan', tmp_path)
         learner.train(features=train_features, targets=targets, smiles=smiles)
@@ -387,9 +409,9 @@ class TestChempropLearnerWithDescriptors:
         """Test compatibility with different featurizer types."""
         from learnm8.features.extraction import extract_features
 
-        compounds = small_real_compounds.copy()
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         for featurizer_type in ['morgan', 'maccs', 'ecfp6']:
             learner = ChempropLearner(max_epochs=5)
@@ -411,10 +433,10 @@ class TestChempropLearnerWithDescriptors:
             early_stopping_patience=3,
             val_fraction=0.2
         )
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:20]
-        targets = compounds['Activity'].values[:20]
+        smiles = compounds['SMILES'].to_list()[:20]
+        targets = compounds['Activity'].to_numpy()[:20]
         features = extract_features(smiles, 'morgan', tmp_path)
 
         learner.train(features=features, targets=targets, smiles=smiles)
@@ -425,3 +447,109 @@ class TestChempropLearnerWithDescriptors:
         predictions, _ = learner.predict(features=features, smiles=smiles)
         assert predictions.shape == (20,)
         assert np.all(np.isfinite(predictions))
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        learner = ChempropLearner()
+        assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        learner = ChempropLearner(enable_aggressive_gc=False)
+        assert learner.enable_aggressive_gc is False
+
+    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after training when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after training' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after prediction when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+
+        cleanup_called.clear()
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        learner.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after prediction' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        learner = ChempropLearner(
+            max_epochs=2,
+            enable_aggressive_gc=False
+        )
+
+        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        learner.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) == 0
+
+    def test_predictions_unaffected_by_gc(self, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        learner_gc_on = ChempropLearner(
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=True
+        )
+        learner_gc_on.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_on, _ = learner_gc_on.predict(features=None, smiles=smiles)
+
+        learner_gc_off = ChempropLearner(
+            max_epochs=2,
+            random_state=42,
+            enable_aggressive_gc=False
+        )
+        learner_gc_off.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_off, _ = learner_gc_off.predict(features=None, smiles=smiles)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
