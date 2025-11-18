@@ -138,7 +138,7 @@ FEATURIZERS = [
 ]
 
 
-def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
+def load_dataset(dataset_name: str) -> tuple[pl.DataFrame, str, CSVOracle]:
     """Load dataset using validation library and create oracle."""
     df, metadata = load_validation_dataset(dataset_name, clean_invalid_scores=True)
     target_col = metadata['target_column']
