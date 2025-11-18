@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 import time
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -10,15 +10,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from learnm8 import run_active_learning
 from learnm8.api import LEARNER_REGISTRY, _create_learner
 from learnm8.oracles import CSVOracle
+from learnm8.learners.torch import ChempropLearner
+from learnm8.learners.ensemble import ChempropEnsemble
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
     get_dataset_info
 )
+<<<<<<< HEAD
 from validation.lib.featurizer_visualizations import (
     generate_comprehensive_visualizations,
     create_all_cost_performance_plots
 )
+=======
+from validation.lib.featurizer_visualizations import generate_comprehensive_visualizations
+>>>>>>> origin/v2
 from validation.lib.seed_aggregation import (
     aggregate_seed_results,
     check_existing_seed_results,
@@ -34,13 +40,17 @@ DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
 ACQUISITION = 'greedy'
+<<<<<<< HEAD
+=======
+RANDOM_STATE = 42
+>>>>>>> origin/v2
 RANDOM_SEEDS = [42, 123, 456]
 OUTPUT_BASE = Path('validation/reports/learner_featurizer_matrix')
 
 
 def print_header():
     print("=" * 80)
-    print("LEARNER-FEATURIZER MATRIX VALIDATION")
+    print("LEARNER-FEATURIZER MATRIX VALIDATION (Multi-Seed)")
     print("=" * 80)
     print(f"Dataset: {DATASET_NAME}")
     print(f"Cycles: {N_CYCLES}")
@@ -51,33 +61,81 @@ def print_header():
     print()
 
 
-def get_compatible_combinations() -> List[Tuple[str, Optional[str]]]:
+def get_compatible_combinations() -> List[Tuple[Union[str, object], Optional[str], str]]:
+    """Returns (learner_spec, featurizer, display_name) tuples."""
     combinations = []
 
     available_featurizers = ['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
 
+    # Create explicit learner instances with custom parameters
+    learner_instances = {}
     for learner_name in sorted(LEARNER_REGISTRY.keys()):
         if learner_name in ['ensemble', 'gp']:
             continue
 
         try:
+<<<<<<< HEAD
             learner = _create_learner(learner_name, RANDOM_SEEDS[0])
+=======
+            if learner_name == 'chemprop':
+                learner_instances[learner_name] = ChempropLearner(
+                    random_state=RANDOM_STATE,
+                    early_stopping_patience=3
+                )
+            elif learner_name == 'chemprop_ensemble':
+                learner_instances[learner_name] = ChempropEnsemble(
+                    random_state=RANDOM_STATE,
+                    early_stopping_patience=3
+                )
+            else:
+                learner_instances[learner_name] = _create_learner(learner_name, RANDOM_STATE)
+        except Exception as e:
+            print(f"Warning: Could not create learner '{learner_name}': {e}")
+            continue
+>>>>>>> origin/v2
 
-            if learner.requires_smiles():
-                combinations.append((learner_name, None))
+    # Build combinations using learner instances
+    for learner_name, learner_instance in learner_instances.items():
+        if learner_name == 'chemprop':
+            if learner_instance.requires_smiles():
+                combinations.append((learner_instance, None, 'chemprop_no_ft'))
                 for featurizer_name in available_featurizers:
-                    combinations.append((learner_name, featurizer_name))
+                    combinations.append((learner_instance, featurizer_name, 'chemprop_no_ft'))
             else:
                 for featurizer_name in available_featurizers:
-                    combinations.append((learner_name, featurizer_name))
+                    combinations.append((learner_instance, featurizer_name, 'chemprop_no_ft'))
 
-        except Exception as e:
-            print(f"Warning: Could not check learner '{learner_name}': {e}")
-            continue
+        elif learner_name == 'chemprop_ensemble':
+            if learner_instance.requires_smiles():
+                combinations.append((learner_instance, None, 'chemprop_ensemble_no_ft'))
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_instance, featurizer_name, 'chemprop_ensemble_no_ft'))
+            else:
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_instance, featurizer_name, 'chemprop_ensemble_no_ft'))
+
+        else:
+            if learner_instance.requires_smiles():
+                combinations.append((learner_instance, None, learner_name))
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_instance, featurizer_name, learner_name))
+            else:
+                for featurizer_name in available_featurizers:
+                    combinations.append((learner_instance, featurizer_name, learner_name))
+
+    # Fine-tuning versions with special markers for dynamic checkpoint directory creation
+    combinations.append(('chemprop_with_ft', None, 'chemprop_ft'))
+    for featurizer_name in available_featurizers:
+        combinations.append(('chemprop_with_ft', featurizer_name, 'chemprop_ft'))
+
+    combinations.append(('chemprop_ensemble_with_ft', None, 'chemprop_ensemble_ft'))
+    for featurizer_name in available_featurizers:
+        combinations.append(('chemprop_ensemble_with_ft', featurizer_name, 'chemprop_ensemble_ft'))
 
     return combinations
 
 
+<<<<<<< HEAD
 def check_existing_results(learner: str, featurizer: Optional[str], seed: int) -> bool:
     featurizer_str = featurizer if featurizer is not None else 'none'
     output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}' / f'seed_{seed}'
@@ -108,14 +166,31 @@ def load_existing_results(learner: str, featurizer: Optional[str], seed: int) ->
         'output_dir': output_dir,
         'elapsed_time': None
     }
+=======
+def check_missing_seeds(display_name: str, featurizer: Optional[str]) -> List[int]:
+    """Check which random seeds need to be run for this experiment.
+
+    Returns:
+        List of seed values that are missing or incomplete.
+    """
+    featurizer_str = featurizer if featurizer is not None else 'none'
+    return check_existing_seed_results(
+        display_name=display_name,
+        condition=featurizer_str,
+        output_base=OUTPUT_BASE,
+        seeds=RANDOM_SEEDS
+    )
+>>>>>>> origin/v2
 
 
 def run_single_experiment(
-    learner_name: str,
+    learner_spec: Union[str, object],
     featurizer_name: Optional[str],
+    display_name: str,
     compound_pool,
     oracle,
     target_col: str,
+<<<<<<< HEAD
     score_direction: str,
     cache_dir: Path,
     seed: int
@@ -125,9 +200,24 @@ def run_single_experiment(
 
     featurizer_str = featurizer_name if featurizer_name is not None else 'none'
     output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}' / f'seed_{seed}'
+=======
+    cache_dir: Path,
+    missing_seeds: List[int]
+) -> Dict:
+    """Run experiment for all missing random seeds and aggregate results."""
+    featurizer_str = featurizer_name if featurizer_name is not None else 'none'
+    output_dir = OUTPUT_BASE / 'data' / f'{display_name}_{featurizer_str}'
+    output_dir.mkdir(parents=True, exist_ok=True)
+>>>>>>> origin/v2
 
-    start_time = time.time()
+    seed_results = load_existing_seed_results(
+        display_name=display_name,
+        condition=featurizer_str,
+        output_base=OUTPUT_BASE,
+        seeds=RANDOM_SEEDS
+    )
 
+<<<<<<< HEAD
     try:
         results = run_active_learning(
             compound_pool=compound_pool.clone(),
@@ -143,24 +233,81 @@ def run_single_experiment(
             cache_dir=cache_dir,
             output_dir=output_dir,
             mode='benchmark'
+=======
+    print(f"  Running {len(missing_seeds)} seed(s): {missing_seeds}")
+
+    for seed in missing_seeds:
+        seed_output_dir = output_dir / f'seed_{seed}'
+        seed_output_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"    Seed {seed}...", end=' ', flush=True)
+
+        if learner_spec == 'chemprop_with_ft':
+            checkpoint_dir = seed_output_dir / '.checkpoints'
+            learner_instance = ChempropLearner(
+                random_state=seed,
+                early_stopping_patience=3,
+                enable_fine_tuning=True,
+                checkpoint_dir=checkpoint_dir
+            )
+        elif learner_spec == 'chemprop_ensemble_with_ft':
+            checkpoint_dir = seed_output_dir / '.checkpoints'
+            learner_instance = ChempropEnsemble(
+                random_state=seed,
+                early_stopping_patience=3,
+                enable_fine_tuning=True,
+                checkpoint_dir=checkpoint_dir
+            )
+        else:
+            learner_instance = learner_spec
+
+        start_time = time.time()
+
+        try:
+            results = run_active_learning(
+                compound_pool=compound_pool.copy(),
+                oracle=oracle,
+                learner=learner_instance,
+                target_col=target_col,
+                featurizer_type=featurizer_name,
+                n_cycles=N_CYCLES,
+                batch_fraction=BATCH_FRACTION,
+                strategy=ACQUISITION,
+                random_state=seed,
+                cache_dir=cache_dir,
+                output_dir=seed_output_dir,
+                mode='benchmark'
+            )
+
+            elapsed_time = time.time() - start_time
+
+            seed_results[seed] = {
+                'compounds_df': results['compounds_df'],
+                'cycle_metrics': results['cycle_metrics'],
+                'elapsed_time': elapsed_time
+            }
+
+            print(f"✓ ({elapsed_time:.1f}s)")
+
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            print(f"✗ FAILED ({elapsed_time:.1f}s)")
+            print(f"      Error: {str(e)}")
+            raise
+
+    if len(seed_results) < len(RANDOM_SEEDS):
+        raise RuntimeError(
+            f"Incomplete seed results: expected {len(RANDOM_SEEDS)}, got {len(seed_results)}"
+>>>>>>> origin/v2
         )
 
-        elapsed_time = time.time() - start_time
+    aggregated = aggregate_seed_results(seed_results)
+    save_aggregated_results(seed_results, aggregated, output_dir)
 
-        print(f"✓ ({elapsed_time:.1f}s)")
-
-        return {
-            'compounds_df': results['compounds_df'],
-            'cycle_metrics': results['cycle_metrics'],
-            'output_dir': output_dir,
-            'elapsed_time': elapsed_time
-        }
-
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        print(f"✗ FAILED ({elapsed_time:.1f}s)")
-        print(f"    Error: {str(e)}")
-        raise
+    return {
+        'seed_results': seed_results,
+        'aggregated': aggregated
+    }
 
 
 def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
@@ -197,8 +344,8 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     print()
 
     print("Compatible combinations:")
-    for learner, featurizer in combinations:
-        print(f"  - {learner:20s} + {featurizer}")
+    for learner_spec, featurizer, display_name in combinations:
+        print(f"  - {display_name:20s} + {featurizer}")
     print()
 
     all_results = {}
@@ -211,6 +358,7 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     print("=" * 80)
     print()
 
+<<<<<<< HEAD
     for idx, (learner_name, featurizer_name) in enumerate(combinations, 1):
         featurizer_display = featurizer_name if featurizer_name is not None else 'none'
         print(f"[{idx}/{len(combinations)}] {learner_name} + {featurizer_display}")
@@ -227,6 +375,51 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
                 except Exception as e:
                     print(f"  Warning: Could not load existing results for seed {seed}: {e}")
                     print(f"  Will re-run experiment...")
+=======
+    for idx, (learner_spec, featurizer_name, display_name) in enumerate(combinations, 1):
+        print(f"[{idx}/{len(combinations)}] {display_name} + {featurizer_name}")
+
+        missing_seeds = check_missing_seeds(display_name, featurizer_name)
+
+        if not missing_seeds:
+            print("  All seeds complete, loading existing results...")
+            try:
+                featurizer_str = featurizer_name if featurizer_name is not None else 'none'
+                seed_results = load_existing_seed_results(
+                    display_name=display_name,
+                    condition=featurizer_str,
+                    output_base=OUTPUT_BASE,
+                    seeds=RANDOM_SEEDS
+                )
+                aggregated = aggregate_seed_results(seed_results)
+                result_data = {
+                    'seed_results': seed_results,
+                    'aggregated': aggregated
+                }
+                all_results[(display_name, featurizer_name)] = result_data
+                skipped += 1
+            except Exception as e:
+                print(f"  Warning: Could not load existing results: {e}")
+                print("  Will re-run all seeds...")
+                missing_seeds = RANDOM_SEEDS
+            else:
+                print()
+                continue
+
+        try:
+            result_data = run_single_experiment(
+                learner_spec,
+                featurizer_name,
+                display_name,
+                compound_pool,
+                oracle,
+                target_col,
+                cache_dir,
+                missing_seeds
+            )
+            all_results[(display_name, featurizer_name)] = result_data
+            completed += 1
+>>>>>>> origin/v2
 
             if seed not in seed_results:
                 try:

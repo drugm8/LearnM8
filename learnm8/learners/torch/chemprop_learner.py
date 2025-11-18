@@ -97,7 +97,7 @@ class ChempropLearner(Learner):
 				 random_state: int = 42,
 				 accelerator: str = 'auto',
 				 early_stopping: bool = True,
-				 early_stopping_patience: int = 10,
+				 early_stopping_patience: int = 3,
 				 early_stopping_min_delta: float = 0.0,
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,

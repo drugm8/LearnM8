@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -11,12 +11,20 @@ from learnm8 import run_active_learning
 from learnm8.api import LEARNER_REGISTRY, _create_learner
 from learnm8.acquisition import ACQUISITION_REGISTRY, get_acquisition_function
 from learnm8.oracles import CSVOracle
+from learnm8.learners.torch import ChempropLearner
+from learnm8.learners.ensemble import ChempropEnsemble
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
     get_dataset_info
 )
 from validation.lib.matrix_visualizations import generate_comprehensive_visualizations
+from validation.lib.seed_aggregation import (
+    aggregate_seed_results,
+    check_existing_seed_results,
+    save_aggregated_results,
+    load_existing_seed_results
+)
 from validation.lib.seed_aggregation import (
     aggregate_seed_results,
     check_existing_seed_results,
@@ -38,23 +46,27 @@ OUTPUT_BASE = Path('validation/reports/learner_acquisition_matrix')
 
 def print_header():
     print("=" * 80)
-    print("LEARNER-ACQUISITION MATRIX VALIDATION")
+    print("LEARNER-ACQUISITION MATRIX VALIDATION (Multi-Seed)")
     print("=" * 80)
     print(f"Dataset: {DATASET_NAME}")
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION}")
     print(f"Featurizer: {FEATURIZER_TYPE}")
     print(f"Random Seeds: {RANDOM_SEEDS}")
+    print(f"Random Seeds: {RANDOM_SEEDS}")
     print("=" * 80)
     print()
 
 
-def get_compatible_combinations() -> List[Tuple[str, str]]:
+def get_compatible_combinations() -> List[Tuple[Union[str, object], str, str]]:
+    """Returns (learner_spec, acquisition, display_name) tuples."""
     combinations = []
 
     basic_acquisitions = ['greedy', 'random']
     uncertainty_acquisitions = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
 
+    # Create explicit learner instances with custom parameters
+    learner_instances = {}
     for learner_name in sorted(LEARNER_REGISTRY.keys()):
         if learner_name == 'ensemble' or learner_name == 'gp':
             continue
@@ -63,16 +75,31 @@ def get_compatible_combinations() -> List[Tuple[str, str]]:
             learner = _create_learner(learner_name, RANDOM_SEEDS[0])
             supports_uncertainty = learner.supports_uncertainty()
 
+        if learner_name == 'chemprop':
             for acquisition_name in basic_acquisitions:
-                combinations.append((learner_name, acquisition_name))
+                combinations.append((learner_instance, acquisition_name, 'chemprop_no_ft'))
+
+        elif learner_name == 'chemprop_ensemble':
+            for acquisition_name in basic_acquisitions:
+                combinations.append((learner_instance, acquisition_name, 'chemprop_ensemble_no_ft'))
+            if supports_uncertainty:
+                for acquisition_name in uncertainty_acquisitions:
+                    combinations.append((learner_instance, acquisition_name, 'chemprop_ensemble_no_ft'))
+
+        else:
+            for acquisition_name in basic_acquisitions:
+                combinations.append((learner_instance, acquisition_name, learner_name))
 
             if supports_uncertainty:
                 for acquisition_name in uncertainty_acquisitions:
-                    combinations.append((learner_name, acquisition_name))
+                    combinations.append((learner_instance, acquisition_name, learner_name))
 
-        except Exception as e:
-            print(f"Warning: Could not check learner '{learner_name}': {e}")
-            continue
+    # Fine-tuning versions with special markers for dynamic checkpoint directory creation
+    for acquisition_name in basic_acquisitions:
+        combinations.append(('chemprop_with_ft', acquisition_name, 'chemprop_ft'))
+
+    for acquisition_name in basic_acquisitions + uncertainty_acquisitions:
+        combinations.append(('chemprop_ensemble_with_ft', acquisition_name, 'chemprop_ensemble_ft'))
 
     return combinations
 
@@ -108,8 +135,9 @@ def load_existing_results(learner: str, acquisition: str, seed: int) -> Dict:
 
 
 def run_single_experiment(
-    learner_name: str,
+    learner_spec: Union[str, object],
     acquisition_name: str,
+    display_name: str,
     compound_pool,
     oracle,
     target_col: str,
@@ -121,7 +149,7 @@ def run_single_experiment(
 
     output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}' / f'seed_{seed}'
 
-    start_time = time.time()
+        start_time = time.time()
 
     try:
         results = run_active_learning(
@@ -140,22 +168,34 @@ def run_single_experiment(
             mode='benchmark'
         )
 
-        elapsed_time = time.time() - start_time
+            elapsed_time = time.time() - start_time
 
-        print(f"✓ ({elapsed_time:.1f}s)")
+            seed_results[seed] = {
+                'compounds_df': results['compounds_df'],
+                'cycle_metrics': results['cycle_metrics'],
+                'elapsed_time': elapsed_time
+            }
 
-        return {
-            'compounds_df': results['compounds_df'],
-            'cycle_metrics': results['cycle_metrics'],
-            'output_dir': output_dir,
-            'elapsed_time': elapsed_time
-        }
+            print(f"✓ ({elapsed_time:.1f}s)")
 
-    except Exception as e:
-        elapsed_time = time.time() - start_time
-        print(f"✗ FAILED ({elapsed_time:.1f}s)")
-        print(f"    Error: {str(e)}")
-        raise
+        except Exception as e:
+            elapsed_time = time.time() - start_time
+            print(f"✗ FAILED ({elapsed_time:.1f}s)")
+            print(f"      Error: {str(e)}")
+            raise
+
+    if len(seed_results) < len(RANDOM_SEEDS):
+        raise RuntimeError(
+            f"Incomplete seed results: expected {len(RANDOM_SEEDS)}, got {len(seed_results)}"
+        )
+
+    aggregated = aggregate_seed_results(seed_results)
+    save_aggregated_results(seed_results, aggregated, output_dir)
+
+    return {
+        'seed_results': seed_results,
+        'aggregated': aggregated
+    }
 
 
 def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
@@ -192,8 +232,8 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
     print()
 
     print("Compatible combinations:")
-    for learner, acquisition in combinations:
-        print(f"  - {learner:20s} + {acquisition}")
+    for learner_spec, acquisition, display_name in combinations:
+        print(f"  - {display_name:20s} + {acquisition}")
     print()
 
     all_results = {}
@@ -206,8 +246,8 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
     print("=" * 80)
     print()
 
-    for idx, (learner_name, acquisition_name) in enumerate(combinations, 1):
-        print(f"[{idx}/{len(combinations)}] {learner_name} + {acquisition_name}")
+    for idx, (learner_spec, acquisition_name, display_name) in enumerate(combinations, 1):
+        print(f"[{idx}/{len(combinations)}] {display_name} + {acquisition_name}")
 
         seed_results = {}
 
