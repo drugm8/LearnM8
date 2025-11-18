@@ -166,8 +166,8 @@ def load_existing_results(
         if not cycle_metrics_path.exists():
             continue
 
-        cycle_metrics_df = pd.read_csv(cycle_metrics_path)
-        cycle_metrics = cycle_metrics_df.to_dict('records')
+        cycle_metrics_df = pl.read_csv(cycle_metrics_path)
+        cycle_metrics = cycle_metrics_df.to_dicts()
 
         seed_results[seed] = {
             'cycle_metrics': cycle_metrics,
@@ -274,7 +274,7 @@ def run_single_experiment(
 
         try:
             results = run_active_learning(
-                compound_pool=compound_pool.copy(),
+                compound_pool=compound_pool.clone(),
                 oracle=oracle,
                 learner=learner,
                 target_col=target_col,
