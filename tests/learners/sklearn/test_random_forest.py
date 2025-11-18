@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.features.extraction import extract_features
@@ -25,12 +25,12 @@ class TestRandomForestLearner:
     
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         learner.train(features, targets)
         assert learner.is_trained
@@ -70,14 +70,14 @@ class TestRandomForestLearner:
     
     def test_feature_importance(self, learner, small_real_compounds, tmp_path):
         """Test feature importance retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
         assert learner.get_feature_importance() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         importance = learner.get_feature_importance()
         assert importance is not None
         assert len(importance) > 0
@@ -85,23 +85,23 @@ class TestRandomForestLearner:
 
     def test_oob_score(self, learner, small_real_compounds, tmp_path):
         """Test out-of-bag score retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
         assert learner.get_oob_score() is None
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         oob_score = learner.get_oob_score()
         assert oob_score is not None
         assert isinstance(oob_score, float)
     
     def test_different_hyperparameters(self, tmp_path, small_real_compounds):
         """Test learner with different hyperparameters."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
         learner = RandomForestLearner(
             n_estimators=5,
@@ -110,8 +110,8 @@ class TestRandomForestLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert learner.max_depth == 3
@@ -119,26 +119,26 @@ class TestRandomForestLearner:
 
     def test_edge_case_single_compound(self, learner, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 1
         assert np.isfinite(predictions[0])
 
     def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = learner.predict(features)
 

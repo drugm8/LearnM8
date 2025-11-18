@@ -12,7 +12,7 @@ All functions return formatted strings suitable for logging at INFO level.
 
 import logging
 from typing import Dict, Any, Optional, List
-import pandas as pd
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +208,7 @@ def format_cycle_metrics_table(
 
 
 def format_experiment_summary(
-    compounds_df: pd.DataFrame,
+    compounds_df: pl.DataFrame,
     duration: float,
     total_cycles: int
 ) -> List[str]:
@@ -227,7 +227,7 @@ def format_experiment_summary(
         List of formatted strings for logging at INFO level
 
     Example:
-        >>> df = pd.DataFrame({
+        >>> df = pl.DataFrame({
         ...     'ID': range(1000),
         ...     'status': ['labeled'] * 300 + ['pruned'] * 200 + ['unlabeled'] * 500
         ... })
@@ -239,9 +239,9 @@ def format_experiment_summary(
         Final unlabeled pool: 500 compounds (50.0%)
         Duration: 1 hour 2 minutes
     """
-    total_labeled = len(compounds_df[compounds_df['status'] == 'labeled'])
-    total_pruned = len(compounds_df[compounds_df['status'] == 'pruned'])
-    total_unlabeled = len(compounds_df[compounds_df['status'] == 'unlabeled'])
+    total_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
+    total_pruned = compounds_df.filter(pl.col('status') == 'pruned').height
+    total_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
     total_compounds = len(compounds_df)
 
     lines = []

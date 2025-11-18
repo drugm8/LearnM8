@@ -2,6 +2,7 @@
 
 import pytest
 import numpy as np
+import polars as pl
 from pathlib import Path
 from learnm8.api import _create_learner, list_available_learners
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
@@ -68,10 +69,12 @@ class TestAPIWithEnsembles:
         """Test Pattern 1: String-based ensemble creation."""
         from learnm8 import run_active_learning
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
-        oracle_df.to_csv(oracle_path, index=False)
+        oracle_df.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=small_real_compounds,
@@ -95,10 +98,12 @@ class TestAPIWithEnsembles:
         from learnm8 import run_active_learning
         from learnm8.learners.ensemble import RFEnsemble
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
-        oracle_df.to_csv(oracle_path, index=False)
+        oracle_df.write_csv(oracle_path)
 
         ensemble = RFEnsemble(
             n_estimators=50,
@@ -124,10 +129,12 @@ class TestAPIWithEnsembles:
         """Test that same random_state produces reproducible results."""
         from learnm8 import run_active_learning
 
-        oracle_df = small_real_compounds.copy()
-        oracle_df['Activity'] = np.random.beta(2, 5, len(oracle_df))
+        oracle_df = small_real_compounds.clone()
+        oracle_df = oracle_df.with_columns(
+            pl.Series('Activity', np.random.beta(2, 5, len(oracle_df)))
+        )
         oracle_path = tmp_path / 'oracle.csv'
-        oracle_df.to_csv(oracle_path, index=False)
+        oracle_df.write_csv(oracle_path)
 
         results1 = run_active_learning(
             compound_pool=small_real_compounds,
@@ -158,6 +165,6 @@ class TestAPIWithEnsembles:
         df1 = results1['compounds_df']
         df2 = results2['compounds_df']
 
-        selected1 = set(df1[df1['status'] == 'labeled']['ID'])
-        selected2 = set(df2[df2['status'] == 'labeled']['ID'])
+        selected1 = set(df1.filter(pl.col('status') == 'labeled')['ID'])
+        selected2 = set(df2.filter(pl.col('status') == 'labeled')['ID'])
         assert selected1 == selected2

@@ -288,13 +288,13 @@ class EnsembleLearner(Learner):
 
         individual_predictions = {}
 
-        for learner in self.learners:
+        for i, learner in enumerate(self.learners):
             try:
                 pred, _ = learner.predict(features)
-                individual_predictions[learner.get_name()] = pred
+                individual_predictions[f"{learner.get_name()}_{i}"] = pred
             except Exception as e:
-                logger.warning(f"Failed to get predictions from {learner.get_name()}: {e}")
-                individual_predictions[learner.get_name()] = None
+                logger.warning(f"Failed to get predictions from {learner.get_name()}_{i}: {e}")
+                individual_predictions[f"{learner.get_name()}_{i}"] = None
 
         return individual_predictions
     

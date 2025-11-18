@@ -6,7 +6,7 @@ native molecular diversity selection optimized for large-scale molecular librari
 
 import logging
 import numpy as np
-import pandas as pd
+import polars as pl
 from typing import List
 
 from .base import AcquisitionFunction
@@ -82,44 +82,44 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 						"pip install git+https://github.com/mqcomplab/bitbirch.git")
 			return False
 	
-	def select(self, compounds: pd.DataFrame, n_select: int) -> pd.DataFrame:
+	def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
 		"""Select compounds using BitBIRCH clustering.
-		
+
 		Args:
 			compounds: DataFrame with 'ID', 'SMILES' columns and predictions
 			n_select: Number of compounds to select
-			
+
 		Returns:
 			DataFrame subset with selected compounds
-			
+
 		Raises:
 			ImportError: If BitBIRCH package is not available
 			ValueError: If required columns are missing or n_select is invalid
 		"""
 		# Validate input
 		self.validate_input(compounds, n_select)
-		
+
 		if not self._bitbirch_available:
 			raise ImportError("BitBIRCH package is required but not available. "
 							"Install with: pip install git+https://github.com/mqcomplab/bitbirch.git")
-		
+
 		if n_select >= len(compounds):
-			return compounds.copy()
+			return compounds.clone()
 
 		logger.info(f"Selecting {n_select} compounds using BitBIRCH clustering")
 
-		requested_ids = compounds['ID'].tolist()
+		requested_ids = compounds.get_column('ID').to_list()
 		valid_ids = [cid for cid in requested_ids if cid in self._id_to_idx]
 
 		if len(valid_ids) == 0:
 			logger.warning("No matching features for provided IDs. Returning empty selection.")
-			return compounds.iloc[0:0].copy()
+			return compounds.head(0).clone()
 
 		if len(valid_ids) < len(requested_ids):
 			missing_ids = set(requested_ids) - set(valid_ids)
 			logger.warning(f"Only {len(valid_ids)}/{len(requested_ids)} compounds have valid features. "
 						  f"Missing IDs: {list(missing_ids)[:5]}{'...' if len(missing_ids) > 5 else ''}")
-			compounds = compounds[compounds['ID'].isin(valid_ids)].copy()
+			compounds = compounds.filter(pl.col('ID').is_in(valid_ids))
 
 		if n_select > len(compounds):
 			logger.warning(
@@ -131,20 +131,24 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		fingerprints = self.features[indices]
 
 		fingerprints = self._prepare_fingerprints(fingerprints)
-		
+
 		cluster_mol_ids = self._bitbirch_clustering(fingerprints)
-		
+
 		# Store clustering results for validation/visualization
 		self.cluster_mol_ids_ = cluster_mol_ids
 		self.n_clusters_ = len(cluster_mol_ids) if cluster_mol_ids else 0
 		self.cluster_labels_ = self._convert_clusters_to_labels(cluster_mol_ids, len(compounds))
-		
+
 		# Select representatives evenly from clusters
 		selected_indices = self._select_from_bitbirch_clusters(
 			compounds, cluster_mol_ids, n_select
 		)
-		
-		return compounds.iloc[selected_indices].copy()
+
+		# Get IDs for selected indices and filter
+		all_ids = compounds.get_column('ID').to_numpy()
+		selected_ids = all_ids[selected_indices]
+
+		return compounds.filter(pl.col('ID').is_in(selected_ids.tolist()))
 	
 	def _prepare_fingerprints(self, fingerprints: np.ndarray) -> np.ndarray:
 		"""Prepare fingerprints for BitBIRCH (binary, int64 format).
@@ -213,7 +217,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		return labels
 	
 	def _select_from_bitbirch_clusters(self,
-									  compounds: pd.DataFrame,
+									  compounds: pl.DataFrame,
 									  cluster_mol_ids: List[List[int]],
 									  n_select: int) -> List[int]:
 		"""Select compounds evenly from BitBIRCH clusters.

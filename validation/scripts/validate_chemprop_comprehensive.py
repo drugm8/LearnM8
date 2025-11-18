@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import warnings
 
-import pandas as pd
+import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -137,6 +137,11 @@ FEATURIZERS = [
     'descriptors',
 ]
 
+<<<<<<< HEAD
+EARLY_STOPPING_OPTIONS = [True, False]
+
+FINE_TUNING_OPTIONS = [False, True]
+=======
 
 def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
     """Load dataset using validation library and create oracle."""
@@ -147,6 +152,7 @@ def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
     oracle = CSVOracle(str(dataset_path), id_column='ID')
 
     return df, target_col, oracle
+>>>>>>> origin/v2
 
 
 def load_existing_results(
@@ -154,10 +160,27 @@ def load_existing_results(
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
+<<<<<<< HEAD
+    early_stopping: bool,
+    fine_tuning: bool,
+=======
+>>>>>>> origin/v2
 ) -> Dict[str, Any]:
     """Load results from existing experiment directory with multi-seed support."""
     featurizer_name = featurizer if featurizer else 'none'
 
+<<<<<<< HEAD
+    cycle_metrics_df = pl.read_csv(exp_dir / 'cycle_metrics.csv')
+    final_metrics = cycle_metrics_df.row(-1, named=True)
+
+    cycle_metrics = cycle_metrics_df.to_dicts()
+    training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
+    prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+    acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
+    oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
+    evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
+    total_times = [m.get('total_time', 0) for m in cycle_metrics[1:]]
+=======
     seed_results = {}
     for seed in RANDOM_SEEDS:
         seed_dir = exp_dir / f'seed_{seed}'
@@ -189,10 +212,33 @@ def load_existing_results(
         prediction_times = [m.get('prediction_time', 0) for m in seed_data['cycle_metrics'][1:]]
         all_training_times.extend(training_times)
         all_prediction_times.extend(prediction_times)
+>>>>>>> origin/v2
 
     return {
         'config_name': config_name,
         'featurizer': featurizer_name,
+<<<<<<< HEAD
+        'early_stopping': early_stopping,
+        'fine_tuning': fine_tuning,
+        'depth': config['depth'],
+        'message_hidden_dim': config['message_hidden_dim'],
+        'top_10_recovery': final_metrics.get('top_10_discovery', 0),
+        'top_100_recovery': final_metrics.get('top_100_discovery', 0),
+        'final_discovery_rate': final_metrics.get('discovery_rate', 0),
+        'avg_training_time': np.mean(training_times) if training_times else 0,
+        'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
+        'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
+        'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
+        'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
+        'cumulative_training_time': np.sum(training_times) if training_times else 0,
+        'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
+        'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
+        'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
+        'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
+        'total_time': np.sum(total_times) if total_times else 0,
+        'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
+        'final_discovery_count': final_metrics.get('discovery_count', 0),
+=======
         'depth': config['depth'],
         'message_hidden_dim': config['message_hidden_dim'],
         'top_10_recovery': final_metrics_mean.get('top_10_discovery', 0),
@@ -206,27 +252,41 @@ def load_existing_results(
         'total_time': 0,
         'final_labeled_count': final_metrics_mean.get('cumulative_labeled', 0),
         'final_discovery_count': final_metrics_mean.get('discovery_count', 0),
+>>>>>>> origin/v2
         'success': True,
         'error': None,
     }
 
 
 def run_single_experiment(
-    compound_pool: pd.DataFrame,
+    compound_pool: pl.DataFrame,
     oracle: CSVOracle,
     target_col: str,
+    score_direction: str,
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
+<<<<<<< HEAD
+    early_stopping: bool,
+    fine_tuning: bool,
+=======
+>>>>>>> origin/v2
     n_cycles: int,
     batch_fraction: float,
     random_state: int,
     output_dir: Path,
+    cache_dir: Path,
     debug: bool = False,
 ) -> Dict[str, Any]:
     """Run experiment across all random seeds and aggregate results."""
     featurizer_name = featurizer if featurizer else 'none'
+<<<<<<< HEAD
+    early_stop_str = 'early_stop' if early_stopping else 'no_early_stop'
+    finetune_str = '_finetune' if fine_tuning else ''
+    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}{finetune_str}"
+=======
     exp_name = f"{config_name}_{featurizer_name}"
+>>>>>>> origin/v2
 
     exp_output_dir = output_dir / 'data' / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
@@ -234,15 +294,55 @@ def run_single_experiment(
     if debug:
         console.print(f"[cyan]Starting experiment: {exp_name} (seeds: {RANDOM_SEEDS})[/cyan]")
 
+<<<<<<< HEAD
+    # Setup checkpoint directory for fine-tuning
+    checkpoint_dir = None
+    if fine_tuning:
+        checkpoint_dir = output_dir / '.checkpoints' / exp_name
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    learner = ChempropLearner(
+        depth=config['depth'],
+        message_hidden_dim=config['message_hidden_dim'],
+        ffn_hidden_dim=config['ffn_hidden_dim'],
+        ffn_num_layers=config['ffn_num_layers'],
+        dropout=config['dropout'],
+        batch_norm=config['batch_norm'],
+        atom_messages=config['atom_messages'],
+        early_stopping=early_stopping,
+        early_stopping_patience=3,
+        max_epochs=50,
+        random_state=random_state,
+        enable_fine_tuning=fine_tuning,
+        checkpoint_dir=checkpoint_dir,
+    )
+=======
     seed_results = {}
     all_training_times = []
     all_prediction_times = []
     total_experiment_time = 0
+>>>>>>> origin/v2
 
     for seed in RANDOM_SEEDS:
         seed_output_dir = exp_output_dir / f'seed_{seed}'
         seed_output_dir.mkdir(parents=True, exist_ok=True)
 
+<<<<<<< HEAD
+    try:
+        results = run_active_learning(
+            compound_pool=compound_pool.clone(),
+            oracle=oracle,
+            learner=learner,
+            target_col=target_col,
+            featurizer_type=featurizer,
+            n_cycles=n_cycles,
+            batch_fraction=batch_fraction,
+            score_direction=score_direction,
+            random_state=random_state,
+            output_dir=exp_output_dir,
+            cache_dir=cache_dir,
+            mode='benchmark',
+=======
         checkpoint_dir = seed_output_dir / '.checkpoints' if config['enable_fine_tuning'] else None
 
         learner = ChempropLearner(
@@ -259,6 +359,7 @@ def run_single_experiment(
             random_state=seed,
             enable_fine_tuning=config['enable_fine_tuning'],
             checkpoint_dir=checkpoint_dir,
+>>>>>>> origin/v2
         )
 
         start_time = time.time()
@@ -277,20 +378,66 @@ def run_single_experiment(
                 mode='benchmark',
             )
 
+<<<<<<< HEAD
+        compounds_df.write_csv(exp_output_dir / 'compounds_final.csv')
+
+        metrics_df = pl.DataFrame(cycle_metrics)
+        list_cols = ['selected_ids', 'pruned_ids']
+        cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
+        if cols_to_drop:
+            metrics_df = metrics_df.drop(cols_to_drop)
+        metrics_df.write_csv(exp_output_dir / 'cycle_metrics.csv')
+
+        training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
+        prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
+        acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
+        oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
+        evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
+=======
             elapsed_time = time.time() - start_time
             total_experiment_time += elapsed_time
 
             cycle_metrics = results['cycle_metrics']
+>>>>>>> origin/v2
 
             seed_results[seed] = {
                 'cycle_metrics': cycle_metrics,
                 'elapsed_time': elapsed_time
             }
 
+<<<<<<< HEAD
+        result = {
+            'config_name': config_name,
+            'featurizer': featurizer_name,
+            'early_stopping': early_stopping,
+            'fine_tuning': fine_tuning,
+            'depth': config['depth'],
+            'message_hidden_dim': config['message_hidden_dim'],
+            'top_10_recovery': final_metrics.get('top_10_discovery', 0),
+            'top_100_recovery': final_metrics.get('top_100_discovery', 0),
+            'final_discovery_rate': final_metrics.get('discovery_rate', 0),
+            'avg_training_time': np.mean(training_times) if training_times else 0,
+            'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
+            'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
+            'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
+            'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
+            'cumulative_training_time': np.sum(training_times) if training_times else 0,
+            'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
+            'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
+            'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
+            'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
+            'total_time': total_time,
+            'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
+            'final_discovery_count': final_metrics.get('discovery_count', 0),
+            'success': True,
+            'error': None,
+        }
+=======
             training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
             prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
             all_training_times.extend(training_times)
             all_prediction_times.extend(prediction_times)
+>>>>>>> origin/v2
 
         except Exception as e:
             if debug:
@@ -303,6 +450,34 @@ def run_single_experiment(
     final_metrics_mean = aggregated['cycle_metrics_mean'][-1]
     final_metrics_std = aggregated['cycle_metrics_std'][-1]
 
+<<<<<<< HEAD
+        return {
+            'config_name': config_name,
+            'featurizer': featurizer_name,
+            'early_stopping': early_stopping,
+            'fine_tuning': fine_tuning,
+            'depth': config['depth'],
+            'message_hidden_dim': config['message_hidden_dim'],
+            'top_10_recovery': 0,
+            'top_100_recovery': 0,
+            'final_discovery_rate': 0,
+            'avg_training_time': 0,
+            'avg_prediction_time': 0,
+            'avg_acquisition_time': 0,
+            'avg_oracle_time': 0,
+            'avg_evaluation_time': 0,
+            'cumulative_training_time': 0,
+            'cumulative_prediction_time': 0,
+            'cumulative_acquisition_time': 0,
+            'cumulative_oracle_time': 0,
+            'cumulative_evaluation_time': 0,
+            'total_time': 0,
+            'final_labeled_count': 0,
+            'final_discovery_count': 0,
+            'success': False,
+            'error': str(e),
+        }
+=======
     result = {
         'config_name': config_name,
         'featurizer': featurizer_name,
@@ -328,34 +503,63 @@ def run_single_experiment(
                      f"time={total_experiment_time:.1f}s[/green]")
 
     return result
+>>>>>>> origin/v2
 
 
-def create_visualizations(df: pd.DataFrame, output_dir: Path):
-    """Create comprehensive visualization plots."""
+def create_visualizations(df: pl.DataFrame, output_dir: Path):
+    """Create comprehensive visualization plots using Polars."""
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    df_success = df[df['success'] == True].copy()
+    df_success = df.filter(pl.col('success') == True)
 
     if len(df_success) == 0:
         console.print("[yellow]Warning: No successful experiments to visualize[/yellow]")
         return
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(2, 3, figsize=(24, 12))
 
+    # Plot 1: Heatmap of Top-10 Recovery by Configuration and Featurizer
     ax = axes[0, 0]
-    performance_data = df_success.pivot_table(
+    performance_pivot = df_success.pivot(
         values='top_10_recovery',
         index='config_name',
         columns='featurizer',
-        aggfunc='mean'
+        aggregate_function='mean'
     )
+
+    # Extract config names before selecting columns
+    config_names = performance_pivot.get_column('config_name').to_list()
+
+    # Select only numeric columns (featurizers), excluding config_name
+    featurizer_cols = [col for col in performance_pivot.columns if col != 'config_name']
+    performance_data = performance_pivot.select(featurizer_cols).to_pandas()
+    performance_data.index = config_names
+
     sns.heatmap(performance_data, annot=True, fmt='.3f', cmap='RdYlGn', ax=ax, vmin=0, vmax=1)
     ax.set_title('Top-10 Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
     ax.set_xlabel('Featurizer')
     ax.set_ylabel('Model Configuration')
 
+    # Plot 2: Early Stopping Impact on Performance
     ax = axes[0, 1]
+<<<<<<< HEAD
+    early_stop_comparison = df_success.group_by(['config_name', 'early_stopping']).agg([
+        pl.col('top_10_recovery').mean().alias('top_10_recovery'),
+        pl.col('top_100_recovery').mean().alias('top_100_recovery'),
+    ]).sort(['config_name', 'early_stopping'])
+
+    config_names = early_stop_comparison['config_name'].unique().sort().to_list()
+    x_pos = np.arange(len(config_names))
+    width = 0.35
+
+    for idx, early_stop in enumerate([False, True]):
+        group = early_stop_comparison.filter(pl.col('early_stopping') == early_stop)
+        offset = width * (idx - 0.5)
+        label = 'Early Stopping' if early_stop else 'No Early Stopping'
+        values = group['top_10_recovery'].to_numpy()
+        ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+=======
     config_comparison = df_success.groupby('config_name').agg({
         'top_10_recovery': ['mean', 'std'],
         'top_100_recovery': ['mean', 'std'],
@@ -371,56 +575,125 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
            yerr=config_comparison['top_10_std'], label='Top-10', alpha=0.8, capsize=5)
     ax.bar(x_pos + width/2, config_comparison['top_100_mean'], width,
            yerr=config_comparison['top_100_std'], label='Top-100', alpha=0.8, capsize=5)
+>>>>>>> origin/v2
 
     ax.set_xlabel('Model Configuration')
     ax.set_ylabel('Recovery Rate (mean ± std)')
     ax.set_title('Configuration Performance Comparison', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
+<<<<<<< HEAD
+    ax.set_xticklabels(config_names)
+=======
     ax.set_xticklabels(config_comparison['config_name'], rotation=45, ha='right')
+>>>>>>> origin/v2
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
+    # Plot 3: Timing Comparison
     ax = axes[1, 0]
-    timing_data = df_success.groupby('config_name').agg({
-        'avg_training_time': 'mean',
-        'avg_prediction_time': 'mean',
-    }).reset_index()
+    timing_data = df_success.group_by('config_name').agg([
+        pl.col('avg_training_time').mean().alias('avg_training_time'),
+        pl.col('avg_prediction_time').mean().alias('avg_prediction_time'),
+    ]).sort('config_name')
 
     x_pos = np.arange(len(timing_data))
     width = 0.35
 
-    ax.bar(x_pos - width/2, timing_data['avg_training_time'], width, label='Training Time', alpha=0.8)
-    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'], width, label='Prediction Time', alpha=0.8)
+    ax.bar(x_pos - width/2, timing_data['avg_training_time'].to_numpy(), width, label='Training Time', alpha=0.8)
+    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'].to_numpy(), width, label='Prediction Time', alpha=0.8)
 
     ax.set_xlabel('Model Configuration')
     ax.set_ylabel('Time (seconds)')
     ax.set_title('Average Training vs Prediction Time', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(timing_data['config_name'])
+    ax.set_xticklabels(timing_data['config_name'].to_list())
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
+    # Plot 4: Featurizer Performance Comparison
     ax = axes[1, 1]
-    featurizer_comparison = df_success.groupby('featurizer').agg({
-        'top_10_recovery': ['mean', 'std'],
-        'total_time': 'mean',
-    }).reset_index()
-
-    featurizer_comparison.columns = ['featurizer', 'mean_recovery', 'std_recovery', 'mean_time']
-    featurizer_comparison = featurizer_comparison.sort_values('mean_recovery', ascending=False)
+    featurizer_comparison = df_success.group_by('featurizer').agg([
+        pl.col('top_10_recovery').mean().alias('mean_recovery'),
+        pl.col('top_10_recovery').std().alias('std_recovery'),
+        pl.col('total_time').mean().alias('mean_time'),
+    ]).sort('mean_recovery', descending=True)
 
     colors = plt.cm.viridis(np.linspace(0.2, 0.8, len(featurizer_comparison)))
-    bars = ax.barh(featurizer_comparison['featurizer'], featurizer_comparison['mean_recovery'],
-                   xerr=featurizer_comparison['std_recovery'], capsize=5, color=colors, alpha=0.8)
+    bars = ax.barh(
+        featurizer_comparison['featurizer'].to_list(),
+        featurizer_comparison['mean_recovery'].to_numpy(),
+        xerr=featurizer_comparison['std_recovery'].to_numpy(),
+        capsize=5, color=colors, alpha=0.8
+    )
 
     ax.set_xlabel('Top-10 Recovery (mean ± std)')
     ax.set_ylabel('Featurizer')
     ax.set_title('Featurizer Performance Comparison', fontsize=14, fontweight='bold')
     ax.grid(axis='x', alpha=0.3)
 
-    for i, (feat, time_val) in enumerate(zip(featurizer_comparison['featurizer'],
-                                              featurizer_comparison['mean_time'])):
-        ax.text(0.02, i, f'{time_val:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
+    for i, row in enumerate(featurizer_comparison.iter_rows(named=True)):
+        ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
+
+    # Plot 5: Fine-Tuning Impact on Performance
+    ax = axes[0, 2]
+    if 'fine_tuning' in df_success.columns:
+        finetune_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
+            pl.col('top_10_recovery').mean().alias('top_10_recovery'),
+            pl.col('top_100_recovery').mean().alias('top_100_recovery'),
+        ]).sort(['config_name', 'fine_tuning'])
+
+        config_names = finetune_comparison['config_name'].unique().sort().to_list()
+        x_pos = np.arange(len(config_names))
+        width = 0.35
+
+        for idx, fine_tune in enumerate([False, True]):
+            group = finetune_comparison.filter(pl.col('fine_tuning') == fine_tune)
+            offset = width * (idx - 0.5)
+            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+            values = group['top_10_recovery'].to_numpy()
+            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+
+        ax.set_xlabel('Model Configuration')
+        ax.set_ylabel('Top-10 Recovery')
+        ax.set_title('Fine-Tuning Impact on Performance', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(config_names)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
+                fontsize=12, transform=ax.transAxes)
+        ax.set_title('Fine-Tuning Impact (No Data)', fontsize=14, fontweight='bold')
+
+    # Plot 6: Fine-Tuning Training Time Comparison
+    ax = axes[1, 2]
+    if 'fine_tuning' in df_success.columns:
+        timing_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
+            pl.col('avg_training_time').mean().alias('avg_training_time'),
+        ]).sort(['config_name', 'fine_tuning'])
+
+        config_names = timing_comparison['config_name'].unique().sort().to_list()
+        x_pos = np.arange(len(config_names))
+        width = 0.35
+
+        for idx, fine_tune in enumerate([False, True]):
+            group = timing_comparison.filter(pl.col('fine_tuning') == fine_tune)
+            offset = width * (idx - 0.5)
+            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+            values = group['avg_training_time'].to_numpy()
+            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+
+        ax.set_xlabel('Model Configuration')
+        ax.set_ylabel('Avg Training Time (s)')
+        ax.set_title('Fine-Tuning Training Time Comparison', fontsize=14, fontweight='bold')
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(config_names)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+    else:
+        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
+                fontsize=12, transform=ax.transAxes)
+        ax.set_title('Fine-Tuning Timing (No Data)', fontsize=14, fontweight='bold')
 
     plt.tight_layout()
     plt.savefig(plots_dir / 'comprehensive_analysis.png', dpi=300, bbox_inches='tight')
@@ -429,15 +702,15 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
     console.print(f"[green]✓ Saved visualizations to {plots_dir}[/green]")
 
 
-def print_summary_table(df: pd.DataFrame):
+def print_summary_table(df: pl.DataFrame):
     """Print a rich summary table of results."""
-    df_success = df[df['success'] == True].copy()
+    df_success = df.filter(pl.col('success') == True)
 
     if len(df_success) == 0:
         console.print("[red]No successful experiments to summarize[/red]")
         return
 
-    df_sorted = df_success.sort_values('top_10_recovery', ascending=False).head(10)
+    df_sorted = df_success.sort('top_10_recovery', descending=True).head(10)
 
     table = Table(title="Top 10 Configurations by Performance", show_header=True, header_style="bold magenta")
     table.add_column("Rank", justify="right", style="cyan", width=6)
@@ -448,6 +721,19 @@ def print_summary_table(df: pd.DataFrame):
     table.add_column("Train Time", justify="right", width=11)
     table.add_column("Total Time", justify="right", width=11)
 
+<<<<<<< HEAD
+    for idx, row in enumerate(df_sorted.iter_rows(named=True), 1):
+        early_stop_icon = "✓" if row['early_stopping'] else "✗"
+        table.add_row(
+            str(idx),
+            row['config_name'],
+            row['featurizer'],
+            early_stop_icon,
+            f"{row['top_10_recovery']:.3f}",
+            f"{row['top_100_recovery']:.3f}",
+            f"{row['avg_training_time']:.1f}s",
+            f"{row['total_time']:.1f}s",
+=======
     for idx, row in enumerate(df_sorted.itertuples(), 1):
         table.add_row(
             str(idx),
@@ -457,6 +743,7 @@ def print_summary_table(df: pd.DataFrame):
             f"{row.top_100_recovery:.3f}±{row.top_100_recovery_std:.3f}",
             f"{row.avg_training_time:.1f}s",
             f"{row.total_time:.1f}s",
+>>>>>>> origin/v2
         )
 
     console.print(table)
@@ -468,6 +755,229 @@ def print_summary_table(df: pd.DataFrame):
     console.print(f"  Best top-10 recovery: {df_success['top_10_recovery'].max():.3f}")
     console.print(f"  Mean top-10 recovery: {df_success['top_10_recovery'].mean():.3f}")
     console.print(f"  Avg total time per experiment: {df_success['total_time'].mean():.1f}s")
+
+
+def create_performance_heatmap(
+    timing_df: pl.DataFrame,
+    output_dir: Path,
+    performance_metric: str = 'top_10_recovery',
+    dataset_name: str = None
+) -> Path:
+    """Create single-panel heatmap showing only performance values.
+
+    Args:
+        timing_df: DataFrame with timing and performance data
+        output_dir: Directory to save output
+        performance_metric: Performance column name (top_10_recovery or top_100_recovery)
+        dataset_name: Optional dataset name to include in title
+
+    Returns:
+        Path to saved heatmap image
+    """
+    output_dir = Path(output_dir)
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create pivot for performance
+    perf_pivot = timing_df.pivot(
+        values=performance_metric,
+        index='learner',
+        columns='featurizer',
+        aggregate_function='first'
+    )
+
+    # Extract learner names before reordering columns
+    learner_names = perf_pivot.get_column('learner').to_list()
+
+    # Reorder columns
+    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    existing_cols = [col for col in desired_order if col in perf_pivot.columns]
+    perf_pivot = perf_pivot.select(existing_cols)
+
+    # Convert to pandas for heatmap
+    perf_pd = perf_pivot.to_pandas()
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+
+    metric_label = performance_metric.replace('_', ' ').title()
+    title = f'Performance Matrix: {metric_label}'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title, fontsize=20, fontweight='bold', y=0.98)
+
+    # Create colormap for performance (higher is better - red to blue)
+    cmap = sns.color_palette("RdYlBu", as_cmap=True)
+
+    # Create heatmap
+    sns.heatmap(
+        perf_pd,
+        annot=False,
+        cmap=cmap,
+        mask=perf_pd.isna(),
+        cbar_kws={'shrink': 0.8, 'label': metric_label},
+        linewidths=0.5,
+        linecolor='white',
+        square=False,
+        vmin=0,
+        vmax=100,
+        ax=ax
+    )
+
+    # Add custom annotations with performance values
+    for i in range(perf_pivot.height):
+        for j in range(len(perf_pivot.columns)):
+            perf_val = perf_pivot.row(i)[j]
+            if perf_val is not None:
+                text = f'{perf_val:.1f}%'
+                # Use white text for dark cells, black for light cells
+                color = 'white' if perf_val < 50 else 'black'
+                ax.text(j + 0.5, i + 0.5, text,
+                       ha='center', va='center',
+                       fontsize=9, fontweight='bold',
+                       color=color)
+
+    ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
+    ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.set_xticklabels(perf_pivot.columns, rotation=45, ha='right')
+    ax.set_yticklabels(learner_names, rotation=0)
+
+    output_filename = f'performance_heatmap_{performance_metric}.png'
+    output_path = plots_dir / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    console.print(f"[green]✓ Created performance heatmap: {output_path.name}[/green]")
+
+    return output_path
+
+
+def prepare_cost_performance_data(
+    df: pl.DataFrame
+) -> pl.DataFrame:
+    """Transform results DataFrame to format expected by cost-performance plotting functions.
+
+    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
+    composite learner names for unified visualization.
+
+    Args:
+        df: Results DataFrame from validation experiments
+
+    Returns:
+        Transformed DataFrame with columns expected by featurizer_visualizations functions
+    """
+    df_filtered = df.filter(pl.col('success') == True)
+
+    # Create composite learner names encoding all configuration dimensions
+    timing_df = df_filtered.select([
+        pl.when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == True))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop + fine-tune)')]))
+          .when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == False))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop)')]))
+          .when((pl.col('early_stopping') == False) & (pl.col('fine_tuning') == True))
+          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (fine-tune)')]))
+          .otherwise(pl.col('config_name'))
+          .alias('learner'),
+        pl.col('config_name'),
+        pl.col('early_stopping'),
+        pl.col('fine_tuning'),
+        pl.col('featurizer'),
+        pl.col('cumulative_training_time'),
+        pl.col('cumulative_prediction_time'),
+        pl.col('cumulative_acquisition_time'),
+        pl.col('cumulative_oracle_time'),
+        pl.col('cumulative_evaluation_time'),
+        pl.col('total_time').alias('cumulative_total_time'),
+        pl.col('total_time').alias('elapsed_time'),
+        (pl.col('cumulative_training_time') + pl.col('cumulative_prediction_time')).alias('cumulative_training_prediction_time'),
+        pl.col('top_10_recovery'),
+        pl.col('top_100_recovery'),
+    ]).sort(['config_name', 'early_stopping', 'fine_tuning'])
+
+    return timing_df
+
+
+def generate_cost_performance_plots(
+    df: pl.DataFrame,
+    output_dir: Path,
+    dataset_name: str = 'chemprop'
+) -> Dict[str, List[Path]]:
+    """Generate cost-performance heatmaps, Pareto frontiers, and performance-only heatmaps.
+
+    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
+    unified visualizations.
+
+    Args:
+        df: Results DataFrame from validation experiments
+        output_dir: Directory to save plots
+        dataset_name: Dataset name for plot titles
+
+    Returns:
+        Dictionary with keys 'heatmaps', 'pareto_plots', and 'performance_heatmaps',
+        each containing list of Path objects
+    """
+    from validation.lib.featurizer_visualizations import (
+        create_cost_performance_heatmaps,
+        create_pareto_frontiers
+    )
+
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    console.print("[cyan]  Generating unified cost-performance plots...[/cyan]")
+
+    # Prepare data with composite learner names (no filtering)
+    timing_df = prepare_cost_performance_data(df)
+
+    if len(timing_df) == 0:
+        console.print("[yellow]  Warning: No successful experiments to visualize[/yellow]")
+        return {
+            'heatmaps': [],
+            'pareto_plots': [],
+            'performance_heatmaps': []
+        }
+
+    all_heatmaps = []
+    all_pareto_plots = []
+    all_performance_heatmaps = []
+
+    for metric in ['top_10_recovery', 'top_100_recovery']:
+        metric_label = metric.replace('_', ' ').title()
+
+        # Cost-performance heatmap
+        heatmap_path = create_cost_performance_heatmaps(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_heatmaps.append(heatmap_path)
+
+        # Pareto frontier
+        pareto_path = create_pareto_frontiers(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_pareto_plots.append(pareto_path)
+
+        # Performance-only heatmap
+        perf_heatmap_path = create_performance_heatmap(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_performance_heatmaps.append(perf_heatmap_path)
+
+    return {
+        'heatmaps': all_heatmaps,
+        'pareto_plots': all_pareto_plots,
+        'performance_heatmaps': all_performance_heatmaps
+    }
 
 
 def main():
@@ -500,6 +1010,9 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    cache_dir = args.output_dir / '.cache'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
     console.print(f"[bold cyan]Chemprop Comprehensive Validation[/bold cyan]")
     console.print(f"Dataset: {args.dataset}")
     console.print(f"Cycles: {args.n_cycles}")
@@ -507,18 +1020,37 @@ def main():
     console.print(f"Output: {args.output_dir}")
     console.print()
 
-    compound_pool, target_col, oracle = load_dataset(args.dataset)
+    compound_pool, metadata = load_validation_dataset(args.dataset, clean_invalid_scores=True)
+    target_col = metadata['target_column']
+    score_direction = metadata['score_direction']
+
+    dataset_path = get_dataset_path(args.dataset)
+    oracle = CSVOracle(str(dataset_path), id_column='ID')
+
     console.print(f"[green]✓ Loaded {len(compound_pool)} compounds[/green]")
     console.print(f"[cyan]Target column: {target_col}[/cyan]")
+    console.print(f"[cyan]Score direction: {score_direction}[/cyan]")
 
     experiments = []
     for config_name, config in MODEL_CONFIGS.items():
         for featurizer in FEATURIZERS:
+<<<<<<< HEAD
+            for early_stopping in EARLY_STOPPING_OPTIONS:
+                for fine_tuning in FINE_TUNING_OPTIONS:
+                    experiments.append({
+                        'config_name': config_name,
+                        'config': config,
+                        'featurizer': featurizer,
+                        'early_stopping': early_stopping,
+                        'fine_tuning': fine_tuning,
+                    })
+=======
             experiments.append({
                 'config_name': config_name,
                 'config': config,
                 'featurizer': featurizer,
             })
+>>>>>>> origin/v2
 
     console.print(f"[cyan]Total experiments to run: {len(experiments)}[/cyan]\n")
 
@@ -535,7 +1067,13 @@ def main():
 
         for exp in experiments:
             featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
+<<<<<<< HEAD
+            early_stop_str = 'early_stop' if exp['early_stopping'] else 'no_early_stop'
+            finetune_str = '_finetune' if exp['fine_tuning'] else ''
+            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
+=======
             exp_name = f"{exp['config_name']}_{featurizer_name}"
+>>>>>>> origin/v2
 
             exp_dir = args.output_dir / 'data' / exp_name
             if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
@@ -545,6 +1083,11 @@ def main():
                         config_name=exp['config_name'],
                         config=exp['config'],
                         featurizer=exp['featurizer'],
+<<<<<<< HEAD
+                        early_stopping=exp['early_stopping'],
+                        fine_tuning=exp['fine_tuning'],
+=======
+>>>>>>> origin/v2
                     )
                     results.append(result)
                     if args.debug:
@@ -561,25 +1104,65 @@ def main():
                 compound_pool=compound_pool,
                 oracle=oracle,
                 target_col=target_col,
+                score_direction=score_direction,
                 config_name=exp['config_name'],
                 config=exp['config'],
                 featurizer=exp['featurizer'],
+<<<<<<< HEAD
+                early_stopping=exp['early_stopping'],
+                fine_tuning=exp['fine_tuning'],
+=======
+>>>>>>> origin/v2
                 n_cycles=args.n_cycles,
                 batch_fraction=args.batch_fraction,
                 random_state=args.random_state,
                 output_dir=args.output_dir,
+                cache_dir=cache_dir,
                 debug=args.debug,
             )
 
             results.append(result)
             progress.advance(task)
 
-    results_df = pd.DataFrame(results)
+    results_df = pl.DataFrame(results)
     summary_path = args.output_dir / 'summary.csv'
-    results_df.to_csv(summary_path, index=False)
+    results_df.write_csv(summary_path)
     console.print(f"\n[green]✓ Saved summary to {summary_path}[/green]")
 
     create_visualizations(results_df, args.output_dir)
+
+    console.print("\n[cyan]Generating cost-performance analysis...[/cyan]")
+    try:
+        cost_perf_paths = generate_cost_performance_plots(
+            results_df,
+            args.output_dir,
+            dataset_name=args.dataset
+        )
+
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['heatmaps'])} cost-performance heatmaps[/green]")
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['pareto_plots'])} Pareto frontier plots[/green]")
+        console.print(f"[green]✓ Generated {len(cost_perf_paths['performance_heatmaps'])} performance-only heatmaps[/green]")
+
+        if cost_perf_paths['heatmaps']:
+            console.print("\n[bold]Cost-Performance Heatmaps:[/bold]")
+            for path in cost_perf_paths['heatmaps']:
+                console.print(f"  - {path}")
+
+        if cost_perf_paths['pareto_plots']:
+            console.print("\n[bold]Pareto Frontier Plots:[/bold]")
+            for path in cost_perf_paths['pareto_plots']:
+                console.print(f"  - {path}")
+
+        if cost_perf_paths['performance_heatmaps']:
+            console.print("\n[bold]Performance-Only Heatmaps:[/bold]")
+            for path in cost_perf_paths['performance_heatmaps']:
+                console.print(f"  - {path}")
+
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not generate cost-performance plots: {e}[/yellow]")
+        import traceback
+        if args.debug:
+            traceback.print_exc()
 
     print_summary_table(results_df)
 

@@ -1,7 +1,7 @@
 """Molecular similarity and diversity metrics for active learning evaluation."""
 
 import numpy as np
-import pandas as pd
+import polars as pl
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 from rdkit import DataStructs
@@ -86,8 +86,8 @@ def _calculate_intra_batch_diversity(fingerprints: list) -> float:
     return np.mean(distances) if distances else 0.0
 
 
-def calculate_molecular_similarity_metrics(newly_selected_df: pd.DataFrame,
-                                         previously_selected_df: pd.DataFrame = None) -> dict:
+def calculate_molecular_similarity_metrics(newly_selected_df: pl.DataFrame,
+                                         previously_selected_df: pl.DataFrame = None) -> dict:
     """
     Calculate molecular similarity metrics for the acquisition step.
 
@@ -108,7 +108,7 @@ def calculate_molecular_similarity_metrics(newly_selected_df: pd.DataFrame,
     if 'SMILES' not in newly_selected_df.columns:
         return results
 
-    new_smiles = newly_selected_df['SMILES'].tolist()
+    new_smiles = newly_selected_df.get_column('SMILES').to_list()
     new_fingerprints = _generate_fingerprints(new_smiles)
 
     # Calculate intra-batch diversity
@@ -116,7 +116,7 @@ def calculate_molecular_similarity_metrics(newly_selected_df: pd.DataFrame,
 
     # Calculate inter-cycle similarity and novelty if previous compounds exist
     if previously_selected_df is not None and 'SMILES' in previously_selected_df.columns and len(previously_selected_df) > 0:
-        prev_smiles = previously_selected_df['SMILES'].tolist()
+        prev_smiles = previously_selected_df.get_column('SMILES').to_list()
         prev_fingerprints = _generate_fingerprints(prev_smiles)
 
         # Inter-cycle similarity (how similar new compounds are to previous ones)

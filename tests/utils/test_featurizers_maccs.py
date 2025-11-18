@@ -155,7 +155,7 @@ class TestSmilesToMaccsFingerprint:
                 assert not np.array_equal(fingerprints[i], fingerprints[j])
 
     def test_real_compounds_from_fixtures(self, small_real_compounds):
-        smiles_list = small_real_compounds['SMILES'].tolist()[:10]
+        smiles_list = small_real_compounds['SMILES'].to_list()[:10]
 
         for smiles in smiles_list:
             fp = smiles_to_maccs_fingerprint(smiles)
@@ -164,7 +164,7 @@ class TestSmilesToMaccsFingerprint:
             assert np.all(np.isin(fp, [0, 1]))
 
     def test_diverse_real_compounds(self, diverse_real_compounds):
-        smiles_list = diverse_real_compounds['SMILES'].tolist()[:15]
+        smiles_list = diverse_real_compounds['SMILES'].to_list()[:15]
 
         fingerprints = []
         for smiles in smiles_list:
@@ -176,7 +176,7 @@ class TestSmilesToMaccsFingerprint:
         assert fingerprints.shape == (15, 167)
 
     def test_edge_case_compounds(self, edge_case_compounds):
-        smiles_list = edge_case_compounds['SMILES'].tolist()[:10]
+        smiles_list = edge_case_compounds['SMILES'].to_list()[:10]
 
         for smiles in smiles_list:
             try:
@@ -278,7 +278,7 @@ class TestSmilesToMaccsFingerprint:
     def test_integration_with_real_dataset(self, small_real_compounds):
         all_fingerprints = []
 
-        for smiles in small_real_compounds['SMILES'].tolist():
+        for smiles in small_real_compounds['SMILES'].to_list():
             fp = smiles_to_maccs_fingerprint(smiles)
             all_fingerprints.append(fp)
 
@@ -314,7 +314,7 @@ class TestSmilesToMaccsFingerprint:
             smiles_to_maccs_fingerprint(12345)
 
     def test_multiple_compounds_consistency(self, small_real_compounds):
-        smiles_list = small_real_compounds['SMILES'].tolist()[:5]
+        smiles_list = small_real_compounds['SMILES'].to_list()[:5]
 
         first_pass = [smiles_to_maccs_fingerprint(s) for s in smiles_list]
         second_pass = [smiles_to_maccs_fingerprint(s) for s in smiles_list]

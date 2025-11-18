@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 
@@ -30,7 +31,7 @@ class TestExecuteCycle:
             random_state=42
         )
 
-        init_labeled = master_df[master_df['labeled_cycle'] == 0]
+        init_labeled = master_df.filter(pl.col('labeled_cycle') == 0)
         assert len(init_labeled) == 10
         assert (init_labeled['status'] == 'labeled').all()
         assert cycle_0_metrics['cycle'] == 0
@@ -50,10 +51,10 @@ class TestExecuteCycle:
             mode='run'
         )
 
-        cycle_1_labeled = updated_df[updated_df['labeled_cycle'] == 1]
+        cycle_1_labeled = updated_df.filter(pl.col('labeled_cycle') == 1)
         assert len(cycle_1_labeled) == 10
 
-        init_labeled = updated_df[updated_df['labeled_cycle'] == 0]
+        init_labeled = updated_df.filter(pl.col('labeled_cycle') == 0)
         assert len(init_labeled) == 10
 
         total_labeled = (updated_df['status'] == 'labeled').sum()
@@ -86,8 +87,8 @@ class TestExecuteCycle:
             )
 
     def test_run_mode_basic_execution(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        initial_ids = sample_compounds['ID'].iloc[:5].tolist()
-        initial_values = pd.Series([0.3, 0.5, 0.7, 0.4, 0.6], index=initial_ids)
+        initial_ids = sample_compounds['ID'].head(5).to_list()
+        initial_values = dict(zip(initial_ids, [0.3, 0.5, 0.7, 0.4, 0.6]))
 
         master_df = initialize_master_dataframe(
             valid_compounds=sample_compounds,
@@ -136,16 +137,15 @@ class TestExecuteCycle:
             )
 
     def test_benchmark_mode_predicts_unlabeled_only(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        initial_ids = sample_compounds['ID'].iloc[:5].tolist()
-        initial_values = pd.Series([0.3, 0.5, 0.7, 0.4, 0.6], index=initial_ids)
+        initial_ids = sample_compounds['ID'].head(5).to_list()
+        initial_values = dict(zip(initial_ids, [0.3, 0.5, 0.7, 0.4, 0.6]))
 
         master_df = initialize_master_dataframe(
-        valid_compounds=sample_compounds,
-        target_col='Activity'
-        ,
-        initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values
-    )
+            valid_compounds=sample_compounds,
+            target_col='Activity',
+            initial_labeled_ids=initial_ids,
+            initial_measurements=initial_values
+        )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
@@ -164,7 +164,7 @@ class TestExecuteCycle:
         )
 
         pred_col = 'prediction_cycle_0'
-        pred_count = updated_df[pred_col].notna().sum()
+        pred_count = (~updated_df[pred_col].is_null()).sum()
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         assert pred_count == unlabeled_count
@@ -301,16 +301,15 @@ class TestExecuteCycle:
             )
 
     def test_no_unlabeled_compounds_returns_unchanged(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        all_labeled = sample_compounds['ID'].tolist()
-        all_values = pd.Series(np.random.rand(len(all_labeled)), index=all_labeled)
+        all_labeled = sample_compounds['ID'].to_list()
+        all_values = dict(zip(all_labeled, np.random.rand(len(all_labeled))))
 
         master_df = initialize_master_dataframe(
-        valid_compounds=sample_compounds,
-        target_col='Activity'
-        ,
-        initial_labeled_ids=all_labeled,
-        initial_measurements=all_values
-    )
+            valid_compounds=sample_compounds,
+            target_col='Activity',
+            initial_labeled_ids=all_labeled,
+            initial_measurements=all_values
+        )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
@@ -423,9 +422,11 @@ class TestCalculateCycleMetrics:
 class TestApplyPruning:
 
     def test_pruning_reduces_pool(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
-        predictions = pool['prediction'].values
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
+        predictions = pool['prediction'].to_numpy()
         uncertainties = np.random.rand(len(pool))
 
         pruned_pool, stats = _apply_pruning(
@@ -441,9 +442,11 @@ class TestApplyPruning:
         assert stats['pruned_count'] >= 0
 
     def test_pruning_returns_stats(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
-        predictions = pool['prediction'].values
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
+        predictions = pool['prediction'].to_numpy()
 
         pruned_pool, stats = _apply_pruning(
             pool,
@@ -461,9 +464,11 @@ class TestApplyPruning:
         assert 'pruning_fraction' in stats
 
     def test_pruning_failure_raises_error(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
-        predictions = pool['prediction'].values
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
+        predictions = pool['prediction'].to_numpy()
 
         with pytest.raises(RuntimeError, match="Pruning configuration invalid"):
             _apply_pruning(
@@ -479,8 +484,10 @@ class TestApplyPruning:
 class TestSelectCompounds:
 
     def test_greedy_selection(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
         batch_size = 10
 
         selected_df = _select_compounds(
@@ -494,8 +501,10 @@ class TestSelectCompounds:
         assert len(selected_df) == batch_size
 
     def test_random_selection(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
         batch_size = 10
 
         selected_df = _select_compounds(
@@ -509,8 +518,10 @@ class TestSelectCompounds:
         assert len(selected_df) == batch_size
 
     def test_unknown_strategy_raises_error(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
 
         with pytest.raises(ValueError, match="Unknown acquisition strategy"):
             _select_compounds(
@@ -522,8 +533,10 @@ class TestSelectCompounds:
             )
 
     def test_missing_uncertainty_for_ucb_raises_error(self, sample_compounds):
-        pool = sample_compounds.copy()
-        pool['prediction'] = np.random.rand(len(pool))
+        pool = sample_compounds.clone()
+        pool = pool.with_columns(
+            pl.Series('prediction', np.random.rand(len(pool)))
+        )
 
         with pytest.raises(ValueError, match="requires uncertainty estimates"):
             _select_compounds(
@@ -554,9 +567,9 @@ class TestEdgeCaseHandling:
             def get_name(self):
                 return "NaNLearner"
 
-        config = CycleConfig('random', n_cycles=1, batch_fraction=0.05)
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(RuntimeError, match="No unlabeled compounds with predictions available"):
+        with pytest.raises(RuntimeError, match="Predictions contain NaN values"):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -604,5 +617,6 @@ class TestEdgeCaseHandling:
 
         assert 'prediction_cycle_0' in updated_df.columns
         pred_col = 'prediction_cycle_0'
-        assert np.all(np.isinf(updated_df[pred_col].dropna()))
+        pred_values = updated_df[pred_col].drop_nulls().to_numpy()
+        assert np.all(np.isinf(pred_values))
         assert metrics['selected_count'] > 0

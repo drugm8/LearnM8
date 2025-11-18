@@ -18,7 +18,7 @@ Validates results structure:
 
 import logging
 import pytest
-import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 
@@ -54,11 +54,11 @@ class TestAPIBasicSimple:
         assert 'unlabeled_data' in results
         assert 'validation_result' in results
 
-        assert isinstance(results['compounds_df'], pd.DataFrame)
+        assert isinstance(results['compounds_df'], pl.DataFrame)
         assert isinstance(results['cycle_metrics'], list)
         assert isinstance(results['saved_files'], dict)
-        assert isinstance(results['labeled_data'], pd.DataFrame)
-        assert isinstance(results['unlabeled_data'], pd.DataFrame)
+        assert isinstance(results['labeled_data'], pl.DataFrame)
+        assert isinstance(results['unlabeled_data'], pl.DataFrame)
 
         assert len(results['cycle_metrics']) == 3
         assert len(results['labeled_data']) > 0
@@ -102,19 +102,19 @@ class TestAPIBasicSimple:
             random_state=42
         )
 
-        labeled_in_init = results['compounds_df'][
-            results['compounds_df']['labeled_cycle'] == 0
-        ]
+        labeled_in_init = results['compounds_df'].filter(
+            pl.col('labeled_cycle') == 0
+        )
         assert len(labeled_in_init) == 5
 
-        labeled_in_cycle_1 = results['compounds_df'][
-            results['compounds_df']['labeled_cycle'] == 1
-        ]
+        labeled_in_cycle_1 = results['compounds_df'].filter(
+            pl.col('labeled_cycle') == 1
+        )
         assert len(labeled_in_cycle_1) == 5
 
-        labeled_in_cycle_2 = results['compounds_df'][
-            results['compounds_df']['labeled_cycle'] == 2
-        ]
+        labeled_in_cycle_2 = results['compounds_df'].filter(
+            pl.col('labeled_cycle') == 2
+        )
         assert len(labeled_in_cycle_2) == 0
 
 
@@ -223,9 +223,9 @@ class TestAPIPruning:
         assert len(results['cycle_metrics']) <= 3
         assert 'compounds_df' in results
 
-        pruned_compounds = results['compounds_df'][
-            results['compounds_df']['status'] == 'pruned'
-        ]
+        pruned_compounds = results['compounds_df'].filter(
+            pl.col('status') == 'pruned'
+        )
         assert len(pruned_compounds) >= 0
 
     def test_pruning_with_advanced_api(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
@@ -308,9 +308,9 @@ class TestAPIModeDetection:
     def test_csv_oracle_auto_detects_benchmark_mode(self, tmp_path, sample_compounds, mock_learner):
         """Test that CSV oracle automatically triggers benchmark mode."""
         csv_file = tmp_path / "oracle_data.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(csv_file, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(csv_file)
 
         output_dir = tmp_path / "csv_oracle_test"
 
@@ -333,9 +333,9 @@ class TestAPIModeDetection:
     def test_oracle_none_with_csv_compound_pool(self, tmp_path, sample_compounds, mock_learner):
         """Test oracle=None auto-detects CSV oracle from compound_pool path."""
         csv_file = tmp_path / "compounds_with_activity.csv"
-        compounds_data = sample_compounds.copy()
-        compounds_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        compounds_data.to_csv(csv_file, index=False)
+        compounds_data = sample_compounds.clone()
+        compounds_data = compounds_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        compounds_data.write_csv(csv_file)
 
         output_dir = tmp_path / "auto_oracle_test"
 
@@ -564,7 +564,7 @@ class TestAPIResultsStructure:
         )
 
         labeled_data = results['labeled_data']
-        assert isinstance(labeled_data, pd.DataFrame)
+        assert isinstance(labeled_data, pl.DataFrame)
         assert len(labeled_data) > 0
         assert all(labeled_data['status'] == 'labeled')
 
@@ -586,7 +586,7 @@ class TestAPIResultsStructure:
         )
 
         unlabeled_data = results['unlabeled_data']
-        assert isinstance(unlabeled_data, pd.DataFrame)
+        assert isinstance(unlabeled_data, pl.DataFrame)
         assert all(unlabeled_data['status'] == 'unlabeled')
 
     def test_validation_result_structure(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
@@ -619,9 +619,9 @@ class TestAPILearnerIntegration:
     def test_learner_string_shortcut(self, tmp_path, sample_compounds):
         """Test instantiating learner from string shortcut."""
         csv_file = tmp_path / "oracle_data.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(csv_file, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(csv_file)
 
         output_dir = tmp_path / "learner_string_test"
 
@@ -665,7 +665,7 @@ class TestAPIErrorHandling:
 
     def test_missing_required_columns(self, tmp_path, mock_learner, mock_oracle):
         """Test that missing ID or SMILES columns raises error."""
-        invalid_compounds = pd.DataFrame({
+        invalid_compounds = pl.DataFrame({
             'compound_id': ['C1', 'C2'],
             'structure': ['CCO', 'CCC']
         })
@@ -690,7 +690,7 @@ class TestAPIErrorHandling:
         """Test that invalid compound_pool type raises error."""
         output_dir = tmp_path / "invalid_type_test"
 
-        with pytest.raises(TypeError, match="compound_pool must be str, Path, or pd.DataFrame"):
+        with pytest.raises(TypeError, match="compound_pool must be str, Path, or pl.DataFrame"):
             run_active_learning(
                 compound_pool={'invalid': 'type'},
                 oracle=mock_oracle,
@@ -844,9 +844,9 @@ class TestAPIEvaluationMetrics:
     def test_benchmark_mode_includes_top_k_metrics(self, tmp_path, sample_compounds, mock_learner):
         """Test that benchmark mode includes top-K overlap metrics."""
         csv_file = tmp_path / "benchmark_oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(csv_file, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(csv_file)
 
         output_dir = tmp_path / "benchmark_topk_test"
 
@@ -908,13 +908,13 @@ class TestValidateCompoundPoolAPI:
         assert hasattr(result, 'valid_compounds')
         assert hasattr(result, 'invalid_compounds')
         assert len(result.valid_compounds) > 0
-        assert result.valid_compounds['ID'].tolist() == sample_compounds['ID'].tolist()
+        assert result.valid_compounds['ID'].to_list() == sample_compounds['ID'].to_list()
 
     def test_validate_with_invalid_smiles(self):
         from learnm8 import validate_compound_pool
         import pandas as pd
 
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['valid_1', 'invalid_1', 'valid_2'],
             'SMILES': ['CCO', 'NOT_A_SMILES_###', 'CCC']
         })
@@ -923,7 +923,7 @@ class TestValidateCompoundPoolAPI:
 
         assert len(result.valid_compounds) == 2
         assert len(result.invalid_compounds) == 1
-        assert 'invalid_1' in result.invalid_compounds['ID'].tolist()
+        assert 'invalid_1' in result.invalid_compounds['ID'].to_list()
 
     def test_validate_integration_with_run_active_learning(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         from learnm8 import validate_compound_pool
@@ -992,9 +992,9 @@ class TestLoggingBehavior:
 
         # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(oracle_path, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=sample_compounds,
@@ -1026,9 +1026,9 @@ class TestLoggingBehavior:
 
         # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(oracle_path, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=sample_compounds,
@@ -1054,9 +1054,9 @@ class TestLoggingBehavior:
 
         # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(oracle_path, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=sample_compounds,
@@ -1087,9 +1087,9 @@ class TestChempropWithExtraDescriptors:
         from learnm8 import run_active_learning
 
         oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(oracle_path, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=sample_compounds,
@@ -1115,9 +1115,9 @@ class TestChempropWithExtraDescriptors:
         from learnm8 import run_active_learning
 
         oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.copy()
-        oracle_data['Activity'] = np.random.uniform(0, 1, len(sample_compounds))
-        oracle_data.to_csv(oracle_path, index=False)
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
             compound_pool=sample_compounds,

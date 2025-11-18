@@ -5,7 +5,7 @@ Note: These tests require RDKit and may be slow due to fingerprint calculations.
 """
 
 import pytest
-import pandas as pd
+import polars as pl
 
 from learnm8.evaluation.metrics.similarity import (
     calculate_molecular_similarity_metrics
@@ -18,7 +18,7 @@ class TestSimilarityMetrics:
     def test_molecular_similarity_metrics_basic(self):
         """Test basic molecular similarity metrics calculation."""
         # Create test data with real SMILES
-        newly_selected = pd.DataFrame({
+        newly_selected = pl.DataFrame({
             'ID': ['mol_1', 'mol_2'],
             'SMILES': ['CCO', 'CCC']  # Ethanol and propane
         })
@@ -37,12 +37,12 @@ class TestSimilarityMetrics:
 
     def test_molecular_similarity_with_previous(self):
         """Test molecular similarity with previous compound data."""
-        newly_selected = pd.DataFrame({
+        newly_selected = pl.DataFrame({
             'ID': ['mol_3', 'mol_4'],
             'SMILES': ['CCCO', 'CCCC']  # Propanol and butane
         })
 
-        previously_selected = pd.DataFrame({
+        previously_selected = pl.DataFrame({
             'ID': ['mol_1', 'mol_2'],
             'SMILES': ['CCO', 'CCC']  # Ethanol and propane
         })
@@ -56,7 +56,7 @@ class TestSimilarityMetrics:
 
     def test_molecular_similarity_no_smiles(self):
         """Test handling when SMILES column is missing."""
-        compounds_no_smiles = pd.DataFrame({
+        compounds_no_smiles = pl.DataFrame({
             'ID': ['mol_1', 'mol_2'],
             'other_column': ['A', 'B']
         })

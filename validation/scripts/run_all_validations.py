@@ -5,14 +5,15 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-STRATEGIES = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
+STRATEGIES = ['ucb', 'ei', 'pi', 'thompson', 'entropy', 'simulated_annealing']
 
 STRATEGY_NAMES = {
     'ucb': 'Upper Confidence Bound',
     'ei': 'Expected Improvement',
     'pi': 'Probability of Improvement',
     'thompson': 'Thompson Sampling',
-    'entropy': 'Entropy-Based Selection'
+    'entropy': 'Entropy-Based Selection',
+    'simulated_annealing': 'Simulated Annealing'
 }
 
 
@@ -81,7 +82,8 @@ def main():
 
 
 def generate_summary_index(results, elapsed):
-    output_file = Path('validation/reports/README.md')
+    project_root = Path(__file__).parent.parent.parent
+    output_file = project_root / 'validation' / 'reports' / 'README.md'
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     content = f"""# Acquisition Strategy Validation Summary
@@ -118,6 +120,7 @@ def generate_summary_index(results, elapsed):
 - **[PI (Probability of Improvement)](pi/validation_report.md)** - Conservative improvement probability
 - **[Thompson Sampling](thompson/validation_report.md)** - Stochastic posterior sampling
 - **[Entropy](entropy/validation_report.md)** - Pure uncertainty-based exploration
+- **[Simulated Annealing](simulated_annealing/validation_report.md)** - Temperature-based optimization exploration
 
 ---
 

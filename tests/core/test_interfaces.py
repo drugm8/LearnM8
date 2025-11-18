@@ -6,7 +6,7 @@ Tests that all components properly implement their abstract interfaces.
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.features import extract_features
@@ -53,25 +53,27 @@ class MockLearner(Learner):
 
 class MockOracle(Oracle):
     """Mock oracle for interface testing."""
-    
+
     def __init__(self, fail_on_invalid=True):
         self.fail_on_invalid = fail_on_invalid
         self.measurement_count = 0
-    
-    def measure(self, compounds: pd.DataFrame, properties: list) -> pd.DataFrame:
+
+    def measure(self, compounds: pl.DataFrame, properties: list) -> pl.DataFrame:
         """Mock measurement implementation."""
         if len(compounds) == 0:
-            return pd.DataFrame(columns=['ID'] + properties)
-        
+            return pl.DataFrame(schema={'ID': pl.Utf8, **{prop: pl.Float64 for prop in properties}})
+
         if 'ID' not in compounds.columns:
             raise KeyError("Compounds must have 'ID' column")
-        
-        result = compounds[['ID']].copy()
-        
+
+        result = compounds.select(['ID'])
+
         for prop in properties:
             # Simulate measurements
-            result[prop] = np.random.uniform(-10, 0, len(compounds))  # Docking-like scores
-        
+            result = result.with_columns(
+                pl.Series(prop, np.random.uniform(-10, 0, len(compounds)))
+            )
+
         self.measurement_count += len(compounds)
         return result
 
@@ -81,9 +83,9 @@ class TestLearnerInterface:
     
     def test_learner_interface_methods(self, small_real_compounds, tmp_path):
         """Test that Learner interface methods are properly defined."""
-        compounds = small_real_compounds.copy()
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        compounds = small_real_compounds.clone()
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         learner = MockLearner(supports_uncertainty=True)
 
@@ -103,9 +105,9 @@ class TestLearnerInterface:
     
     def test_learner_without_uncertainty(self, small_real_compounds, tmp_path):
         """Test learner that doesn't support uncertainty."""
-        compounds = small_real_compounds.copy()
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        compounds = small_real_compounds.clone()
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
         learner = MockLearner(supports_uncertainty=False)
 
         learner.train(features, targets)
@@ -132,9 +134,9 @@ class TestLearnerInterface:
     
     def test_real_learner_interface_compliance(self, small_real_compounds, tmp_path):
         """Test that real learners comply with interface."""
-        compounds = small_real_compounds.copy()
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        compounds = small_real_compounds.clone()
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
 
         rf_learner = RandomForestLearner()
 
@@ -166,7 +168,7 @@ class TestOracleInterface:
     
     def test_oracle_interface_methods(self, small_real_compounds):
         """Test that Oracle interface methods are properly defined."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         oracle = MockOracle()
 
         assert hasattr(oracle, 'measure')
@@ -174,7 +176,7 @@ class TestOracleInterface:
         properties = ['Activity', 'LogP']
         result = oracle.measure(compounds, properties)
 
-        assert isinstance(result, pd.DataFrame)
+        assert isinstance(result, pl.DataFrame)
         assert 'ID' in result.columns
         assert all(prop in result.columns for prop in properties)
         assert len(result) == len(compounds)
@@ -182,29 +184,29 @@ class TestOracleInterface:
     def test_oracle_empty_input(self):
         """Test oracle with empty input."""
         oracle = MockOracle()
-        empty_compounds = pd.DataFrame(columns=['ID', 'SMILES'])
-        
+        empty_compounds = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8})
+
         result = oracle.measure(empty_compounds, ['Activity'])
-        
-        assert isinstance(result, pd.DataFrame)
+
+        assert isinstance(result, pl.DataFrame)
         assert 'ID' in result.columns
         assert 'Activity' in result.columns
         assert len(result) == 0
     
     def test_oracle_error_conditions(self, small_real_compounds):
         """Test oracle error handling."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         oracle = MockOracle()
 
-        compounds_no_id = compounds.drop(columns=['ID'])
+        compounds_no_id = compounds.drop('ID')
         with pytest.raises(KeyError):
             oracle.measure(compounds_no_id, ['Activity'])
     
     def test_real_oracle_interface_compliance(self, small_real_compounds, tmp_path):
         """Test that real oracles comply with interface."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         test_csv = tmp_path / "test_data.csv"
-        compounds.to_csv(test_csv, index=False)
+        compounds.write_csv(test_csv)
 
         csv_oracle = CSVOracle(str(test_csv))
 
@@ -213,10 +215,33 @@ class TestOracleInterface:
 
         result = csv_oracle.measure(compounds.head(5), ['Activity'])
 
-        assert isinstance(result, pd.DataFrame)
+        assert isinstance(result, pl.DataFrame)
         assert 'ID' in result.columns
         assert 'Activity' in result.columns
         assert len(result) == 5
+
+    def test_csv_oracle_preserves_input_order(self, tmp_path):
+        """Test that CSVOracle preserves input compound order."""
+        oracle_data = pl.DataFrame({
+            'ID': ['A', 'B', 'C', 'D', 'E'],
+            'SMILES': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
+            'Activity': [0.1, 0.2, 0.3, 0.4, 0.5]
+        })
+
+        test_csv = tmp_path / "test_oracle.csv"
+        oracle_data.write_csv(test_csv)
+
+        oracle = CSVOracle(str(test_csv))
+
+        request = pl.DataFrame({
+            'ID': ['E', 'B', 'A', 'D', 'C'],
+            'SMILES': ['CCCCCC', 'CCC', 'CCO', 'CCCCC', 'CCCC']
+        })
+
+        result = oracle.measure(request, ['Activity'])
+
+        assert result['ID'].to_list() == ['E', 'B', 'A', 'D', 'C']
+        assert result['Activity'].to_list() == [0.5, 0.2, 0.1, 0.4, 0.3]
 
 
 class TestInterfaceIntegration:
@@ -224,9 +249,9 @@ class TestInterfaceIntegration:
     
     def test_learner_oracle_integration(self, small_real_compounds, tmp_path):
         """Test learner and oracle working together."""
-        compounds = small_real_compounds.copy()
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        targets = compounds['Activity'].values
+        compounds = small_real_compounds.clone()
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        targets = compounds['Activity'].to_numpy()
         learner = MockLearner(supports_uncertainty=True)
         oracle = MockOracle()
 
@@ -236,7 +261,7 @@ class TestInterfaceIntegration:
 
         n_select = min(5, len(compounds))
         selected_indices = np.argsort(predictions)[-n_select:]
-        selected_compounds = compounds.iloc[selected_indices]
+        selected_compounds = compounds[selected_indices]
 
         measurements = oracle.measure(selected_compounds, ['Activity'])
 
@@ -246,14 +271,14 @@ class TestInterfaceIntegration:
     
     def test_interface_with_real_components(self, medium_real_compounds, tmp_path):
         """Test interface integration with real components."""
-        compounds = medium_real_compounds.copy()
+        compounds = medium_real_compounds.clone()
 
         if len(compounds) < 10:
             pytest.skip("Insufficient compounds for integration test")
 
-        oracle_data = compounds.copy()
+        oracle_data = compounds.clone()
         test_csv = tmp_path / "oracle_data.csv"
-        oracle_data.to_csv(test_csv, index=False)
+        oracle_data.write_csv(test_csv)
 
         learner = RandomForestLearner()
         oracle = CSVOracle(str(test_csv))
@@ -261,40 +286,40 @@ class TestInterfaceIntegration:
         train_compounds = compounds.head(50)
         test_compounds = compounds.tail(20)
 
-        train_features = extract_features(train_compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        train_targets = train_compounds['Activity'].values
+        train_features = extract_features(train_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        train_targets = train_compounds['Activity'].to_numpy()
         learner.train(train_features, train_targets)
 
-        test_features = extract_features(test_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        test_features = extract_features(test_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         predictions, uncertainty = learner.predict(test_features)
 
         assert len(predictions) == len(test_compounds)
 
         n_select = 5
         top_indices = np.argsort(predictions)[-n_select:]
-        selected_compounds = test_compounds.iloc[top_indices]
+        selected_compounds = test_compounds[top_indices]
 
         measurements = oracle.measure(selected_compounds, ['Activity'])
 
         assert len(measurements) == n_select
-        assert set(measurements['ID']) == set(selected_compounds['ID'])
+        assert set(measurements['ID'].to_list()) == set(selected_compounds['ID'].to_list())
     
     def test_interface_error_propagation(self, small_real_compounds, tmp_path):
         """Test error propagation through interface components."""
-        compounds = small_real_compounds.copy()
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        compounds = small_real_compounds.clone()
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
         learner = MockLearner()
         oracle = MockOracle()
 
-        targets_wrong_length = compounds['Activity'].values[:len(compounds)//2]
+        targets_wrong_length = compounds['Activity'].to_numpy()[:len(compounds)//2]
 
         with pytest.raises(ValueError):
             learner.train(features, targets_wrong_length)
 
-        targets = compounds['Activity'].values
+        targets = compounds['Activity'].to_numpy()
         learner.train(features, targets)
 
-        compounds_no_id = compounds.drop(columns=['ID'])
+        compounds_no_id = compounds.drop('ID')
 
         with pytest.raises(KeyError):
             oracle.measure(compounds_no_id, ['Activity'])

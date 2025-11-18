@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 from unittest.mock import Mock
 
 from learnm8.learners.torch.mc_dropout import MCDropoutLearner
@@ -35,12 +35,14 @@ class TestMCDropoutLearner:
     
     def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
         assert learner.model is not None
 
@@ -53,12 +55,14 @@ class TestMCDropoutLearner:
 
     def test_uncertainty_quality(self, learner, small_real_compounds, tmp_path):
         """Test that MC Dropout uncertainty estimates are reasonable."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert np.std(uncertainty) > 0
@@ -67,11 +71,13 @@ class TestMCDropoutLearner:
 
     def test_dropout_samples_effect(self, tmp_path, small_real_compounds):
         """Test effect of different numbers of dropout samples."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         learner_few = MCDropoutLearner(
             hidden_sizes=(32,),
@@ -80,7 +86,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        learner_few.train(features, compounds['Activity'].values)
+        learner_few.train(features, compounds['Activity'].to_numpy())
         pred_few, unc_few = learner_few.predict(features)
 
         learner_many = MCDropoutLearner(
@@ -90,7 +96,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        learner_many.train(features, compounds['Activity'].values)
+        learner_many.train(features, compounds['Activity'].to_numpy())
         pred_many, unc_many = learner_many.predict(features)
 
         assert len(pred_few) == len(compounds)
@@ -100,7 +106,7 @@ class TestMCDropoutLearner:
 
     def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
     
@@ -114,9 +120,11 @@ class TestMCDropoutLearner:
     
     def test_different_architectures(self, tmp_path, small_real_compounds):
         """Test learner with different architectures."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner = MCDropoutLearner(
             hidden_sizes=(128, 64, 32),
@@ -127,8 +135,8 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert learner.hidden_sizes == (128, 64, 32)
@@ -139,9 +147,11 @@ class TestMCDropoutLearner:
 
     def test_dropout_rate_effect(self, tmp_path, small_real_compounds):
         """Test effect of different dropout rates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         for dropout_rate in [0.1, 0.3, 0.5]:
             learner = MCDropoutLearner(
@@ -152,8 +162,8 @@ class TestMCDropoutLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-            learner.train(features, compounds['Activity'].values)
+            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            learner.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = learner.predict(features)
 
             assert learner.dropout_rate == dropout_rate
@@ -163,7 +173,7 @@ class TestMCDropoutLearner:
 
     def test_edge_case_single_compound(self, tmp_path):
         """Test with single compound using learner without batch norm."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
@@ -177,8 +187,8 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, single_compound['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
         assert len(predictions) == 1
@@ -188,14 +198,14 @@ class TestMCDropoutLearner:
 
     def test_uncertainty_consistency(self, learner, tmp_path):
         """Test that uncertainty is consistent across multiple predictions."""
-        compounds = pd.DataFrame({
+        compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
             'SMILES': ['CCO', 'CCC', 'CCN'],
             'Activity': [0.3, 0.6, 0.9]
         })
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, compounds['Activity'].to_numpy())
 
         pred1, unc1 = learner.predict(features)
         pred2, unc2 = learner.predict(features)
@@ -208,9 +218,11 @@ class TestMCDropoutLearner:
 
     def test_deterministic_with_same_seed(self, tmp_path, small_real_compounds):
         """Test reproducibility with same random seed."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         learner1 = MCDropoutLearner(
             hidden_sizes=(32,),
@@ -223,9 +235,9 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        learner1.train(features, compounds['Activity'].values)
-        learner2.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner1.train(features, compounds['Activity'].to_numpy())
+        learner2.train(features, compounds['Activity'].to_numpy())
 
         pred1, _ = learner1.predict(features)
         pred2, _ = learner2.predict(features)

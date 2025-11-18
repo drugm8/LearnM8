@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 try:
     from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
@@ -73,12 +73,14 @@ class TestChempropEnsemble:
 
     def test_train_predict_integration(self, chemprop_ensemble, small_real_compounds):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
         assert chemprop_ensemble.is_trained
@@ -92,12 +94,14 @@ class TestChempropEnsemble:
 
     def test_uncertainty_estimation(self, chemprop_ensemble, small_real_compounds):
         """Test that ensemble provides uncertainty estimates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
@@ -117,12 +121,14 @@ class TestChempropEnsemble:
         assert len(set(random_states)) == 3
         assert random_states == [42, 123, 456]
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
@@ -147,7 +153,7 @@ class TestChempropEnsemble:
 
     def test_predict_without_training(self, chemprop_ensemble, small_real_compounds):
         """Test error when predicting without training."""
-        smiles = small_real_compounds['SMILES'].tolist()[:5]
+        smiles = small_real_compounds['SMILES'].to_list()[:5]
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             chemprop_ensemble.predict(features=None, smiles=smiles)
 
@@ -181,12 +187,14 @@ class TestChempropEnsemble:
 
     def test_aggregation_methods(self, small_real_compounds):
         """Test different aggregation methods with Chemprop ensemble."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         for method in ['mean', 'median']:
             ensemble = ChempropEnsemble(
@@ -203,12 +211,14 @@ class TestChempropEnsemble:
 
     def test_uncertainty_methods(self, small_real_compounds):
         """Test different uncertainty estimation methods."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         for method in ['std', 'mad', 'quantile']:
             ensemble = ChempropEnsemble(
@@ -225,9 +235,11 @@ class TestChempropEnsemble:
 
     def test_weighted_ensemble(self, small_real_compounds):
         """Test weighted ensemble aggregation."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         weights = [0.6, 0.3, 0.1]
         ensemble = ChempropEnsemble(
@@ -236,8 +248,8 @@ class TestChempropEnsemble:
             weights=weights
         )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         ensemble.train(features=None, targets=targets, smiles=smiles)
         predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
@@ -247,16 +259,18 @@ class TestChempropEnsemble:
 
     def test_ensemble_statistics(self, chemprop_ensemble, small_real_compounds):
         """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         stats = chemprop_ensemble.get_ensemble_statistics()
         assert stats['n_learners'] == 3
         assert stats['is_trained'] is False
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
         stats = chemprop_ensemble.get_ensemble_statistics()
@@ -272,14 +286,14 @@ class TestChempropEnsemble:
             max_epochs=3
         )
 
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        smiles = single_compound['SMILES'].tolist()
-        targets = single_compound['Activity'].values
+        smiles = single_compound['SMILES'].to_list()
+        targets = single_compound['Activity'].to_numpy()
 
         ensemble.train(features=None, targets=targets, smiles=smiles)
         predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
@@ -291,12 +305,14 @@ class TestChempropEnsemble:
 
     def test_uncertainty_diversity(self, chemprop_ensemble, small_real_compounds):
         """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
         predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
@@ -314,12 +330,14 @@ class TestChempropEnsemble:
 
     def test_prediction_consistency(self, chemprop_ensemble, small_real_compounds):
         """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
@@ -331,12 +349,14 @@ class TestChempropEnsemble:
 
     def test_different_architectures(self, small_real_compounds):
         """Test ensemble with different architecture configurations."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        smiles = compounds['SMILES'].tolist()
-        targets = compounds['Activity'].values
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
 
         architectures = [
             {'depth': 2, 'message_hidden_dim': 300},
@@ -381,10 +401,10 @@ class TestChempropEnsembleWithDescriptors:
         from learnm8.features.extraction import extract_features
 
         ensemble = ChempropEnsemble(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         features = extract_features(smiles, 'morgan', tmp_path)
 
@@ -400,10 +420,10 @@ class TestChempropEnsembleWithDescriptors:
     def test_train_predict_without_descriptors(self, small_real_compounds):
         """Test ensemble backward compatibility without descriptors."""
         ensemble = ChempropEnsemble(max_epochs=5)
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
 
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         ensemble.train(features=None, targets=targets, smiles=smiles)
 
@@ -417,9 +437,9 @@ class TestChempropEnsembleWithDescriptors:
         """Test that uncertainty is provided in both modes."""
         from learnm8.features.extraction import extract_features
 
-        compounds = small_real_compounds.copy()
-        smiles = compounds['SMILES'].tolist()[:10]
-        targets = compounds['Activity'].values[:10]
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
 
         ensemble_with = ChempropEnsemble(max_epochs=5)
         features = extract_features(smiles, 'morgan', tmp_path)
@@ -434,3 +454,113 @@ class TestChempropEnsembleWithDescriptors:
         assert unc_without.shape == (10,)
         assert np.all(unc_with >= 0)
         assert np.all(unc_without >= 0)
+
+    def test_aggressive_gc_enabled_by_default(self):
+        """Verify enable_aggressive_gc defaults to True."""
+        ensemble = ChempropEnsemble()
+        assert ensemble.enable_aggressive_gc is True
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is True
+
+    def test_aggressive_gc_can_be_disabled(self):
+        """Verify enable_aggressive_gc can be set to False."""
+        ensemble = ChempropEnsemble(enable_aggressive_gc=False)
+        assert ensemble.enable_aggressive_gc is False
+        for learner in ensemble.learners:
+            assert learner.enable_aggressive_gc is False
+
+    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after training when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after ensemble training' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is called after prediction when enabled."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=True
+        )
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+
+        cleanup_called.clear()
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        ensemble.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) > 0
+        assert any('after ensemble prediction' in ctx for ctx in cleanup_called)
+
+    def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
+        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
+        cleanup_called = []
+
+        def mock_cleanup(self, context=""):
+            cleanup_called.append(context)
+
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            enable_aggressive_gc=False
+        )
+
+        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+        ensemble.predict(features=None, smiles=smiles)
+
+        assert len(cleanup_called) == 0
+
+    def test_predictions_unaffected_by_gc(self, small_real_compounds):
+        """Verify predictions are identical with GC enabled vs disabled."""
+        compounds = small_real_compounds.clone()
+        smiles = compounds['SMILES'].to_list()[:10]
+        targets = compounds['Activity'].to_numpy()[:10]
+
+        ensemble_gc_on = ChempropEnsemble(
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=True
+        )
+        ensemble_gc_on.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_on, _ = ensemble_gc_on.predict(features=None, smiles=smiles)
+
+        ensemble_gc_off = ChempropEnsemble(
+            max_epochs=2,
+            random_states=[42, 123, 456],
+            enable_aggressive_gc=False
+        )
+        ensemble_gc_off.train(features=None, targets=targets, smiles=smiles)
+        pred_gc_off, _ = ensemble_gc_off.predict(features=None, smiles=smiles)
+
+        assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)

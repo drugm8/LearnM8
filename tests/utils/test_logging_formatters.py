@@ -1,7 +1,7 @@
 """Tests for logging formatters module."""
 
 import pytest
-import pandas as pd
+import polars as pl
 import numpy as np
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
@@ -184,7 +184,7 @@ class TestFormatExperimentSummary:
 
     def test_summary_with_pruning(self):
         """Format summary with labeled, pruned, and unlabeled compounds."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ID': range(1000),
             'status': ['labeled'] * 300 + ['pruned'] * 200 + ['unlabeled'] * 500
         })
@@ -202,7 +202,7 @@ class TestFormatExperimentSummary:
 
     def test_summary_no_pruning(self):
         """Format summary without pruning."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ID': range(1000),
             'status': ['labeled'] * 400 + ['unlabeled'] * 600
         })
@@ -216,7 +216,7 @@ class TestFormatExperimentSummary:
 
     def test_summary_all_labeled(self):
         """Format summary when all compounds are labeled."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ID': range(100),
             'status': ['labeled'] * 100
         })
@@ -229,7 +229,7 @@ class TestFormatExperimentSummary:
 
     def test_duration_formats_correctly(self):
         """Verify duration is formatted in summary."""
-        df = pd.DataFrame({
+        df = pl.DataFrame({
             'ID': range(100),
             'status': ['labeled'] * 50 + ['unlabeled'] * 50
         })

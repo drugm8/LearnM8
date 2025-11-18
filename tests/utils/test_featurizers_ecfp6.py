@@ -190,7 +190,7 @@ class TestECFP6EdgeCases:
 
     def test_large_molecule(self, small_real_compounds):
         if len(small_real_compounds) > 0:
-            large_smiles = small_real_compounds['SMILES'].iloc[0]
+            large_smiles = small_real_compounds['SMILES'][0]
             fp = smiles_to_ecfp6_fingerprint(large_smiles)
 
             assert fp.shape == (2048,)
@@ -221,7 +221,7 @@ class TestECFP6RealMolecularData:
         if len(small_real_compounds) == 0:
             pytest.skip("No real compounds available")
 
-        smiles_list = small_real_compounds['SMILES'].tolist()[:10]
+        smiles_list = small_real_compounds['SMILES'].to_list()[:10]
         fps = [smiles_to_ecfp6_fingerprint(smiles) for smiles in smiles_list]
 
         assert len(fps) == len(smiles_list)
@@ -233,7 +233,7 @@ class TestECFP6RealMolecularData:
         if len(diverse_real_compounds) == 0:
             pytest.skip("No diverse compounds available")
 
-        smiles_list = diverse_real_compounds['SMILES'].tolist()[:5]
+        smiles_list = diverse_real_compounds['SMILES'].to_list()[:5]
         fps = [smiles_to_ecfp6_fingerprint(smiles) for smiles in smiles_list]
 
         for i in range(len(fps)):
@@ -248,7 +248,7 @@ class TestECFP6RealMolecularData:
         if len(medium_real_compounds) == 0:
             pytest.skip("No medium compounds available")
 
-        smiles_list = medium_real_compounds['SMILES'].tolist()[:5]
+        smiles_list = medium_real_compounds['SMILES'].to_list()[:5]
         fps = [smiles_to_ecfp6_fingerprint(smiles) for smiles in smiles_list]
 
         assert len(fps) == len(smiles_list)
@@ -259,7 +259,7 @@ class TestECFP6RealMolecularData:
         if len(edge_case_compounds) == 0:
             pytest.skip("No edge case compounds available")
 
-        smiles_list = edge_case_compounds['SMILES'].tolist()
+        smiles_list = edge_case_compounds['SMILES'].to_list()
 
         for smiles in smiles_list:
             try:

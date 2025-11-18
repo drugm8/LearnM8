@@ -54,6 +54,7 @@ class ChempropEnsemble(EnsembleLearner):
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,
 				 checkpoint_dir: Optional[Path] = None,
+				 enable_aggressive_gc: bool = True,
 				 **kwargs):
 		"""Initialize Chemprop ensemble.
 
@@ -78,6 +79,8 @@ class ChempropEnsemble(EnsembleLearner):
 			val_fraction: Fraction of data for validation (default: 0.1)
 			enable_fine_tuning: Enable checkpoint-based fine-tuning (default: False)
 			checkpoint_dir: Directory for checkpoint storage (required if fine-tuning enabled)
+			enable_aggressive_gc: Enable automatic GPU memory cleanup for all
+				ensemble members and at ensemble level (default: True)
 			**kwargs: Additional arguments passed to EnsembleLearner
 		"""
 		if random_states is None:
@@ -118,7 +121,8 @@ class ChempropEnsemble(EnsembleLearner):
 				early_stopping_min_delta=early_stopping_min_delta,
 				val_fraction=val_fraction,
 				enable_fine_tuning=enable_fine_tuning,
-				checkpoint_dir=member_checkpoint_dir
+				checkpoint_dir=member_checkpoint_dir,
+				enable_aggressive_gc=enable_aggressive_gc
 			)
 			learners.append(chemprop)
 
@@ -149,6 +153,7 @@ class ChempropEnsemble(EnsembleLearner):
 		# Store fine-tuning configuration
 		self.enable_fine_tuning = enable_fine_tuning
 		self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
+		self.enable_aggressive_gc = enable_aggressive_gc
 
 	def train(self, features, targets, smiles=None):
 		"""Train ensemble with SMILES strings.
@@ -172,6 +177,8 @@ class ChempropEnsemble(EnsembleLearner):
 			learner.train(features=None, targets=targets, smiles=smiles)
 
 		self.is_trained = True
+
+		self._cleanup_gpu_memory("after ensemble training")
 
 	def predict(self, features, smiles=None):
 		"""Predict with SMILES strings.
@@ -200,6 +207,8 @@ class ChempropEnsemble(EnsembleLearner):
 		# Aggregate predictions
 		ensemble_predictions = self._aggregate_predictions(predictions_array)
 		uncertainties = self._calculate_uncertainty(predictions_array)
+
+		self._cleanup_gpu_memory("after ensemble prediction")
 
 		return ensemble_predictions, uncertainties
 
@@ -233,3 +242,48 @@ class ChempropEnsemble(EnsembleLearner):
 	def requires_smiles(self) -> bool:
 		"""ChempropEnsemble requires SMILES strings."""
 		return True
+
+	def _cleanup_gpu_memory(self, context: str = "") -> None:
+		"""Force garbage collection and clear GPU cache if enabled.
+
+		This method performs two cleanup operations:
+		1. torch.cuda.empty_cache() - Releases cached GPU memory
+		2. gc.collect() - Forces Python garbage collection
+
+		This is particularly important in active learning scenarios where
+		models are trained repeatedly over many cycles, which can lead to
+		GPU memory accumulation from unreferenced tensors and PyTorch's
+		caching allocator.
+
+		The cleanup is a best-effort operation that won't raise exceptions
+		if it fails. It only runs if enable_aggressive_gc=True.
+
+		Args:
+			context: Optional description of when cleanup is being called,
+					used for debug logging (e.g., "after training")
+
+		Note:
+			This is safe to call after predictions have been moved to CPU
+			memory via .cpu().numpy(), as it only affects unreferenced
+			GPU tensors and Python objects.
+		"""
+		if not self.enable_aggressive_gc:
+			return
+
+		try:
+			import gc
+			import torch
+
+			if torch.cuda.is_available():
+				torch.cuda.empty_cache()
+			gc.collect()
+
+			if context:
+				import logging
+				logger = logging.getLogger(__name__)
+				logger.debug(f"GPU memory cleanup: {context}")
+
+		except Exception as e:
+			import logging
+			logger = logging.getLogger(__name__)
+			logger.warning(f"GPU memory cleanup failed ({context}): {e}")

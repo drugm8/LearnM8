@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
@@ -48,12 +48,14 @@ class TestMixedEnsemble:
 
     def test_train_predict_integration(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         assert mixed_ensemble.is_trained
 
         predictions, uncertainty = mixed_ensemble.predict(features)
@@ -65,12 +67,14 @@ class TestMixedEnsemble:
 
     def test_uncertainty_estimation(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test that ensemble provides meaningful uncertainty estimates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = mixed_ensemble.predict(features)
 
         assert uncertainty is not None
@@ -85,7 +89,7 @@ class TestMixedEnsemble:
 
     def test_predict_without_training(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             mixed_ensemble.predict(features)
 
@@ -118,16 +122,18 @@ class TestMixedEnsemble:
 
     def test_ensemble_statistics(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         stats = mixed_ensemble.get_ensemble_statistics()
         assert stats['n_learners'] == 3
         assert stats['is_trained'] is False
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         stats = mixed_ensemble.get_ensemble_statistics()
         assert stats['is_trained'] is True
         assert 'learner_names' in stats
@@ -135,12 +141,14 @@ class TestMixedEnsemble:
 
     def test_individual_predictions(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test individual learner predictions retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         individual_preds = mixed_ensemble.get_individual_predictions(features)
 
         assert len(individual_preds) == 3
@@ -150,14 +158,14 @@ class TestMixedEnsemble:
 
     def test_edge_case_single_compound(self, mixed_ensemble, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, single_compound['Activity'].to_numpy())
         predictions, uncertainty = mixed_ensemble.predict(features)
 
         assert len(predictions) == 1
@@ -167,12 +175,14 @@ class TestMixedEnsemble:
 
     def test_model_diversity_in_predictions(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test that different models produce diverse predictions."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         individual_preds = mixed_ensemble.get_individual_predictions(features)
 
         pred_arrays = [preds for preds in individual_preds.values() if preds is not None]
@@ -185,12 +195,14 @@ class TestMixedEnsemble:
 
     def test_uncertainty_captures_model_disagreement(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test that uncertainty reflects disagreement between models."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = mixed_ensemble.predict(features)
         individual_preds = mixed_ensemble.get_individual_predictions(features)
@@ -203,26 +215,30 @@ class TestMixedEnsemble:
 
     def test_all_learners_train_successfully(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test that all learners train without errors."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         initial_learner_count = len(mixed_ensemble.learners)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
 
         assert len(mixed_ensemble.learners) == initial_learner_count
         assert mixed_ensemble.is_trained
 
     def test_prediction_range_reasonable(self, mixed_ensemble, small_real_compounds, tmp_path):
         """Test that predictions are in reasonable range given training data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        mixed_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, _ = mixed_ensemble.predict(features)
 
         train_min = compounds['Activity'].min()
@@ -237,18 +253,20 @@ class TestMixedEnsemble:
 
     def test_reproducibility_with_fixed_random_state(self, small_real_compounds, tmp_path):
         """Test that fixed random state produces reproducible results."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         ensemble1 = MixedEnsemble(random_state=42)
-        ensemble1.train(features, compounds['Activity'].values)
+        ensemble1.train(features, compounds['Activity'].to_numpy())
         pred1, unc1 = ensemble1.predict(features)
 
         ensemble2 = MixedEnsemble(random_state=42)
-        ensemble2.train(features, compounds['Activity'].values)
+        ensemble2.train(features, compounds['Activity'].to_numpy())
         pred2, unc2 = ensemble2.predict(features)
 
         np.testing.assert_array_almost_equal(pred1, pred2)
@@ -256,32 +274,34 @@ class TestMixedEnsemble:
 
     def test_different_random_states_produce_different_results(self, small_real_compounds, tmp_path):
         """Test that different random states produce different results."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         ensemble1 = MixedEnsemble(random_state=42)
-        ensemble1.train(features, compounds['Activity'].values)
+        ensemble1.train(features, compounds['Activity'].to_numpy())
         pred1, _ = ensemble1.predict(features)
 
         ensemble2 = MixedEnsemble(random_state=123)
-        ensemble2.train(features, compounds['Activity'].values)
+        ensemble2.train(features, compounds['Activity'].to_numpy())
         pred2, _ = ensemble2.predict(features)
 
         assert not np.allclose(pred1, pred2)
 
     def test_empty_features_handling(self, mixed_ensemble):
         """Test handling of empty feature arrays after training."""
-        dummy_compounds = pd.DataFrame({
+        dummy_compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
             'SMILES': ['CCO', 'CCC'],
             'Activity': [0.5, 0.7]
         })
 
         dummy_features = np.random.randn(2, 2048)
-        mixed_ensemble.train(dummy_features, dummy_compounds['Activity'].values)
+        mixed_ensemble.train(dummy_features, dummy_compounds['Activity'].to_numpy())
 
         empty_features = np.array([]).reshape(0, 2048)
         predictions, uncertainty = mixed_ensemble.predict(empty_features)

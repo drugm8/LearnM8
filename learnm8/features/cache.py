@@ -81,11 +81,9 @@ def cache_features(default_cache_dir: Path) -> Callable:
                         try:
                             if smiles_hash in features_group:
                                 cached_features[idx] = features_group[smiles_hash][:]
-                                logger.debug(f"Cache hit for SMILES hash {smiles_hash[:8]}...")
                             else:
                                 uncached_smiles.append(smiles)
                                 uncached_indices.append(idx)
-                                logger.debug(f"Cache miss for SMILES hash {smiles_hash[:8]}...")
                         except (OSError, IOError, KeyError, RuntimeError) as e:
                             logger.warning(f"Cache read failed for SMILES hash {smiles_hash[:8]}: {e}")
                             uncached_smiles.append(smiles)

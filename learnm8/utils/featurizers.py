@@ -4,7 +4,7 @@ Provides both direct computation and file-based caching of molecular representat
 """
 
 import os
-import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -132,17 +132,25 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer_type: str = "morga
     return np.array(fingerprints)
 
 
-def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
-    """Compute Mordred descriptors for a list of SMILES."""
+def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
+    """Compute Mordred descriptors for a list of SMILES.
+
+    Note:
+        The Mordred library only provides a pandas API (Calculator.pandas()).
+        We convert the pandas DataFrame to Polars immediately after computation
+        for consistency with the rest of the LearnM8 codebase. This conversion
+        overhead is acceptable as descriptor computation is cached.
+    """
     from mordred import Calculator, descriptors
-    
+    import pandas as pd  # Required by Mordred library
+
     # Create calculator
     calc = Calculator(descriptors, ignore_3D=True)
-    
+
     # Convert SMILES to molecules, keeping track of valid indices
     mols = []
     valid_indices = []
-    
+
     for i, smiles in enumerate(smiles_list):
         try:
             mol = Chem.MolFromSmiles(smiles)
@@ -152,7 +160,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
         except Exception:
             # Skip invalid molecules
             continue
-    
+
     if not mols:
         # No valid molecules, return empty dataframe with correct structure
         # Calculate descriptors for a dummy molecule to get column structure
@@ -163,9 +171,9 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
         for _ in range(len(smiles_list)):
             empty_df.loc[len(empty_df)] = 0
         empty_df = empty_df.astype(np.float32)
-        return empty_df
-    
-    # Calculate descriptors for valid molecules
+        return pl.from_pandas(empty_df)  # Convert to Polars for consistency
+
+    # Calculate descriptors for valid molecules (Mordred returns pandas)
     descriptors_df = calc.pandas(mols)
 
     # Fill NaN values for molecules that couldn't be processed
@@ -176,8 +184,8 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
 
     # Create final dataframe with all input molecules
     if len(valid_indices) == len(smiles_list):
-        # All molecules were valid
-        return descriptors_df
+        # All molecules were valid - convert to Polars
+        return pl.from_pandas(descriptors_df)
     else:
         # Some molecules were invalid, need to insert zero rows
         final_df = pd.DataFrame(columns=descriptors_df.columns)
@@ -193,7 +201,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pd.DataFrame:
                 final_df.loc[len(final_df)] = 0
 
         final_df = final_df.astype(np.float32)
-        return final_df
+        return pl.from_pandas(final_df)  # Convert to Polars for consistency
 
 
 def _get_representation_file(results_dir: Path, featurizer_type: str) -> Path:
@@ -204,37 +212,37 @@ def _get_representation_file(results_dir: Path, featurizer_type: str) -> Path:
 
 
 def _compute_and_store_representations(
-    compounds: pd.DataFrame, 
-    featurizer_type: str, 
+    compounds: pl.DataFrame,
+    featurizer_type: str,
     results_dir: Path,
     logger: Optional[logging.Logger] = None
 ) -> None:
     """Compute and store representations to file."""
     if logger:
         logger.info(f"Computing {featurizer_type} representations for {len(compounds)} compounds")
-    
+
     representations = {}
-    
+
     if featurizer_type in ["morgan", "maccs", "ecfp6"]:
         # Compute fingerprints
-        fingerprints = smiles_to_fingerprints(compounds['SMILES'].tolist(), featurizer_type)
-        for idx, compound_id in enumerate(compounds['ID']):
+        fingerprints = smiles_to_fingerprints(compounds.get_column('SMILES').to_list(), featurizer_type)
+        for idx, compound_id in enumerate(compounds.get_column('ID').to_list()):
             representations[compound_id] = fingerprints[idx]
-    
+
     elif featurizer_type == "descriptors":
         # Compute Mordred descriptors
-        descriptors_df = _compute_mordred_descriptors(compounds['SMILES'].tolist())
-        for idx, compound_id in enumerate(compounds['ID']):
-            representations[compound_id] = descriptors_df.iloc[idx].values
-    
+        descriptors_df = _compute_mordred_descriptors(compounds.get_column('SMILES').to_list())
+        for idx, compound_id in enumerate(compounds.get_column('ID').to_list()):
+            representations[compound_id] = descriptors_df.row(idx)
+
     else:
         raise ValueError(f"Unknown featurizer type: {featurizer_type}. Supported: morgan, maccs, ecfp6, descriptors")
-    
+
     # Store to file
     representation_file = _get_representation_file(results_dir, featurizer_type)
     with open(representation_file, 'wb') as f:
         pickle.dump(representations, f)
-    
+
     if logger:
         logger.info(f"Stored {featurizer_type} representations to {representation_file}")
 
@@ -279,17 +287,17 @@ def get_descriptors(compound_ids: List[str], results_dir: Path) -> np.ndarray:
 
 
 def precompute_representations(
-    compounds: pd.DataFrame,
+    compounds: pl.DataFrame,
     featurizer_type: str,
     results_dir: Path,
     logger: Optional[logging.Logger] = None
 ) -> None:
     """Precompute and store representations for all compounds."""
     representation_file = _get_representation_file(results_dir, featurizer_type)
-    
+
     if representation_file.exists():
         if logger:
             logger.info(f"Representations already exist at {representation_file}")
         return
-    
+
     _compute_and_store_representations(compounds, featurizer_type, results_dir, logger)

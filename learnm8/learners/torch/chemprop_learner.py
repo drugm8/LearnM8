@@ -52,6 +52,11 @@ class ChempropLearner(Learner):
 		- enable_fine_tuning: Enable checkpoint-based fine-tuning (default: False)
 		- checkpoint_dir: Directory for checkpoint storage (required if fine-tuning enabled)
 
+	Memory Management Configuration:
+		- enable_aggressive_gc: Enable automatic GPU memory cleanup after training
+			and prediction. Recommended for active learning with many cycles.
+			Default: True. Disable for maximum performance if GPU memory is abundant.
+
 	Example:
 		# Pure graph-based learning
 		learner = ChempropLearner(depth=5, message_hidden_dim=500)
@@ -96,7 +101,8 @@ class ChempropLearner(Learner):
 				 early_stopping_min_delta: float = 0.0,
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,
-				 checkpoint_dir: Optional[Path] = None):
+				 checkpoint_dir: Optional[Path] = None,
+				 enable_aggressive_gc: bool = True):
 		if not CHEMPROP_AVAILABLE:
 			raise ImportError(
 				"Chemprop is required for ChempropLearner. "
@@ -135,6 +141,9 @@ class ChempropLearner(Learner):
 		self.current_checkpoint_path: Optional[Path] = None
 		self.cycle_counter = 0
 
+		# Memory management configuration
+		self.enable_aggressive_gc = enable_aggressive_gc
+
 		if self.enable_fine_tuning:
 			if self.checkpoint_dir is None:
 				raise ValueError(
@@ -163,8 +172,6 @@ class ChempropLearner(Learner):
 		if smiles is None:
 			raise ValueError("ChempropLearner requires SMILES strings")
 
-		logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
-		logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
 		warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
 
 		n_samples = len(targets)
@@ -291,16 +298,24 @@ class ChempropLearner(Learner):
 			callbacks.append(early_stop_callback)
 			logger.info(f"Early stopping enabled (patience={self.early_stopping_patience})")
 
+		# Enable progress bar and model summary if DEBUG logging is active
+		enable_verbose = logging.getLogger().level <= logging.DEBUG
+
+		# Suppress PyTorch Lightning's internal DEBUG logging
+		logging.getLogger("lightning.pytorch").setLevel(logging.WARNING)
+
 		self.trainer = pl.Trainer(
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
-			enable_progress_bar=True,
+			enable_progress_bar=enable_verbose,
 			enable_model_summary=False,
 			logger=False,
 			callbacks=callbacks
 		)
 
+		logger.info(f"Starting Chemprop training: {n_samples} samples, {self.max_epochs} max epochs")
 		self.trainer.fit(self.model, train_loader, val_loader)
+		logger.info("Chemprop training completed successfully")
 		self.is_trained = True
 
 		# Save checkpoint if fine-tuning enabled
@@ -317,6 +332,8 @@ class ChempropLearner(Learner):
 				# Don't raise - training succeeded, just checkpoint save failed
 
 		logger.info("Training complete")
+
+		self._cleanup_gpu_memory("after training")
 
 	def predict(self,
 				features: Optional[np.ndarray],
@@ -363,6 +380,47 @@ class ChempropLearner(Learner):
 	def get_name(self) -> str:
 		"""Return descriptive learner name."""
 		return f"Chemprop(depth={self.depth},hidden={self.message_hidden_dim})"
+
+	def _cleanup_gpu_memory(self, context: str = "") -> None:
+		"""Force garbage collection and clear GPU cache if enabled.
+
+		This method performs two cleanup operations:
+		1. torch.cuda.empty_cache() - Releases cached GPU memory
+		2. gc.collect() - Forces Python garbage collection
+
+		This is particularly important in active learning scenarios where
+		models are trained repeatedly over many cycles, which can lead to
+		GPU memory accumulation from unreferenced tensors and PyTorch's
+		caching allocator.
+
+		The cleanup is a best-effort operation that won't raise exceptions
+		if it fails. It only runs if enable_aggressive_gc=True.
+
+		Args:
+			context: Optional description of when cleanup is being called,
+					used for debug logging (e.g., "after training")
+
+		Note:
+			This is safe to call after predictions have been moved to CPU
+			memory via .cpu().numpy(), as it only affects unreferenced
+			GPU tensors and Python objects.
+		"""
+		if not self.enable_aggressive_gc:
+			return
+
+		try:
+			import gc
+			import torch
+
+			if torch.cuda.is_available():
+				torch.cuda.empty_cache()
+			gc.collect()
+
+			if context:
+				logger.debug(f"GPU memory cleanup: {context}")
+
+		except Exception as e:
+			logger.warning(f"GPU memory cleanup failed ({context}): {e}")
 
 	def _create_dataset(self,
 					   smiles: List[str],
@@ -499,8 +557,13 @@ class ChempropLearner(Learner):
 			num_workers=0
 		)
 
+		logger.info(f"Starting Chemprop prediction on {len(smiles)} samples")
 		predictions = self.trainer.predict(self.model, test_loader)
+		logger.info("Chemprop prediction completed, processing results")
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()
+
+		self._cleanup_gpu_memory("after prediction")
+		logger.info(f"Chemprop prediction finalized: {len(predictions)} predictions")
 
 		return predictions

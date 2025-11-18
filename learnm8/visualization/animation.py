@@ -1,4 +1,4 @@
-import pandas as pd
+import polars as pl
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -11,29 +11,40 @@ from .utils import downsample_for_viz, detect_benchmark_mode, format_metric_valu
 logger = logging.getLogger(__name__)
 
 
-def load_csv_data(output_dir: str) -> Dict[str, pd.DataFrame]:
+def load_csv_data(output_dir: str) -> Dict[str, pl.DataFrame]:
+    """Load visualization data from CSV files.
+
+    Args:
+        output_dir: Directory containing CSV output files
+
+    Returns:
+        Dictionary with 'predictions', 'metrics', and 'selections' DataFrames
+
+    Raises:
+        FileNotFoundError: If required files are missing
+    """
     output_path = Path(output_dir)
 
     data = {}
 
     predictions_file = output_path / 'compounds_final.csv'
     if predictions_file.exists():
-        data['predictions'] = pd.read_csv(predictions_file, comment='#')
+        data['predictions'] = pl.read_csv(predictions_file, comment_prefix='#')
     else:
         raise FileNotFoundError(f"Required file not found: {predictions_file}")
 
     metrics_file = output_path / 'cycle_metrics.csv'
     if metrics_file.exists():
-        data['metrics'] = pd.read_csv(metrics_file, comment='#')
+        data['metrics'] = pl.read_csv(metrics_file, comment_prefix='#')
     else:
         raise FileNotFoundError(f"Required file not found: {metrics_file}")
 
     selection_file = output_path / 'selection_history.csv'
     if selection_file.exists():
-        data['selections'] = pd.read_csv(selection_file, comment='#')
+        data['selections'] = pl.read_csv(selection_file, comment_prefix='#')
     else:
         logger.warning(f"Selection history not found: {selection_file}")
-        data['selections'] = pd.DataFrame()
+        data['selections'] = pl.DataFrame()
 
     return data
 
@@ -82,6 +93,7 @@ def create_dashboard_animation_from_csv(
 
     is_benchmark = detect_benchmark_mode(metrics_df)
 
+    # Get prediction and uncertainty columns
     pred_cols = [col for col in predictions_df.columns if col.startswith('prediction_cycle_')]
     unc_cols = [col for col in predictions_df.columns if col.startswith('uncertainty_cycle_')]
 
@@ -104,20 +116,19 @@ def create_dashboard_animation_from_csv(
 
     logger.info(f"Creating animation for {n_cycles} cycles (benchmark mode: {is_benchmark})")
 
+    # Compute global ranges for consistent axis scaling
     global_pred_min = float('inf')
     global_pred_max = float('-inf')
     global_unc_max = 0.0
 
     for pred_col in pred_cols:
-        valid_preds = predictions_df[pred_col].values
-        valid_preds = valid_preds[~np.isnan(valid_preds)]
+        valid_preds = predictions_df.get_column(pred_col).drop_nulls().to_numpy()
         if len(valid_preds) > 0:
             global_pred_min = min(global_pred_min, valid_preds.min())
             global_pred_max = max(global_pred_max, valid_preds.max())
 
     for unc_col in unc_cols:
-        valid_uncs = predictions_df[unc_col].values
-        valid_uncs = valid_uncs[~np.isnan(valid_uncs)]
+        valid_uncs = predictions_df.get_column(unc_col).drop_nulls().to_numpy()
         if len(valid_uncs) > 0:
             global_unc_max = max(global_unc_max, valid_uncs.max())
 
@@ -131,10 +142,11 @@ def create_dashboard_animation_from_csv(
     ax2_xlim = (global_pred_min - pred_range * 0.05, global_pred_max + pred_range * 0.05)
     ax2_ylim = (0, global_unc_max * 1.1)
 
+    # Get unique strategies for color mapping
     unique_strategies = []
     strategy_color_map = {}
-    if not selections_df.empty and 'strategy' in selections_df.columns:
-        unique_strategies = selections_df['strategy'].unique().tolist()
+    if selections_df.height > 0 and 'strategy' in selections_df.columns:
+        unique_strategies = selections_df.get_column('strategy').unique().to_list()
         strategy_color_map = _get_strategy_color_map(unique_strategies)
 
     if is_benchmark:
@@ -250,12 +262,13 @@ def create_dashboard_animation_from_csv(
         cycle_col = pred_cols[cycle_idx]
         cycle_num = int(cycle_col.split('_')[-1])
 
-        predictions = predictions_df[cycle_col].values
+        # Extract predictions to numpy
+        predictions = predictions_df.get_column(cycle_col).to_numpy()
 
         # Panel A: Uncertainty vs Prediction scatter
         if cycle_idx < len(unc_cols):
             unc_col = unc_cols[cycle_idx]
-            uncertainties = predictions_df[unc_col].values
+            uncertainties = predictions_df.get_column(unc_col).to_numpy()
 
             valid_mask = ~np.isnan(predictions) & ~np.isnan(uncertainties)
             pred_clean = predictions[valid_mask]
@@ -273,16 +286,17 @@ def create_dashboard_animation_from_csv(
                 ax1.set_xlim(ax2_xlim)
                 ax1.set_ylim(ax2_ylim)
 
-                if not selections_df.empty and strategy_scatters:
-                    selected_up_to_cycle = selections_df[selections_df['cycle'] <= cycle_num]
+                # Update strategy scatter points
+                if selections_df.height > 0 and strategy_scatters:
+                    selected_up_to_cycle = selections_df.filter(pl.col('cycle') <= cycle_num)
 
                     for strategy in unique_strategies:
                         strategy_scatter = strategy_scatters[strategy]
-                        strategy_selections = selected_up_to_cycle[selected_up_to_cycle['strategy'] == strategy]
+                        strategy_selections = selected_up_to_cycle.filter(pl.col('strategy') == strategy)
 
-                        if len(strategy_selections) > 0:
-                            selected_preds = strategy_selections['prediction_at_selection'].values
-                            selected_uncs = strategy_selections['uncertainty_at_selection'].values
+                        if strategy_selections.height > 0:
+                            selected_preds = strategy_selections.get_column('prediction_at_selection').to_numpy()
+                            selected_uncs = strategy_selections.get_column('uncertainty_at_selection').to_numpy()
 
                             valid_sel_mask = ~np.isnan(selected_preds) & ~np.isnan(selected_uncs)
                             selected_preds = selected_preds[valid_sel_mask]
@@ -302,22 +316,32 @@ def create_dashboard_animation_from_csv(
             for scatter in strategy_scatters.values():
                 scatter.set_offsets(np.empty((0, 2)))
 
-        # Panel B: Discovery Metrics
+        # Panel B: Discovery Metrics - extract data up to current cycle
         cycles = np.arange(cycle_idx + 1)
-        top10_values = metrics_df['top_10_discovery'].iloc[:cycle_idx + 1].values if 'top_10_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        top100_values = metrics_df['top_100_discovery'].iloc[:cycle_idx + 1].values if 'top_100_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        top01pct_values = metrics_df['top_0_1_pct_discovery'].iloc[:cycle_idx + 1].values if 'top_0_1_pct_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        top1pct_values = metrics_df['top_1_pct_discovery'].iloc[:cycle_idx + 1].values if 'top_1_pct_discovery' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        batch_ratio_values = metrics_df['batch_avg_score_ratio'].iloc[:cycle_idx + 1].values if 'batch_avg_score_ratio' in metrics_df.columns else np.ones(cycle_idx + 1)
-        cumul_ratio_values = metrics_df['cumulative_avg_score_ratio'].iloc[:cycle_idx + 1].values if 'cumulative_avg_score_ratio' in metrics_df.columns else np.ones(cycle_idx + 1)
+
+        # Helper to safely extract metric column
+        def get_metric_values(col_name, default_value=0.0):
+            if col_name in metrics_df.columns:
+                return metrics_df.head(cycle_idx + 1).get_column(col_name).to_numpy()
+            return np.full(cycle_idx + 1, default_value)
+
+        top10_values = get_metric_values('top_10_discovery', 0.0)
+        top100_values = get_metric_values('top_100_discovery', 0.0)
+        top01pct_values = get_metric_values('top_0_1_pct_discovery', 0.0)
+        top1pct_values = get_metric_values('top_1_pct_discovery', 0.0)
+        batch_ratio_values = get_metric_values('batch_avg_score_ratio', 1.0)
+        cumul_ratio_values = get_metric_values('cumulative_avg_score_ratio', 1.0)
 
         # Calculate percentage explored for x-axis coordinates
-        n_total = len(predictions_df)
+        n_total = predictions_df.height
         pct_explored = []
-        for i in range(cycle_idx + 1):
-            cumulative = metrics_df['cumulative_labeled'].iloc[i] if 'cumulative_labeled' in metrics_df.columns else 0
-            pct = (cumulative / n_total) * 100 if n_total > 0 else 0
-            pct_explored.append(pct)
+        if 'cumulative_labeled' in metrics_df.columns:
+            cumulative_values = metrics_df.head(cycle_idx + 1).get_column('cumulative_labeled').to_numpy()
+            for cumulative in cumulative_values:
+                pct = (cumulative / n_total) * 100 if n_total > 0 else 0
+                pct_explored.append(pct)
+        else:
+            pct_explored = [0.0] * (cycle_idx + 1)
 
         line_top10_disc.set_data(pct_explored, top10_values)
         line_top100_disc.set_data(pct_explored, top100_values)
@@ -339,16 +363,16 @@ def create_dashboard_animation_from_csv(
         ax3.set_xlabel('Data Explored (%)', fontsize=10)
         ax3.set_ylabel('Best Value (Lower is Better)')
 
-        if not selections_df.empty:
-            selected_up_to_cycle = selections_df[selections_df['cycle'] <= cycle_num]
-            if len(selected_up_to_cycle) > 0:
+        if selections_df.height > 0:
+            selected_up_to_cycle = selections_df.filter(pl.col('cycle') <= cycle_num)
+            if selected_up_to_cycle.height > 0:
                 cumulative_best = []
                 best_so_far = float('inf')
 
                 for c in range(cycle_num + 1):
-                    cycle_selections = selections_df[selections_df['cycle'] == c]
-                    if len(cycle_selections) > 0:
-                        cycle_values = cycle_selections['measured_value'].values
+                    cycle_selections = selections_df.filter(pl.col('cycle') == c)
+                    if cycle_selections.height > 0:
+                        cycle_values = cycle_selections.get_column('measured_value').to_numpy()
                         cycle_best = np.nanmin(cycle_values)
                         best_so_far = min(best_so_far, cycle_best)
                     cumulative_best.append(best_so_far)
@@ -357,8 +381,8 @@ def create_dashboard_animation_from_csv(
                 ax3.plot(pct_range, cumulative_best, 'b-', linewidth=2, marker='o', markersize=4, label='Best Found')
 
                 if target_col and target_col in predictions_df.columns:
-                    true_best = predictions_df[target_col].min()
-                    if not np.isnan(true_best):
+                    true_best = predictions_df.get_column(target_col).min()
+                    if true_best is not None and not np.isnan(true_best):
                         ax3.axhline(y=true_best, color='g', linestyle='--', linewidth=2, alpha=0.7, label='True Best')
 
                 max_pct = pct_explored[-1] if len(pct_explored) > 0 else 5.0
@@ -375,9 +399,9 @@ def create_dashboard_animation_from_csv(
                 ax3.set_xticklabels(x_labels_c, fontsize=8, rotation=0)
 
         # Panel D: Model Ranking Metrics
-        spearman_values = metrics_df['unlabeled_spearman_correlation'].iloc[:cycle_idx + 1].values if 'unlabeled_spearman_correlation' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        top1000_overlap_values = metrics_df['unlabeled_top_1000_overlap'].iloc[:cycle_idx + 1].values if 'unlabeled_top_1000_overlap' in metrics_df.columns else np.zeros(cycle_idx + 1)
-        top100_overlap_values = metrics_df['unlabeled_top_100_overlap'].iloc[:cycle_idx + 1].values if 'unlabeled_top_100_overlap' in metrics_df.columns else np.zeros(cycle_idx + 1)
+        spearman_values = get_metric_values('unlabeled_spearman_correlation', 0.0)
+        top1000_overlap_values = get_metric_values('unlabeled_top_1000_overlap', 0.0)
+        top100_overlap_values = get_metric_values('unlabeled_top_100_overlap', 0.0)
 
         line_spearman.set_data(pct_explored, spearman_values)
         line_top1000_overlap.set_data(pct_explored, top1000_overlap_values)

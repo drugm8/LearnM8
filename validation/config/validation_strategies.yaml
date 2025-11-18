@@ -243,3 +243,65 @@ strategies:
       - Ranking quality: Does model quality degrade on smaller pools?
       - Pool size: How quickly does search space shrink?
       - Score ratios: Are selected compounds still high quality?
+
+  simulated_annealing:
+    name: 'Simulated Annealing'
+    full_name: 'Simulated Annealing'
+    class_name: 'SimulatedAnnealingAcquisition'
+    param_name: 'config'
+    param_values:
+      - [0.5, 'exponential']
+      - [0.5, 'linear']
+      - [1.0, 'exponential']
+      - [1.0, 'linear']
+      - [5.0, 'exponential']
+      - [5.0, 'linear']
+    representative_param: [1.0, 'exponential']
+    requires_current_best: false
+    requires_scipy: false
+    description: |
+      Simulated Annealing is an optimization-inspired acquisition strategy that balances exploration
+      and exploitation through a temperature-based probabilistic selection process. It starts with
+      high temperature allowing random exploration and gradually cools down to become more greedy.
+    formula: |
+      **Algorithm:**
+      ```
+      1. Initialize temperature T = T_initial
+      2. Start with random compound (current state)
+      3. For each iteration:
+         a. Propose new candidate compound (random selection)
+         b. Calculate energy: E(x) = -prediction (for maximization)
+         c. Accept candidate if:
+            - E_candidate ≤ E_current (always accept better)
+            - OR with probability: exp(-ΔE/T) (Metropolis criterion)
+         d. Update temperature: T = T(iteration)
+      4. Return best n compounds from annealing history
+      ```
+
+      **Energy Function:**
+      - Maximization: E(x) = -μ(x)
+      - Minimization: E(x) = μ(x)
+
+      **Cooling Schedules:**
+      - Exponential: T(t) = T_initial × (T_final/T_initial)^(t/max_iter)
+      - Linear: T(t) = T_initial × (1-t/max_iter) + T_final × (t/max_iter)
+
+      **Selection:** Compounds visited during annealing, ranked by energy
+    param_interpretation: |
+      **Initial Temperature (T_initial) Controls Starting Randomness:**
+      - **T = 0.5:** Conservative start (moderate exploration)
+      - **T = 1.0:** Balanced start (standard setting)
+      - **T = 5.0:** Aggressive start (high initial exploration)
+
+      **Cooling Schedule Controls Temperature Decay:**
+      - **Exponential:** Rapid initial cooling, slow later (fast convergence)
+      - **Linear:** Constant cooling rate (steady exploration reduction)
+
+      **Fixed Parameters:**
+      - max_iterations = 500 (search thoroughness)
+      - final_temp = 0.01 (nearly greedy at end)
+
+      **Behavior:**
+      - Higher T_initial → More random exploration early
+      - Exponential schedule → Quicker transition to exploitation
+      - Linear schedule → Longer exploration phase

@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.features.extraction import extract_features
@@ -51,12 +51,12 @@ class TestLREnsemble:
 
     def test_train_predict_integration(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
         assert lr_ensemble.is_trained
 
         predictions, uncertainty = lr_ensemble.predict(features)
@@ -68,12 +68,12 @@ class TestLREnsemble:
 
     def test_uncertainty_estimation(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test that ensemble provides uncertainty estimates."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = lr_ensemble.predict(features)
 
@@ -91,12 +91,12 @@ class TestLREnsemble:
         assert len(set(alphas)) == 3
         assert alphas == [0.1, 1.0, 10.0]
 
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
 
         individual_preds = lr_ensemble.get_individual_predictions(features)
         assert len(individual_preds) == 3
@@ -118,7 +118,7 @@ class TestLREnsemble:
 
     def test_predict_without_training(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             lr_ensemble.predict(features)
 
@@ -146,15 +146,15 @@ class TestLREnsemble:
 
     def test_aggregation_methods(self, small_real_compounds, tmp_path):
         """Test different aggregation methods with LR ensemble."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         for method in ['mean', 'median']:
             ensemble = LREnsemble(aggregation_method=method)
-            ensemble.train(features, compounds['Activity'].values)
+            ensemble.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = ensemble.predict(features)
 
             assert predictions.shape[0] == len(compounds)
@@ -163,15 +163,15 @@ class TestLREnsemble:
 
     def test_uncertainty_methods(self, small_real_compounds, tmp_path):
         """Test different uncertainty estimation methods."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         for method in ['std', 'mad', 'quantile']:
             ensemble = LREnsemble(uncertainty_method=method)
-            ensemble.train(features, compounds['Activity'].values)
+            ensemble.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = ensemble.predict(features)
 
             assert predictions.shape[0] == len(compounds)
@@ -180,15 +180,15 @@ class TestLREnsemble:
 
     def test_weighted_ensemble(self, small_real_compounds, tmp_path):
         """Test weighted ensemble aggregation."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
         weights = [0.6, 0.3, 0.1]
         ensemble = LREnsemble(weights=weights)
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = ensemble.predict(features)
 
         assert predictions.shape[0] == len(compounds)
@@ -196,16 +196,16 @@ class TestLREnsemble:
 
     def test_ensemble_statistics(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
         stats = lr_ensemble.get_ensemble_statistics()
         assert stats['n_learners'] == 3
         assert stats['is_trained'] is False
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
         stats = lr_ensemble.get_ensemble_statistics()
         assert stats['is_trained'] is True
         assert 'learner_names' in stats
@@ -214,12 +214,12 @@ class TestLREnsemble:
 
     def test_individual_predictions(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test individual learner predictions retrieval."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
         individual_preds = lr_ensemble.get_individual_predictions(features)
 
         assert len(individual_preds) == 3
@@ -230,14 +230,14 @@ class TestLREnsemble:
 
     def test_edge_case_single_compound(self, lr_ensemble, tmp_path):
         """Test with single compound."""
-        single_compound = pd.DataFrame({
+        single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
             'Activity': [0.5]
         })
 
-        features = extract_features(single_compound['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, single_compound['Activity'].values)
+        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, single_compound['Activity'].to_numpy())
         predictions, uncertainty = lr_ensemble.predict(features)
 
         assert len(predictions) == 1
@@ -247,12 +247,12 @@ class TestLREnsemble:
 
     def test_uncertainty_diversity(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = lr_ensemble.predict(features)
 
         assert np.std(uncertainty) > 0
@@ -260,17 +260,17 @@ class TestLREnsemble:
 
     def test_regularization_effect_on_predictions(self, small_real_compounds, tmp_path):
         """Test that different regularization strengths produce different predictions."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
 
         ensemble_weak = LREnsemble(regularization_strengths=[0.01, 0.01, 0.01])
         ensemble_strong = LREnsemble(regularization_strengths=[10.0, 10.0, 10.0])
 
-        ensemble_weak.train(features, compounds['Activity'].values)
-        ensemble_strong.train(features, compounds['Activity'].values)
+        ensemble_weak.train(features, compounds['Activity'].to_numpy())
+        ensemble_strong.train(features, compounds['Activity'].to_numpy())
 
         preds_weak, _ = ensemble_weak.predict(features)
         preds_strong, _ = ensemble_strong.predict(features)
@@ -308,12 +308,12 @@ class TestLREnsemble:
 
     def test_prediction_consistency(self, lr_ensemble, small_real_compounds, tmp_path):
         """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.copy()
+        compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds['Activity'] = np.random.beta(2, 5, len(compounds))
+            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].tolist(), 'morgan', tmp_path)
-        lr_ensemble.train(features, compounds['Activity'].values)
+        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        lr_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions1, uncertainty1 = lr_ensemble.predict(features)
         predictions2, uncertainty2 = lr_ensemble.predict(features)
