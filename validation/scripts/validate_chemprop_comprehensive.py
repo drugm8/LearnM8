@@ -235,7 +235,9 @@ def run_single_experiment(
 ) -> Dict[str, Any]:
     """Run experiment across all random seeds and aggregate results."""
     featurizer_name = featurizer if featurizer else 'none'
-    exp_name = f"{config_name}_{featurizer_name}"
+    early_stop_str = 'early_stop' if config.get('early_stopping', False) else 'no_early_stop'
+    finetune_str = '_finetune' if config.get('enable_fine_tuning', False) else ''
+    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}{finetune_str}"
 
     exp_output_dir = output_dir / 'data' / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
@@ -842,7 +844,9 @@ def main():
 
         for exp in experiments:
             featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
-            exp_name = f"{exp['config_name']}_{featurizer_name}"
+            early_stop_str = 'early_stop' if exp['config'].get('early_stopping', False) else 'no_early_stop'
+            finetune_str = '_finetune' if exp['config'].get('enable_fine_tuning', False) else ''
+            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
 
             exp_dir = args.output_dir / 'data' / exp_name
             if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
