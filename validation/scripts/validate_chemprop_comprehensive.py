@@ -137,11 +137,6 @@ FEATURIZERS = [
     'descriptors',
 ]
 
-<<<<<<< HEAD
-EARLY_STOPPING_OPTIONS = [True, False]
-
-FINE_TUNING_OPTIONS = [False, True]
-=======
 
 def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
     """Load dataset using validation library and create oracle."""
@@ -152,7 +147,6 @@ def load_dataset(dataset_name: str) -> tuple[pd.DataFrame, str, CSVOracle]:
     oracle = CSVOracle(str(dataset_path), id_column='ID')
 
     return df, target_col, oracle
->>>>>>> origin/v2
 
 
 def load_existing_results(
@@ -160,27 +154,10 @@ def load_existing_results(
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
-<<<<<<< HEAD
-    early_stopping: bool,
-    fine_tuning: bool,
-=======
->>>>>>> origin/v2
 ) -> Dict[str, Any]:
     """Load results from existing experiment directory with multi-seed support."""
     featurizer_name = featurizer if featurizer else 'none'
 
-<<<<<<< HEAD
-    cycle_metrics_df = pl.read_csv(exp_dir / 'cycle_metrics.csv')
-    final_metrics = cycle_metrics_df.row(-1, named=True)
-
-    cycle_metrics = cycle_metrics_df.to_dicts()
-    training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
-    prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
-    acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
-    oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
-    evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
-    total_times = [m.get('total_time', 0) for m in cycle_metrics[1:]]
-=======
     seed_results = {}
     for seed in RANDOM_SEEDS:
         seed_dir = exp_dir / f'seed_{seed}'
@@ -212,35 +189,18 @@ def load_existing_results(
         prediction_times = [m.get('prediction_time', 0) for m in seed_data['cycle_metrics'][1:]]
         all_training_times.extend(training_times)
         all_prediction_times.extend(prediction_times)
->>>>>>> origin/v2
 
     return {
         'config_name': config_name,
         'featurizer': featurizer_name,
-<<<<<<< HEAD
-        'early_stopping': early_stopping,
-        'fine_tuning': fine_tuning,
+        'early_stopping': config.get('early_stopping', False),
+        'fine_tuning': config.get('enable_fine_tuning', False),
         'depth': config['depth'],
         'message_hidden_dim': config['message_hidden_dim'],
-        'top_10_recovery': final_metrics.get('top_10_discovery', 0),
-        'top_100_recovery': final_metrics.get('top_100_discovery', 0),
-        'final_discovery_rate': final_metrics.get('discovery_rate', 0),
-        'avg_training_time': np.mean(training_times) if training_times else 0,
-        'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-        'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
-        'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
-        'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
-        'cumulative_training_time': np.sum(training_times) if training_times else 0,
-        'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
-        'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
-        'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
-        'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
-        'total_time': np.sum(total_times) if total_times else 0,
-        'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
-        'final_discovery_count': final_metrics.get('discovery_count', 0),
-=======
-        'depth': config['depth'],
-        'message_hidden_dim': config['message_hidden_dim'],
+        'top_0_1_pct_recovery': final_metrics_mean.get('top_0_1_pct_discovery', 0),
+        'top_0_1_pct_recovery_std': final_metrics_std.get('top_0_1_pct_discovery', 0),
+        'top_1_pct_recovery': final_metrics_mean.get('top_1_pct_discovery', 0),
+        'top_1_pct_recovery_std': final_metrics_std.get('top_1_pct_discovery', 0),
         'top_10_recovery': final_metrics_mean.get('top_10_discovery', 0),
         'top_10_recovery_std': final_metrics_std.get('top_10_discovery', 0),
         'top_100_recovery': final_metrics_mean.get('top_100_discovery', 0),
@@ -249,10 +209,10 @@ def load_existing_results(
         'avg_training_time': np.mean(all_training_times) if all_training_times else 0,
         'avg_prediction_time': np.mean(all_prediction_times) if all_prediction_times else 0,
         'total_training_time': np.sum(all_training_times) if all_training_times else 0,
+        'cumulative_training_prediction_time': np.sum(all_training_times) + np.sum(all_prediction_times) if all_training_times and all_prediction_times else 0,
         'total_time': 0,
         'final_labeled_count': final_metrics_mean.get('cumulative_labeled', 0),
         'final_discovery_count': final_metrics_mean.get('discovery_count', 0),
->>>>>>> origin/v2
         'success': True,
         'error': None,
     }
@@ -266,11 +226,6 @@ def run_single_experiment(
     config_name: str,
     config: Dict[str, Any],
     featurizer: Optional[str],
-<<<<<<< HEAD
-    early_stopping: bool,
-    fine_tuning: bool,
-=======
->>>>>>> origin/v2
     n_cycles: int,
     batch_fraction: float,
     random_state: int,
@@ -280,13 +235,7 @@ def run_single_experiment(
 ) -> Dict[str, Any]:
     """Run experiment across all random seeds and aggregate results."""
     featurizer_name = featurizer if featurizer else 'none'
-<<<<<<< HEAD
-    early_stop_str = 'early_stop' if early_stopping else 'no_early_stop'
-    finetune_str = '_finetune' if fine_tuning else ''
-    exp_name = f"{config_name}_{featurizer_name}_{early_stop_str}{finetune_str}"
-=======
     exp_name = f"{config_name}_{featurizer_name}"
->>>>>>> origin/v2
 
     exp_output_dir = output_dir / 'data' / exp_name
     exp_output_dir.mkdir(parents=True, exist_ok=True)
@@ -294,55 +243,15 @@ def run_single_experiment(
     if debug:
         console.print(f"[cyan]Starting experiment: {exp_name} (seeds: {RANDOM_SEEDS})[/cyan]")
 
-<<<<<<< HEAD
-    # Setup checkpoint directory for fine-tuning
-    checkpoint_dir = None
-    if fine_tuning:
-        checkpoint_dir = output_dir / '.checkpoints' / exp_name
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-
-    learner = ChempropLearner(
-        depth=config['depth'],
-        message_hidden_dim=config['message_hidden_dim'],
-        ffn_hidden_dim=config['ffn_hidden_dim'],
-        ffn_num_layers=config['ffn_num_layers'],
-        dropout=config['dropout'],
-        batch_norm=config['batch_norm'],
-        atom_messages=config['atom_messages'],
-        early_stopping=early_stopping,
-        early_stopping_patience=3,
-        max_epochs=50,
-        random_state=random_state,
-        enable_fine_tuning=fine_tuning,
-        checkpoint_dir=checkpoint_dir,
-    )
-=======
     seed_results = {}
     all_training_times = []
     all_prediction_times = []
     total_experiment_time = 0
->>>>>>> origin/v2
 
     for seed in RANDOM_SEEDS:
         seed_output_dir = exp_output_dir / f'seed_{seed}'
         seed_output_dir.mkdir(parents=True, exist_ok=True)
 
-<<<<<<< HEAD
-    try:
-        results = run_active_learning(
-            compound_pool=compound_pool.clone(),
-            oracle=oracle,
-            learner=learner,
-            target_col=target_col,
-            featurizer_type=featurizer,
-            n_cycles=n_cycles,
-            batch_fraction=batch_fraction,
-            score_direction=score_direction,
-            random_state=random_state,
-            output_dir=exp_output_dir,
-            cache_dir=cache_dir,
-            mode='benchmark',
-=======
         checkpoint_dir = seed_output_dir / '.checkpoints' if config['enable_fine_tuning'] else None
 
         learner = ChempropLearner(
@@ -359,7 +268,6 @@ def run_single_experiment(
             random_state=seed,
             enable_fine_tuning=config['enable_fine_tuning'],
             checkpoint_dir=checkpoint_dir,
->>>>>>> origin/v2
         )
 
         start_time = time.time()
@@ -378,66 +286,20 @@ def run_single_experiment(
                 mode='benchmark',
             )
 
-<<<<<<< HEAD
-        compounds_df.write_csv(exp_output_dir / 'compounds_final.csv')
-
-        metrics_df = pl.DataFrame(cycle_metrics)
-        list_cols = ['selected_ids', 'pruned_ids']
-        cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
-        if cols_to_drop:
-            metrics_df = metrics_df.drop(cols_to_drop)
-        metrics_df.write_csv(exp_output_dir / 'cycle_metrics.csv')
-
-        training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
-        prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
-        acquisition_times = [m.get('acquisition_time', 0) for m in cycle_metrics[1:]]
-        oracle_times = [m.get('oracle_time', 0) for m in cycle_metrics[1:]]
-        evaluation_times = [m.get('evaluation_time', 0) for m in cycle_metrics[1:]]
-=======
             elapsed_time = time.time() - start_time
             total_experiment_time += elapsed_time
 
             cycle_metrics = results['cycle_metrics']
->>>>>>> origin/v2
 
             seed_results[seed] = {
                 'cycle_metrics': cycle_metrics,
                 'elapsed_time': elapsed_time
             }
 
-<<<<<<< HEAD
-        result = {
-            'config_name': config_name,
-            'featurizer': featurizer_name,
-            'early_stopping': early_stopping,
-            'fine_tuning': fine_tuning,
-            'depth': config['depth'],
-            'message_hidden_dim': config['message_hidden_dim'],
-            'top_10_recovery': final_metrics.get('top_10_discovery', 0),
-            'top_100_recovery': final_metrics.get('top_100_discovery', 0),
-            'final_discovery_rate': final_metrics.get('discovery_rate', 0),
-            'avg_training_time': np.mean(training_times) if training_times else 0,
-            'avg_prediction_time': np.mean(prediction_times) if prediction_times else 0,
-            'avg_acquisition_time': np.mean(acquisition_times) if acquisition_times else 0,
-            'avg_oracle_time': np.mean(oracle_times) if oracle_times else 0,
-            'avg_evaluation_time': np.mean(evaluation_times) if evaluation_times else 0,
-            'cumulative_training_time': np.sum(training_times) if training_times else 0,
-            'cumulative_prediction_time': np.sum(prediction_times) if prediction_times else 0,
-            'cumulative_acquisition_time': np.sum(acquisition_times) if acquisition_times else 0,
-            'cumulative_oracle_time': np.sum(oracle_times) if oracle_times else 0,
-            'cumulative_evaluation_time': np.sum(evaluation_times) if evaluation_times else 0,
-            'total_time': total_time,
-            'final_labeled_count': final_metrics.get('cumulative_labeled', 0),
-            'final_discovery_count': final_metrics.get('discovery_count', 0),
-            'success': True,
-            'error': None,
-        }
-=======
             training_times = [m.get('training_time', 0) for m in cycle_metrics[1:]]
             prediction_times = [m.get('prediction_time', 0) for m in cycle_metrics[1:]]
             all_training_times.extend(training_times)
             all_prediction_times.extend(prediction_times)
->>>>>>> origin/v2
 
         except Exception as e:
             if debug:
@@ -450,39 +312,17 @@ def run_single_experiment(
     final_metrics_mean = aggregated['cycle_metrics_mean'][-1]
     final_metrics_std = aggregated['cycle_metrics_std'][-1]
 
-<<<<<<< HEAD
-        return {
-            'config_name': config_name,
-            'featurizer': featurizer_name,
-            'early_stopping': early_stopping,
-            'fine_tuning': fine_tuning,
-            'depth': config['depth'],
-            'message_hidden_dim': config['message_hidden_dim'],
-            'top_10_recovery': 0,
-            'top_100_recovery': 0,
-            'final_discovery_rate': 0,
-            'avg_training_time': 0,
-            'avg_prediction_time': 0,
-            'avg_acquisition_time': 0,
-            'avg_oracle_time': 0,
-            'avg_evaluation_time': 0,
-            'cumulative_training_time': 0,
-            'cumulative_prediction_time': 0,
-            'cumulative_acquisition_time': 0,
-            'cumulative_oracle_time': 0,
-            'cumulative_evaluation_time': 0,
-            'total_time': 0,
-            'final_labeled_count': 0,
-            'final_discovery_count': 0,
-            'success': False,
-            'error': str(e),
-        }
-=======
     result = {
         'config_name': config_name,
         'featurizer': featurizer_name,
+        'early_stopping': config.get('early_stopping', False),
+        'fine_tuning': config.get('enable_fine_tuning', False),
         'depth': config['depth'],
         'message_hidden_dim': config['message_hidden_dim'],
+        'top_0_1_pct_recovery': final_metrics_mean.get('top_0_1_pct_discovery', 0),
+        'top_0_1_pct_recovery_std': final_metrics_std.get('top_0_1_pct_discovery', 0),
+        'top_1_pct_recovery': final_metrics_mean.get('top_1_pct_discovery', 0),
+        'top_1_pct_recovery_std': final_metrics_std.get('top_1_pct_discovery', 0),
         'top_10_recovery': final_metrics_mean.get('top_10_discovery', 0),
         'top_10_recovery_std': final_metrics_std.get('top_10_discovery', 0),
         'top_100_recovery': final_metrics_mean.get('top_100_discovery', 0),
@@ -491,6 +331,8 @@ def run_single_experiment(
         'avg_training_time': np.mean(all_training_times) if all_training_times else 0,
         'avg_prediction_time': np.mean(all_prediction_times) if all_prediction_times else 0,
         'total_training_time': np.sum(all_training_times) if all_training_times else 0,
+        'total_prediction_time': np.sum(all_prediction_times) if all_prediction_times else 0,
+        'cumulative_training_prediction_time': np.sum(all_training_times) + np.sum(all_prediction_times) if all_training_times and all_prediction_times else 0,
         'total_time': total_experiment_time,
         'final_labeled_count': final_metrics_mean.get('cumulative_labeled', 0),
         'final_discovery_count': final_metrics_mean.get('discovery_count', 0),
@@ -503,7 +345,6 @@ def run_single_experiment(
                      f"time={total_experiment_time:.1f}s[/green]")
 
     return result
->>>>>>> origin/v2
 
 
 def create_visualizations(df: pl.DataFrame, output_dir: Path):
@@ -543,23 +384,6 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
 
     # Plot 2: Early Stopping Impact on Performance
     ax = axes[0, 1]
-<<<<<<< HEAD
-    early_stop_comparison = df_success.group_by(['config_name', 'early_stopping']).agg([
-        pl.col('top_10_recovery').mean().alias('top_10_recovery'),
-        pl.col('top_100_recovery').mean().alias('top_100_recovery'),
-    ]).sort(['config_name', 'early_stopping'])
-
-    config_names = early_stop_comparison['config_name'].unique().sort().to_list()
-    x_pos = np.arange(len(config_names))
-    width = 0.35
-
-    for idx, early_stop in enumerate([False, True]):
-        group = early_stop_comparison.filter(pl.col('early_stopping') == early_stop)
-        offset = width * (idx - 0.5)
-        label = 'Early Stopping' if early_stop else 'No Early Stopping'
-        values = group['top_10_recovery'].to_numpy()
-        ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
-=======
     config_comparison = df_success.groupby('config_name').agg({
         'top_10_recovery': ['mean', 'std'],
         'top_100_recovery': ['mean', 'std'],
@@ -575,17 +399,12 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
            yerr=config_comparison['top_10_std'], label='Top-10', alpha=0.8, capsize=5)
     ax.bar(x_pos + width/2, config_comparison['top_100_mean'], width,
            yerr=config_comparison['top_100_std'], label='Top-100', alpha=0.8, capsize=5)
->>>>>>> origin/v2
 
     ax.set_xlabel('Model Configuration')
     ax.set_ylabel('Recovery Rate (mean ± std)')
     ax.set_title('Configuration Performance Comparison', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-<<<<<<< HEAD
-    ax.set_xticklabels(config_names)
-=======
     ax.set_xticklabels(config_comparison['config_name'], rotation=45, ha='right')
->>>>>>> origin/v2
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
@@ -721,19 +540,6 @@ def print_summary_table(df: pl.DataFrame):
     table.add_column("Train Time", justify="right", width=11)
     table.add_column("Total Time", justify="right", width=11)
 
-<<<<<<< HEAD
-    for idx, row in enumerate(df_sorted.iter_rows(named=True), 1):
-        early_stop_icon = "✓" if row['early_stopping'] else "✗"
-        table.add_row(
-            str(idx),
-            row['config_name'],
-            row['featurizer'],
-            early_stop_icon,
-            f"{row['top_10_recovery']:.3f}",
-            f"{row['top_100_recovery']:.3f}",
-            f"{row['avg_training_time']:.1f}s",
-            f"{row['total_time']:.1f}s",
-=======
     for idx, row in enumerate(df_sorted.itertuples(), 1):
         table.add_row(
             str(idx),
@@ -743,7 +549,6 @@ def print_summary_table(df: pl.DataFrame):
             f"{row.top_100_recovery:.3f}±{row.top_100_recovery_std:.3f}",
             f"{row.avg_training_time:.1f}s",
             f"{row.total_time:.1f}s",
->>>>>>> origin/v2
         )
 
     console.print(table)
@@ -859,9 +664,6 @@ def prepare_cost_performance_data(
 ) -> pl.DataFrame:
     """Transform results DataFrame to format expected by cost-performance plotting functions.
 
-    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
-    composite learner names for unified visualization.
-
     Args:
         df: Results DataFrame from validation experiments
 
@@ -870,31 +672,19 @@ def prepare_cost_performance_data(
     """
     df_filtered = df.filter(pl.col('success') == True)
 
-    # Create composite learner names encoding all configuration dimensions
+    # Select relevant columns for visualization
     timing_df = df_filtered.select([
-        pl.when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == True))
-          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop + fine-tune)')]))
-          .when((pl.col('early_stopping') == True) & (pl.col('fine_tuning') == False))
-          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (early stop)')]))
-          .when((pl.col('early_stopping') == False) & (pl.col('fine_tuning') == True))
-          .then(pl.concat_str([pl.col('config_name'), pl.lit(' (fine-tune)')]))
-          .otherwise(pl.col('config_name'))
-          .alias('learner'),
         pl.col('config_name'),
+        pl.col('featurizer'),
         pl.col('early_stopping'),
         pl.col('fine_tuning'),
-        pl.col('featurizer'),
-        pl.col('cumulative_training_time'),
-        pl.col('cumulative_prediction_time'),
-        pl.col('cumulative_acquisition_time'),
-        pl.col('cumulative_oracle_time'),
-        pl.col('cumulative_evaluation_time'),
-        pl.col('total_time').alias('cumulative_total_time'),
-        pl.col('total_time').alias('elapsed_time'),
-        (pl.col('cumulative_training_time') + pl.col('cumulative_prediction_time')).alias('cumulative_training_prediction_time'),
+        pl.col('cumulative_training_prediction_time'),
+        pl.col('total_time'),
+        pl.col('top_0_1_pct_recovery'),
+        pl.col('top_1_pct_recovery'),
         pl.col('top_10_recovery'),
         pl.col('top_100_recovery'),
-    ]).sort(['config_name', 'early_stopping', 'fine_tuning'])
+    ]).sort('config_name')
 
     return timing_df
 
@@ -904,10 +694,7 @@ def generate_cost_performance_plots(
     output_dir: Path,
     dataset_name: str = 'chemprop'
 ) -> Dict[str, List[Path]]:
-    """Generate cost-performance heatmaps, Pareto frontiers, and performance-only heatmaps.
-
-    Combines all configuration dimensions (config_name, early_stopping, fine_tuning) into
-    unified visualizations.
+    """Generate time, performance, and efficiency heatmaps for all metrics.
 
     Args:
         df: Results DataFrame from validation experiments
@@ -915,68 +702,68 @@ def generate_cost_performance_plots(
         dataset_name: Dataset name for plot titles
 
     Returns:
-        Dictionary with keys 'heatmaps', 'pareto_plots', and 'performance_heatmaps',
+        Dictionary with keys 'time_heatmaps', 'performance_heatmaps', and 'efficiency_heatmaps',
         each containing list of Path objects
     """
     from validation.lib.featurizer_visualizations import (
-        create_cost_performance_heatmaps,
-        create_pareto_frontiers
+        create_time_heatmap,
+        create_performance_heatmap,
+        create_efficiency_heatmap
     )
 
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    console.print("[cyan]  Generating unified cost-performance plots...[/cyan]")
+    console.print("[cyan]  Generating heatmap visualizations...[/cyan]")
 
-    # Prepare data with composite learner names (no filtering)
+    # Prepare data
     timing_df = prepare_cost_performance_data(df)
 
     if len(timing_df) == 0:
         console.print("[yellow]  Warning: No successful experiments to visualize[/yellow]")
         return {
-            'heatmaps': [],
-            'pareto_plots': [],
-            'performance_heatmaps': []
+            'time_heatmaps': [],
+            'performance_heatmaps': [],
+            'efficiency_heatmaps': []
         }
 
-    all_heatmaps = []
-    all_pareto_plots = []
+    all_time_heatmaps = []
     all_performance_heatmaps = []
+    all_efficiency_heatmaps = []
 
-    for metric in ['top_10_recovery', 'top_100_recovery']:
-        metric_label = metric.replace('_', ' ').title()
-
-        # Cost-performance heatmap
-        heatmap_path = create_cost_performance_heatmaps(
+    # Generate heatmaps for all 4 metrics
+    for metric in ['top_0_1_pct_recovery', 'top_1_pct_recovery', 'top_10_recovery', 'top_100_recovery']:
+        # Time heatmap
+        time_path = create_time_heatmap(
             timing_df,
             output_dir,
             performance_metric=metric,
             dataset_name=dataset_name
         )
-        all_heatmaps.append(heatmap_path)
+        all_time_heatmaps.append(time_path)
 
-        # Pareto frontier
-        pareto_path = create_pareto_frontiers(
+        # Performance heatmap
+        perf_path = create_performance_heatmap(
             timing_df,
             output_dir,
             performance_metric=metric,
             dataset_name=dataset_name
         )
-        all_pareto_plots.append(pareto_path)
+        all_performance_heatmaps.append(perf_path)
 
-        # Performance-only heatmap
-        perf_heatmap_path = create_performance_heatmap(
+        # Efficiency heatmap
+        efficiency_path = create_efficiency_heatmap(
             timing_df,
             output_dir,
             performance_metric=metric,
             dataset_name=dataset_name
         )
-        all_performance_heatmaps.append(perf_heatmap_path)
+        all_efficiency_heatmaps.append(efficiency_path)
 
     return {
-        'heatmaps': all_heatmaps,
-        'pareto_plots': all_pareto_plots,
-        'performance_heatmaps': all_performance_heatmaps
+        'time_heatmaps': all_time_heatmaps,
+        'performance_heatmaps': all_performance_heatmaps,
+        'efficiency_heatmaps': all_efficiency_heatmaps
     }
 
 
@@ -1034,23 +821,11 @@ def main():
     experiments = []
     for config_name, config in MODEL_CONFIGS.items():
         for featurizer in FEATURIZERS:
-<<<<<<< HEAD
-            for early_stopping in EARLY_STOPPING_OPTIONS:
-                for fine_tuning in FINE_TUNING_OPTIONS:
-                    experiments.append({
-                        'config_name': config_name,
-                        'config': config,
-                        'featurizer': featurizer,
-                        'early_stopping': early_stopping,
-                        'fine_tuning': fine_tuning,
-                    })
-=======
             experiments.append({
                 'config_name': config_name,
                 'config': config,
                 'featurizer': featurizer,
             })
->>>>>>> origin/v2
 
     console.print(f"[cyan]Total experiments to run: {len(experiments)}[/cyan]\n")
 
@@ -1067,13 +842,7 @@ def main():
 
         for exp in experiments:
             featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
-<<<<<<< HEAD
-            early_stop_str = 'early_stop' if exp['early_stopping'] else 'no_early_stop'
-            finetune_str = '_finetune' if exp['fine_tuning'] else ''
-            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
-=======
             exp_name = f"{exp['config_name']}_{featurizer_name}"
->>>>>>> origin/v2
 
             exp_dir = args.output_dir / 'data' / exp_name
             if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
@@ -1083,11 +852,6 @@ def main():
                         config_name=exp['config_name'],
                         config=exp['config'],
                         featurizer=exp['featurizer'],
-<<<<<<< HEAD
-                        early_stopping=exp['early_stopping'],
-                        fine_tuning=exp['fine_tuning'],
-=======
->>>>>>> origin/v2
                     )
                     results.append(result)
                     if args.debug:
@@ -1108,11 +872,6 @@ def main():
                 config_name=exp['config_name'],
                 config=exp['config'],
                 featurizer=exp['featurizer'],
-<<<<<<< HEAD
-                early_stopping=exp['early_stopping'],
-                fine_tuning=exp['fine_tuning'],
-=======
->>>>>>> origin/v2
                 n_cycles=args.n_cycles,
                 batch_fraction=args.batch_fraction,
                 random_state=args.random_state,
@@ -1131,35 +890,35 @@ def main():
 
     create_visualizations(results_df, args.output_dir)
 
-    console.print("\n[cyan]Generating cost-performance analysis...[/cyan]")
+    console.print("\n[cyan]Generating heatmap visualizations...[/cyan]")
     try:
-        cost_perf_paths = generate_cost_performance_plots(
+        heatmap_paths = generate_cost_performance_plots(
             results_df,
             args.output_dir,
             dataset_name=args.dataset
         )
 
-        console.print(f"[green]✓ Generated {len(cost_perf_paths['heatmaps'])} cost-performance heatmaps[/green]")
-        console.print(f"[green]✓ Generated {len(cost_perf_paths['pareto_plots'])} Pareto frontier plots[/green]")
-        console.print(f"[green]✓ Generated {len(cost_perf_paths['performance_heatmaps'])} performance-only heatmaps[/green]")
+        console.print(f"[green]✓ Generated {len(heatmap_paths['time_heatmaps'])} time heatmaps[/green]")
+        console.print(f"[green]✓ Generated {len(heatmap_paths['performance_heatmaps'])} performance heatmaps[/green]")
+        console.print(f"[green]✓ Generated {len(heatmap_paths['efficiency_heatmaps'])} efficiency heatmaps[/green]")
 
-        if cost_perf_paths['heatmaps']:
-            console.print("\n[bold]Cost-Performance Heatmaps:[/bold]")
-            for path in cost_perf_paths['heatmaps']:
-                console.print(f"  - {path}")
+        if heatmap_paths['time_heatmaps']:
+            console.print("\n[bold]Time Heatmaps:[/bold]")
+            for path in heatmap_paths['time_heatmaps']:
+                console.print(f"  - {path.name}")
 
-        if cost_perf_paths['pareto_plots']:
-            console.print("\n[bold]Pareto Frontier Plots:[/bold]")
-            for path in cost_perf_paths['pareto_plots']:
-                console.print(f"  - {path}")
+        if heatmap_paths['performance_heatmaps']:
+            console.print("\n[bold]Performance Heatmaps:[/bold]")
+            for path in heatmap_paths['performance_heatmaps']:
+                console.print(f"  - {path.name}")
 
-        if cost_perf_paths['performance_heatmaps']:
-            console.print("\n[bold]Performance-Only Heatmaps:[/bold]")
-            for path in cost_perf_paths['performance_heatmaps']:
-                console.print(f"  - {path}")
+        if heatmap_paths['efficiency_heatmaps']:
+            console.print("\n[bold]Efficiency Heatmaps:[/bold]")
+            for path in heatmap_paths['efficiency_heatmaps']:
+                console.print(f"  - {path.name}")
 
     except Exception as e:
-        console.print(f"[yellow]Warning: Could not generate cost-performance plots: {e}[/yellow]")
+        console.print(f"[yellow]Warning: Could not generate heatmap visualizations: {e}[/yellow]")
         import traceback
         if args.debug:
             traceback.print_exc()

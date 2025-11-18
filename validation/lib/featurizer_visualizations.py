@@ -401,43 +401,6 @@ def _format_time_label(seconds: float) -> str:
         return f"{seconds/3600:.1f}h"
 
 
-def _identify_pareto_frontier(x_values: np.ndarray, y_values: np.ndarray, maximize_y: bool = True) -> np.ndarray:
-    """Identify Pareto-optimal points (non-dominated solutions).
-
-    Args:
-        x_values: Cost values (minimize)
-        y_values: Performance values
-        maximize_y: If True, maximize y_values; if False, minimize
-
-    Returns:
-        Boolean mask of Pareto-optimal points
-    """
-    n_points = len(x_values)
-    is_pareto = np.ones(n_points, dtype=bool)
-
-    for i in range(n_points):
-        if not is_pareto[i]:
-            continue
-
-        for j in range(n_points):
-            if i == j:
-                continue
-
-            # Check if j dominates i
-            if maximize_y:
-                # j dominates i if: x[j] <= x[i] AND y[j] >= y[i] with at least one strict inequality
-                if x_values[j] <= x_values[i] and y_values[j] >= y_values[i]:
-                    if x_values[j] < x_values[i] or y_values[j] > y_values[i]:
-                        is_pareto[i] = False
-                        break
-            else:
-                # j dominates i if: x[j] <= x[i] AND y[j] <= y[i] with at least one strict inequality
-                if x_values[j] <= x_values[i] and y_values[j] <= y_values[i]:
-                    if x_values[j] < x_values[i] or y_values[j] < y_values[i]:
-                        is_pareto[i] = False
-                        break
-
-    return is_pareto
 
 
 def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.DataFrame:
@@ -485,18 +448,31 @@ def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.
     return pl.DataFrame(timing_data)
 
 
-def create_cost_performance_heatmaps(
+
+
+def _get_metric_label(performance_metric: str) -> str:
+    """Get human-readable label for performance metric."""
+    metric_labels = {
+        'top_0_1_pct_recovery': 'Top 0.1%',
+        'top_1_pct_recovery': 'Top 1%',
+        'top_10_recovery': 'Top 10',
+        'top_100_recovery': 'Top 100',
+    }
+    return metric_labels.get(performance_metric, performance_metric)
+
+
+def create_time_heatmap(
     timing_df: pl.DataFrame,
     output_dir: Path,
-    performance_metric: str = 'top_1_pct_discovery',
+    performance_metric: str = 'top_10_recovery',
     dataset_name: str = None
 ) -> Path:
-    """Create 4-panel heatmap showing cost metrics for each learner-featurizer combination.
+    """Create heatmap showing cumulative training + prediction time.
 
     Args:
         timing_df: DataFrame with timing and performance data
         output_dir: Directory to save output
-        performance_metric: Performance column name (top_1_pct_discovery or top_0_1_pct_discovery)
+        performance_metric: Performance metric name (for file naming)
         dataset_name: Optional dataset name to include in title
 
     Returns:
@@ -506,305 +482,286 @@ def create_cost_performance_heatmaps(
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    cost_metrics = [
-        ('cumulative_training_time', 'Cumulative Training Time (s)'),
-        ('cumulative_prediction_time', 'Cumulative Prediction Time (s)'),
-        ('elapsed_time', 'Total Elapsed Time (s)'),
-        ('cumulative_training_prediction_time', 'Cumulative Training+Prediction Time (s)')
-    ]
+    metric_label = _get_metric_label(performance_metric)
 
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
-    axes = axes.flatten()
+    # Create pivot for time
+    time_pivot = timing_df.pivot(
+        values='cumulative_training_prediction_time',
+        index='config_name',
+        columns='featurizer',
+        aggregate_function='first'
+    )
 
-    metric_label = 'Top 1%' if 'top_1' in performance_metric else 'Top 0.1%'
-    title = f'Cost vs Performance Matrix: {metric_label} Discovery Rate'
+    # Extract config names before reordering columns
+    config_names = time_pivot.get_column('config_name').to_list()
+
+    # Reorder columns
+    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    existing_cols = [col for col in desired_order if col in time_pivot.columns]
+    time_pivot = time_pivot.select(existing_cols)
+
+    # Convert to pandas for heatmap
+    time_pd = time_pivot.to_pandas()
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+
+    title = f'Time Matrix: Cumulative Training + Prediction Time (seconds)\n{metric_label} Discovery Rate'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title,
-                 fontsize=24, fontweight='bold', y=0.995)
+    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
 
-    plt.subplots_adjust(
-        left=0.08,
-        right=0.98,
-        top=0.94,
-        bottom=0.06,
-        wspace=0.25,
-        hspace=0.28
+    # Create colormap for time (lower is better - green to red)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        'green_red',
+        ['#1a9641', '#a6d96a', '#ffffbf', '#fdae61', '#d7191c']
     )
 
-    for idx, (cost_col, cost_label) in enumerate(cost_metrics):
-        ax = axes[idx]
+    # Create heatmap
+    sns.heatmap(
+        time_pd,
+        annot=False,
+        cmap=cmap,
+        mask=time_pd.isna(),
+        cbar_kws={'shrink': 0.8, 'label': 'Time (seconds)'},
+        linewidths=0.5,
+        linecolor='white',
+        square=False,
+        ax=ax
+    )
 
-        # Create pivot for cost
-        cost_pivot = timing_df.pivot(
-            values=cost_col,
-            index='learner',
-            columns='featurizer',
-            aggregate_function='first'
-        )
+    # Add custom annotations with time values
+    for i in range(time_pivot.height):
+        for j in range(len(time_pivot.columns)):
+            time_val = time_pivot.row(i)[j]
+            if time_val is not None:
+                text = f'{time_val:.1f}s'
+                # Use white text for dark cells, black for light cells
+                color = 'white' if time_val > time_pd.max().max() / 2 else 'black'
+                ax.text(j + 0.5, i + 0.5, text,
+                       ha='center', va='center',
+                       fontsize=9, fontweight='bold',
+                       color=color)
 
-        # Create pivot for performance
-        perf_pivot = timing_df.pivot(
-            values=performance_metric,
-            index='learner',
-            columns='featurizer',
-            aggregate_function='first'
-        )
+    ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
+    ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.set_xticklabels(time_pivot.columns, rotation=45, ha='right')
+    ax.set_yticklabels(config_names, rotation=0)
 
-        # Extract learner names before reordering columns
-        learner_names = cost_pivot.get_column('learner').to_list()
-
-        # Reorder columns
-        desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-        existing_cols = [col for col in desired_order if col in cost_pivot.columns]
-        cost_pivot = cost_pivot.select(existing_cols)
-        perf_pivot = perf_pivot.select(existing_cols)
-
-        # Convert to pandas for heatmap
-        cost_pd = cost_pivot.to_pandas()
-
-        # Create colormap for cost (lower is better - green to red)
-        cmap = mcolors.LinearSegmentedColormap.from_list(
-            'green_red',
-            ['#2d7f2d', '#77b377', '#ffeb99', '#ff9966', '#d73027']
-        )
-
-        # Normalize colors
-        vmin = cost_pd.min().min()
-        vmax = cost_pd.max().max()
-
-        # Create heatmap
-        sns.heatmap(
-            cost_pd,
-            annot=False,
-            cmap=cmap,
-            mask=cost_pd.isna(),
-            cbar_kws={'shrink': 0.8, 'label': cost_label},
-            linewidths=0.5,
-            linecolor='white',
-            square=False,
-            vmin=vmin,
-            vmax=vmax,
-            ax=ax
-        )
-
-        # Add custom annotations with cost and performance
-        for i in range(cost_pivot.height):
-            for j in range(len(cost_pivot.columns)):
-                cost_val = cost_pivot.row(i)[j]
-                perf_val = perf_pivot.row(i)[j]
-                if cost_val is not None and perf_val is not None:
-                    time_str = _format_time_label(cost_val)
-                    text = f'{time_str}\n({perf_val:.1f}%)'
-                    ax.text(j + 0.5, i + 0.5, text,
-                           ha='center', va='center',
-                           fontsize=8, fontweight='bold',
-                           color='white')
-
-        ax.set_title(cost_label, fontsize=16, fontweight='bold', pad=12)
-        ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
-        ax.set_ylabel('Learner', fontsize=13, labelpad=8)
-        ax.tick_params(axis='both', labelsize=11)
-        ax.set_xticklabels(cost_pivot.columns, rotation=45, ha='right')
-        display_names = [LEARNER_DISPLAY_NAMES.get(name, name) for name in learner_names]
-        ax.set_yticklabels(display_names, rotation=0)
-
-    output_filename = f'cost_performance_heatmap_{performance_metric}.png'
+    output_filename = f'time_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"✓ Created cost/performance heatmap: {output_path.name}")
+    print(f"✓ Created time heatmap: {output_path.name}")
 
     return output_path
 
 
-def create_pareto_frontiers(
+def create_performance_heatmap(
     timing_df: pl.DataFrame,
     output_dir: Path,
-    performance_metric: str = 'top_1_pct_discovery',
+    performance_metric: str = 'top_10_recovery',
     dataset_name: str = None
 ) -> Path:
-    """Create 4-panel Pareto frontier plots showing cost vs performance trade-offs.
+    """Create heatmap showing performance metric values.
 
     Args:
         timing_df: DataFrame with timing and performance data
         output_dir: Directory to save output
-        performance_metric: Performance column name (top_1_pct_discovery or top_0_1_pct_discovery)
+        performance_metric: Performance column name
         dataset_name: Optional dataset name to include in title
 
     Returns:
-        Path to saved Pareto plot image
+        Path to saved heatmap image
     """
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    cost_metrics = [
-        ('cumulative_training_time', 'Cumulative Training Time (s)'),
-        ('cumulative_prediction_time', 'Cumulative Prediction Time (s)'),
-        ('elapsed_time', 'Total Elapsed Time (s)'),
-        ('cumulative_training_prediction_time', 'Cumulative Training+Prediction Time (s)')
-    ]
+    metric_label = _get_metric_label(performance_metric)
 
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
-    axes = axes.flatten()
+    # Create pivot for performance
+    perf_pivot = timing_df.pivot(
+        values=performance_metric,
+        index='config_name',
+        columns='featurizer',
+        aggregate_function='first'
+    )
 
-    metric_label = 'Top 1%' if 'top_1' in performance_metric else 'Top 0.1%'
-    title = f'Pareto Frontier Analysis: {metric_label} Discovery Rate'
+    # Extract config names before reordering columns
+    config_names = perf_pivot.get_column('config_name').to_list()
+
+    # Reorder columns
+    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    existing_cols = [col for col in desired_order if col in perf_pivot.columns]
+    perf_pivot = perf_pivot.select(existing_cols)
+
+    # Convert to pandas for heatmap
+    perf_pd = perf_pivot.to_pandas()
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+
+    title = f'Performance Matrix: {metric_label} Discovery Rate (%)'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title,
-                 fontsize=24, fontweight='bold', y=0.995)
+    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
 
-    plt.subplots_adjust(
-        left=0.08,
-        right=0.98,
-        top=0.94,
-        bottom=0.06,
-        wspace=0.25,
-        hspace=0.28
+    # Create colormap for performance (higher is better - red to blue)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        'red_blue',
+        ['#d73027', '#f46d43', '#fdae61', '#fee090', '#e0f3f8', '#abd9e9', '#74add1', '#4575b4']
     )
 
-    # Color mapping for learners
-    unique_learners = sorted(timing_df['learner'].unique().to_list())
-    colors = plt.cm.tab10(np.linspace(0, 1, len(unique_learners)))
-    learner_colors = dict(zip(unique_learners, colors))
+    # Create heatmap
+    sns.heatmap(
+        perf_pd,
+        annot=False,
+        cmap=cmap,
+        mask=perf_pd.isna(),
+        cbar_kws={'shrink': 0.8, 'label': 'Discovery Rate (%)'},
+        linewidths=0.5,
+        linecolor='white',
+        square=False,
+        vmin=0,
+        vmax=100,
+        ax=ax
+    )
 
-    # Marker mapping for featurizers
-    featurizer_markers = {
-        'none': 'o',
-        'morgan': 's',
-        'maccs': '^',
-        'ecfp6': 'D',
-        'descriptors': 'v',
-        'morgan_feat': 'p'
-    }
+    # Add custom annotations with performance values
+    for i in range(perf_pivot.height):
+        for j in range(len(perf_pivot.columns)):
+            perf_val = perf_pivot.row(i)[j]
+            if perf_val is not None:
+                text = f'{perf_val:.1f}%'
+                # Use white text for dark cells, black for light cells
+                color = 'white' if perf_val < 50 else 'black'
+                ax.text(j + 0.5, i + 0.5, text,
+                       ha='center', va='center',
+                       fontsize=9, fontweight='bold',
+                       color=color)
 
-    for idx, (cost_col, cost_label) in enumerate(cost_metrics):
-        ax = axes[idx]
+    ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
+    ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.set_xticklabels(perf_pivot.columns, rotation=45, ha='right')
+    ax.set_yticklabels(config_names, rotation=0)
 
-        # Get cost and performance arrays
-        x_values = timing_df[cost_col].to_numpy()
-        y_values = timing_df[performance_metric].to_numpy()
-        learners = timing_df['learner'].to_numpy()
-        featurizers = timing_df['featurizer'].to_numpy()
-
-        # Identify Pareto frontier
-        pareto_mask = _identify_pareto_frontier(x_values, y_values, maximize_y=True)
-
-        # Plot all points
-        for i, (x, y, learner, featurizer) in enumerate(zip(x_values, y_values, learners, featurizers)):
-            marker = featurizer_markers.get(featurizer, 'o')
-            color = learner_colors[learner]
-            alpha = 1.0 if pareto_mask[i] else 0.3
-            size = 120 if pareto_mask[i] else 60
-            edgecolor = 'black' if pareto_mask[i] else 'none'
-            linewidth = 2 if pareto_mask[i] else 0
-
-            ax.scatter(x, y, c=[color], marker=marker, s=size,
-                      alpha=alpha, edgecolors=edgecolor, linewidth=linewidth,
-                      label=f'{learner} ({featurizer})' if i < len(unique_learners) else '')
-
-        # Draw Pareto frontier line
-        pareto_points = np.column_stack([x_values[pareto_mask], y_values[pareto_mask]])
-        sorted_indices = np.argsort(pareto_points[:, 0])
-        pareto_sorted = pareto_points[sorted_indices]
-
-        ax.plot(pareto_sorted[:, 0], pareto_sorted[:, 1],
-               'k--', linewidth=2, alpha=0.5, label='Pareto Frontier')
-
-        # Annotate Pareto-optimal points
-        for i, (is_pareto, x, y, learner, featurizer) in enumerate(zip(pareto_mask, x_values, y_values, learners, featurizers)):
-            if is_pareto:
-                label = f'{learner[:3]}+{featurizer[:3]}'
-                ax.annotate(label, (x, y), xytext=(5, 5),
-                           textcoords='offset points', fontsize=7,
-                           bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.7))
-
-        ax.set_xlabel(cost_label, fontsize=13, labelpad=8)
-        ax.set_ylabel(f'{metric_label} Discovery Rate (%)', fontsize=13, labelpad=8)
-        ax.set_title(f'{cost_label.split("(")[0].strip()}', fontsize=16, fontweight='bold', pad=12)
-        ax.grid(True, alpha=0.3, linestyle='--')
-        ax.set_xlim(left=0)
-        ax.set_ylim(bottom=0, top=100)
-
-    # Create custom legend
-    legend_elements = []
-    for learner, color in learner_colors.items():
-        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
-                                         markerfacecolor=color, markersize=8,
-                                         label=learner))
-
-    for featurizer, marker in featurizer_markers.items():
-        if featurizer in timing_df['featurizer'].unique().to_list():
-            legend_elements.append(plt.Line2D([0], [0], marker=marker, color='w',
-                                             markerfacecolor='gray', markersize=8,
-                                             label=f'Feat: {featurizer}'))
-
-    fig.legend(handles=legend_elements, loc='center right',
-              fontsize=8, framealpha=0.9, ncol=1, bbox_to_anchor=(1.0, 0.5))
-
-    output_filename = f'pareto_frontier_{performance_metric}.png'
+    output_filename = f'performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"✓ Created Pareto frontier plot: {output_path.name}")
+    print(f"✓ Created performance heatmap: {output_path.name}")
 
     return output_path
 
 
-def create_all_cost_performance_plots(
-    all_results: Dict[Tuple[str, str], Dict],
+def create_efficiency_heatmap(
+    timing_df: pl.DataFrame,
     output_dir: Path,
-    config: Dict
-) -> Dict[str, List[Path]]:
-    """Generate all cost/performance visualizations.
+    performance_metric: str = 'top_10_recovery',
+    dataset_name: str = None
+) -> Path:
+    """Create heatmap showing efficiency (performance / time).
 
     Args:
-        all_results: Dictionary mapping (learner, featurizer) → result data
-        output_dir: Base output directory
-        config: Configuration dictionary with experiment parameters
+        timing_df: DataFrame with timing and performance data
+        output_dir: Directory to save output
+        performance_metric: Performance column name
+        dataset_name: Optional dataset name to include in title
 
     Returns:
-        Dictionary with keys 'heatmaps' and 'pareto_plots', each containing list of Paths
+        Path to saved heatmap image
     """
-    print("=" * 80)
-    print("GENERATING COST/PERFORMANCE ANALYSIS")
-    print("=" * 80)
-    print()
+    output_dir = Path(output_dir)
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
 
-    # Calculate cumulative timing data
-    print("Calculating cumulative timing metrics...")
-    timing_df = calculate_cumulative_timing(all_results)
-    print(f"✓ Processed timing data for {len(timing_df)} learner-featurizer combinations")
-    print()
+    metric_label = _get_metric_label(performance_metric)
 
-    # Generate heatmaps for both metrics
-    print("Creating cost/performance heatmaps...")
-    heatmap_paths = []
-    for perf_metric in ['top_1_pct_discovery', 'top_0_1_pct_discovery']:
-        heatmap_path = create_cost_performance_heatmaps(timing_df, output_dir, perf_metric, config.get('dataset_name'))
-        heatmap_paths.append(heatmap_path)
-    print()
+    # Calculate efficiency (performance / time)
+    timing_with_efficiency = timing_df.with_columns([
+        (pl.col(performance_metric) / pl.col('cumulative_training_prediction_time')).alias('efficiency')
+    ])
 
-    # Generate Pareto frontiers for both metrics
-    print("Creating Pareto frontier plots...")
-    pareto_paths = []
-    for perf_metric in ['top_1_pct_discovery', 'top_0_1_pct_discovery']:
-        pareto_path = create_pareto_frontiers(timing_df, output_dir, perf_metric, config.get('dataset_name'))
-        pareto_paths.append(pareto_path)
-    print()
+    # Create pivot for efficiency
+    efficiency_pivot = timing_with_efficiency.pivot(
+        values='efficiency',
+        index='config_name',
+        columns='featurizer',
+        aggregate_function='first'
+    )
 
-    print("=" * 80)
-    print("COST/PERFORMANCE ANALYSIS COMPLETE")
-    print("=" * 80)
-    print()
+    # Extract config names before reordering columns
+    config_names = efficiency_pivot.get_column('config_name').to_list()
 
-    return {
-        'heatmaps': heatmap_paths,
-        'pareto_plots': pareto_paths
-    }
+    # Reorder columns
+    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    existing_cols = [col for col in desired_order if col in efficiency_pivot.columns]
+    efficiency_pivot = efficiency_pivot.select(existing_cols)
+
+    # Convert to pandas for heatmap
+    efficiency_pd = efficiency_pivot.to_pandas()
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+
+    title = f'Efficiency Matrix: {metric_label} Discovery Rate per Second (%/s)'
+    if dataset_name:
+        title += f'\nDataset: {dataset_name}'
+
+    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
+
+    # Create colormap for efficiency (higher is better - purple to orange)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        'purple_orange',
+        ['#542788', '#8073ac', '#b2abd2', '#e8e8e8', '#fdb863', '#e08214', '#b35806']
+    )
+
+    # Create heatmap
+    sns.heatmap(
+        efficiency_pd,
+        annot=False,
+        cmap=cmap,
+        mask=efficiency_pd.isna(),
+        cbar_kws={'shrink': 0.8, 'label': 'Efficiency (%/s)'},
+        linewidths=0.5,
+        linecolor='white',
+        square=False,
+        ax=ax
+    )
+
+    # Add custom annotations with efficiency values
+    for i in range(efficiency_pivot.height):
+        for j in range(len(efficiency_pivot.columns)):
+            efficiency_val = efficiency_pivot.row(i)[j]
+            if efficiency_val is not None:
+                text = f'{efficiency_val:.2f}'
+                # Use white text for dark cells, black for light cells
+                color = 'white' if efficiency_val < efficiency_pd.max().max() / 2 else 'black'
+                ax.text(j + 0.5, i + 0.5, text,
+                       ha='center', va='center',
+                       fontsize=9, fontweight='bold',
+                       color=color)
+
+    ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
+    ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
+    ax.tick_params(axis='both', labelsize=10)
+    ax.set_xticklabels(efficiency_pivot.columns, rotation=45, ha='right')
+    ax.set_yticklabels(config_names, rotation=0)
+
+    output_filename = f'efficiency_heatmap_{performance_metric}.png'
+    output_path = plots_dir / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    print(f"✓ Created efficiency heatmap: {output_path.name}")
+
+    return output_path
+
+
