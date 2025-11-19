@@ -68,10 +68,9 @@ enable_chemprop_fine_tuning: false
 
 # Pruning Configuration
 pruning_fraction: 0.3  # Optional, enables pruning if specified
-pruning_strategy: "score_based"  # or "uncertainty_threshold", "prediction_threshold"
+pruning_strategy: "score_based"  # Only supported strategy
 pruning_params:
-  threshold: 0.1
-  adaptive: true
+  pruning_threshold: 0.5  # Optional: absolute score threshold
 
 # Acquisition Parameters (optional, strategy-specific)
 acquisition_params:
@@ -153,10 +152,9 @@ cycles:
     batch_fraction: 0.01
 
 pruning_fraction: 0.3
-pruning_strategy: "uncertainty_threshold"
+pruning_strategy: "score_based"
 pruning_params:
-  threshold: 0.2
-  adaptive: true
+  pruning_threshold: 0.5
 
 cache_dir: ".cache/global"
 random_state: 42
@@ -257,10 +255,9 @@ JSON format is also supported, with identical schema to YAML but different synta
     }
   ],
   "pruning_fraction": 0.3,
-  "pruning_strategy": "uncertainty_threshold",
+  "pruning_strategy": "score_based",
   "pruning_params": {
-    "threshold": 0.2,
-    "adaptive": true
+    "pruning_threshold": 0.5
   },
   "acquisition_params": {
     "beta": 1.5,
@@ -529,7 +526,7 @@ Cycle dictionary structure:
 |-----------|------|---------|-------------|
 | `enable_chemprop_fine_tuning` | bool | False | Enable fine-tuning for Chemprop models |
 | `pruning_fraction` | float | None | Fraction to prune per cycle (0.0-0.9) |
-| `pruning_strategy` | str | None | Pruning method (score_based, uncertainty_threshold) |
+| `pruning_strategy` | str | None | Pruning method (only score_based is supported) |
 | `pruning_params` | dict | None | Additional pruning parameters |
 | `acquisition_params` | dict | None | Acquisition strategy parameters (beta, temperature, etc.) |
 
@@ -585,10 +582,9 @@ cycles:
     batch_fraction: 0.0005
 
 pruning_fraction: 0.4
-pruning_strategy: "uncertainty_threshold"
+pruning_strategy: "score_based"
 pruning_params:
-  threshold: 0.3
-  adaptive: true
+  pruning_threshold: 0.5
 
 cache_dir: ".cache/production"
 output_dir: "results/screening_campaign_001"
