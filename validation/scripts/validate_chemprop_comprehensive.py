@@ -166,7 +166,7 @@ def load_existing_results(
         if not cycle_metrics_path.exists():
             continue
 
-        cycle_metrics_df = pl.read_csv(cycle_metrics_path)
+        cycle_metrics_df = pl.read_csv(cycle_metrics_path, comment_prefix='#')
         cycle_metrics = cycle_metrics_df.to_dicts()
 
         seed_results[seed] = {
@@ -472,7 +472,16 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
             group = finetune_comparison.filter(pl.col('fine_tuning') == fine_tune)
             offset = width * (idx - 0.5)
             label = 'Fine-Tuning' if fine_tune else 'From Scratch'
-            values = group['top_10_recovery'].to_numpy()
+
+            # Create aligned values array matching config_names order
+            values = np.zeros(len(config_names))
+            for i, config_name in enumerate(config_names):
+                matching = group.filter(pl.col('config_name') == config_name)
+                if len(matching) > 0:
+                    values[i] = matching['top_10_recovery'][0]
+                else:
+                    values[i] = 0  # No data for this config+fine_tune combination
+
             ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
 
         ax.set_xlabel('Model Configuration')
@@ -502,7 +511,16 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
             group = timing_comparison.filter(pl.col('fine_tuning') == fine_tune)
             offset = width * (idx - 0.5)
             label = 'Fine-Tuning' if fine_tune else 'From Scratch'
-            values = group['avg_training_time'].to_numpy()
+
+            # Create aligned values array matching config_names order
+            values = np.zeros(len(config_names))
+            for i, config_name in enumerate(config_names):
+                matching = group.filter(pl.col('config_name') == config_name)
+                if len(matching) > 0:
+                    values[i] = matching['avg_training_time'][0]
+                else:
+                    values[i] = 0  # No data for this config+fine_tune combination
+
             ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
 
         ax.set_xlabel('Model Configuration')
