@@ -8,7 +8,7 @@ import pytest
 import polars as pl
 import numpy as np
 from learnm8.features import extract_features
-from learnm8.acquisition.basic import GreedyAcquisition, RandomAcquisition
+from learnm8.acquisition import GreedyAcquisition, RandomAcquisition
 from learnm8.evaluation.core import evaluate_cycle
 
 

@@ -7,7 +7,7 @@ Tests core functionality for the most commonly used acquisition methods.
 import pytest
 import numpy as np
 import polars as pl
-from learnm8.acquisition.basic import GreedyAcquisition, RandomAcquisition, TopKAcquisition
+from learnm8.acquisition import GreedyAcquisition, RandomAcquisition, TopKAcquisition
 
 
 def pd_to_pl(df: pl.DataFrame) -> pl.DataFrame:

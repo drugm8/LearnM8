@@ -7,14 +7,14 @@ using dimensionality reduction and clustering.
 """
 
 from .base import AcquisitionFunction, AcquisitionError
-from .basic import GreedyAcquisition, RandomAcquisition, TopKAcquisition
-from .uncertainty_based import (
-    UCBAcquisition,
-    ExpectedImprovementAcquisition,
-    ProbabilityImprovementAcquisition,
-    ThompsonSamplingAcquisition,
-    EntropyAcquisition
-)
+from .greedy import GreedyAcquisition
+from .random import RandomAcquisition
+from .top_k import TopKAcquisition
+from .ucb import UCBAcquisition
+from .expected_improvement import ExpectedImprovementAcquisition
+from .probability_improvement import ProbabilityImprovementAcquisition
+from .thompson_sampling import ThompsonSamplingAcquisition
+from .entropy import EntropyAcquisition
 from .simulated_annealing import SimulatedAnnealingAcquisition
 
 # Simplified clustering-based acquisition functions (currently not implemented)
