@@ -3,6 +3,7 @@
 import polars as pl
 from pathlib import Path
 from typing import Tuple
+from learnm8.utils.file_loaders import load_compound_file
 
 
 def validate_csv_columns(df: pl.DataFrame, required_columns: list, file_description: str) -> None:
@@ -18,10 +19,10 @@ def validate_csv_columns(df: pl.DataFrame, required_columns: list, file_descript
 
 def load_benchmark_data(data_path: str, target_col: str) -> Tuple[pl.DataFrame, pl.DataFrame]:
     """
-    Load data for benchmark mode from single CSV file.
+    Load data for benchmark mode from single file (CSV/SDF/SMI).
 
     Args:
-        data_path: Path to CSV file
+        data_path: Path to compound file (CSV/SDF/SMI)
         target_col: Name of target column
 
     Returns:
@@ -31,8 +32,8 @@ def load_benchmark_data(data_path: str, target_col: str) -> Tuple[pl.DataFrame, 
     if not data_path.exists():
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
-    # Load the data
-    df = pl.read_csv(data_path)
+    # Load the data using multi-format loader
+    df = load_compound_file(data_path, progress=False)
 
     # Validate required columns
     required_columns = ['ID', 'SMILES', target_col]
@@ -64,7 +65,7 @@ def load_run_data(compounds_path: str, oracle_path: str) -> pl.DataFrame:
     Load data for run mode with separate compound pool.
 
     Args:
-        compounds_path: Path to compound pool CSV file
+        compounds_path: Path to compound pool file (CSV/SDF/SMI)
         oracle_path: Path to oracle Python file (for validation only)
 
     Returns:
@@ -79,8 +80,8 @@ def load_run_data(compounds_path: str, oracle_path: str) -> pl.DataFrame:
     if not oracle_path.exists():
         raise FileNotFoundError(f"Oracle file not found: {oracle_path}")
 
-    # Load compound pool
-    compound_pool = pl.read_csv(compounds_path)
+    # Load compound pool using multi-format loader
+    compound_pool = load_compound_file(compounds_path, progress=False)
 
     # Validate required columns
     required_columns = ['ID', 'SMILES']
