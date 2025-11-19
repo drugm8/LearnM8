@@ -279,10 +279,10 @@ learnm8/
 │
 ├── acquisition/                    # Selection strategies (unchanged)
 │   ├── base.py
-│   ├── basic.py                    # Greedy, Random
-│   ├── uncertainty_based.py        # UCB, EI, PI, Thompson
-│   ├── diversity.py                # Diverse acquisition
-│   └── bitbirch.py                 # BitBIRCH (deferred to future release)
+│   ├── basic.py                    # Greedy, Random, TopK
+│   ├── uncertainty_based.py        # UCB, EI, PI, Thompson, Entropy
+│   ├── simulated_annealing.py      # Simulated annealing optimization
+│   └── bitbirch.py                 # BitBIRCH clustering (optional dependency)
 │
 ├── oracles/                        # Measurement sources (unchanged)
 │   ├── csv_oracle.py               # CSV-based oracle
@@ -410,8 +410,8 @@ sequenceDiagram
 **Inputs Accepted:**
 
 1. **compound_pool:**
-   - `str` or `Path`: CSV file path → loaded with pandas
-   - `pd.DataFrame`: Used directly
+   - `str` or `Path`: CSV file path → loaded with Polars (`pl.read_csv()`)
+   - `pd.DataFrame` or `pl.DataFrame`: Pandas input converted to Polars immediately
    - Required columns: `ID`, `SMILES`
 
 2. **oracle:**
@@ -436,9 +436,11 @@ def run_active_learning(
 ):
     # Normalize compound_pool
     if isinstance(compound_pool, (str, Path)):
-        compounds_df = pd.read_csv(compound_pool)
+        compounds_df = pl.read_csv(compound_pool)
+    elif isinstance(compound_pool, pd.DataFrame):
+        compounds_df = pl.from_pandas(compound_pool)
     else:
-        compounds_df = compound_pool.copy()
+        compounds_df = compound_pool.clone()
 
     # Validate required columns
     if 'ID' not in compounds_df.columns or 'SMILES' not in compounds_df.columns:
@@ -1785,7 +1787,7 @@ cycles = [
 
     # Cycle 10: Final diverse selection
     CycleConfig(
-        strategy='random',  # Note: bitbirch deferred to future release
+        strategy='random'
         n_cycles=1,
         batch_size=50  # Absolute batch size instead of fraction
     )
@@ -2000,16 +2002,23 @@ Complete mapping of shortcuts to classes:
 | Shortcut | Class | Uncertainty | Backend | Notes |
 |----------|-------|-------------|---------|-------|
 | 'rf' | RandomForestLearner | Yes (tree variance) | sklearn | Fast, robust |
+| 'advanced_rf' | AdvancedRandomForestLearner | Yes (improved) | sklearn | Enhanced uncertainty |
 | 'gp' | GaussianProcessLearner | Yes (native GP) | sklearn | Best uncertainty, small datasets |
 | 'xgb' | XGBoostLearner | No | xgboost | Fast, accurate, large datasets |
+| 'dt' | DecisionTreeLearner | No | sklearn | Simple, interpretable |
+| 'lr' | LinearRegressionLearner | No | sklearn | Linear relationships |
 | 'mlp' | MLPLearner | No | torch | Complex patterns, needs GPU |
 | 'mc_dropout' | MCDropoutLearner | Yes (MC sampling) | torch | GPU acceleration, good uncertainty |
+| 'fastprop' | FastpropLearner | No | torch | PyTorch Lightning feedforward |
+| 'chemprop' | ChempropLearner | Yes (ensemble) | torch | Graph neural network, SMILES-native |
 | 'ensemble' | EnsembleLearner | Yes (ensemble) | mixed | Best overall, meta-model |
 | 'rf_ensemble' | RFEnsemble | Yes | sklearn | RF variants |
 | 'lr_ensemble' | LREnsemble | Yes | sklearn | Linear regression variants |
 | 'xgb_ensemble' | XGBEnsemble | Yes | xgboost | XGBoost variants |
 | 'dt_ensemble' | DTEnsemble | Yes | sklearn | Decision tree variants |
 | 'mixed_ensemble' | MixedEnsemble | Yes | mixed | Diverse model types |
+| 'fastprop_ensemble' | FastpropEnsemble | Yes | torch | Fastprop ensemble |
+| 'chemprop_ensemble' | ChempropEnsemble | Yes | torch | Chemprop ensemble |
 
 **Uncertainty Requirements by Strategy:**
 
@@ -2018,12 +2027,13 @@ Complete mapping of shortcuts to classes:
 | greedy | No | All |
 | random | No | All |
 | topk | No | All |
-| ucb | Yes | rf, gp, mc_dropout, *_ensemble |
-| ei | Yes | gp, mc_dropout, ensemble |
-| pi | Yes | gp, mc_dropout, ensemble |
-| thompson | Yes | gp, mc_dropout, *_ensemble |
-| entropy | Yes | mc_dropout, ensemble |
-| bitbirch | No | All (deferred to future release) |
+| ucb | Yes | rf, advanced_rf, gp, mc_dropout, chemprop, *_ensemble |
+| ei | Yes | gp, mc_dropout, chemprop, ensemble |
+| pi | Yes | gp, mc_dropout, chemprop, ensemble |
+| thompson | Yes | gp, mc_dropout, chemprop, *_ensemble |
+| entropy | Yes | mc_dropout, chemprop, ensemble |
+| simulated_annealing | No | All |
+| bitbirch | No | All (optional dependency) |
 
 ---
 
@@ -2179,12 +2189,17 @@ Available Learners:
 
 Sklearn-based:
   rf           RandomForestLearner       (uncertainty: yes)
+  advanced_rf  AdvancedRandomForestLearner (uncertainty: yes)
   gp           GaussianProcessLearner    (uncertainty: yes)
   xgb          XGBoostLearner            (uncertainty: no)
+  dt           DecisionTreeLearner       (uncertainty: no)
+  lr           LinearRegressionLearner   (uncertainty: no)
 
 PyTorch-based:
   mlp          MLPLearner                (uncertainty: no)
   mc_dropout   MCDropoutLearner          (uncertainty: yes)
+  fastprop     FastpropLearner           (uncertainty: no)
+  chemprop     ChempropLearner           (uncertainty: yes)
 
 Ensembles:
   ensemble     EnsembleLearner           (uncertainty: yes)
@@ -2193,6 +2208,8 @@ Ensembles:
   xgb_ensemble XGBEnsemble               (uncertainty: yes)
   dt_ensemble  DTEnsemble                (uncertainty: yes)
   mixed_ensemble MixedEnsemble           (uncertainty: yes)
+  fastprop_ensemble FastpropEnsemble     (uncertainty: yes)
+  chemprop_ensemble ChempropEnsemble     (uncertainty: yes)
 ```
 
 **List Acquisition Strategies:**
@@ -2217,8 +2234,11 @@ Uncertainty-based:
   thompson     Thompson Sampling
   entropy      Maximum Entropy
 
+Optimization-based:
+  simulated_annealing  Simulated annealing exploration-exploitation
+
 Diversity-based:
-  bitbirch     BitBIRCH clustering (deferred to future release)
+  bitbirch     BitBIRCH clustering (optional dependency)
 ```
 
 **List Featurizers:**
@@ -2265,7 +2285,7 @@ diverse (10 cycles):
   - random:0.02 × 1
   - greedy:0.01 × 3
   - ucb:0.01 × 3
-  - random:0.01 × 3  (Note: bitbirch deferred to future release)
+  - random:0.01 × 3
 ```
 
 ---
@@ -2345,7 +2365,7 @@ Detailed breakdown of each schedule:
   - 1 cycle random (2%)
   - 3 cycles greedy (1%)
   - 3 cycles UCB (1%)
-  - 3 cycles random (1%) - Note: bitbirch deferred to future release
+  - 3 cycles random (1%)
 
 ---
 
@@ -3126,12 +3146,12 @@ Selects initial batch for cycle 0 using specified strategy. Currently supports '
 - Default and recommended choice
 
 **Future Strategies:**
-- BitBIRCH and other diversity-based initialization strategies are deferred to a future release
+- All initialization uses simple random sampling (no clustering-based strategies)
 - When requested, function falls back to random with warning
 
 **Design Patterns:**
 
-- **Vectorized initialization:** No loops, uses pandas categorical types and vectorized operations
+- **Vectorized initialization:** No loops, uses Polars expressions and vectorized operations
 - **Immutable operations:** Returns new DataFrames, never modifies input
 - **Graceful fallback:** Unsupported strategies → random sampling with warning
 - **Consistent with cycle execution:** Uses same acquisition functions as regular cycles
@@ -3662,7 +3682,7 @@ ACQUISITION_REGISTRY = {
     'pi': ProbabilityOfImprovementAcquisition,
     'thompson': ThompsonSampling,
     'entropy': EntropyAcquisition,
-    'bitbirch': BitBIRCHAcquisition,  # Note: Implementation deferred to future release
+    'bitbirch': BitBIRCHAcquisition,  # Optional dependency
 }
 
 def get_acquisition_function(name: str) -> Type[AcquisitionFunction]:
@@ -4451,10 +4471,12 @@ results = run_active_learning(
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| pandas | ≥1.5.0 | DataFrame operations |
+| polars | ≥0.20.0 | DataFrame operations (primary) |
+| pandas | ≥1.5.0 | Input compatibility, Mordred adapter |
 | numpy | ≥1.24.0 | Numerical arrays |
 | scikit-learn | ≥1.3.0 | ML models |
 | rdkit | ≥2023.3.1 | Molecular features |
+| datamol | ≥0.12.0 | SMILES validation |
 | joblib | ≥1.3.0 | Parallel processing |
 | h5py | ≥3.8.0 | HDF5 caching |
 | rich | ≥13.0.0 | CLI output |
@@ -4465,10 +4487,10 @@ results = run_active_learning(
 | Package | Version | Purpose | Install |
 |---------|---------|---------|---------|
 | tqdm | ≥4.0.0 | Progress bars | pip install learnm8[progress] |
-| umap-learn | ≥0.5.0 | Diversity acquisition | pip install learnm8[diversity] |
-| hdbscan | ≥0.8.0 | Clustering | pip install learnm8[diversity] |
-| torch | ≥2.0.0 | Neural networks | pip install learnm8[torch] |
+| torch | ≥2.0.0 | Neural networks (MLP, MCDropout, Chemprop) | pip install learnm8[torch] |
 | xgboost | ≥1.7.0 | XGBoost learner | pip install learnm8[xgboost] |
+| chemprop | ≥2.0.0 | Graph neural networks | pip install chemprop |
+| bitbirch | - | Molecular clustering | pip install git+https://github.com/mqcomplab/bitbirch.git |
 
 **All Optional:**
 
@@ -4599,7 +4621,8 @@ All output files are CSV with metadata comments:
 | pi | Yes | gp, mc_dropout, ensemble |
 | thompson | Yes | gp, mc_dropout, ensemble |
 | entropy | Yes | mc_dropout, ensemble |
-| bitbirch | No | Any (deferred to future release) |
+| bitbirch | No | Any (optional dependency) |
+| simulated_annealing | No | Any |
 
 ---
 
@@ -4747,15 +4770,15 @@ A: Not in v1.0.0. Planned for v1.1.0 with checkpoint support.
 
 **Q: How do I visualize results?**
 
-A: Read CSV files with pandas/Excel or use matplotlib/seaborn:
+A: Read CSV files with Pandas/Polars/Excel or use matplotlib/seaborn:
 
 ```python
-import pandas as pd
+import polars as pl
 import matplotlib.pyplot as plt
 
-# Read results
-df = pd.read_csv('results/compounds_final.csv', comment='#')
-metrics = pd.read_csv('results/cycle_metrics.csv', comment='#')
+# Read results (Polars is faster for large files)
+df = pl.read_csv('results/compounds_final.csv', comment_prefix='#')
+metrics = pl.read_csv('results/cycle_metrics.csv', comment_prefix='#')
 
 # Plot best value over time
 plt.plot(metrics['cycle'], metrics['best_so_far'])
