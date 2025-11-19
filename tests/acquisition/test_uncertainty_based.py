@@ -7,7 +7,7 @@ Tests acquisition functions that leverage prediction uncertainty for selection.
 import pytest
 import numpy as np
 import polars as pl
-from learnm8.acquisition.uncertainty_based import (
+from learnm8.acquisition import (
     UCBAcquisition, ExpectedImprovementAcquisition,
     ProbabilityImprovementAcquisition, ThompsonSamplingAcquisition
 )

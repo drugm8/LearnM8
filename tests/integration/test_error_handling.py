@@ -11,7 +11,7 @@ from pathlib import Path
 
 from learnm8.features import extract_features
 from learnm8.acquisition import get_acquisition_function
-from learnm8.acquisition.basic import GreedyAcquisition
+from learnm8.acquisition import GreedyAcquisition
 from learnm8.oracles.csv_oracle import CSVOracle
 from learnm8.oracles.python_oracle import PythonOracle
 
