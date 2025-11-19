@@ -290,8 +290,7 @@ learnm8/
 │
 ├── pruning/                        # Pool reduction (unchanged)
 │   ├── base.py
-│   ├── probabilistic.py
-│   ├── adaptive.py
+│   ├── score_based.py
 │   └── utils.py
 │
 ├── evaluation/                     # Metrics (v1.0: new two-category system)
@@ -1675,7 +1674,7 @@ config = CycleConfig(
     strategy='greedy',
     n_cycles=5,
     batch_fraction=0.01,
-    pruning_strategy='score',
+    pruning_strategy='score_based',
     pruning_params={'pruning_fraction': 0.3}
 )
 
@@ -1768,7 +1767,7 @@ cycles = [
         strategy='greedy',
         n_cycles=5,
         batch_fraction=0.01,
-        pruning_strategy='score',
+        pruning_strategy='score_based',
         pruning_params={
             'pruning_fraction': 0.3,
             'pruning_threshold': 0.5
