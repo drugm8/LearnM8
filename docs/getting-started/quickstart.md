@@ -2,52 +2,13 @@
 
 Get up and running with LearnM8 in under 5 minutes. This guide covers the essentials for your first active learning experiment.
 
-## Your First Experiment (CLI)
+## Your First Experiment (Python API)
 
-The simplest way to run LearnM8 is through the command-line interface.
+The recommended way to use LearnM8 is through the Python API, which provides full programmatic control:
 
 ### Basic Benchmark Experiment
 
 For a benchmark experiment with a CSV file containing known activities:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
-```
-
-This command:
-- Uses `compounds.csv` as both compound pool and oracle (benchmark mode)
-- Predicts the `Activity` column
-- Uses Gaussian Process regression with Morgan fingerprints
-- Runs 10 active learning cycles
-
-### Understanding the Parameters
-
-**Required Parameters:**
-- `compounds.csv`: CSV file with `ID`, `SMILES`, and target columns
-- `--target Activity`: Column name containing property values
-- `--learner gp`: Machine learning model (Gaussian Process)
-- `--featurizer morgan`: Molecular representation (Morgan fingerprints)
-
-**Optional Parameters:**
-- `--n-cycles 10`: Number of active learning cycles (default: 10)
-- `--batch-fraction 0.01`: Fraction of pool to select each cycle (default: 0.01)
-
-### Where Are My Results?
-
-Results are saved to a timestamped directory:
-
-```
-learnm8_output_20251118_143022/
-├── compounds_final.csv          # Final dataset with predictions
-├── cycle_metrics.csv            # Performance metrics per cycle
-├── selection_history.csv        # Compounds selected each cycle
-├── validation_report.csv        # SMILES validation results
-└── experiment_config.json       # Full configuration for reproducibility
-```
-
-## Your First Experiment (Python API)
-
-The same experiment using Python:
 
 ```python
 from learnm8 import run_active_learning
@@ -62,6 +23,25 @@ results = run_active_learning(
     batch_fraction=0.01
 )
 ```
+
+This code:
+- Uses `compounds.csv` as both compound pool and oracle (benchmark mode)
+- Predicts the `Activity` column
+- Uses Gaussian Process regression with Morgan fingerprints
+- Runs 10 active learning cycles
+
+### Understanding the Parameters
+
+**Required Parameters:**
+- `compound_pool='compounds.csv'`: CSV file with `ID`, `SMILES`, and target columns
+- `oracle='compounds.csv'`: Oracle for measurements (same file = benchmark mode)
+- `learner='gp'`: Machine learning model (Gaussian Process)
+- `target_col='Activity'`: Column name containing property values
+- `featurizer_type='morgan'`: Molecular representation (Morgan fingerprints)
+
+**Optional Parameters:**
+- `n_cycles=10`: Number of active learning cycles (default: 10)
+- `batch_fraction=0.01`: Fraction of pool to select each cycle (default: 0.01)
 
 ### Accessing Results
 
@@ -100,25 +80,50 @@ compounds_pd = results['compounds_df'].to_pandas()
 labeled_pd = results['labeled_data'].to_pandas()
 ```
 
+### Where Are My Results?
+
+Results are saved to a timestamped directory:
+
+```
+learnm8_output_20251118_143022/
+├── compounds_final.csv          # Final dataset with predictions
+├── cycle_metrics.csv            # Performance metrics per cycle
+├── selection_history.csv        # Compounds selected each cycle
+├── validation_report.csv        # SMILES validation results
+└── experiment_config.json       # Full configuration for reproducibility
+```
+
+## Your First Experiment (CLI Alternative)
+
+You can also run LearnM8 through the command-line interface for quick experiments:
+
+### Basic Benchmark Experiment
+
+```bash
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
+```
+
+This command:
+- Uses `compounds.csv` as both compound pool and oracle (benchmark mode)
+- Predicts the `Activity` column
+- Uses Gaussian Process regression with Morgan fingerprints
+- Runs 10 active learning cycles
+
+### CLI Parameters
+
+**Required:**
+- `compounds.csv`: CSV file with `ID`, `SMILES`, and target columns
+- `--target Activity`: Column name containing property values
+- `--learner gp`: Machine learning model
+- `--featurizer morgan`: Molecular representation
+
+**Optional:**
+- `--n-cycles 10`: Number of cycles (default: 10)
+- `--batch-fraction 0.01`: Fraction to select (default: 0.01)
+
 ## Validating Compounds
 
 Before running experiments, validate your compound pool to catch errors early:
-
-### CLI Validation
-
-```bash
-learnm8 validate compounds.csv
-```
-
-This checks all SMILES strings for validity using datamol. Invalid compounds are reported with error messages.
-
-### Save Validation Report
-
-```bash
-learnm8 validate compounds.csv -o validation_results/
-```
-
-Creates `validation_results/validation_report.csv` with detailed error information.
 
 ### Python API Validation
 
@@ -137,6 +142,22 @@ print(f"Success rate: {result.success_rate:.1%}")
 for compound_id, error in result.validation_errors.items():
     print(f"{compound_id}: {error}")
 ```
+
+### CLI Validation
+
+```bash
+learnm8 validate compounds.csv
+```
+
+This checks all SMILES strings for validity using datamol. Invalid compounds are reported with error messages.
+
+**Save validation report:**
+
+```bash
+learnm8 validate compounds.csv -o validation_results/
+```
+
+Creates `validation_results/validation_report.csv` with detailed error information.
 
 ## Exploring Available Components
 
@@ -184,52 +205,72 @@ Displays built-in cycle schedules for different screening scenarios:
 
 Experiment with different learners to find the best for your dataset:
 
-```bash
+```python
+from learnm8 import run_active_learning
+
 # Random Forest (fast baseline)
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
+results_rf = run_active_learning(
+    compound_pool='compounds.csv', oracle='oracle.csv',
+    learner='rf', target_col='Activity', featurizer_type='morgan', n_cycles=10
+)
 
 # Ensemble (robust performance)
-learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan --n-cycles 10
+results_ensemble = run_active_learning(
+    compound_pool='compounds.csv', oracle='oracle.csv',
+    learner='ensemble', target_col='Activity', featurizer_type='morgan', n_cycles=10
+)
 
 # XGBoost (high performance)
-learnm8 run compounds.csv --target Activity --learner xgb --featurizer morgan --n-cycles 10
+results_xgb = run_active_learning(
+    compound_pool='compounds.csv', oracle='oracle.csv',
+    learner='xgb', target_col='Activity', featurizer_type='morgan', n_cycles=10
+)
+```
+
+**CLI alternative:**
+```bash
+learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
+learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan --n-cycles 10
 ```
 
 ### Use Custom Acquisition Strategies
 
-Move beyond greedy selection:
+Move beyond greedy selection with uncertainty-based strategies:
 
-```bash
+```python
 # Upper Confidence Bound (exploration/exploitation balance)
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.01 ucb:0.005*9"
-
-# Thompson Sampling (Bayesian approach)
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.01 thompson:0.005*9"
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='oracle.csv',
+    learner='gp',
+    target_col='Activity',
+    featurizer_type='morgan',
+    strategy='ucb',
+    acquisition_params={'exploration_weight': 2.0},
+    n_cycles=10
+)
 ```
 
-### Try Predefined Schedules
-
-Use expert-designed cycle combinations:
-
+**CLI alternative:**
 ```bash
-# Intensive screening (20 cycles)
-learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan \
-  --schedule intensive
-
-# Diversity-focused screening
-learnm8 run compounds.csv --target Activity --learner mc_dropout --featurizer morgan \
-  --schedule diverse
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
+  --cycles "random:0.01 ucb:0.005*9"
 ```
 
 ### Production Screening with Custom Oracle
 
 For real screening campaigns, provide a custom scoring function:
 
-```bash
-learnm8 run compounds.csv scoring_module.py:calculate_affinity \
-  --target binding_score --learner mc_dropout --featurizer morgan --n-cycles 20
+```python
+# Python API
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='scoring_module.py:calculate_affinity',
+    learner='mc_dropout',
+    target_col='binding_score',
+    featurizer_type='morgan',
+    n_cycles=20
+)
 ```
 
 Where `scoring_module.py` contains:
@@ -250,6 +291,12 @@ def calculate_affinity(smiles_list):
         score = your_scoring_function(smiles)
         scores.append(score)
     return scores
+```
+
+**CLI alternative:**
+```bash
+learnm8 run compounds.csv scoring_module.py:calculate_affinity \
+  --target binding_score --learner mc_dropout --featurizer morgan --n-cycles 20
 ```
 
 ## Learn More

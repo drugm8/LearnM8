@@ -59,13 +59,7 @@ LearnM8 combines modern software engineering practices with cutting-edge molecul
 
 ## Quick Example
 
-Get started with LearnM8 in seconds using the command-line interface:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
-```
-
-Or use the Python API for more control:
+Get started with LearnM8's Python API:
 
 ```python
 from learnm8 import run_active_learning
@@ -78,6 +72,12 @@ results = run_active_learning(
     featurizer_type='morgan',
     n_cycles=10
 )
+```
+
+Or use the command-line interface for quick experiments:
+
+```bash
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
 ```
 
 ## Architecture Highlights

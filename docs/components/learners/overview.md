@@ -183,24 +183,6 @@ All available learners with their properties and dependencies:
 
 ## Using Learners
 
-### CLI Usage
-
-Specify a learner using the `--learner` flag with any shortcut from the registry:
-
-```bash
-# Random Forest
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
-
-# Gaussian Process with uncertainty
-learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors
-
-# Chemprop (no featurizer needed)
-learnm8 run compounds.csv --target Activity --learner chemprop
-
-# Ensemble for robust uncertainty
-learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan
-```
-
 ### Python API Usage
 
 Use learner shortcuts or instantiate custom learner instances:
@@ -234,6 +216,24 @@ results = run_active_learning(
     featurizer_type='morgan',
     n_cycles=10
 )
+```
+
+### CLI Usage
+
+Specify a learner using the `--learner` flag with any shortcut from the registry:
+
+```bash
+# Random Forest
+learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
+
+# Gaussian Process with uncertainty
+learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors
+
+# Chemprop (no featurizer needed)
+learnm8 run compounds.csv --target Activity --learner chemprop
+
+# Ensemble for robust uncertainty
+learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan
 ```
 
 ### Listing Available Learners

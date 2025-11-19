@@ -26,19 +26,6 @@ Benchmark mode uses pre-computed ground truth data from a CSV file to evaluate a
 
 The CSVOracle reads ground truth from a CSV file containing compound IDs and measured properties.
 
-**CLI Example:**
-
-```bash
-learnm8 run compounds.csv \
-  --target Activity \
-  --learner gp \
-  --featurizer morgan \
-  --n-cycles 10 \
-  --batch-fraction 0.01
-```
-
-When `compounds.csv` contains the target column, LearnM8 auto-detects benchmark mode.
-
 **Python API Example:**
 
 ```python
@@ -60,10 +47,38 @@ results = run_active_learning(
 print(f"Final enrichment: {results['aggregate_metrics']['enrichment_factor_1']:.2f}")
 ```
 
+**CLI Alternative:**
+
+```bash
+learnm8 run compounds.csv \
+  --target Activity \
+  --learner gp \
+  --featurizer morgan \
+  --n-cycles 10 \
+  --batch-fraction 0.01
+```
+
+When `compounds.csv` contains the target column, LearnM8 auto-detects benchmark mode.
+
 ### ESSENCE Benchmark Example
 
 The ESSENCE benchmark dataset provides validated ground truth for testing active learning algorithms.
 
+```python
+from learnm8 import run_active_learning
+
+results = run_active_learning(
+    compound_pool='ESSENCE_benchmark_input/ADA.csv',
+    oracle=None,  # Auto-detect from compound pool
+    learner='ensemble',
+    target_col='Activity',
+    featurizer_type='morgan',
+    n_cycles=15,
+    batch_fraction=0.01
+)
+```
+
+**CLI alternative:**
 ```bash
 learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
@@ -135,17 +150,6 @@ def calculate_binding_affinity(compound_ids: List[str]) -> dict:
     })
 ```
 
-**CLI Example:**
-
-```bash
-learnm8 run compound_library.csv scoring_module.py:calculate_binding_affinity \
-  --target binding_affinity \
-  --learner mc_dropout \
-  --featurizer morgan \
-  --n-cycles 20 \
-  --batch-fraction 0.005
-```
-
 **Python API Example:**
 
 ```python
@@ -166,6 +170,17 @@ results = run_active_learning(
     n_cycles=20,
     batch_fraction=0.005
 )
+```
+
+**CLI Alternative:**
+
+```bash
+learnm8 run compound_library.csv scoring_module.py:calculate_binding_affinity \
+  --target binding_affinity \
+  --learner mc_dropout \
+  --featurizer morgan \
+  --n-cycles 20 \
+  --batch-fraction 0.005
 ```
 
 ### Custom Oracle Example: Docking
@@ -213,6 +228,23 @@ def run_docking(mol, receptor):
     return energy
 ```
 
+**Using the docking oracle:**
+
+```python
+from learnm8 import run_active_learning
+
+results = run_active_learning(
+    compound_pool='compound_library.csv',
+    oracle='docking_oracle.py:dock_compounds',
+    learner='ensemble',
+    target_col='docking_score',
+    featurizer_type='morgan',
+    score_direction='lower',
+    n_cycles=25
+)
+```
+
+**CLI alternative:**
 ```bash
 learnm8 run compound_library.csv docking_oracle.py:dock_compounds \
   --target docking_score \
@@ -240,15 +272,9 @@ LearnM8 automatically detects the appropriate mode based on oracle type:
 
 Explicitly specify mode when auto-detection is ambiguous:
 
-```bash
-learnm8 run compounds.csv \
-  --mode benchmark \
-  --target Activity \
-  --learner gp \
-  --featurizer morgan
-```
-
 ```python
+from learnm8 import run_active_learning
+
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle=oracle,
@@ -257,6 +283,15 @@ results = run_active_learning(
     target_col='Activity',
     featurizer_type='morgan'
 )
+```
+
+**CLI alternative:**
+```bash
+learnm8 run compounds.csv \
+  --mode benchmark \
+  --target Activity \
+  --learner gp \
+  --featurizer morgan
 ```
 
 ## Performance Differences
@@ -319,6 +354,39 @@ results = run_active_learning(
 
 Start with benchmark mode for algorithm selection, then deploy in production mode:
 
+```python
+from learnm8 import run_active_learning, CycleConfig
+
+# 1. Test strategies on benchmark
+benchmark_results = run_active_learning(
+    compound_pool='ESSENCE_benchmark_input/ADA.csv',
+    oracle=None,
+    learner='ensemble',
+    target_col='Activity',
+    featurizer_type='morgan',
+    cycles=[
+        CycleConfig('random', n_cycles=1, batch_fraction=0.02),
+        CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
+        CycleConfig('diverse', n_cycles=1, batch_fraction=0.01)
+    ]
+)
+
+# 2. Deploy best strategy in production
+production_results = run_active_learning(
+    compound_pool='screening_library.csv',
+    oracle='docking_oracle.py:score',
+    learner='ensemble',
+    target_col='affinity',
+    featurizer_type='morgan',
+    cycles=[
+        CycleConfig('random', n_cycles=1, batch_fraction=0.02),
+        CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
+        CycleConfig('diverse', n_cycles=1, batch_fraction=0.01)
+    ]
+)
+```
+
+**CLI alternative:**
 ```bash
 # 1. Test strategies on benchmark
 learnm8 run ESSENCE_benchmark_input/ADA.csv \

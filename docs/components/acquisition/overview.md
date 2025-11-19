@@ -155,13 +155,10 @@ results = run_active_learning(
 
 ## Using Acquisition Functions
 
-**CLI**: Specify strategy with `--strategy` or in `--cycles` specification
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --strategy ucb --n-cycles 10
-```
+### Python API
 
-**API**: Use strategy name (string) or custom instance
+Use strategy name (string) or custom instance:
+
 ```python
 from learnm8 import run_active_learning
 
@@ -192,19 +189,21 @@ results = run_active_learning(
 )
 ```
 
+### CLI Alternative
+
+Specify strategy with `--strategy` or in `--cycles` specification:
+
+```bash
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
+  --strategy ucb --n-cycles 10
+```
+
 ## Multi-Strategy Cycles
 
 Combine different strategies across cycles for sophisticated exploration:
 
-```bash
-# CLI: Random initialization → UCB exploration → Greedy exploitation
-learnm8 run compounds.csv oracle.py:score --target binding \
-  --cycles "random:0.01 ucb:0.005*5 greedy:0.005*4" \
-  --learner ensemble --featurizer morgan
-```
-
 ```python
-# API: Use CycleConfig for fine-grained control
+# Python API: Use CycleConfig for fine-grained control
 from learnm8 import run_active_learning, CycleConfig
 
 results = run_active_learning(
@@ -220,6 +219,14 @@ results = run_active_learning(
         CycleConfig('greedy', n_cycles=4, batch_fraction=0.005)
     ]
 )
+```
+
+**CLI alternative:**
+```bash
+# Random initialization → UCB exploration → Greedy exploitation
+learnm8 run compounds.csv oracle.py:score --target binding \
+  --cycles "random:0.01 ucb:0.005*5 greedy:0.005*4" \
+  --learner ensemble --featurizer morgan
 ```
 
 ## See Also
