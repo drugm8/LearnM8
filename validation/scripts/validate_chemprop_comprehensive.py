@@ -386,13 +386,14 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
 
     # Plot 2: Early Stopping Impact on Performance
     ax = axes[0, 1]
-    config_comparison = df_success.groupby('config_name').agg({
-        'top_10_recovery': ['mean', 'std'],
-        'top_100_recovery': ['mean', 'std'],
-    }).reset_index()
+    config_comparison = df_success.group_by('config_name').agg([
+        pl.col('top_10_recovery').mean().alias('top_10_mean'),
+        pl.col('top_10_recovery').std().alias('top_10_std'),
+        pl.col('top_100_recovery').mean().alias('top_100_mean'),
+        pl.col('top_100_recovery').std().alias('top_100_std'),
+    ]).sort('top_10_mean', descending=True)
 
-    config_comparison.columns = ['config_name', 'top_10_mean', 'top_10_std', 'top_100_mean', 'top_100_std']
-    config_comparison = config_comparison.sort_values('top_10_mean', ascending=False)
+    config_comparison = config_comparison.to_pandas()
 
     x_pos = np.arange(len(config_comparison))
     width = 0.35
@@ -427,7 +428,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     ax.set_ylabel('Time (seconds)')
     ax.set_title('Average Training vs Prediction Time', fontsize=14, fontweight='bold')
     ax.set_xticks(x_pos)
-    ax.set_xticklabels(timing_data['config_name'].to_list())
+    ax.set_xticklabels(timing_data['config_name'].to_list(), rotation=45, ha='right')
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
 
@@ -478,7 +479,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         ax.set_ylabel('Top-10 Recovery')
         ax.set_title('Fine-Tuning Impact on Performance', fontsize=14, fontweight='bold')
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(config_names)
+        ax.set_xticklabels(config_names, rotation=45, ha='right')
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
     else:
@@ -508,7 +509,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         ax.set_ylabel('Avg Training Time (s)')
         ax.set_title('Fine-Tuning Training Time Comparison', fontsize=14, fontweight='bold')
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(config_names)
+        ax.set_xticklabels(config_names, rotation=45, ha='right')
         ax.legend()
         ax.grid(axis='y', alpha=0.3)
     else:
@@ -542,15 +543,15 @@ def print_summary_table(df: pl.DataFrame):
     table.add_column("Train Time", justify="right", width=11)
     table.add_column("Total Time", justify="right", width=11)
 
-    for idx, row in enumerate(df_sorted.itertuples(), 1):
+    for idx, row in enumerate(df_sorted.iter_rows(named=True), 1):
         table.add_row(
             str(idx),
-            row.config_name,
-            row.featurizer,
-            f"{row.top_10_recovery:.3f}±{row.top_10_recovery_std:.3f}",
-            f"{row.top_100_recovery:.3f}±{row.top_100_recovery_std:.3f}",
-            f"{row.avg_training_time:.1f}s",
-            f"{row.total_time:.1f}s",
+            row['config_name'],
+            row['featurizer'],
+            f"{row['top_10_recovery']:.3f}±{row['top_10_recovery_std']:.3f}",
+            f"{row['top_100_recovery']:.3f}±{row['top_100_recovery_std']:.3f}",
+            f"{row['avg_training_time']:.1f}s",
+            f"{row['total_time']:.1f}s",
         )
 
     console.print(table)
