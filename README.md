@@ -84,7 +84,7 @@ results = run_active_learning(
 | **Learners** | 18 | RandomForest, GaussianProcess, XGBoost, MLP, MCDropout, FastProp, Chemprop, Ensembles |
 | **Acquisition** | 11 | greedy, random, ucb, ei, pi, thompson, entropy, bitbirch, simulated_annealing |
 | **Featurizers** | 5 | morgan (2048-bit), maccs (167-bit), ecfp6 (2048-bit), morgan_feat (2048-bit), descriptors (1613-D) |
-| **Pruning** | 6 | score_based, uncertainty_threshold, prediction_threshold, probabilistic, adaptive |
+| **Pruning** | 1 | score_based |
 
 See the [documentation](docs/) for complete details on all components.
 
