@@ -1,0 +1,109 @@
+site_name: LearnM8
+site_description: Active Learning Framework for Molecular Screening
+site_author: LearnM8 Team
+repo_url: https://github.com/volkamerlab/LearnM8
+repo_name: volkamerlab/LearnM8
+edit_uri: edit/main/docs/
+site_url: https://volkamerlab.github.io/LearnM8
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+plugins:
+  - search:
+      lang: en
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/volkamerlab/LearnM8
+  version:
+    provider: mike
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+      - Core Concepts: getting-started/concepts.md
+  - Tutorials:
+      - Running Experiments: tutorials/running-experiments.md
+      - Building Custom Cycles: tutorials/building-custom-cycles.md
+      - Benchmark vs Production: tutorials/benchmark-vs-production.md
+      - Advanced Workflows: tutorials/advanced-workflows.md
+  - User Guide:
+      - CLI Reference: user-guide/cli-reference.md
+      - API Reference: user-guide/api-reference.md
+      - Configuration Files: user-guide/configuration-files.md
+  - Components:
+      - Learners:
+          - Overview: components/learners/overview.md
+          - Scikit-learn Models: components/learners/scikit-learn.md
+          - PyTorch Models: components/learners/pytorch.md
+          - Graph Neural Networks: components/learners/graph-neural-networks.md
+          - Ensembles: components/learners/ensembles.md
+      - Acquisition Functions:
+          - Overview: components/acquisition/overview.md
+          - Basic Strategies: components/acquisition/basic.md
+          - Uncertainty-Based: components/acquisition/uncertainty-based.md
+          - Diversity Methods: components/acquisition/diversity.md
+      - Featurizers:
+          - Overview: components/featurizers/overview.md
+          - Available Featurizers: components/featurizers/available-featurizers.md
+      - Oracles:
+          - Overview: components/oracles/overview.md
+          - Custom Oracles: components/oracles/custom-oracles.md
+  - Customization:
+      - Custom Learners: customization/custom-learners.md
+      - Custom Acquisition: customization/custom-acquisition.md
+      - Extending Framework: customization/extending-framework.md
+
+copyright: Copyright &copy; 2025 LearnM8 Team
