@@ -38,6 +38,7 @@ from learnm8.api import run_active_learning
 from learnm8.core.validation import validate_compound_pool
 from learnm8.core.config import parse_cycle_spec, CycleConfig
 from learnm8.acquisition import list_acquisition_functions
+from learnm8.utils.file_loaders import load_compound_file
 
 install()
 console = Console()
@@ -220,7 +221,7 @@ def create_parser() -> argparse.ArgumentParser:
         nargs='?',
         type=Path,
         default=None,
-        help='CSV file with compounds (ID, SMILES required)'
+        help='Compound file (CSV/SDF/SMI) with ID and SMILES. Supported: .csv, .sdf, .smi'
     )
 
     run_parser.add_argument(
@@ -362,7 +363,7 @@ def create_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument(
         'compound_pool',
         type=Path,
-        help='CSV file with compounds (must have ID and SMILES columns)'
+        help='Compound file (CSV/SDF/SMI) with ID and SMILES. Supported: .csv, .sdf, .smi'
     )
     validate_parser.add_argument(
         '-o', '--output',
@@ -611,7 +612,7 @@ def cmd_validate(args: argparse.Namespace):
             sys.exit(1)
 
         console.print(f"[cyan]Validating:[/cyan] {args.compound_pool}")
-        compounds = pl.read_csv(args.compound_pool)
+        compounds = load_compound_file(args.compound_pool, progress=False)
         console.print(f"Total compounds: {len(compounds)}")
 
         with Progress(

@@ -57,6 +57,7 @@ from learnm8.core.cycle import execute_cycle
 from learnm8.core.persistence import save_results
 from learnm8.core.interfaces import Oracle, Learner
 from learnm8.oracles import CSVOracle
+from learnm8.utils.file_loaders import load_compound_file
 from learnm8.learners import (
     RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
     MLPLearner, MCDropoutLearner, FastpropLearner, EnsembleLearner,
@@ -390,7 +391,7 @@ def run_active_learning(
 
     Args:
         compound_pool: Compound pool specification:
-            - str/Path: Path to CSV file (must have 'ID' and 'SMILES' columns)
+            - str/Path: Path to compound file (CSV/SDF/SMI) - must have 'ID' and 'SMILES' columns
             - pl.DataFrame: DataFrame with 'ID' and 'SMILES' columns
 
         oracle: Oracle specification:
@@ -524,8 +525,8 @@ def run_active_learning(
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
                 raise FileNotFoundError(f"Compound pool file not found: {compound_pool_path}")
-            compound_pool = pl.read_csv(compound_pool_path)
-            logger.debug(f"Loading DataFrame from CSV: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
+            compound_pool = load_compound_file(compound_pool_path, progress=True)
+            logger.debug(f"Loaded DataFrame: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
         elif isinstance(compound_pool, pl.DataFrame):
             logger.debug("Using provided DataFrame as compound pool")
         else:
