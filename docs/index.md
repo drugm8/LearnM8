@@ -138,7 +138,7 @@ validation_result = results['validation_result']
 
 **Oracles**: CSVOracle for benchmarking and PythonOracle for custom scoring functions
 
-**Pruning**: Probabilistic, uncertainty threshold, prediction threshold, and adaptive pruning strategies
+**Pruning**: Score-based pruning for design space reduction in large compound libraries
 
 ## Next Steps
 

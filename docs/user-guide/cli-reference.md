@@ -157,10 +157,12 @@ learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
 | `--pruning-fraction F` | float | None | Fraction of pool to prune each cycle (0.0-0.9) |
 | `--pruning-strategy NAME` | string | `score_based` | Pruning strategy |
 
-**Pruning Strategies:**
-- `score_based` - Remove lowest-scoring compounds
-- `uncertainty_threshold` - Remove low-uncertainty compounds
-- `prediction_threshold` - Remove compounds outside prediction range
+**Pruning Strategy:**
+- `score_based` - Remove lowest-scoring compounds based on model predictions
+
+**Pruning Parameters:**
+- `pruning_fraction` (float, 0.0-0.9): Fraction of pool to prune each cycle
+- `pruning_threshold` (float, optional): Absolute score threshold for pruning (alternative to fraction)
 
 **Example:**
 ```bash
