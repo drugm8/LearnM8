@@ -58,7 +58,7 @@ results = run_active_learning(
 )
 ```
 
-**CLI equivalent:**
+**CLI alternative:**
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \

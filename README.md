@@ -33,12 +33,6 @@ pip install -e .
 
 ### Your First Experiment
 
-**CLI:**
-```bash
-learnm8 validate compounds.csv
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
-```
-
 **Python API:**
 ```python
 from learnm8 import run_active_learning
@@ -51,6 +45,12 @@ results = run_active_learning(
     featurizer_type='morgan',
     n_cycles=10
 )
+```
+
+**CLI Alternative:**
+```bash
+learnm8 validate compounds.csv
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
 ```
 
 ## ✨ Key Features

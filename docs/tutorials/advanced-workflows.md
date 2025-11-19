@@ -24,21 +24,6 @@ Pruning removes low-value compounds from the unlabeled pool based on model predi
 
 Remove compounds with poor predicted scores.
 
-**CLI Example:**
-
-```bash
-learnm8 run large_library.csv oracle.py:score \
-  --target affinity \
-  --learner gp \
-  --featurizer morgan \
-  --n-cycles 20 \
-  --pruning-strategy score_based \
-  --pruning-fraction 0.1 \
-  --score-direction higher
-```
-
-Removes bottom 10% of compounds by predicted score each cycle.
-
 **Python API Example:**
 
 ```python
@@ -57,10 +42,25 @@ results = run_active_learning(
 )
 ```
 
+Removes bottom 10% of compounds by predicted score each cycle.
+
 **Parameters:**
 - `pruning_strategy`: `'score_based'` for prediction-based pruning
 - `pruning_fraction`: Fraction to remove (0.0-0.9), typically 0.1-0.3
 - `score_direction`: `'higher'` or `'lower'` based on optimization goal
+
+**CLI Alternative:**
+
+```bash
+learnm8 run large_library.csv oracle.py:score \
+  --target affinity \
+  --learner gp \
+  --featurizer morgan \
+  --n-cycles 20 \
+  --pruning-strategy score_based \
+  --pruning-fraction 0.1 \
+  --score-direction higher
+```
 
 ### Uncertainty-Based Pruning
 
@@ -178,17 +178,6 @@ Where:
 
 Combines RandomForest, LinearRegression, and XGBoost for maximum diversity.
 
-**CLI Example:**
-
-```bash
-learnm8 run compounds.csv oracle.py:score \
-  --target affinity \
-  --learner mixed \
-  --featurizer morgan \
-  --n-cycles 15 \
-  --batch-fraction 0.01
-```
-
 **Python API Example:**
 
 ```python
@@ -206,6 +195,17 @@ results = run_active_learning(
     n_cycles=15,
     batch_fraction=0.01
 )
+```
+
+**CLI Alternative:**
+
+```bash
+learnm8 run compounds.csv oracle.py:score \
+  --target affinity \
+  --learner mixed \
+  --featurizer morgan \
+  --n-cycles 15 \
+  --batch-fraction 0.01
 ```
 
 ### Custom Ensemble
@@ -251,7 +251,22 @@ LearnM8 provides pre-configured ensembles for common model types.
 - `fastprop_ensemble`: 3 FastProp neural networks
 - `chemprop_ensemble`: 3 Chemprop graph neural networks
 
-**Example:**
+**Python API Example:**
+
+```python
+from learnm8 import run_active_learning
+
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='oracle.py:score',
+    learner='rf_ensemble',
+    target_col='affinity',
+    featurizer_type='morgan',
+    n_cycles=10
+)
+```
+
+**CLI Alternative:**
 
 ```bash
 learnm8 run compounds.csv oracle.py:score \
@@ -300,18 +315,6 @@ Fine-tuning for active learning reuses trained model weights from previous cycle
 
 ### Enabling Fine-Tuning
 
-**CLI Example:**
-
-```bash
-learnm8 run compounds.csv oracle.py:score \
-  --target affinity \
-  --learner chemprop \
-  --n-cycles 20 \
-  --batch-fraction 0.005 \
-  --enable-chemprop-fine-tuning \
-  --checkpoint-dir ./checkpoints
-```
-
 **Python API Example:**
 
 ```python
@@ -334,6 +337,18 @@ results = run_active_learning(
     n_cycles=20,
     batch_fraction=0.005
 )
+```
+
+**CLI Alternative:**
+
+```bash
+learnm8 run compounds.csv oracle.py:score \
+  --target affinity \
+  --learner chemprop \
+  --n-cycles 20 \
+  --batch-fraction 0.005 \
+  --enable-chemprop-fine-tuning \
+  --checkpoint-dir ./checkpoints
 ```
 
 ### Fine-Tuning Parameters
@@ -487,6 +502,18 @@ cache_dir: .cache/docking_features
 
 ### Loading Configuration
 
+**Python API:**
+
+```python
+import yaml
+from learnm8 import run_active_learning
+
+with open('experiment_config.yaml') as f:
+    config = yaml.safe_load(f)
+
+results = run_active_learning(**config)
+```
+
 **CLI:**
 
 ```bash
@@ -499,18 +526,6 @@ learnm8 run --config experiment_config.yaml
 learnm8 run --config experiment_config.yaml \
   --random-state 123 \
   --output-dir results/docking_campaign_002
-```
-
-**Python API:**
-
-```python
-import yaml
-from learnm8 import run_active_learning
-
-with open('experiment_config.yaml') as f:
-    config = yaml.safe_load(f)
-
-results = run_active_learning(**config)
 ```
 
 ### Version Control for Experiments

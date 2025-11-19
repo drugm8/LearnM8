@@ -23,12 +23,7 @@ All scikit-learn, PyTorch, and XGBoost learners require featurizers:
 - MLP, MCDropout, Fastprop
 - All ensemble variants (Mixed, RF, LR, XGB, DT, Fastprop)
 
-**CLI:**
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan
-```
-
-**API:**
+**Python API:**
 ```python
 from learnm8 import run_active_learning
 
@@ -41,21 +36,29 @@ results = run_active_learning(
 )
 ```
 
+**CLI:**
+```bash
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan
+```
+
 ### Optional for Graph Neural Networks
 
 Chemprop works directly with SMILES strings and does not require featurizers. However, featurizers can be used in **hybrid mode** to combine graph features with molecular descriptors.
 
 **Standard Chemprop (no featurizer needed):**
-```bash
-learnm8 run compounds.csv --target Activity --learner chemprop
+```python
+from learnm8 import run_active_learning
+
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='oracle.csv',
+    learner='chemprop',
+    target_col='Activity'
+    # No featurizer_type needed
+)
 ```
 
 **Hybrid Chemprop (combines graph + descriptors):**
-```bash
-learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
-```
-
-**API:**
 ```python
 results = run_active_learning(
     compound_pool='compounds.csv',
@@ -64,6 +67,15 @@ results = run_active_learning(
     target_col='Activity',
     featurizer_type='descriptors'  # Optional: enables hybrid mode
 )
+```
+
+**CLI alternatives:**
+```bash
+# Standard
+learnm8 run compounds.csv --target Activity --learner chemprop
+
+# Hybrid
+learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
 ```
 
 ## Feature Extraction API
@@ -336,6 +348,19 @@ maccs (167 bytes) < fingerprints (2048 bytes) < descriptors (6452 bytes float32)
 
 Most experiments use Morgan fingerprints as the default:
 
+```python
+from learnm8 import run_active_learning
+
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='oracle.csv',
+    learner='rf',
+    target_col='Activity',
+    featurizer_type='morgan'
+)
+```
+
+**CLI alternative:**
 ```bash
 learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
 ```
@@ -344,6 +369,20 @@ learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
 
 Use MACCS for fastest feature extraction:
 
+```python
+from pathlib import Path
+
+results = run_active_learning(
+    compound_pool='large_library.csv',
+    oracle='oracle.csv',
+    learner='rf',
+    target_col='Activity',
+    featurizer_type='maccs',
+    cache_dir=Path('.cache')
+)
+```
+
+**CLI alternative:**
 ```bash
 learnm8 run large_library.csv --target Activity --learner rf --featurizer maccs --cache-dir .cache
 ```
@@ -352,6 +391,17 @@ learnm8 run large_library.csv --target Activity --learner rf --featurizer maccs 
 
 Use Mordred descriptors for maximum chemical information:
 
+```python
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    oracle='oracle.csv',
+    learner='gp',
+    target_col='Activity',
+    featurizer_type='descriptors'
+)
+```
+
+**CLI alternative:**
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors
 ```
@@ -360,12 +410,9 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptor
 
 Combine graph neural network with molecular descriptors:
 
-```bash
-learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
-```
-
-**API:**
 ```python
+from pathlib import Path
+
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
@@ -376,10 +423,38 @@ results = run_active_learning(
 )
 ```
 
+**CLI alternative:**
+```bash
+learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
+```
+
 ### Shared Cache Setup
 
 Create shared cache for multiple experiments:
 
+```python
+from pathlib import Path
+from learnm8 import run_active_learning
+
+shared_cache = Path('.shared_cache')
+shared_cache.mkdir(exist_ok=True)
+
+# First experiment
+results1 = run_active_learning(
+    compound_pool='dataset1.csv', oracle='oracle1.csv',
+    learner='rf', target_col='Activity', featurizer_type='morgan',
+    cache_dir=shared_cache
+)
+
+# Second experiment (reuses cached features)
+results2 = run_active_learning(
+    compound_pool='dataset2.csv', oracle='oracle2.csv',
+    learner='gp', target_col='Activity', featurizer_type='morgan',
+    cache_dir=shared_cache
+)
+```
+
+**CLI alternative:**
 ```bash
 mkdir .shared_cache
 
