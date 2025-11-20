@@ -8,6 +8,11 @@ import seaborn as sns
 from datetime import datetime
 from matplotlib.patches import Polygon
 from learnm8.api import LEARNER_DISPLAY_NAMES
+from validation.lib.heatmap_utils import (
+    get_purple_colormap,
+    auto_scale_range,
+    add_heatmap_annotations
+)
 
 
 def create_top_k_heatmap(
@@ -18,41 +23,40 @@ def create_top_k_heatmap(
     ax: plt.Axes,
     learner_names: List[str] = None
 ) -> plt.Axes:
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        'red_blue',
-        ['#d73027', '#f46d43', '#fdae61', '#fee090', '#e0f3f8', '#abd9e9', '#74add1', '#4575b4']
-    )
-
-    norm = mcolors.TwoSlopeNorm(vmin=0, vcenter=75, vmax=100)
+    cmap = get_purple_colormap()
 
     mean_pd = mean_matrix.to_pandas()
+    std_pd = std_matrix.to_pandas()
     mask = mean_pd.isna()
+
+    mean_values = mean_pd.values
+    vmin, vmax = auto_scale_range(mean_values, percentile=5, padding=0.05)
 
     hm = sns.heatmap(
         mean_pd,
         annot=False,
         cmap=cmap,
-        norm=norm,
         mask=mask,
         cbar_kws={'shrink': 0.8, 'label': 'Discovery Rate (%)'},
-        linewidths=0.5,
+        linewidths=0.3,
         linecolor='white',
         square=False,
-        vmin=0,
-        vmax=100,
+        vmin=vmin,
+        vmax=vmax,
         ax=ax
     )
 
-    for i in range(mean_matrix.height):
-        for j in range(len(mean_matrix.columns)):
-            mean_val = mean_matrix.row(i)[j]
-            std_val = std_matrix.row(i)[j]
-            if mean_val is not None and std_val is not None:
-                text = f'{mean_val:.1f}±{std_val:.1f}'
-                ax.text(j + 0.5, i + 0.5, text,
-                       ha='center', va='center',
-                       fontsize=8, fontweight='bold',
-                       color='black' if mean_val > 50 else 'white')
+    add_heatmap_annotations(
+        ax=ax,
+        data=mean_values,
+        std_data=std_pd.values,
+        colormap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        format_string='{:.1f}',
+        show_std=True,
+        fontsize=8
+    )
 
     cbar = hm.collections[0].colorbar
     cbar.ax.tick_params(labelsize=11)
@@ -441,8 +445,14 @@ def calculate_cumulative_timing(all_results: Dict[Tuple[str, str], Dict]) -> pl.
             'cumulative_total_time': cumulative_total,
             'cumulative_training_prediction_time': cumulative_training_prediction,
             'elapsed_time': aggregated.get('elapsed_time_mean', cumulative_total),
+            'top_0_1_pct_discovery': final_metrics.get('top_0_1_pct_discovery', 0.0),
             'top_1_pct_discovery': final_metrics.get('top_1_pct_discovery', 0.0),
-            'top_0_1_pct_discovery': final_metrics.get('top_0_1_pct_discovery', 0.0)
+            'top_10_discovery': final_metrics.get('top_10_discovery', 0.0),
+            'top_100_discovery': final_metrics.get('top_100_discovery', 0.0),
+            'top_0_1_pct_recovery': final_metrics.get('top_0_1_pct_discovery', 0.0),
+            'top_1_pct_recovery': final_metrics.get('top_1_pct_discovery', 0.0),
+            'top_10_recovery': final_metrics.get('top_10_discovery', 0.0),
+            'top_100_recovery': final_metrics.get('top_100_discovery', 0.0),
         })
 
     return pl.DataFrame(timing_data)
@@ -484,16 +494,19 @@ def create_time_heatmap(
 
     metric_label = _get_metric_label(performance_metric)
 
+    # Determine index column (config_name for chemprop_comprehensive, learner for learner_featurizer_matrix)
+    index_col = 'config_name' if 'config_name' in timing_df.columns else 'learner'
+
     # Create pivot for time
     time_pivot = timing_df.pivot(
         values='cumulative_training_prediction_time',
-        index='config_name',
+        index=index_col,
         columns='featurizer',
         aggregate_function='first'
     )
 
-    # Extract config names before reordering columns
-    config_names = time_pivot.get_column('config_name').to_list()
+    # Extract row names before reordering columns
+    row_names = time_pivot.get_column(index_col).to_list()
 
     # Reorder columns
     desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
@@ -512,43 +525,42 @@ def create_time_heatmap(
 
     fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
 
-    # Create colormap for time (lower is better - green to red)
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        'green_red',
-        ['#1a9641', '#a6d96a', '#ffffbf', '#fdae61', '#d7191c']
-    )
+    cmap = get_purple_colormap(reverse=True)
 
-    # Create heatmap
+    time_values = time_pd.values
+    vmin, vmax = auto_scale_range(time_values, percentile=5, padding=0.05)
+
     sns.heatmap(
         time_pd,
         annot=False,
         cmap=cmap,
         mask=time_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Time (seconds)'},
-        linewidths=0.5,
+        linewidths=0.3,
         linecolor='white',
         square=False,
+        vmin=vmin,
+        vmax=vmax,
         ax=ax
     )
 
-    # Add custom annotations with time values
-    for i in range(time_pivot.height):
-        for j in range(len(time_pivot.columns)):
-            time_val = time_pivot.row(i)[j]
-            if time_val is not None:
-                text = f'{time_val:.1f}s'
-                # Use white text for dark cells, black for light cells
-                color = 'white' if time_val > time_pd.max().max() / 2 else 'black'
-                ax.text(j + 0.5, i + 0.5, text,
-                       ha='center', va='center',
-                       fontsize=9, fontweight='bold',
-                       color=color)
+    add_heatmap_annotations(
+        ax=ax,
+        data=time_values,
+        std_data=None,
+        colormap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        format_string='{:.1f}s',
+        show_std=False,
+        fontsize=9
+    )
 
     ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
     ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
     ax.tick_params(axis='both', labelsize=10)
     ax.set_xticklabels(time_pivot.columns, rotation=45, ha='right')
-    ax.set_yticklabels(config_names, rotation=0)
+    ax.set_yticklabels(row_names, rotation=0)
 
     output_filename = f'time_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
@@ -583,16 +595,19 @@ def create_performance_heatmap(
 
     metric_label = _get_metric_label(performance_metric)
 
+    # Determine index column (config_name for chemprop_comprehensive, learner for learner_featurizer_matrix)
+    index_col = 'config_name' if 'config_name' in timing_df.columns else 'learner'
+
     # Create pivot for performance
     perf_pivot = timing_df.pivot(
         values=performance_metric,
-        index='config_name',
+        index=index_col,
         columns='featurizer',
         aggregate_function='first'
     )
 
-    # Extract config names before reordering columns
-    config_names = perf_pivot.get_column('config_name').to_list()
+    # Extract row names before reordering columns
+    row_names = perf_pivot.get_column(index_col).to_list()
 
     # Reorder columns
     desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
@@ -611,45 +626,42 @@ def create_performance_heatmap(
 
     fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
 
-    # Create colormap for performance (higher is better - red to blue)
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        'red_blue',
-        ['#d73027', '#f46d43', '#fdae61', '#fee090', '#e0f3f8', '#abd9e9', '#74add1', '#4575b4']
-    )
+    cmap = get_purple_colormap()
 
-    # Create heatmap
+    perf_values = perf_pd.values
+    vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
+
     sns.heatmap(
         perf_pd,
         annot=False,
         cmap=cmap,
         mask=perf_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Discovery Rate (%)'},
-        linewidths=0.5,
+        linewidths=0.3,
         linecolor='white',
         square=False,
-        vmin=0,
-        vmax=100,
+        vmin=vmin,
+        vmax=vmax,
         ax=ax
     )
 
-    # Add custom annotations with performance values
-    for i in range(perf_pivot.height):
-        for j in range(len(perf_pivot.columns)):
-            perf_val = perf_pivot.row(i)[j]
-            if perf_val is not None:
-                text = f'{perf_val:.1f}%'
-                # Use white text for dark cells, black for light cells
-                color = 'white' if perf_val < 50 else 'black'
-                ax.text(j + 0.5, i + 0.5, text,
-                       ha='center', va='center',
-                       fontsize=9, fontweight='bold',
-                       color=color)
+    add_heatmap_annotations(
+        ax=ax,
+        data=perf_values,
+        std_data=None,
+        colormap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        format_string='{:.1f}%',
+        show_std=False,
+        fontsize=9
+    )
 
     ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
     ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
     ax.tick_params(axis='both', labelsize=10)
     ax.set_xticklabels(perf_pivot.columns, rotation=45, ha='right')
-    ax.set_yticklabels(config_names, rotation=0)
+    ax.set_yticklabels(row_names, rotation=0)
 
     output_filename = f'performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
@@ -684,6 +696,9 @@ def create_efficiency_heatmap(
 
     metric_label = _get_metric_label(performance_metric)
 
+    # Determine index column (config_name for chemprop_comprehensive, learner for learner_featurizer_matrix)
+    index_col = 'config_name' if 'config_name' in timing_df.columns else 'learner'
+
     # Calculate efficiency (performance / time)
     timing_with_efficiency = timing_df.with_columns([
         (pl.col(performance_metric) / pl.col('cumulative_training_prediction_time')).alias('efficiency')
@@ -692,13 +707,13 @@ def create_efficiency_heatmap(
     # Create pivot for efficiency
     efficiency_pivot = timing_with_efficiency.pivot(
         values='efficiency',
-        index='config_name',
+        index=index_col,
         columns='featurizer',
         aggregate_function='first'
     )
 
-    # Extract config names before reordering columns
-    config_names = efficiency_pivot.get_column('config_name').to_list()
+    # Extract row names before reordering columns
+    row_names = efficiency_pivot.get_column(index_col).to_list()
 
     # Reorder columns
     desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
@@ -717,43 +732,42 @@ def create_efficiency_heatmap(
 
     fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
 
-    # Create colormap for efficiency (higher is better - purple to orange)
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        'purple_orange',
-        ['#542788', '#8073ac', '#b2abd2', '#e8e8e8', '#fdb863', '#e08214', '#b35806']
-    )
+    cmap = get_purple_colormap()
 
-    # Create heatmap
+    efficiency_values = efficiency_pd.values
+    vmin, vmax = auto_scale_range(efficiency_values, percentile=5, padding=0.05)
+
     sns.heatmap(
         efficiency_pd,
         annot=False,
         cmap=cmap,
         mask=efficiency_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Efficiency (%/s)'},
-        linewidths=0.5,
+        linewidths=0.3,
         linecolor='white',
         square=False,
+        vmin=vmin,
+        vmax=vmax,
         ax=ax
     )
 
-    # Add custom annotations with efficiency values
-    for i in range(efficiency_pivot.height):
-        for j in range(len(efficiency_pivot.columns)):
-            efficiency_val = efficiency_pivot.row(i)[j]
-            if efficiency_val is not None:
-                text = f'{efficiency_val:.2f}'
-                # Use white text for dark cells, black for light cells
-                color = 'white' if efficiency_val < efficiency_pd.max().max() / 2 else 'black'
-                ax.text(j + 0.5, i + 0.5, text,
-                       ha='center', va='center',
-                       fontsize=9, fontweight='bold',
-                       color=color)
+    add_heatmap_annotations(
+        ax=ax,
+        data=efficiency_values,
+        std_data=None,
+        colormap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        format_string='{:.2f}',
+        show_std=False,
+        fontsize=9
+    )
 
     ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
     ax.set_ylabel('Configuration', fontsize=13, labelpad=8)
     ax.tick_params(axis='both', labelsize=10)
     ax.set_xticklabels(efficiency_pivot.columns, rotation=45, ha='right')
-    ax.set_yticklabels(config_names, rotation=0)
+    ax.set_yticklabels(row_names, rotation=0)
 
     output_filename = f'efficiency_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
@@ -763,5 +777,63 @@ def create_efficiency_heatmap(
     print(f"✓ Created efficiency heatmap: {output_path.name}")
 
     return output_path
+
+
+def create_all_cost_performance_plots(
+    all_results: Dict[Tuple[str, str], Dict],
+    output_dir: Path,
+    config: Dict
+) -> Dict[str, List[Path]]:
+    """Generate time, performance, and efficiency heatmaps for learner-featurizer matrix.
+
+    Args:
+        all_results: Dictionary mapping (learner, featurizer) tuples to result data
+        output_dir: Directory to save plots
+        config: Configuration dictionary with dataset_name
+
+    Returns:
+        Dictionary with 'heatmaps' key containing list of Path objects
+    """
+    output_dir = Path(output_dir)
+    plots_dir = output_dir / 'plots'
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    timing_df = calculate_cumulative_timing(all_results)
+
+    if len(timing_df) == 0:
+        print("Warning: No successful experiments to visualize")
+        return {'heatmaps': []}
+
+    all_heatmaps = []
+    dataset_name = config.get('dataset_name', 'validation')
+
+    for metric in ['top_0_1_pct_recovery', 'top_1_pct_recovery', 'top_10_recovery', 'top_100_recovery']:
+        time_path = create_time_heatmap(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_heatmaps.append(time_path)
+
+        perf_path = create_performance_heatmap(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_heatmaps.append(perf_path)
+
+        efficiency_path = create_efficiency_heatmap(
+            timing_df,
+            output_dir,
+            performance_metric=metric,
+            dataset_name=dataset_name
+        )
+        all_heatmaps.append(efficiency_path)
+
+    print(f"✓ Generated {len(all_heatmaps)} cost/performance heatmaps")
+
+    return {'heatmaps': all_heatmaps}
 
 

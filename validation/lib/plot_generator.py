@@ -67,7 +67,7 @@ def create_comprehensive_validation_plot(
             ax.scatter(
                 selected_up_to[pred_col].to_numpy(),
                 selected_up_to[unc_col].to_numpy(),
-                c='#2E86AB',
+                c='#7e62df',
                 alpha=0.75,
                 s=35,
                 edgecolors='black',
@@ -86,10 +86,10 @@ def create_comprehensive_validation_plot(
     ax_b = fig.add_subplot(gs[2, :])
 
     discovery_metrics = [
-        ('top_10_discovery', 'Top-10', '#08519c', '-'),
-        ('top_100_discovery', 'Top-100', '#3182bd', '-'),
-        ('top_0_1_pct_discovery', 'Top-0.1%', '#6baed6', '--'),
-        ('top_1_pct_discovery', 'Top-1%', '#bdd7e7', ':')
+        ('top_10_discovery', 'Top-10', '#452997', '-'),
+        ('top_100_discovery', 'Top-100', '#6b4fc7', '-'),
+        ('top_0_1_pct_discovery', 'Top-0.1%', '#a48dd7', '--'),
+        ('top_1_pct_discovery', 'Top-1%', '#cabde7', ':')
     ]
 
     cycles = cycle_metrics_df['cycle'].to_numpy()
@@ -122,8 +122,8 @@ def create_comprehensive_validation_plot(
     ax_c = fig.add_subplot(gs[3, :])
 
     score_metrics = [
-        ('cumulative_avg_score_ratio', 'Cumulative Avg', '#2ca02c', '-'),
-        ('batch_avg_score_ratio', 'Batch Avg', '#ff7f0e', '-')
+        ('cumulative_avg_score_ratio', 'Cumulative Avg', '#7e62df', '-'),
+        ('batch_avg_score_ratio', 'Batch Avg', '#b7a5df', '-')
     ]
 
     for metric, label, color, style in score_metrics:
@@ -317,9 +317,9 @@ def create_pruning_efficiency_timeline(
     dpi: int = 300
 ) -> Path:
     strategy_colors = {
-        0.0: '#3498db',
-        0.15: '#2ecc71',
-        0.3: '#e74c3c'
+        0.0: '#cabde7',
+        0.15: '#7e62df',
+        0.3: '#452997'
     }
 
     fig, ax1 = plt.subplots(figsize=figsize)
@@ -373,9 +373,9 @@ def create_discovery_efficiency_scatter(
     dpi: int = 300
 ) -> Path:
     strategy_colors = {
-        0.0: '#3498db',
-        0.15: '#2ecc71',
-        0.3: '#e74c3c'
+        0.0: '#cabde7',
+        0.15: '#7e62df',
+        0.3: '#452997'
     }
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -426,9 +426,9 @@ def create_model_quality_facets(
     dpi: int = 300
 ) -> Path:
     strategy_colors = {
-        0.0: '#3498db',
-        0.15: '#2ecc71',
-        0.3: '#e74c3c'
+        0.0: '#cabde7',
+        0.15: '#7e62df',
+        0.3: '#452997'
     }
 
     fig, axes = plt.subplots(2, 2, figsize=figsize)
@@ -534,7 +534,7 @@ def create_uncertainty_prediction_snapshots(
             ax.scatter(
                 pruned_at_cycle[pred_col],
                 pruned_at_cycle[unc_col],
-                c='#e74c3c',
+                c='#d89ba5',
                 alpha=0.5,
                 s=20,
                 edgecolors='darkred',
@@ -547,7 +547,7 @@ def create_uncertainty_prediction_snapshots(
             ax.scatter(
                 selected_up_to[pred_col],
                 selected_up_to[unc_col],
-                c='#2E86AB',
+                c='#7e62df',
                 alpha=0.75,
                 s=35,
                 edgecolors='black',
@@ -579,9 +579,9 @@ def create_score_ratio_evolution(
     dpi: int = 300
 ) -> Path:
     strategy_colors = {
-        0.0: '#3498db',
-        0.15: '#2ecc71',
-        0.3: '#e74c3c'
+        0.0: '#cabde7',
+        0.15: '#7e62df',
+        0.3: '#452997'
     }
 
     fig, ax = plt.subplots(figsize=figsize)
