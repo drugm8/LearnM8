@@ -53,6 +53,24 @@ learnm8 validate compounds.csv
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
 ```
 
+## 📖 Examples
+
+Learn LearnM8 through hands-on examples:
+
+**Notebooks:** ([examples/notebooks/](examples/notebooks/))
+- [Quickstart](examples/notebooks/01_quickstart.ipynb) (10 min): First active learning experiment (benchmark mode)
+- [Custom Oracles](examples/notebooks/02_custom_oracles.ipynb) (15 min): Custom oracles in production (run mode)
+- [Advanced Configuration](examples/notebooks/03_advanced_configuration.ipynb) (15 min): Custom learners and multi-stage workflows
+- [Production Screening](examples/notebooks/04_production_screening.ipynb) (20 min): Real-world deployment
+
+**Example Oracles:** ([examples/oracles/](examples/oracles/))
+- `SimilarityOracle`: 2D fingerprint-based similarity
+- `Pharmacophore2DOracle`: Functional group pattern matching
+- `CDPKitPharmacophoreOracle`: 3D pharmacophore alignment (requires CDPKit)
+- `VinaOracle`: Molecular docking (requires Vina)
+
+See [examples/README.md](examples/README.md) for complete guide.
+
 ## ✨ Key Features
 
 **Architecture & Performance:**
