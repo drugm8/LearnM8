@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from rich.console import Console
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -995,59 +995,54 @@ def main():
 
     results = []
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("[cyan]Running experiments...", total=len(experiments))
+    pbar = tqdm(experiments, desc="Running experiments", unit="exp", smoothing=0)
 
-        for exp in experiments:
-            featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
-            early_stop_str = 'early_stop' if exp['config'].get('early_stopping', False) else 'no_early_stop'
-            finetune_str = '_finetune' if exp['config'].get('enable_fine_tuning', False) else ''
-            exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
+    for exp in pbar:
+        featurizer_name = exp['featurizer'] if exp['featurizer'] else 'none'
+        early_stop_str = 'early_stop' if exp['config'].get('early_stopping', False) else 'no_early_stop'
+        finetune_str = '_finetune' if exp['config'].get('enable_fine_tuning', False) else ''
+        exp_name = f"{exp['config_name']}_{featurizer_name}_{early_stop_str}{finetune_str}"
 
-            exp_dir = args.output_dir / 'data' / exp_name
-            if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
-                try:
-                    result = load_existing_results(
-                        exp_dir=exp_dir,
-                        config_name=exp['config_name'],
-                        config=exp['config'],
-                        featurizer=exp['featurizer'],
-                    )
-                    results.append(result)
-                    if args.debug:
-                        console.print(f"[yellow]⊙ Loaded existing: {exp_name} (top_10={result['top_10_recovery']:.3f})[/yellow]")
-                except Exception as e:
-                    if args.debug:
-                        console.print(f"[red]✗ Failed to load existing {exp_name}: {e}[/red]")
-                        console.print(f"[yellow]  Re-running experiment...[/yellow]")
-                else:
-                    progress.advance(task)
-                    continue
+        pbar.set_description(f"{exp['config_name']}+{featurizer_name}")
 
-            result = run_single_experiment(
-                compound_pool=compound_pool,
-                oracle=oracle,
-                target_col=target_col,
-                score_direction=score_direction,
-                config_name=exp['config_name'],
-                config=exp['config'],
-                featurizer=exp['featurizer'],
-                n_cycles=args.n_cycles,
-                batch_fraction=args.batch_fraction,
-                random_state=args.random_state,
-                output_dir=args.output_dir,
-                cache_dir=cache_dir,
-                debug=args.debug,
-            )
+        exp_dir = args.output_dir / 'data' / exp_name
+        if args.skip_existing and exp_dir.exists() and (exp_dir / 'seed_42' / 'cycle_metrics.csv').exists():
+            try:
+                result = load_existing_results(
+                    exp_dir=exp_dir,
+                    config_name=exp['config_name'],
+                    config=exp['config'],
+                    featurizer=exp['featurizer'],
+                )
+                results.append(result)
+                if args.debug:
+                    pbar.write(f"⊙ Loaded existing: {exp_name} (top_10={result['top_10_recovery']:.3f})")
+            except Exception as e:
+                if args.debug:
+                    pbar.write(f"✗ Failed to load existing {exp_name}: {e}")
+                    pbar.write(f"  Re-running experiment...")
+            else:
+                continue
 
-            results.append(result)
-            progress.advance(task)
+        result = run_single_experiment(
+            compound_pool=compound_pool,
+            oracle=oracle,
+            target_col=target_col,
+            score_direction=score_direction,
+            config_name=exp['config_name'],
+            config=exp['config'],
+            featurizer=exp['featurizer'],
+            n_cycles=args.n_cycles,
+            batch_fraction=args.batch_fraction,
+            random_state=args.random_state,
+            output_dir=args.output_dir,
+            cache_dir=cache_dir,
+            debug=args.debug,
+        )
+
+        results.append(result)
+
+    pbar.close()
 
     results_df = pl.DataFrame(results)
     summary_path = args.output_dir / 'summary.csv'

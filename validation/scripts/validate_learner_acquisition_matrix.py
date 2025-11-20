@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 from typing import Dict, List, Tuple, Union
 from datetime import datetime
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -145,11 +146,9 @@ def run_single_experiment(
     cache_dir: Path,
     seed: int
 ) -> Dict:
-    print(f"  Running seed {seed}: {learner_name} + {acquisition_name}...", end=' ', flush=True)
-
     output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}' / f'seed_{seed}'
 
-        start_time = time.time()
+    start_time = time.time()
 
     try:
         results = run_active_learning(
@@ -168,34 +167,17 @@ def run_single_experiment(
             mode='benchmark'
         )
 
-            elapsed_time = time.time() - start_time
+        elapsed_time = time.time() - start_time
 
-            seed_results[seed] = {
-                'compounds_df': results['compounds_df'],
-                'cycle_metrics': results['cycle_metrics'],
-                'elapsed_time': elapsed_time
-            }
+        return {
+            'compounds_df': results['compounds_df'],
+            'cycle_metrics': results['cycle_metrics'],
+            'elapsed_time': elapsed_time
+        }
 
-            print(f"✓ ({elapsed_time:.1f}s)")
-
-        except Exception as e:
-            elapsed_time = time.time() - start_time
-            print(f"✗ FAILED ({elapsed_time:.1f}s)")
-            print(f"      Error: {str(e)}")
-            raise
-
-    if len(seed_results) < len(RANDOM_SEEDS):
-        raise RuntimeError(
-            f"Incomplete seed results: expected {len(RANDOM_SEEDS)}, got {len(seed_results)}"
-        )
-
-    aggregated = aggregate_seed_results(seed_results)
-    save_aggregated_results(seed_results, aggregated, output_dir)
-
-    return {
-        'seed_results': seed_results,
-        'aggregated': aggregated
-    }
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        raise
 
 
 def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
@@ -246,21 +228,26 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
     print("=" * 80)
     print()
 
-    for idx, (learner_spec, acquisition_name, display_name) in enumerate(combinations, 1):
-        print(f"[{idx}/{len(combinations)}] {display_name} + {acquisition_name}")
+    pbar_combinations = tqdm(combinations, desc="Combinations", unit="comb", smoothing=0, position=0)
+
+    for learner_spec, acquisition_name, display_name in pbar_combinations:
+        pbar_combinations.set_description(f"{display_name} + {acquisition_name}")
 
         seed_results = {}
 
-        for seed in RANDOM_SEEDS:
+        pbar_seeds = tqdm(RANDOM_SEEDS, desc="  Seeds", unit="seed", smoothing=0, position=1, leave=False)
+        for seed in pbar_seeds:
+            pbar_seeds.set_description(f"  Seed {seed}")
+
             if check_existing_results(learner_name, acquisition_name, seed):
-                print(f"  Seed {seed}: Skipping (results already exist)")
                 try:
                     result_data = load_existing_results(learner_name, acquisition_name, seed)
                     seed_results[seed] = result_data
                     skipped += 1
+                    pbar_seeds.write(f"  Seed {seed}: Skipping (results already exist)")
                 except Exception as e:
-                    print(f"  Warning: Could not load existing results for seed {seed}: {e}")
-                    print(f"  Will re-run experiment...")
+                    pbar_seeds.write(f"  Warning: Could not load existing results for seed {seed}: {e}")
+                    pbar_seeds.write(f"  Will re-run experiment...")
 
             if seed not in seed_results:
                 try:
@@ -278,11 +265,13 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
                     completed += 1
 
                 except Exception as e:
-                    print(f"  Seed {seed}: Failed - {e}")
+                    pbar_seeds.write(f"  Seed {seed}: Failed - {e}")
                     failed += 1
 
+        pbar_seeds.close()
+
         if len(seed_results) > 0:
-            print(f"  Aggregating results across {len(seed_results)} seeds...")
+            pbar_combinations.write(f"  Aggregating results across {len(seed_results)} seeds...")
             aggregated = aggregate_seed_results(seed_results)
 
             combination_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}'
@@ -295,9 +284,10 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
                 'compounds_df': seed_results[RANDOM_SEEDS[0]]['compounds_df'],
                 'output_dir': combination_dir
             }
-            print(f"  ✓ Aggregation complete")
+            pbar_combinations.write(f"  ✓ Aggregation complete")
 
-        print()
+    pbar_combinations.close()
+    print()
 
     print("=" * 80)
     print(f"Individual experiments completed: {completed}")
