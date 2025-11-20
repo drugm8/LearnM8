@@ -4,16 +4,16 @@ import numpy as np
 from pathlib import Path
 import tempfile
 
-from learnm8.oracles.examples import SimilarityOracle, Pharmacophore2DOracle
+from examples.oracles import SimilarityOracle, Pharmacophore2DOracle
 
 try:
-    from learnm8.oracles.examples import CDPKitPharmacophoreOracle
+    from examples.oracles import CDPKitPharmacophoreOracle
     CDPKIT_AVAILABLE = True
 except (ImportError, AttributeError):
     CDPKIT_AVAILABLE = False
 
 try:
-    from learnm8.oracles.examples import VinaOracle
+    from examples.oracles import VinaOracle
     VINA_AVAILABLE = True
 except (ImportError, AttributeError):
     VINA_AVAILABLE = False
