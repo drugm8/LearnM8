@@ -6,7 +6,7 @@ from pathlib import Path
 
 from learnm8.core.cycle import execute_cycle, _calculate_cycle_metrics, _apply_pruning, _select_compounds
 from learnm8.core.config import CycleConfig
-from conftest import create_initialized_master_df as initialize_master_dataframe
+from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
 
 class TestExecuteCycle:

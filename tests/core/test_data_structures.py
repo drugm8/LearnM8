@@ -11,7 +11,7 @@ from learnm8.core.data_structures import (
     STATUS_PRUNED,
     VALID_STATUSES
 )
-from conftest import create_initialized_master_df
+from tests.fixtures.master_dataframe import create_initialized_master_df
 
 
 class TestConstants:
