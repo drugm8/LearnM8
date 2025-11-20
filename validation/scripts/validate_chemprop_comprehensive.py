@@ -32,6 +32,11 @@ from validation.lib.seed_aggregation import (
     aggregate_seed_results,
     save_aggregated_results
 )
+from validation.lib.heatmap_utils import (
+    get_purple_colormap,
+    auto_scale_range,
+    add_heatmap_annotations
+)
 
 console = Console()
 warnings.filterwarnings('ignore')
@@ -89,18 +94,6 @@ MODEL_CONFIGS = {
         'early_stopping': False,
         'early_stopping_patience': 3,
         'enable_fine_tuning': True,
-    },
-    'baseline_early_stopping': {
-        'depth': 3,
-        'message_hidden_dim': 300,
-        'ffn_hidden_dim': 300,
-        'ffn_num_layers': 1,
-        'dropout': 0.0,
-        'batch_norm': False,
-        'atom_messages': False,
-        'early_stopping': True,
-        'early_stopping_patience': 3,
-        'enable_fine_tuning': False,
     },
     'baseline_dropout': {
         'depth': 3,
@@ -503,80 +496,70 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         console.print("[yellow]Warning: No successful experiments to visualize[/yellow]")
         return
 
-    fig, axes = plt.subplots(2, 3, figsize=(24, 12))
+    fig, axes = plt.subplots(3, 2, figsize=(16, 18))
 
-    # Plot 1: Heatmap of Top-10 Recovery by Configuration and Featurizer
+    cmap = get_purple_colormap()
+
+    # Plot 1: Heatmap of Top-0.1% Recovery by Configuration and Featurizer
     ax = axes[0, 0]
     performance_pivot = df_success.pivot(
-        values='top_10_recovery',
+        values='top_0_1_pct_recovery',
         index='config_name',
         columns='featurizer',
         aggregate_function='mean'
     )
 
-    # Extract config names before selecting columns
     config_names = performance_pivot.get_column('config_name').to_list()
-
-    # Select only numeric columns (featurizers), excluding config_name
     featurizer_cols = [col for col in performance_pivot.columns if col != 'config_name']
     performance_data = performance_pivot.select(featurizer_cols).to_pandas()
     performance_data.index = config_names
 
-    sns.heatmap(performance_data, annot=True, fmt='.3f', cmap='RdYlGn', ax=ax, vmin=0, vmax=1)
-    ax.set_title('Top-10 Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
+    perf_values = performance_data.values
+    vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
+
+    sns.heatmap(performance_data, annot=False, cmap=cmap, ax=ax, vmin=vmin, vmax=vmax,
+                linewidths=0.3, linecolor='white', cbar_kws={'label': 'Recovery Rate (%)'})
+
+    add_heatmap_annotations(
+        ax=ax, data=perf_values, std_data=None, colormap=cmap,
+        vmin=vmin, vmax=vmax, format_string='{:.1f}', show_std=False, fontsize=8
+    )
+
+    ax.set_title('Top-0.1% Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
     ax.set_xlabel('Featurizer')
     ax.set_ylabel('Model Configuration')
 
-    # Plot 2: Early Stopping Impact on Performance
+    # Plot 2: Heatmap of Top-1% Recovery by Configuration and Featurizer
     ax = axes[0, 1]
-    config_comparison = df_success.group_by('config_name').agg([
-        pl.col('top_10_recovery').mean().alias('top_10_mean'),
-        pl.col('top_10_recovery').std().alias('top_10_std'),
-        pl.col('top_100_recovery').mean().alias('top_100_mean'),
-        pl.col('top_100_recovery').std().alias('top_100_std'),
-    ]).sort('top_10_mean', descending=True)
+    performance_pivot = df_success.pivot(
+        values='top_1_pct_recovery',
+        index='config_name',
+        columns='featurizer',
+        aggregate_function='mean'
+    )
 
-    config_comparison = config_comparison.to_pandas()
+    config_names = performance_pivot.get_column('config_name').to_list()
+    featurizer_cols = [col for col in performance_pivot.columns if col != 'config_name']
+    performance_data = performance_pivot.select(featurizer_cols).to_pandas()
+    performance_data.index = config_names
 
-    x_pos = np.arange(len(config_comparison))
-    width = 0.35
+    perf_values = performance_data.values
+    vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
 
-    ax.bar(x_pos - width/2, config_comparison['top_10_mean'], width,
-           yerr=config_comparison['top_10_std'], label='Top-10', alpha=0.8, capsize=5)
-    ax.bar(x_pos + width/2, config_comparison['top_100_mean'], width,
-           yerr=config_comparison['top_100_std'], label='Top-100', alpha=0.8, capsize=5)
+    sns.heatmap(performance_data, annot=False, cmap=cmap, ax=ax, vmin=vmin, vmax=vmax,
+                linewidths=0.3, linecolor='white', cbar_kws={'label': 'Recovery Rate (%)'})
 
-    ax.set_xlabel('Model Configuration')
-    ax.set_ylabel('Recovery Rate (mean ± std)')
-    ax.set_title('Configuration Performance Comparison', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(config_comparison['config_name'], rotation=45, ha='right')
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
+    add_heatmap_annotations(
+        ax=ax, data=perf_values, std_data=None, colormap=cmap,
+        vmin=vmin, vmax=vmax, format_string='{:.1f}', show_std=False, fontsize=8
+    )
 
-    # Plot 3: Timing Comparison
+    ax.set_title('Top-1% Recovery by Configuration and Featurizer', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Featurizer')
+    ax.set_ylabel('Model Configuration')
+
+    # Plot 3: Featurizer Performance Comparison
     ax = axes[1, 0]
-    timing_data = df_success.group_by('config_name').agg([
-        pl.col('avg_training_time').mean().alias('avg_training_time'),
-        pl.col('avg_prediction_time').mean().alias('avg_prediction_time'),
-    ]).sort('config_name')
-
-    x_pos = np.arange(len(timing_data))
-    width = 0.35
-
-    ax.bar(x_pos - width/2, timing_data['avg_training_time'].to_numpy(), width, label='Training Time', alpha=0.8)
-    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'].to_numpy(), width, label='Prediction Time', alpha=0.8)
-
-    ax.set_xlabel('Model Configuration')
-    ax.set_ylabel('Time (seconds)')
-    ax.set_title('Average Training vs Prediction Time', fontsize=14, fontweight='bold')
-    ax.set_xticks(x_pos)
-    ax.set_xticklabels(timing_data['config_name'].to_list(), rotation=45, ha='right')
-    ax.legend()
-    ax.grid(axis='y', alpha=0.3)
-
-    # Plot 4: Featurizer Performance Comparison
-    ax = axes[1, 1]
     featurizer_comparison = df_success.group_by('featurizer').agg([
         pl.col('top_10_recovery').mean().alias('mean_recovery'),
         pl.col('top_10_recovery').std().alias('std_recovery'),
@@ -599,84 +582,203 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     for i, row in enumerate(featurizer_comparison.iter_rows(named=True)):
         ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
 
-    # Plot 5: Fine-Tuning Impact on Performance
-    ax = axes[0, 2]
-    if 'fine_tuning' in df_success.columns:
-        finetune_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
-            pl.col('top_10_recovery').mean().alias('top_10_recovery'),
-            pl.col('top_100_recovery').mean().alias('top_100_recovery'),
-        ]).sort(['config_name', 'fine_tuning'])
+    # Plot 4: Timing Comparison
+    ax = axes[1, 1]
 
-        config_names = finetune_comparison['config_name'].unique().sort().to_list()
-        x_pos = np.arange(len(config_names))
-        width = 0.35
+    config_categories_timing = {
+        'Baseline': ['baseline', 'baseline_atom'],
+        'Architecture': ['deep', 'wide'],
+        'Early Stopping': ['early_stop_aggressive', 'early_stop_moderate', 'early_stop_patient'],
+        'Batch Size': ['baseline_batch_small', 'baseline_batch_large'],
+        'Learning Rate': ['baseline_lr_high', 'baseline_lr_low'],
+        'Epochs': ['baseline_short', 'baseline_extended'],
+        'Aggregation': ['baseline_agg_sum', 'baseline_agg_norm'],
+        'Regularization': ['baseline_dropout'],
+        'Fine-tuning': ['baseline_ft']
+    }
 
-        for idx, fine_tune in enumerate([False, True]):
-            group = finetune_comparison.filter(pl.col('fine_tuning') == fine_tune)
-            offset = width * (idx - 0.5)
-            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+    timing_data = df_success.group_by('config_name').agg([
+        pl.col('avg_training_time').mean().alias('avg_training_time'),
+        pl.col('avg_prediction_time').mean().alias('avg_prediction_time'),
+    ])
 
-            # Create aligned values array matching config_names order
-            values = np.zeros(len(config_names))
-            for i, config_name in enumerate(config_names):
-                matching = group.filter(pl.col('config_name') == config_name)
-                if len(matching) > 0:
-                    values[i] = matching['top_10_recovery'][0]
-                else:
-                    values[i] = 0  # No data for this config+fine_tune combination
+    category_map_timing = {}
+    for config_name in timing_data['config_name'].to_list():
+        for category, configs in config_categories_timing.items():
+            if config_name in configs:
+                category_map_timing[config_name] = category
+                break
+        if config_name not in category_map_timing:
+            category_map_timing[config_name] = 'Other'
 
-            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+    timing_data = timing_data.with_columns(
+        pl.Series('category', [category_map_timing.get(name, 'Other') for name in timing_data['config_name'].to_list()])
+    )
 
-        ax.set_xlabel('Model Configuration')
-        ax.set_ylabel('Top-10 Recovery')
-        ax.set_title('Fine-Tuning Impact on Performance', fontsize=14, fontweight='bold')
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(config_names, rotation=45, ha='right')
-        ax.legend()
-        ax.grid(axis='y', alpha=0.3)
-    else:
-        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
-                fontsize=12, transform=ax.transAxes)
-        ax.set_title('Fine-Tuning Impact (No Data)', fontsize=14, fontweight='bold')
+    category_order_timing = ['Baseline', 'Architecture', 'Regularization', 'Early Stopping',
+                              'Learning Rate', 'Batch Size', 'Epochs', 'Aggregation', 'Fine-tuning', 'Other']
 
-    # Plot 6: Fine-Tuning Training Time Comparison
-    ax = axes[1, 2]
-    if 'fine_tuning' in df_success.columns:
-        timing_comparison = df_success.group_by(['config_name', 'fine_tuning']).agg([
-            pl.col('avg_training_time').mean().alias('avg_training_time'),
-        ]).sort(['config_name', 'fine_tuning'])
+    category_rank_timing = {cat: idx for idx, cat in enumerate(category_order_timing)}
+    timing_data = timing_data.with_columns(
+        pl.Series('category_rank', [category_rank_timing.get(cat, 999) for cat in timing_data['category'].to_list()])
+    )
 
-        config_names = timing_comparison['config_name'].unique().sort().to_list()
-        x_pos = np.arange(len(config_names))
-        width = 0.35
+    timing_data = timing_data.sort(['category_rank', 'avg_training_time'], descending=[False, True])
 
-        for idx, fine_tune in enumerate([False, True]):
-            group = timing_comparison.filter(pl.col('fine_tuning') == fine_tune)
-            offset = width * (idx - 0.5)
-            label = 'Fine-Tuning' if fine_tune else 'From Scratch'
+    categories_timing = list(config_categories_timing.keys()) + ['Other']
+    colors_timing = plt.cm.tab10(np.linspace(0, 0.9, len(categories_timing)))
+    color_map_timing = {cat: colors_timing[i] for i, cat in enumerate(categories_timing)}
 
-            # Create aligned values array matching config_names order
-            values = np.zeros(len(config_names))
-            for i, config_name in enumerate(config_names):
-                matching = group.filter(pl.col('config_name') == config_name)
-                if len(matching) > 0:
-                    values[i] = matching['avg_training_time'][0]
-                else:
-                    values[i] = 0  # No data for this config+fine_tune combination
+    bar_colors_timing = [color_map_timing[cat] for cat in timing_data['category'].to_list()]
 
-            ax.bar(x_pos + offset, values, width, label=label, alpha=0.8)
+    x_pos = np.arange(len(timing_data))
+    width = 0.35
 
-        ax.set_xlabel('Model Configuration')
-        ax.set_ylabel('Avg Training Time (s)')
-        ax.set_title('Fine-Tuning Training Time Comparison', fontsize=14, fontweight='bold')
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(config_names, rotation=45, ha='right')
-        ax.legend()
-        ax.grid(axis='y', alpha=0.3)
-    else:
-        ax.text(0.5, 0.5, 'Fine-tuning data\nnot available', ha='center', va='center',
-                fontsize=12, transform=ax.transAxes)
-        ax.set_title('Fine-Tuning Timing (No Data)', fontsize=14, fontweight='bold')
+    ax.bar(x_pos - width/2, timing_data['avg_training_time'].to_numpy(), width,
+           label='Training Time', color=bar_colors_timing, alpha=0.8)
+    ax.bar(x_pos + width/2, timing_data['avg_prediction_time'].to_numpy(), width,
+           label='Prediction Time', color=bar_colors_timing, alpha=0.5)
+
+    ax.set_xlabel('Model Configuration')
+    ax.set_ylabel('Time (seconds)')
+    ax.set_title('Average Training vs Prediction Time', fontsize=14, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(timing_data['config_name'].to_list(), rotation=45, ha='right', fontsize=8)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+
+    # Plot 5: Configuration Type Analysis - Top-0.1%
+    ax = axes[2, 0]
+
+    config_categories_01 = {
+        'Baseline': ['baseline', 'baseline_atom'],
+        'Architecture': ['deep', 'wide'],
+        'Early Stopping': ['early_stop_aggressive', 'early_stop_moderate', 'early_stop_patient'],
+        'Batch Size': ['baseline_batch_small', 'baseline_batch_large'],
+        'Learning Rate': ['baseline_lr_high', 'baseline_lr_low'],
+        'Epochs': ['baseline_short', 'baseline_extended'],
+        'Aggregation': ['baseline_agg_sum', 'baseline_agg_norm'],
+        'Regularization': ['baseline_dropout'],
+        'Fine-tuning': ['baseline_ft']
+    }
+
+    config_type_data_01 = df_success.group_by('config_name').agg([
+        pl.col('top_0_1_pct_recovery').mean().alias('performance'),
+        pl.col('top_0_1_pct_recovery').std().alias('performance_std')
+    ])
+
+    category_map_01 = {}
+    for config_name in config_type_data_01['config_name'].to_list():
+        for category, configs in config_categories_01.items():
+            if config_name in configs:
+                category_map_01[config_name] = category
+                break
+        if config_name not in category_map_01:
+            category_map_01[config_name] = 'Other'
+
+    config_type_data_01 = config_type_data_01.with_columns(
+        pl.Series('category', [category_map_01.get(name, 'Other') for name in config_type_data_01['config_name'].to_list()])
+    )
+
+    category_order_01 = ['Baseline', 'Architecture', 'Regularization', 'Early Stopping',
+                          'Learning Rate', 'Batch Size', 'Epochs', 'Aggregation', 'Fine-tuning', 'Other']
+
+    category_rank_01 = {cat: idx for idx, cat in enumerate(category_order_01)}
+    config_type_data_01 = config_type_data_01.with_columns(
+        pl.Series('category_rank', [category_rank_01.get(cat, 999) for cat in config_type_data_01['category'].to_list()])
+    )
+
+    config_type_data_01 = config_type_data_01.sort(['category_rank', 'performance'], descending=[False, True])
+
+    categories_01 = list(config_categories_01.keys()) + ['Other']
+    colors_01 = plt.cm.tab10(np.linspace(0, 0.9, len(categories_01)))
+    color_map_01 = {cat: colors_01[i] for i, cat in enumerate(categories_01)}
+
+    bar_colors_01 = [color_map_01[cat] for cat in config_type_data_01['category'].to_list()]
+
+    x_pos = np.arange(len(config_type_data_01))
+    ax.bar(x_pos, config_type_data_01['performance'].to_numpy(),
+           yerr=config_type_data_01['performance_std'].to_numpy(),
+           color=bar_colors_01, alpha=0.8, capsize=3, error_kw={'linewidth': 1.5})
+
+    ax.set_xlabel('Model Configuration')
+    ax.set_ylabel('Top-0.1% Recovery Rate (%)')
+    ax.set_title('Configuration Type Analysis - Top-0.1%', fontsize=14, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(config_type_data_01['config_name'].to_list(), rotation=45, ha='right', fontsize=7)
+    ax.grid(axis='y', alpha=0.3)
+
+    legend_handles_01 = [plt.Rectangle((0, 0), 1, 1, fc=color_map_01[cat], alpha=0.8) for cat in categories_01 if cat in config_type_data_01['category'].unique().to_list()]
+    legend_labels_01 = [cat for cat in categories_01 if cat in config_type_data_01['category'].unique().to_list()]
+    ax.legend(legend_handles_01, legend_labels_01, loc='lower right', fontsize=8, ncol=2)
+
+    # Plot 6: Configuration Type Analysis - Top-10
+    ax = axes[2, 1]
+
+    config_categories = {
+        'Baseline': ['baseline', 'baseline_atom'],
+        'Architecture': ['deep', 'wide'],
+        'Early Stopping': ['early_stop_aggressive', 'early_stop_moderate', 'early_stop_patient'],
+        'Batch Size': ['baseline_batch_small', 'baseline_batch_large'],
+        'Learning Rate': ['baseline_lr_high', 'baseline_lr_low'],
+        'Epochs': ['baseline_short', 'baseline_extended'],
+        'Aggregation': ['baseline_agg_sum', 'baseline_agg_norm'],
+        'Regularization': ['baseline_dropout'],
+        'Fine-tuning': ['baseline_ft']
+    }
+
+    config_type_data = df_success.group_by('config_name').agg([
+        pl.col('top_10_recovery').mean().alias('performance'),
+        pl.col('top_10_recovery').std().alias('performance_std')
+    ])
+
+    category_map = {}
+    for config_name in config_type_data['config_name'].to_list():
+        for category, configs in config_categories.items():
+            if config_name in configs:
+                category_map[config_name] = category
+                break
+        if config_name not in category_map:
+            category_map[config_name] = 'Other'
+
+    config_type_data = config_type_data.with_columns(
+        pl.Series('category', [category_map.get(name, 'Other') for name in config_type_data['config_name'].to_list()])
+    )
+
+    # Define category order for better grouping
+    category_order = ['Baseline', 'Architecture', 'Regularization', 'Early Stopping',
+                      'Learning Rate', 'Batch Size', 'Epochs', 'Aggregation', 'Fine-tuning', 'Other']
+
+    # Create category rank for sorting
+    category_rank = {cat: idx for idx, cat in enumerate(category_order)}
+    config_type_data = config_type_data.with_columns(
+        pl.Series('category_rank', [category_rank.get(cat, 999) for cat in config_type_data['category'].to_list()])
+    )
+
+    # Sort by category first (ascending), then by performance within category (descending)
+    config_type_data = config_type_data.sort(['category_rank', 'performance'], descending=[False, True])
+
+    categories = list(config_categories.keys()) + ['Other']
+    colors = plt.cm.tab10(np.linspace(0, 0.9, len(categories)))
+    color_map = {cat: colors[i] for i, cat in enumerate(categories)}
+
+    bar_colors = [color_map[cat] for cat in config_type_data['category'].to_list()]
+
+    x_pos = np.arange(len(config_type_data))
+    ax.bar(x_pos, config_type_data['performance'].to_numpy(),
+           yerr=config_type_data['performance_std'].to_numpy(),
+           color=bar_colors, alpha=0.8, capsize=3, error_kw={'linewidth': 1.5})
+
+    ax.set_xlabel('Model Configuration')
+    ax.set_ylabel('Top-10 Recovery Rate (%)')
+    ax.set_title('Configuration Type Analysis - Top-10', fontsize=14, fontweight='bold')
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels(config_type_data['config_name'].to_list(), rotation=45, ha='right', fontsize=7)
+    ax.grid(axis='y', alpha=0.3)
+
+    legend_handles = [plt.Rectangle((0, 0), 1, 1, fc=color_map[cat], alpha=0.8) for cat in categories if cat in config_type_data['category'].unique().to_list()]
+    legend_labels = [cat for cat in categories if cat in config_type_data['category'].unique().to_list()]
+    ax.legend(legend_handles, legend_labels, loc='lower right', fontsize=8, ncol=2)
 
     plt.tight_layout()
     plt.savefig(plots_dir / 'comprehensive_analysis.png', dpi=300, bbox_inches='tight')
@@ -776,36 +878,36 @@ def create_performance_heatmap(
 
     fig.suptitle(title, fontsize=20, fontweight='bold', y=0.98)
 
-    # Create colormap for performance (higher is better - red to blue)
-    cmap = sns.color_palette("RdYlBu", as_cmap=True)
+    cmap = get_purple_colormap()
 
-    # Create heatmap
+    perf_values = perf_pd.values
+    vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
+
     sns.heatmap(
         perf_pd,
         annot=False,
         cmap=cmap,
         mask=perf_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': metric_label},
-        linewidths=0.5,
+        linewidths=0.3,
         linecolor='white',
         square=False,
-        vmin=0,
-        vmax=100,
+        vmin=vmin,
+        vmax=vmax,
         ax=ax
     )
 
-    # Add custom annotations with performance values
-    for i in range(perf_pivot.height):
-        for j in range(len(perf_pivot.columns)):
-            perf_val = perf_pivot.row(i)[j]
-            if perf_val is not None:
-                text = f'{perf_val:.1f}%'
-                # Use white text for dark cells, black for light cells
-                color = 'white' if perf_val < 50 else 'black'
-                ax.text(j + 0.5, i + 0.5, text,
-                       ha='center', va='center',
-                       fontsize=9, fontweight='bold',
-                       color=color)
+    add_heatmap_annotations(
+        ax=ax,
+        data=perf_values,
+        std_data=None,
+        colormap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        format_string='{:.1f}%',
+        show_std=False,
+        fontsize=9
+    )
 
     ax.set_xlabel('Featurizer', fontsize=13, labelpad=8)
     ax.set_ylabel('Configuration', fontsize=13, labelpad=8)

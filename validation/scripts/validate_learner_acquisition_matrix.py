@@ -12,8 +12,6 @@ from learnm8 import run_active_learning
 from learnm8.api import LEARNER_REGISTRY, _create_learner
 from learnm8.acquisition import ACQUISITION_REGISTRY, get_acquisition_function
 from learnm8.oracles import CSVOracle
-from learnm8.learners.torch import ChempropLearner
-from learnm8.learners.ensemble import ChempropEnsemble
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
@@ -35,7 +33,7 @@ from validation.lib.seed_aggregation import (
 
 
 from learnm8 import setup_logging
-setup_logging(level='DEBUG')
+setup_logging(level='INFO')
 
 DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
@@ -52,8 +50,7 @@ def print_header():
     print(f"Dataset: {DATASET_NAME}")
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION}")
-    print(f"Featurizer: {FEATURIZER_TYPE}")
-    print(f"Random Seeds: {RANDOM_SEEDS}")
+    print(f"Featurizer: {FEATURIZER_TYPE} (Chemprop learners use pure graph-based learning)")
     print(f"Random Seeds: {RANDOM_SEEDS}")
     print("=" * 80)
     print()
@@ -63,7 +60,7 @@ def get_compatible_combinations() -> List[Tuple[Union[str, object], str, str]]:
     """Returns (learner_spec, acquisition, display_name) tuples."""
     combinations = []
 
-    basic_acquisitions = ['greedy', 'random']
+    basic_acquisitions = ['greedy', 'random', 'simulated_annealing']
     uncertainty_acquisitions = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
 
     # Create explicit learner instances with custom parameters
@@ -76,31 +73,15 @@ def get_compatible_combinations() -> List[Tuple[Union[str, object], str, str]]:
             learner = _create_learner(learner_name, RANDOM_SEEDS[0])
             supports_uncertainty = learner.supports_uncertainty()
 
-        if learner_name == 'chemprop':
             for acquisition_name in basic_acquisitions:
-                combinations.append((learner_instance, acquisition_name, 'chemprop_no_ft'))
-
-        elif learner_name == 'chemprop_ensemble':
-            for acquisition_name in basic_acquisitions:
-                combinations.append((learner_instance, acquisition_name, 'chemprop_ensemble_no_ft'))
-            if supports_uncertainty:
-                for acquisition_name in uncertainty_acquisitions:
-                    combinations.append((learner_instance, acquisition_name, 'chemprop_ensemble_no_ft'))
-
-        else:
-            for acquisition_name in basic_acquisitions:
-                combinations.append((learner_instance, acquisition_name, learner_name))
+                combinations.append((learner_name, acquisition_name, learner_name))
 
             if supports_uncertainty:
                 for acquisition_name in uncertainty_acquisitions:
-                    combinations.append((learner_instance, acquisition_name, learner_name))
-
-    # Fine-tuning versions with special markers for dynamic checkpoint directory creation
-    for acquisition_name in basic_acquisitions:
-        combinations.append(('chemprop_with_ft', acquisition_name, 'chemprop_ft'))
-
-    for acquisition_name in basic_acquisitions + uncertainty_acquisitions:
-        combinations.append(('chemprop_ensemble_with_ft', acquisition_name, 'chemprop_ensemble_ft'))
+                    combinations.append((learner_name, acquisition_name, learner_name))
+        except Exception as e:
+            print(f"Warning: Could not create learner {learner_name}: {e}")
+            continue
 
     return combinations
 
@@ -136,9 +117,8 @@ def load_existing_results(learner: str, acquisition: str, seed: int) -> Dict:
 
 
 def run_single_experiment(
-    learner_spec: Union[str, object],
+    learner_name: str,
     acquisition_name: str,
-    display_name: str,
     compound_pool,
     oracle,
     target_col: str,
@@ -150,13 +130,15 @@ def run_single_experiment(
 
     start_time = time.time()
 
+    featurizer_type = None if learner_name in ['chemprop', 'chemprop_ensemble'] else FEATURIZER_TYPE
+
     try:
         results = run_active_learning(
             compound_pool=compound_pool.clone(),
             oracle=oracle,
             learner=learner_name,
             target_col=target_col,
-            featurizer_type=FEATURIZER_TYPE,
+            featurizer_type=featurizer_type,
             n_cycles=N_CYCLES,
             batch_fraction=BATCH_FRACTION,
             strategy=acquisition_name,
@@ -239,9 +221,9 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
         for seed in pbar_seeds:
             pbar_seeds.set_description(f"  Seed {seed}")
 
-            if check_existing_results(learner_name, acquisition_name, seed):
+            if check_existing_results(display_name, acquisition_name, seed):
                 try:
-                    result_data = load_existing_results(learner_name, acquisition_name, seed)
+                    result_data = load_existing_results(display_name, acquisition_name, seed)
                     seed_results[seed] = result_data
                     skipped += 1
                     pbar_seeds.write(f"  Seed {seed}: Skipping (results already exist)")
@@ -252,7 +234,7 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
             if seed not in seed_results:
                 try:
                     result_data = run_single_experiment(
-                        learner_name,
+                        display_name,
                         acquisition_name,
                         compound_pool,
                         oracle,
@@ -274,10 +256,10 @@ def run_all_experiments() -> Dict[Tuple[str, str], Dict]:
             pbar_combinations.write(f"  Aggregating results across {len(seed_results)} seeds...")
             aggregated = aggregate_seed_results(seed_results)
 
-            combination_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{acquisition_name}'
+            combination_dir = OUTPUT_BASE / 'data' / f'{display_name}_{acquisition_name}'
             save_aggregated_results(seed_results, aggregated, combination_dir)
 
-            all_results[(learner_name, acquisition_name)] = {
+            all_results[(display_name, acquisition_name)] = {
                 'seed_results': seed_results,
                 'aggregated': aggregated,
                 'cycle_metrics': aggregated['cycle_metrics_mean'],
@@ -319,7 +301,7 @@ def main():
             'n_cycles': N_CYCLES,
             'batch_fraction': BATCH_FRACTION,
             'batch_size': int(n_compounds * BATCH_FRACTION),
-            'featurizer_type': FEATURIZER_TYPE,
+            'featurizer_type': f"{FEATURIZER_TYPE} (chemprop: None)",
             'random_seeds': RANDOM_SEEDS
         }
 

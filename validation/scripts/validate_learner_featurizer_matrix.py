@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from learnm8 import run_active_learning
 from learnm8.api import LEARNER_REGISTRY, _create_learner
 from learnm8.oracles import CSVOracle
-from learnm8.learners.torch import ChempropLearner
-from learnm8.learners.ensemble import ChempropEnsemble
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
@@ -30,7 +28,7 @@ from validation.lib.seed_aggregation import (
 )
 
 from learnm8 import setup_logging
-setup_logging(level='DEBUG')
+setup_logging(level='INFO')
 
 
 DATASET_NAME = 'ampc_30k'
@@ -71,21 +69,15 @@ def get_compatible_combinations() -> List[Tuple[Union[str, object], Optional[str
             learner = _create_learner(learner_name, RANDOM_SEEDS[0])
 
             if learner.requires_smiles():
-                combinations.append((learner_name, None))
+                combinations.append((learner_name, None, learner_name))
                 for featurizer_name in available_featurizers:
-                    combinations.append((learner_instance, featurizer_name, learner_name))
+                    combinations.append((learner_name, featurizer_name, learner_name))
             else:
                 for featurizer_name in available_featurizers:
-                    combinations.append((learner_instance, featurizer_name, learner_name))
-
-    # Fine-tuning versions with special markers for dynamic checkpoint directory creation
-    combinations.append(('chemprop_with_ft', None, 'chemprop_ft'))
-    for featurizer_name in available_featurizers:
-        combinations.append(('chemprop_with_ft', featurizer_name, 'chemprop_ft'))
-
-    combinations.append(('chemprop_ensemble_with_ft', None, 'chemprop_ensemble_ft'))
-    for featurizer_name in available_featurizers:
-        combinations.append(('chemprop_ensemble_with_ft', featurizer_name, 'chemprop_ensemble_ft'))
+                    combinations.append((learner_name, featurizer_name, learner_name))
+        except Exception as e:
+            print(f"Warning: Could not create learner {learner_name}: {e}")
+            continue
 
     return combinations
 
@@ -123,9 +115,8 @@ def load_existing_results(learner: str, featurizer: Optional[str], seed: int) ->
 
 
 def run_single_experiment(
-    learner_spec: Union[str, object],
+    learner_name: str,
     featurizer_name: Optional[str],
-    display_name: str,
     compound_pool,
     oracle,
     target_col: str,
@@ -218,7 +209,8 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
 
     pbar_combinations = tqdm(combinations, desc="Combinations", unit="comb", smoothing=0, position=0)
 
-    for learner_name, featurizer_name in pbar_combinations:
+    for learner_spec, featurizer_name, display_name in pbar_combinations:
+        learner_name = display_name if display_name else learner_spec
         featurizer_display = featurizer_name if featurizer_name is not None else 'none'
         pbar_combinations.set_description(f"{learner_name} + {featurizer_display}")
 
@@ -344,9 +336,6 @@ def main():
         print(f"  - Heatmaps ({len(cost_perf_paths['heatmaps'])} files):")
         for heatmap_path in cost_perf_paths['heatmaps']:
             print(f"      {heatmap_path}")
-        print(f"  - Pareto plots ({len(cost_perf_paths['pareto_plots'])} files):")
-        for pareto_path in cost_perf_paths['pareto_plots']:
-            print(f"      {pareto_path}")
         print()
         print(f"All results saved to: {OUTPUT_BASE}")
         print("=" * 80)
