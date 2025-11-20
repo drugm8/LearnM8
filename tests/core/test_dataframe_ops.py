@@ -15,36 +15,16 @@ from learnm8.core.data_structures import (
     STATUS_UNLABELED,
     STATUS_PRUNED
 )
-from conftest import create_initialized_master_df
+from tests.fixtures.master_dataframe import create_initialized_master_df
 
 
-@pytest.fixture
-def sample_compound_pool():
-    """Create sample compound pool for testing."""
-    return pl.DataFrame({
-        'ID': [f'COMP_{i:03d}' for i in range(100)],
-        'SMILES': [f'C{i}' for i in range(100)]
-    })
-
-
-@pytest.fixture
-def sample_master_df(sample_compound_pool):
-    """Create sample master DataFrame."""
-    return create_initialized_master_df(
-        valid_compounds=sample_compound_pool,
-        target_col='Activity',
-        initial_labeled_ids=['COMP_000', 'COMP_001', 'COMP_002'],
-        initial_measurements={'COMP_000': 0.5, 'COMP_001': 0.7, 'COMP_002': 0.9}
-    )
-
-
-def test_initialize_master_dataframe(sample_compound_pool):
+def test_initialize_master_dataframe(sample_compounds):
     """Test initialization with valid compound pool."""
     initial_ids = ['COMP_000', 'COMP_001']
     initial_values = pd.Series([0.5, 0.7], index=['COMP_000', 'COMP_001'])
 
     master_df = create_initialized_master_df(
-        valid_compounds=sample_compound_pool,
+        valid_compounds=sample_compounds,
         target_col='Activity',
         initial_labeled_ids=initial_ids,
         initial_measurements=initial_values
@@ -64,10 +44,10 @@ def test_initialize_master_dataframe(sample_compound_pool):
         assert target_val == initial_values[comp_id]
 
 
-def test_initialize_master_dataframe_empty_initial(sample_compound_pool):
+def test_initialize_master_dataframe_empty_initial(sample_compounds):
     """Test initialization with no initial labeled compounds."""
     master_df = create_initialized_master_df(
-        valid_compounds=sample_compound_pool,
+        valid_compounds=sample_compounds,
         target_col='Activity',
         initial_labeled_ids=[],
         initial_measurements=pd.Series(dtype='float64')

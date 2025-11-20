@@ -10,11 +10,6 @@ import polars as pl
 from learnm8.acquisition import GreedyAcquisition, RandomAcquisition, TopKAcquisition
 
 
-def pd_to_pl(df: pl.DataFrame) -> pl.DataFrame:
-    """Convert pandas DataFrame to polars DataFrame for tests."""
-    return pl.from_pandas(df)
-
-
 class TestGreedyAcquisition:
     """Test GreedyAcquisition functionality."""
     
