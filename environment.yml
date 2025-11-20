@@ -203,3 +203,5 @@ dependencies:
   - pip
   - pip:
     - git+https://github.com/mqcomplab/bitbirch.git
+    - fastprop
+    - chemprop

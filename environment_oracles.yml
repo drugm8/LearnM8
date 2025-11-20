@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.11
+  - python=3.11
   - pip
   # Core molecular handling
   - rdkit>=2023.09.1
@@ -25,5 +25,5 @@ dependencies:
 
   # Install via pip
   - pip:
-    - cdpkit>=1.1.0  # 3D pharmacophore calculations
+    - cdpkit  # 3D pharmacophore calculations
     - datamol  # Molecular validation utilities
