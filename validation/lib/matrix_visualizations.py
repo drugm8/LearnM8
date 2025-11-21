@@ -76,8 +76,8 @@ def create_top_k_heatmap(
 
     ax.set_title(f'{k_label} Discovery Rate (mean ± std)',
                  fontsize=16, fontweight='bold', pad=12)
-    ax.set_xlabel('Acquisition Strategy', fontsize=13, labelpad=8)
-    ax.set_ylabel('Learner', fontsize=13, labelpad=8)
+    ax.set_xlabel('')
+    ax.set_ylabel('')
 
     ax.tick_params(axis='both', labelsize=11)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
@@ -146,7 +146,7 @@ def create_all_heatmaps(
 
         learner_names = mean_pivot.get_column('learner').to_list()
 
-        desired_order = ['greedy', 'random', 'ucb', 'ei', 'pi', 'thompson', 'entropy']
+        desired_order = ['greedy', 'random', 'simulated_annealing', 'ucb', 'ei', 'pi', 'thompson', 'entropy']
         existing_cols = [col for col in desired_order if col in mean_pivot.columns]
         mean_pivot = mean_pivot.select(existing_cols)
         std_pivot = std_pivot.select(existing_cols)
