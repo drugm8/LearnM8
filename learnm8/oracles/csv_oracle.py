@@ -1,8 +1,11 @@
 """CSV-based oracle for looking up pre-computed compound properties."""
 
+import logging
 import polars as pl
 from pathlib import Path
 from learnm8.core.interfaces import Oracle
+
+logger = logging.getLogger(__name__)
 
 
 class CSVOracle(Oracle):
@@ -42,6 +45,26 @@ class CSVOracle(Oracle):
                     except Exception:
                         # Keep as string if conversion fails
                         pass
+
+        # Filter out rows with null values in numeric columns
+        # This removes compounds with invalid scores like 'no_score' that were converted to null
+        initial_height = self.ground_truth.height
+        for column in self.ground_truth.columns:
+            if column not in ['ID', id_column, 'SMILES']:
+                col_dtype = self.ground_truth[column].dtype
+                if col_dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]:
+                    null_count = self.ground_truth[column].is_null().sum()
+                    if null_count > 0:
+                        logger.warning(
+                            f"CSVOracle: Filtering {null_count} compounds with null values in '{column}'"
+                        )
+                        self.ground_truth = self.ground_truth.filter(pl.col(column).is_not_null())
+
+        filtered_count = initial_height - self.ground_truth.height
+        if filtered_count > 0:
+            logger.info(
+                f"CSVOracle: Filtered {filtered_count} compounds with invalid/null property values"
+            )
 
         # Validate the ID column exists
         if id_column not in self.ground_truth.columns:
@@ -92,6 +115,18 @@ class CSVOracle(Oracle):
             on='ID',
             how='inner'
         )
+
+        # Validate that no null values exist in requested properties
+        for prop in properties:
+            null_mask = result[prop].is_null()
+            if null_mask.any():
+                null_count = null_mask.sum()
+                null_ids = result.filter(null_mask)['ID'].to_list()
+                raise ValueError(
+                    f"CSVOracle cannot measure property '{prop}' for {null_count} compounds "
+                    f"(IDs: {null_ids[:5]}{'...' if len(null_ids) > 5 else ''}). "
+                    f"These compounds have invalid/null values in the ground truth data."
+                )
 
         # Preserve input order by sorting on temporary order column, then remove it
         result = result.sort('_input_order').drop('_input_order')
