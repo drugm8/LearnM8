@@ -15,14 +15,12 @@ try:
     VINA_AVAILABLE = True
 except ImportError:
     VINA_AVAILABLE = False
-    logger.warning("Vina not available. Install with: conda install -c conda-forge vina")
 
 try:
     from meeko import MoleculePreparation, PDBQTWriterLegacy
     MEEKO_AVAILABLE = True
 except ImportError:
     MEEKO_AVAILABLE = False
-    logger.warning("Meeko not available. Install with: conda install -c conda-forge meeko")
 
 
 class VinaOracle(Oracle):
@@ -134,7 +132,7 @@ class VinaOracle(Oracle):
 
                 energies = v.energies(n_poses=1)
 
-                if energies and len(energies) > 0:
+                if energies is not None and len(energies) > 0:
                     best_affinity = energies[0][0]
                     return float(best_affinity)
                 else:
