@@ -1,27 +1,34 @@
 #!/usr/bin/env python3
 """
-Standalone validation script for AmpC 1M dataset using Chemprop with mixed strategy.
+Standalone validation script for AmpC 1M dataset using Chemprop with MolPAL-style hyperparameters.
 
-This script runs a complete active learning validation on the AmpC 1M dataset:
-- Learner: Chemprop (default settings)
-- Strategy: Random (1 cycle) → Greedy (15 cycles)
-- Cycles: 16 total (1 random + 15 greedy)
+This script provides a fair comparison by using hyperparameters matching MolPAL's MPNN implementation:
+- FFN layers: 2 (MolPAL default) vs 1 (LearnM8 default)
+- Batch size: 50 (MolPAL default) vs 32 (LearnM8 default)
+- Learning rate: 1e-3 (MolPAL max_lr) vs 1e-4 (LearnM8 default)
+- Early stopping: Disabled (MolPAL doesn't have it)
+- Fine-tuning: Disabled (MolPAL doesn't have it)
+- Validation split: 20% (MolPAL) vs 10% (LearnM8 default)
+
+Strategy:
+- Random (1 cycle) → Greedy (15 cycles)
+- Cycles: 16 total
 - Batch size: 0.1% per cycle (1,000 compounds)
 
 Usage:
-    python validation/scripts/validate_ampc_1M_chemprop_mixed.py
+    python validation/scripts/validate_ampc_1M_chemprop_molpal_params.py
 
 Output:
-    validation/reports/ampc_1M_chemprop_mixed_validation/
-        ├── data/ampc_1M_chemprop_mixed_<timestamp>/
+    validation/reports/ampc_1M_chemprop_molpal_params/
+        ├── data/ampc_1M_chemprop_molpal_params_<timestamp>/
         │   ├── compounds_final.csv
         │   ├── cycle_metrics.csv
         │   └── selection_history.csv
-        ├── plots/ampc_1M_chemprop_mixed_validation.png
+        ├── plots/ampc_1M_chemprop_molpal_params.png
         └── summary.txt
 
 Expected Runtime: Variable (depends on GPU availability)
-Memory Requirements: ~8-16 GB (GPU recommended)
+Memory Requirements: ~10-20 GB (GPU recommended, higher than default due to larger batch size)
 """
 
 import sys
@@ -34,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from learnm8 import run_active_learning, CycleConfig
 from learnm8.oracles import CSVOracle
+from learnm8.learners.torch.chemprop_learner import ChempropLearner
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
@@ -49,7 +57,7 @@ setup_logging(level='INFO')
 
 def print_header():
     print("=" * 80)
-    print("  AmpC 1M Chemprop Mixed Strategy Validation")
+    print("  AmpC 1M Chemprop with MolPAL Hyperparameters Validation")
     print("=" * 80)
     print()
 
@@ -68,7 +76,16 @@ def print_configuration(compounds_count):
     print()
     print("Configuration:")
     print(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)")
-    print(f"  Learner: Chemprop (default settings)")
+    print(f"  Learner: Chemprop with MolPAL hyperparameters")
+    print()
+    print("  MolPAL-style Hyperparameters:")
+    print(f"    • FFN layers: 2 (vs LearnM8 default: 1)")
+    print(f"    • Batch size: 50 (vs LearnM8 default: 32)")
+    print(f"    • Learning rate: 1e-3 (vs LearnM8 default: 1e-4)")
+    print(f"    • Validation split: 20% (vs LearnM8 default: 10%)")
+    print(f"    • Early stopping: Disabled (MolPAL doesn't have it)")
+    print(f"    • Fine-tuning: Disabled (MolPAL doesn't have it)")
+    print()
     print(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)")
     print(f"  Cycles: 16 total")
     print(f"  Batch size: 0.1% (1,000 compounds/cycle)")
@@ -91,15 +108,23 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
     final_metrics = results['cycle_metrics'][-1]
 
     with open(summary_path, 'w') as f:
-        f.write("AmpC 1M Chemprop Mixed Strategy Validation Summary\n")
+        f.write("AmpC 1M Chemprop with MolPAL Hyperparameters Validation Summary\n")
         f.write("=" * 80 + "\n\n")
 
         f.write("Configuration:\n")
         f.write(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)\n")
         f.write(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)\n")
-        f.write(f"  Learner: Chemprop (default settings)\n")
+        f.write(f"  Learner: Chemprop with MolPAL hyperparameters\n")
         f.write(f"  Cycles: {len(results['cycle_metrics'])}\n")
         f.write(f"  Runtime: {format_time(elapsed_time)}\n\n")
+
+        f.write("MolPAL-style Hyperparameters:\n")
+        f.write("  • FFN layers: 2 (vs LearnM8 default: 1)\n")
+        f.write("  • Batch size: 50 (vs LearnM8 default: 32)\n")
+        f.write("  • Learning rate: 1e-3 (vs LearnM8 default: 1e-4)\n")
+        f.write("  • Validation split: 20% (vs LearnM8 default: 10%)\n")
+        f.write("  • Early stopping: Disabled\n")
+        f.write("  • Fine-tuning: Disabled\n\n")
 
         f.write("Final Performance Metrics:\n")
         f.write(f"  Total Labeled: {final_metrics.get('cumulative_labeled', 'N/A'):,}\n")
@@ -125,7 +150,7 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
 
         f.write("\nOutput Files:\n")
         f.write(f"  Data: {results['output_dir']}/\n")
-        f.write(f"  Plot: {output_dir}/plots/ampc_1M_chemprop_mixed_validation.png\n")
+        f.write(f"  Plot: {output_dir}/plots/ampc_1M_chemprop_molpal_params.png\n")
         f.write(f"  Summary: {summary_path}\n")
 
     return summary_path
@@ -156,11 +181,11 @@ def main():
 
     # Configuration
     DATASET_NAME = 'ampc_1000k'
-    LEARNER_NAME = 'Chemprop'
+    LEARNER_NAME = 'Chemprop (MolPAL params)'
 
     # Timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output_dir = Path('validation/reports/ampc_1M_chemprop_mixed_validation')
+    base_output_dir = Path('validation/reports/ampc_1M_chemprop_molpal_params')
     data_dir_parent = base_output_dir / 'data'
     plots_dir = base_output_dir / 'plots'
 
@@ -168,7 +193,7 @@ def main():
     print()
 
     # Check for existing results
-    existing_runs = sorted(data_dir_parent.glob('ampc_1M_chemprop_mixed_*'))
+    existing_runs = sorted(data_dir_parent.glob('ampc_1M_chemprop_molpal_params_*'))
     skip_run = False
     results = None
     data_output_dir = None
@@ -188,7 +213,7 @@ def main():
             print()
 
     if not skip_run:
-        data_output_dir = data_dir_parent / f'ampc_1M_chemprop_mixed_{timestamp}'
+        data_output_dir = data_dir_parent / f'ampc_1M_chemprop_molpal_params_{timestamp}'
 
         # Check dataset exists
         try:
@@ -234,6 +259,45 @@ def main():
             print(f"❌ ERROR: Failed to setup oracle: {e}")
             sys.exit(1)
 
+        # Create learner with MolPAL-style hyperparameters
+        print()
+        print("Creating Chemprop learner with MolPAL hyperparameters...")
+        try:
+            learner = ChempropLearner(
+                # Architecture (same as MolPAL)
+                message_hidden_dim=300,
+                depth=3,
+                aggregation='mean',
+                atom_messages=False,
+                message_bias=False,
+
+                # FFN configuration (MolPAL style)
+                ffn_hidden_dim=300,
+                ffn_num_layers=2,  # MolPAL default (vs LearnM8 default: 1)
+                dropout=0.0,
+
+                # Training configuration (MolPAL style)
+                max_epochs=50,
+                batch_size=50,  # MolPAL default (vs LearnM8 default: 32)
+                learning_rate=1e-3,  # MolPAL max_lr (vs LearnM8 default: 1e-4)
+
+                # Validation (MolPAL style)
+                early_stopping=False,  # MolPAL doesn't have early stopping
+                val_fraction=0.2,  # MolPAL uses 80/20 split (vs LearnM8 default: 0.1)
+
+                # Features not in MolPAL
+                enable_fine_tuning=False,  # Disabled for fair comparison
+                batch_norm=False,
+                random_state=42,
+                accelerator='auto',
+                enable_aggressive_gc=True  # Keep LearnM8's memory management
+            )
+            print("✓ Learner created with MolPAL hyperparameters")
+            print()
+        except Exception as e:
+            print(f"❌ ERROR: Failed to create learner: {e}")
+            sys.exit(1)
+
         # Run active learning
         print()
         print("Running active learning validation...")
@@ -244,12 +308,15 @@ def main():
         start_time = time.time()
 
         try:
-            cycles = [CycleConfig('random', n_cycles=1, batch_fraction=0.001), CycleConfig('greedy', n_cycles=15, batch_fraction=0.001)]
+            cycles = [
+                CycleConfig('random', n_cycles=1, batch_fraction=0.001),
+                CycleConfig('greedy', n_cycles=15, batch_fraction=0.001)
+            ]
 
             results = run_active_learning(
                 compound_pool=compound_pool,
                 oracle=oracle,
-                learner='chemprop',
+                learner=learner,  # Pass configured learner instance
                 target_col=metadata['target_column'],
                 cycles=cycles,
                 score_direction=metadata['score_direction'],
@@ -280,10 +347,10 @@ def main():
     print("Generating validation plot...")
     try:
         plots_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = plots_dir / 'ampc_1M_chemprop_mixed_validation.png'
+        plot_path = plots_dir / 'ampc_1M_chemprop_molpal_params.png'
 
         strategy_config = {
-            'name': 'Mixed (Random→Greedy)',
+            'name': 'Mixed (Random→Greedy) - MolPAL params',
             'param_name': None
         }
 
@@ -332,6 +399,15 @@ def main():
     print(f"  📁 Data: {data_output_dir.resolve()}/")
     print(f"  📊 Plot: {plot_path.resolve()}")
     print(f"  📄 Summary: {summary_path.resolve()}")
+    print()
+
+    print("Comparison Notes:")
+    print("  This run uses MolPAL-style hyperparameters for direct comparison:")
+    print("  • Deeper FFN (2 layers vs 1)")
+    print("  • Larger batches (50 vs 32)")
+    print("  • Higher learning rate (1e-3 vs 1e-4)")
+    print("  • No early stopping (trains full 50 epochs)")
+    print("  • Larger validation split (20% vs 10%)")
     print()
 
 

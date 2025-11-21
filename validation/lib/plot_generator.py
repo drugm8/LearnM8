@@ -2,6 +2,7 @@ import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.colors import LogNorm
 import seaborn as sns
 import logging
 from pathlib import Path
@@ -15,7 +16,9 @@ def create_comprehensive_validation_plot(
     strategy_config: Dict[str, Any],
     param_value: float,
     output_path: Path,
-    dpi: int = 300
+    dpi: int = 300,
+    dataset_name: Optional[str] = None,
+    learner_name: Optional[str] = None
 ) -> Path:
     param_name = strategy_config['param_name']
     strategy_name = strategy_config['name']
@@ -23,73 +26,232 @@ def create_comprehensive_validation_plot(
     df = result['compounds_df']
     cycle_metrics_df = pl.DataFrame(result['cycle_metrics'])
 
-    fig = plt.figure(figsize=(10, 12.5))
-    gs = gridspec.GridSpec(4, 2, height_ratios=[1.0, 1.0, 0.6, 0.6], hspace=0.5, wspace=0.3, top=0.96)
+    # Auto-detect learner capabilities from data
+    has_uncertainty = False
+    sample_cycle = 1
+    pred_col = f'prediction_cycle_{sample_cycle}'
+    unc_col = f'uncertainty_cycle_{sample_cycle}'
+    if pred_col in df.columns and unc_col in df.columns:
+        has_uncertainty = len(df[unc_col].drop_nulls()) > 0
 
+    # Auto-detect pruning from metrics
+    has_pruning = False
+    if 'cumulative_pruned' in cycle_metrics_df.columns:
+        has_pruning = cycle_metrics_df['cumulative_pruned'].max() > 0
+
+    # Determine layout based on what we're showing
+    # Always show top 4 plots (uncertainty scatter or prediction violin)
+    n_rows = 0
+    cycle_viz_rows = [0, 1]
+    n_rows = 2
+    pruning_row = None
+    metrics_row = None
+
+    if has_pruning:
+        pruning_row = n_rows
+        n_rows += 1
+
+    metrics_row = n_rows
+    n_rows += 1
+
+    # Create figure with appropriate size
+    fig_height = 3 + (n_rows * 2.8)
+    fig = plt.figure(figsize=(12, fig_height))
+
+    # Build height ratios: cycle plots = 1/3, metrics = 2/3
+    # Top 4 plots across 2 rows = 0.5 units each (total 1.0 for 1/3)
+    # Metrics plot = 2.0 units (for 2/3)
+    height_ratios = [0.5, 0.5]  # Top 4 cycle visualization plots (1/3 total)
+    if has_pruning:
+        height_ratios.append(0.6)
+    height_ratios.append(2.0)  # Discovery and score metrics (2/3 total)
+
+    gs = gridspec.GridSpec(n_rows, 2, height_ratios=height_ratios, hspace=0.4, wspace=0.3, top=0.96)
+
+    # Plot top 4 cycle visualizations (uncertainty scatter or prediction violin)
     cycles_to_show = [1, 3, 6, 9]
-    final_cycle = cycle_metrics_df['cycle'].max()
+    final_cycle = int(cycle_metrics_df['cycle'].max())
     cycles_to_show = [c for c in cycles_to_show if c <= final_cycle]
-
-    unlabeled_bg = df.filter(pl.col('status') == 'unlabeled')
-    if len(unlabeled_bg) > 5000:
-        unlabeled_bg = unlabeled_bg.sample(n=5000, seed=42)
 
     subplot_positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
 
-    for idx, cycle in enumerate(cycles_to_show):
-        row, col = subplot_positions[idx]
-        ax = fig.add_subplot(gs[row, col])
+    if has_uncertainty:
+        # Uncertainty scatter plots
+        for idx, cycle in enumerate(cycles_to_show):
+            row, col = subplot_positions[idx]
+            ax = fig.add_subplot(gs[row, col])
 
-        pred_col = f'prediction_cycle_{cycle}'
-        unc_col = f'uncertainty_cycle_{cycle}'
+            pred_col = f'prediction_cycle_{cycle}'
+            unc_col = f'uncertainty_cycle_{cycle}'
 
-        if pred_col not in df.columns or unc_col not in df.columns:
-            ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
-                   ha='center', va='center', transform=ax.transAxes)
-            ax.set_title(f'Cycle {cycle}')
-            continue
+            if pred_col not in df.columns or unc_col not in df.columns:
+                ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
+                       ha='center', va='center', transform=ax.transAxes)
+                ax.set_title(f'Cycle {cycle}')
+                continue
 
-        if unc_col in unlabeled_bg.columns:
-            ax.scatter(
-                unlabeled_bg[pred_col].to_numpy(),
-                unlabeled_bg[unc_col].to_numpy(),
-                c='#CCCCCC',
-                alpha=0.25,
-                s=8,
-                edgecolors='none'
+            # Get all compounds with predictions at this cycle (labeled or unlabeled)
+            compounds_with_pred = df.filter(
+                pl.col(pred_col).is_not_null() & pl.col(unc_col).is_not_null()
             )
 
-        selected_up_to = df.filter(
-            (pl.col('status') == 'labeled') & (pl.col('selected_cycle') <= cycle)
-        )
-
-        if len(selected_up_to) > 0:
-            ax.scatter(
-                selected_up_to[pred_col].to_numpy(),
-                selected_up_to[unc_col].to_numpy(),
-                c='#7e62df',
-                alpha=0.75,
-                s=35,
-                edgecolors='black',
-                linewidths=0.5,
-                label=f'Selected (n={len(selected_up_to)})'
+            # Plot all compounds as density hexbin (no subsampling)
+            hb = ax.hexbin(
+                compounds_with_pred[pred_col].to_numpy(),
+                compounds_with_pred[unc_col].to_numpy(),
+                gridsize=50,           # Balance between detail and performance
+                cmap='Greys',          # Neutral, shows density clearly
+                mincnt=1,              # Show even single points
+                norm=LogNorm(),        # Logarithmic scale makes low-density areas visible
+                alpha=0.7,             # Slightly more opaque for better visibility
+                edgecolors='none',     # Clean appearance
+                linewidths=0,
+                zorder=1               # Behind selected points
             )
 
-        ax.set_xlabel('Prediction', fontsize=10)
-        if col == 0:
-            ax.set_ylabel('Uncertainty', fontsize=10)
-        ax.set_title(f'Cycle {cycle}', fontsize=11, fontweight='bold')
-        ax.grid(True, alpha=0.3, linewidth=0.5)
-        if len(selected_up_to) > 0:
-            ax.legend(fontsize=8, loc='best', framealpha=0.9)
+            selected_this_cycle = df.filter(
+                (pl.col('status') == 'labeled') & (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+            )
 
-    ax_b = fig.add_subplot(gs[2, :])
+            if len(selected_this_cycle) > 0:
+                ax.scatter(
+                    selected_this_cycle[pred_col].to_numpy(),
+                    selected_this_cycle[unc_col].to_numpy(),
+                    c='#7e62df',
+                    alpha=0.75,
+                    s=35,
+                    edgecolors='black',
+                    linewidths=0.5,
+                    label=f'Selected (n={len(selected_this_cycle)})',
+                    zorder=10             # Ensure visibility on top of hexbin
+                )
+
+            ax.set_xlabel('Prediction', fontsize=9)
+            if col == 0:
+                ax.set_ylabel('Uncertainty', fontsize=9)
+            ax.set_title(f'Cycle {cycle}', fontsize=10, fontweight='bold')
+            ax.grid(True, alpha=0.3, linewidth=0.5)
+            if len(selected_this_cycle) > 0:
+                ax.legend(fontsize=7, loc='best', framealpha=0.9)
+    else:
+        # Horizontal violin plots showing prediction distribution and selection
+        for idx, cycle in enumerate(cycles_to_show):
+            row, col = subplot_positions[idx]
+            ax = fig.add_subplot(gs[row, col])
+
+            pred_col = f'prediction_cycle_{cycle}'
+
+            if pred_col not in df.columns:
+                ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
+                       ha='center', va='center', transform=ax.transAxes)
+                ax.set_title(f'Cycle {cycle}')
+                continue
+
+            # Get all compounds with predictions at this cycle
+            compounds_with_pred = df.filter(pl.col(pred_col).is_not_null())
+
+            if len(compounds_with_pred) == 0:
+                ax.text(0.5, 0.5, f'No predictions\nfor cycle {cycle}',
+                       ha='center', va='center', transform=ax.transAxes)
+                ax.set_title(f'Cycle {cycle}')
+                continue
+
+            all_predictions = compounds_with_pred[pred_col].to_numpy()
+
+            # Get selected compounds in this specific cycle
+            selected_this_cycle = df.filter(
+                (pl.col('status') == 'labeled') &
+                (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+            )
+
+            # Create horizontal violin plot
+            parts = ax.violinplot([all_predictions], positions=[0], vert=False,
+                                 widths=0.7, showmeans=False, showmedians=False,
+                                 showextrema=False)
+
+            # Style the violin
+            for pc in parts['bodies']:
+                pc.set_facecolor('#d0c9e8')
+                pc.set_edgecolor('#7e62df')
+                pc.set_alpha(0.6)
+                pc.set_linewidth(1.5)
+
+            # Show selected predictions as a rug plot or strip
+            if len(selected_this_cycle) > 0:
+                selected_preds = selected_this_cycle[pred_col].to_numpy()
+
+                # Add jitter to y-position for better visibility
+                n_selected = len(selected_preds)
+                jitter = np.random.RandomState(42 + cycle).uniform(-0.15, 0.15, n_selected)
+
+                ax.scatter(selected_preds, jitter,
+                          c='#7e62df', s=30, alpha=0.8,
+                          edgecolors='black', linewidths=0.5,
+                          zorder=10, label=f'Selected (n={n_selected})')
+
+                # Add vertical lines showing selection range
+                if len(selected_preds) > 1:
+                    sel_min, sel_max = selected_preds.min(), selected_preds.max()
+                    ax.axvline(sel_min, color='#7e62df', linestyle='--',
+                              linewidth=1.5, alpha=0.5, zorder=5)
+                    ax.axvline(sel_max, color='#7e62df', linestyle='--',
+                              linewidth=1.5, alpha=0.5, zorder=5)
+
+            ax.set_xlabel('Prediction', fontsize=9)
+            ax.set_yticks([])
+            ax.set_ylim(-0.5, 0.5)
+            ax.set_title(f'Cycle {cycle}', fontsize=10, fontweight='bold')
+            ax.grid(True, alpha=0.3, linewidth=0.5, axis='x')
+
+            if len(selected_this_cycle) > 0:
+                ax.legend(fontsize=7, loc='upper right', framealpha=0.9)
+
+    # Plot pruning timeline if pruning was used
+    if has_pruning:
+        ax_prune = fig.add_subplot(gs[pruning_row, :])
+        ax_prune_twin = ax_prune.twinx()
+
+        cycles = cycle_metrics_df['cycle'].to_numpy()
+        pool_sizes = cycle_metrics_df['pool_size'].to_numpy()
+        cumulative_labeled = cycle_metrics_df['cumulative_labeled'].to_numpy()
+
+        ax_prune.plot(cycles, pool_sizes, color='#7e62df', linewidth=2.5,
+                     marker='o', markersize=5, label='Unlabeled Pool Size')
+        ax_prune.fill_between(cycles, 0, pool_sizes, color='#7e62df', alpha=0.15)
+
+        ax_prune_twin.plot(cycles, cumulative_labeled, color='#e67e22', linewidth=2.5,
+                          marker='s', markersize=5, label='Cumulative Labeled', linestyle='--')
+
+        ax_prune.set_xlabel('Cycle', fontsize=11)
+        ax_prune.set_ylabel('Unlabeled Pool Size', fontsize=11, color='#7e62df')
+        ax_prune.tick_params(axis='y', labelcolor='#7e62df')
+        ax_prune_twin.set_ylabel('Cumulative Labeled', fontsize=11, color='#e67e22')
+        ax_prune_twin.tick_params(axis='y', labelcolor='#e67e22')
+
+        ax_prune.grid(True, alpha=0.3, linewidth=0.75)
+        ax_prune.legend(loc='upper left', fontsize=9, framealpha=0.9)
+        ax_prune_twin.legend(loc='upper right', fontsize=9, framealpha=0.9)
+
+    # Create two separate subplots for discovery and score metrics with shared x-axis
+    # Use a nested GridSpec for the metrics row to create two plot areas
+    metrics_gs = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[metrics_row, :],
+                                                   hspace=0.05, height_ratios=[1, 1])
+
+    ax_discovery = fig.add_subplot(metrics_gs[0])
+    ax_score = fig.add_subplot(metrics_gs[1], sharex=ax_discovery)
 
     discovery_metrics = [
         ('top_10_discovery', 'Top-10', '#452997', '-'),
-        ('top_100_discovery', 'Top-100', '#6b4fc7', '-'),
+        ('top_100_discovery', 'Top-100', '#5b3fb5', '-'),
+        ('top_1000_discovery', 'Top-1000', '#7e62df', '-'),
         ('top_0_1_pct_discovery', 'Top-0.1%', '#a48dd7', '--'),
-        ('top_1_pct_discovery', 'Top-1%', '#cabde7', ':')
+        ('top_1_pct_discovery', 'Top-1%', '#c8b5e7', '--'),
+        ('top_10_pct_discovery', 'Top-10%', '#e3d8f0', ':')
+    ]
+
+    score_metrics = [
+        ('cumulative_avg_score_ratio', 'Cumulative Avg', '#7e62df', '-'),
+        ('batch_avg_score_ratio', 'Batch Avg', '#b7a5df', '-')
     ]
 
     cycles = cycle_metrics_df['cycle'].to_numpy()
@@ -102,51 +264,59 @@ def create_comprehensive_validation_plot(
         n_compounds = int(cumulative_compounds[i])
         xtick_labels.append(f'C{cycle}: {cumulative_pct[i]:.1f}%\n({n_compounds})')
 
+    # Plot discovery metrics
     for metric, label, color, style in discovery_metrics:
         if metric in cycle_metrics_df.columns:
             values = cycle_metrics_df[metric].to_numpy()
-            ax_b.plot(cumulative_pct, values, color=color, linestyle=style,
-                     linewidth=2, marker='o', markersize=5, label=label)
+            ax_discovery.plot(cumulative_pct, values, color=color, linestyle=style,
+                            linewidth=2, marker='o', markersize=4, label=label)
 
-    ax_b.set_xlabel('Cumulative % Compounds Evaluated', fontsize=12)
-    ax_b.set_ylabel('Discovery Rate (%)', fontsize=12)
-    ax_b.set_title(f'{strategy_name} {param_name}={param_value}: Discovery Metrics',
-                   fontsize=14, fontweight='bold')
-    ax_b.set_xticks(cumulative_pct)
-    ax_b.set_xticklabels(xtick_labels, fontsize=9)
-    ax_b.set_ylim(0, 100)
-    ax_b.grid(True, alpha=0.3, linewidth=0.75)
-    ax_b.grid(True, which='minor', alpha=0.15, linewidth=0.5)
-    ax_b.legend(loc='upper left', frameon=True, framealpha=0.9, fontsize=10)
+    ax_discovery.set_ylabel('Discovery Rate (%)', fontsize=11)
+    ax_discovery.set_ylim(0, 100)
+    ax_discovery.grid(True, alpha=0.3, linewidth=0.75)
+    ax_discovery.legend(loc='upper left', frameon=True, framealpha=0.9, fontsize=9)
+    ax_discovery.tick_params(labelbottom=False)
 
-    ax_c = fig.add_subplot(gs[3, :])
-
-    score_metrics = [
-        ('cumulative_avg_score_ratio', 'Cumulative Avg', '#7e62df', '-'),
-        ('batch_avg_score_ratio', 'Batch Avg', '#b7a5df', '-')
-    ]
-
+    # Plot score metrics
+    score_values_all = []
     for metric, label, color, style in score_metrics:
         if metric in cycle_metrics_df.columns:
             values = cycle_metrics_df[metric].to_numpy()
-            ax_c.plot(cumulative_pct, values, color=color, linestyle=style,
-                     linewidth=2, marker='o', markersize=5, label=label)
+            score_values_all.extend(values)
+            ax_score.plot(cumulative_pct, values, color=color, linestyle=style,
+                         linewidth=2, marker='o', markersize=4, label=label)
 
-    ax_c.axhline(y=1.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.5, label='Random baseline')
+    ax_score.axhline(y=1.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.5, label='Random baseline')
 
-    ax_c.set_xlabel('Cumulative % Compounds Evaluated', fontsize=12)
-    ax_c.set_ylabel('Score Ratio', fontsize=12)
-    ax_c.set_title(f'{strategy_name} {param_name}={param_value}: Score Ratio Metrics',
-                   fontsize=14, fontweight='bold')
-    ax_c.set_xticks(cumulative_pct)
-    ax_c.set_xticklabels(xtick_labels, fontsize=9)
-    ax_c.set_ylim(1, 2)
-    ax_c.grid(True, alpha=0.3, linewidth=0.75)
-    ax_c.grid(True, which='minor', alpha=0.15, linewidth=0.5)
-    ax_c.legend(loc='upper left', frameon=True, framealpha=0.9, fontsize=10)
+    # Dynamic y-axis for score ratio
+    if score_values_all:
+        score_min = min(score_values_all)
+        score_max = max(score_values_all)
+        y_min = max(0.8, score_min - 0.2)
+        y_max = min(3.0, score_max + 0.5)
+        ax_score.set_ylim(y_min, y_max)
 
-    plt.suptitle(f'{strategy_name} Validation: {param_name}={param_value}',
-                 fontsize=16, fontweight='bold', y=0.998)
+    ax_score.set_xlabel('Cumulative % Compounds Evaluated', fontsize=11)
+    ax_score.set_ylabel('Score Ratio', fontsize=11)
+    ax_score.set_xticks(cumulative_pct)
+    ax_score.set_xticklabels(xtick_labels, fontsize=8, rotation=0)
+    ax_score.grid(True, alpha=0.3, linewidth=0.75)
+    ax_score.legend(loc='upper left', frameon=True, framealpha=0.9, fontsize=9)
+
+    # Add a shared title for both metric plots
+    ax_discovery.text(0.5, 1.15, 'Discovery and Score Metrics',
+                     ha='center', va='bottom', transform=ax_discovery.transAxes,
+                     fontsize=12, fontweight='bold')
+
+    # Generate title
+    if dataset_name and learner_name:
+        title = f'{dataset_name} {learner_name} Validation'
+    elif param_name and param_value is not None:
+        title = f'{strategy_name} Validation: {param_name}={param_value}'
+    else:
+        title = f'{strategy_name} Validation'
+
+    plt.suptitle(title, fontsize=15, fontweight='bold', y=0.998)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')

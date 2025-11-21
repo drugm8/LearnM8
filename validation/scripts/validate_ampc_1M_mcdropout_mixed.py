@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-Standalone validation script for AmpC 1M dataset using Chemprop with mixed strategy.
+Standalone validation script for AmpC 1M dataset using MCDropout with mixed strategy.
 
 This script runs a complete active learning validation on the AmpC 1M dataset:
-- Learner: Chemprop (default settings)
+- Learner: MCDropout (default settings)
+- Featurizer: morgan_feat
 - Strategy: Random (1 cycle) → Greedy (15 cycles)
 - Cycles: 16 total (1 random + 15 greedy)
 - Batch size: 0.1% per cycle (1,000 compounds)
 
 Usage:
-    python validation/scripts/validate_ampc_1M_chemprop_mixed.py
+    python validation/scripts/validate_ampc_1M_mcdropout_mixed.py
 
 Output:
-    validation/reports/ampc_1M_chemprop_mixed_validation/
-        ├── data/ampc_1M_chemprop_mixed_<timestamp>/
+    validation/reports/ampc_1M_mcdropout_mixed_validation/
+        ├── data/ampc_1M_mcdropout_mixed_<timestamp>/
         │   ├── compounds_final.csv
         │   ├── cycle_metrics.csv
         │   └── selection_history.csv
-        ├── plots/ampc_1M_chemprop_mixed_validation.png
+        ├── plots/ampc_1M_mcdropout_mixed_validation.png
         └── summary.txt
 
 Expected Runtime: Variable (depends on GPU availability)
@@ -49,7 +50,7 @@ setup_logging(level='INFO')
 
 def print_header():
     print("=" * 80)
-    print("  AmpC 1M Chemprop Mixed Strategy Validation")
+    print("  AmpC 1M MCDropout Mixed Strategy Validation")
     print("=" * 80)
     print()
 
@@ -68,7 +69,8 @@ def print_configuration(compounds_count):
     print()
     print("Configuration:")
     print(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)")
-    print(f"  Learner: Chemprop (default settings)")
+    print(f"  Learner: MCDropout (default settings)")
+    print(f"  Featurizer: morgan_feat")
     print(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)")
     print(f"  Cycles: 16 total")
     print(f"  Batch size: 0.1% (1,000 compounds/cycle)")
@@ -91,13 +93,14 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
     final_metrics = results['cycle_metrics'][-1]
 
     with open(summary_path, 'w') as f:
-        f.write("AmpC 1M Chemprop Mixed Strategy Validation Summary\n")
+        f.write("AmpC 1M MCDropout Mixed Strategy Validation Summary\n")
         f.write("=" * 80 + "\n\n")
 
         f.write("Configuration:\n")
         f.write(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)\n")
         f.write(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)\n")
-        f.write(f"  Learner: Chemprop (default settings)\n")
+        f.write(f"  Learner: MCDropout (default settings)\n")
+        f.write(f"  Featurizer: morgan_feat\n")
         f.write(f"  Cycles: {len(results['cycle_metrics'])}\n")
         f.write(f"  Runtime: {format_time(elapsed_time)}\n\n")
 
@@ -125,7 +128,7 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
 
         f.write("\nOutput Files:\n")
         f.write(f"  Data: {results['output_dir']}/\n")
-        f.write(f"  Plot: {output_dir}/plots/ampc_1M_chemprop_mixed_validation.png\n")
+        f.write(f"  Plot: {output_dir}/plots/ampc_1M_mcdropout_mixed_validation.png\n")
         f.write(f"  Summary: {summary_path}\n")
 
     return summary_path
@@ -154,13 +157,11 @@ def load_existing_results(data_dir):
 def main():
     print_header()
 
-    # Configuration
     DATASET_NAME = 'ampc_1000k'
-    LEARNER_NAME = 'Chemprop'
+    LEARNER_NAME = 'MCDropout'
 
-    # Timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output_dir = Path('validation/reports/ampc_1M_chemprop_mixed_validation')
+    base_output_dir = Path('validation/reports/ampc_1M_mcdropout_mixed_validation')
     data_dir_parent = base_output_dir / 'data'
     plots_dir = base_output_dir / 'plots'
 
@@ -168,7 +169,7 @@ def main():
     print()
 
     # Check for existing results
-    existing_runs = sorted(data_dir_parent.glob('ampc_1M_chemprop_mixed_*'))
+    existing_runs = sorted(data_dir_parent.glob('ampc_1M_mcdropout_mixed_*'))
     skip_run = False
     results = None
     data_output_dir = None
@@ -188,9 +189,8 @@ def main():
             print()
 
     if not skip_run:
-        data_output_dir = data_dir_parent / f'ampc_1M_chemprop_mixed_{timestamp}'
+        data_output_dir = data_dir_parent / f'ampc_1M_mcdropout_mixed_{timestamp}'
 
-        # Check dataset exists
         try:
             dataset_path = get_dataset_path(DATASET_NAME)
             check_dataset_exists(dataset_path)
@@ -198,7 +198,6 @@ def main():
             print(f"❌ ERROR: Failed to locate dataset: {e}")
             sys.exit(1)
 
-        # Get dataset info for ID column
         try:
             dataset_info = get_dataset_info(DATASET_NAME)
             id_column = dataset_info['id_column']
@@ -206,7 +205,6 @@ def main():
             print(f"❌ ERROR: Failed to get dataset info: {e}")
             sys.exit(1)
 
-        # Load dataset
         print("Loading dataset...")
         try:
             compound_pool, metadata = load_validation_dataset(
@@ -222,10 +220,8 @@ def main():
             print(f"❌ ERROR: Failed to load dataset: {e}")
             sys.exit(1)
 
-        # Print configuration
         print_configuration(len(compound_pool))
 
-        # Setup oracle (CRITICAL: Use original ID column from dataset)
         print("Setting up oracle...")
         try:
             oracle = CSVOracle(str(dataset_path), id_column=id_column)
@@ -234,7 +230,6 @@ def main():
             print(f"❌ ERROR: Failed to setup oracle: {e}")
             sys.exit(1)
 
-        # Run active learning
         print()
         print("Running active learning validation...")
         print("⏱  Estimated time: Variable (depends on GPU)")
@@ -249,7 +244,8 @@ def main():
             results = run_active_learning(
                 compound_pool=compound_pool,
                 oracle=oracle,
-                learner='chemprop',
+                learner='mc_dropout',
+                featurizer_type='morgan_feat',
                 target_col=metadata['target_column'],
                 cycles=cycles,
                 score_direction=metadata['score_direction'],
@@ -276,11 +272,10 @@ def main():
         elapsed_time = 0
         compound_pool = results['compounds_df']
 
-    # Generate validation plot
     print("Generating validation plot...")
     try:
         plots_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = plots_dir / 'ampc_1M_chemprop_mixed_validation.png'
+        plot_path = plots_dir / 'ampc_1M_mcdropout_mixed_validation.png'
 
         strategy_config = {
             'name': 'Mixed (Random→Greedy)',
@@ -301,7 +296,6 @@ def main():
     except Exception as e:
         print(f"⚠  Warning: Failed to generate plot: {e}")
 
-    # Save summary
     print("Generating summary...")
     try:
         summary_path = save_summary(results, base_output_dir, elapsed_time, len(compound_pool))
@@ -309,7 +303,6 @@ def main():
     except Exception as e:
         print(f"⚠  Warning: Failed to generate summary: {e}")
 
-    # Print final results
     print()
     print("=" * 80)
     print("  Validation Complete!")
