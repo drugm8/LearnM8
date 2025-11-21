@@ -2,7 +2,7 @@ import polars as pl
 import numpy as np
 from typing import List
 from rdkit import Chem, DataStructs
-from rdkit.Chem import AllChem, MACCSkeys
+from rdkit.Chem import rdFingerprintGenerator, MACCSkeys
 from learnm8.core.interfaces import Oracle
 import logging
 
@@ -41,7 +41,8 @@ class SimilarityOracle(Oracle):
 
     def _compute_fingerprint(self, mol):
         if self.fingerprint_type == 'morgan':
-            return AllChem.GetMorganFingerprintAsBitVect(mol, self.radius, nBits=self.n_bits)
+            morgan_gen = rdFingerprintGenerator.GetMorganGenerator(radius=self.radius, fpSize=self.n_bits)
+            return morgan_gen.GetFingerprint(mol)
         elif self.fingerprint_type == 'maccs':
             return MACCSkeys.GenMACCSKeys(mol)
         elif self.fingerprint_type == 'topological':
