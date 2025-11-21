@@ -48,216 +48,514 @@ RANDOM_SEEDS = [42, 123, 456]
 
 MODEL_CONFIGS = {
     'baseline': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'deep': {
+        # Message Passing
         'depth': 5,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 2,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'wide': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 500,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 500,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_ft': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': True,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_dropout': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.1,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_atom': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'early_stop_aggressive': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': True,
         'early_stopping_patience': 2,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'early_stop_moderate': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': True,
         'early_stopping_patience': 5,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'early_stop_patient': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': True,
         'early_stopping_patience': 10,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_lr_high': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-3,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'learning_rate': 1e-3,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_lr_low': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-5,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'learning_rate': 1e-5,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_batch_small': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 16,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'batch_size': 16,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_batch_large': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 128,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'batch_size': 128,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_agg_sum': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'sum',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'aggregation': 'sum',
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_agg_norm': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'norm',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'aggregation': 'norm',
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_short': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 25,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'max_epochs': 25,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
     'baseline_extended': {
+        # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
         'ffn_hidden_dim': 300,
         'ffn_num_layers': 1,
+        # Regularization
         'dropout': 0.0,
         'batch_norm': False,
-        'atom_messages': False,
+        # Training Configuration
+        'max_epochs': 100,
+        'batch_size': 32,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
         'early_stopping': False,
         'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
         'enable_fine_tuning': False,
-        'max_epochs': 100,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
     },
 }
 
@@ -390,22 +688,34 @@ def run_single_experiment(
         checkpoint_dir = seed_output_dir / '.checkpoints' if config['enable_fine_tuning'] else None
 
         learner = ChempropLearner(
+            # Message Passing
             depth=config['depth'],
             message_hidden_dim=config['message_hidden_dim'],
+            message_bias=config['message_bias'],
+            atom_messages=config['atom_messages'],
+            aggregation=config['aggregation'],
+            # FFN Configuration
             ffn_hidden_dim=config['ffn_hidden_dim'],
             ffn_num_layers=config['ffn_num_layers'],
+            # Regularization
             dropout=config['dropout'],
             batch_norm=config['batch_norm'],
-            atom_messages=config['atom_messages'],
+            # Training Configuration
+            max_epochs=config['max_epochs'],
+            batch_size=config['batch_size'],
+            learning_rate=config['learning_rate'],
+            random_state=seed,
+            accelerator=config['accelerator'],
+            # Early Stopping
             early_stopping=config['early_stopping'],
             early_stopping_patience=config['early_stopping_patience'],
-            max_epochs=config.get('max_epochs', 50),
-            batch_size=config.get('batch_size', 32),
-            learning_rate=config.get('learning_rate', 1e-4),
-            aggregation=config.get('aggregation', 'mean'),
-            random_state=seed,
+            early_stopping_min_delta=config['early_stopping_min_delta'],
+            val_fraction=config['val_fraction'],
+            # Fine-Tuning
             enable_fine_tuning=config['enable_fine_tuning'],
             checkpoint_dir=checkpoint_dir,
+            # Memory Management
+            enable_aggressive_gc=config['enable_aggressive_gc'],
         )
 
         start_time = time.time()
