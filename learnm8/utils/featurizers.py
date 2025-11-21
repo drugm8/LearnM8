@@ -52,7 +52,13 @@ def smiles_to_morgan_feature_fingerprint(smiles: str) -> np.ndarray:
     if mol is None:
         raise ValueError(f"Invalid SMILES: {smiles}")
 
-    fp = AllChem.GetHashedMorganFingerprint(mol, radius=2, nBits=2048, useFeatures=True)
+    feature_inv_gen = rdFingerprintGenerator.GetMorganFeatureAtomInvGen()
+    morgan_gen = rdFingerprintGenerator.GetMorganGenerator(
+        radius=2,
+        fpSize=2048,
+        atomInvariantsGenerator=feature_inv_gen
+    )
+    fp = morgan_gen.GetFingerprint(mol)
     arr = np.zeros(2048, dtype=np.uint8)
     DataStructs.ConvertToNumpyArray(fp, arr)
     return arr
