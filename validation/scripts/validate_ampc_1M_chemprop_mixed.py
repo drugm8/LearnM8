@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
 """
-Standalone validation script for AmpC 1M dataset using UCB acquisition.
+Standalone validation script for AmpC 1M dataset using Chemprop with mixed strategy.
 
 This script runs a complete active learning validation on the AmpC 1M dataset:
-- Strategy: UCB (Upper Confidence Bound) with beta=1.0
-- Learner: RF Ensemble (Random Forest Ensemble)
-- Featurizer: Morgan fingerprints
-- Cycles: 10
-- Batch size: 1% per cycle (5,000 compounds)
+- Learner: Chemprop (default settings)
+- Strategy: Random (1 cycle) → Greedy (15 cycles)
+- Cycles: 16 total (1 random + 15 greedy)
+- Batch size: 0.1% per cycle (1,000 compounds)
 
 Usage:
-    python validation/scripts/validate_ampc_1M_ucb.py
+    python validation/scripts/validate_ampc_1M_chemprop_mixed.py
 
 Output:
-    validation/reports/ampc_1M_ucb_validation/
-        ├── data/ampc_1M_ucb_beta_1.0_<timestamp>/
+    validation/reports/ampc_1M_chemprop_mixed_validation/
+        ├── data/ampc_1M_chemprop_mixed_<timestamp>/
         │   ├── compounds_final.csv
         │   ├── cycle_metrics.csv
         │   └── selection_history.csv
-        ├── plots/ampc_1M_ucb_validation.png
+        ├── plots/ampc_1M_chemprop_mixed_validation.png
         └── summary.txt
 
-Expected Runtime: 40-60 minutes (first run with cache generation)
-Memory Requirements: ~8-12 GB
+Expected Runtime: Variable (depends on GPU availability)
+Memory Requirements: ~8-16 GB (GPU recommended)
 """
 
 import sys
@@ -50,7 +49,7 @@ setup_logging(level='INFO')
 
 def print_header():
     print("=" * 80)
-    print("  AmpC 1M UCB Validation")
+    print("  AmpC 1M Chemprop Mixed Strategy Validation")
     print("=" * 80)
     print()
 
@@ -65,16 +64,15 @@ def check_dataset_exists(dataset_path):
     print(f"✓ Dataset found: {dataset_path}")
 
 
-def print_configuration(beta, n_cycles, batch_fraction, compounds_count):
+def print_configuration(compounds_count):
     print()
     print("Configuration:")
     print(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)")
-    print(f"  Strategy: UCB (beta={beta})")
-    print(f"  Learner: RF Ensemble")
-    print(f"  Featurizer: Morgan fingerprints")
-    print(f"  Cycles: {n_cycles}")
-    print(f"  Batch size: {batch_fraction:.1%} ({int(compounds_count * batch_fraction):,} compounds/cycle)")
-    print(f"  Total to label: {int(compounds_count * batch_fraction * n_cycles):,} compounds")
+    print(f"  Learner: Chemprop (default settings)")
+    print(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)")
+    print(f"  Cycles: 16 total")
+    print(f"  Batch size: 0.1% (1,000 compounds/cycle)")
+    print(f"  Total to label: 16,000 compounds")
     print()
 
 
@@ -93,14 +91,13 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
     final_metrics = results['cycle_metrics'][-1]
 
     with open(summary_path, 'w') as f:
-        f.write("AmpC 1M UCB Validation Summary\n")
+        f.write("AmpC 1M Chemprop Mixed Strategy Validation Summary\n")
         f.write("=" * 80 + "\n\n")
 
         f.write("Configuration:\n")
         f.write(f"  Dataset: AmpC 1M ({compounds_count:,} compounds)\n")
-        f.write(f"  Strategy: UCB (beta=1.0)\n")
-        f.write(f"  Learner: RF Ensemble\n")
-        f.write(f"  Featurizer: Morgan fingerprints\n")
+        f.write(f"  Strategy: Random (1 cycle) → Greedy (15 cycles)\n")
+        f.write(f"  Learner: Chemprop (default settings)\n")
         f.write(f"  Cycles: {len(results['cycle_metrics'])}\n")
         f.write(f"  Runtime: {format_time(elapsed_time)}\n\n")
 
@@ -126,7 +123,7 @@ def save_summary(results, output_dir, elapsed_time, compounds_count):
 
         f.write("\nOutput Files:\n")
         f.write(f"  Data: {results['output_dir']}/\n")
-        f.write(f"  Plot: {output_dir}/plots/ampc_1M_ucb_validation.png\n")
+        f.write(f"  Plot: {output_dir}/plots/ampc_1M_chemprop_mixed_validation.png\n")
         f.write(f"  Summary: {summary_path}\n")
 
     return summary_path
@@ -137,14 +134,11 @@ def main():
 
     # Configuration
     DATASET_NAME = 'ampc_1000k'
-    BETA = 1.0
-    N_CYCLES = 10
-    BATCH_FRACTION = 0.01
 
     # Timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output_dir = Path('validation/reports/ampc_1M_ucb_validation')
-    data_output_dir = base_output_dir / 'data' / f'ampc_1M_ucb_beta_{BETA}_{timestamp}'
+    base_output_dir = Path('validation/reports/ampc_1M_chemprop_mixed_validation')
+    data_output_dir = base_output_dir / 'data' / f'ampc_1M_chemprop_mixed_{timestamp}'
     plots_dir = base_output_dir / 'plots'
 
     print(f"Output directory: {base_output_dir.resolve()}")
@@ -183,7 +177,7 @@ def main():
         sys.exit(1)
 
     # Print configuration
-    print_configuration(BETA, N_CYCLES, BATCH_FRACTION, len(compound_pool))
+    print_configuration(len(compound_pool))
 
     # Setup oracle (CRITICAL: Use original ID column from dataset)
     print("Setting up oracle...")
@@ -197,7 +191,7 @@ def main():
     # Run active learning
     print()
     print("Running active learning validation...")
-    print("⏱  Estimated time: 40-60 minutes")
+    print("⏱  Estimated time: Variable (depends on GPU)")
     print("📊 Progress will be shown below...")
     print()
 
@@ -209,12 +203,10 @@ def main():
         results = run_active_learning(
             compound_pool=compound_pool,
             oracle=oracle,
-            learner='rf_ensemble',
+            learner='chemprop',
             target_col=metadata['target_column'],
-            featurizer_type='morgan',
             cycles=cycles,
             score_direction=metadata['score_direction'],
-            acquisition_params={'beta': BETA},
             output_dir=str(data_output_dir),
             mode='benchmark',
             cache_dir=Path(base_output_dir/'.ampc1M_cache')
@@ -239,17 +231,17 @@ def main():
     print("Generating validation plot...")
     try:
         plots_dir.mkdir(parents=True, exist_ok=True)
-        plot_path = plots_dir / 'ampc_1M_ucb_validation.png'
+        plot_path = plots_dir / 'ampc_1M_chemprop_mixed_validation.png'
 
         strategy_config = {
-            'name': 'UCB',
-            'param_name': 'beta'
+            'name': 'Mixed (Random→Greedy)',
+            'param_name': None
         }
 
         create_comprehensive_validation_plot(
             result=results,
             strategy_config=strategy_config,
-            param_value=BETA,
+            param_value=None,
             output_path=plot_path,
             dpi=300
         )
