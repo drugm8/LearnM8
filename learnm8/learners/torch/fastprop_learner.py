@@ -53,6 +53,12 @@ class FastpropLearner(Learner):
 		- Early stopping prevents overfitting
 		- Input clamping (winsorization) for robustness
 		- No uncertainty estimates (single model, no ensemble)
+
+	Performance Configuration:
+		- batch_size: Training batch size (default: 32)
+		- predict_batch_size: Prediction batch size (default: None, uses 4x batch_size)
+		- precision: Precision mode - 'auto', '16-mixed', '32-true' (default: 'auto')
+		- pin_memory: Enable pinned memory (may not work with fastpropDataLoader, default: False)
 	"""
 
 	def __init__(self,
@@ -61,6 +67,9 @@ class FastpropLearner(Learner):
 				 max_epochs: int = 50,
 				 learning_rate: float = 0.0001,
 				 batch_size: int = 32,
+				 predict_batch_size: Optional[int] = None,
+				 precision: str = 'auto',
+				 pin_memory: bool = False,
 				 clamp_input: bool = True,
 				 early_stopping_patience: int = 5,
 				 random_state: int = 42,
@@ -73,7 +82,10 @@ class FastpropLearner(Learner):
 			hidden_size: Hidden layer size (1800 is fastprop's recommended)
 			max_epochs: Maximum training epochs
 			learning_rate: Learning rate for optimizer
-			batch_size: Batch size for training and prediction
+			batch_size: Training batch size
+			predict_batch_size: Prediction batch size (default: None, uses 4x batch_size)
+			precision: Precision mode - 'auto', '16-mixed', '32-true' (default: 'auto')
+			pin_memory: Enable pinned memory (may not work with fastpropDataLoader, default: False)
 			clamp_input: Apply winsorization to inputs (recommended)
 			early_stopping_patience: Patience for early stopping
 			random_state: Random seed for reproducibility
@@ -96,6 +108,9 @@ class FastpropLearner(Learner):
 		self.max_epochs = max_epochs
 		self.learning_rate = learning_rate
 		self.batch_size = batch_size
+		self.predict_batch_size = predict_batch_size if predict_batch_size is not None else (batch_size * 4)
+		self.precision = self._validate_and_resolve_precision(precision)
+		self.pin_memory = pin_memory
 		self.clamp_input = clamp_input
 		self.early_stopping_patience = early_stopping_patience
 		self.random_state = random_state
@@ -122,6 +137,32 @@ class FastpropLearner(Learner):
 			torch.cuda.manual_seed_all(random_state)
 
 		logger.info(f"Initialized FastpropLearner on device: {self.device}")
+
+	def _validate_and_resolve_precision(self, precision: str) -> str:
+		"""Validate precision parameter and resolve 'auto' setting."""
+		import torch
+
+		valid_precisions = ['auto', '16-mixed', '32-true', 'bf16-mixed', '32', '16']
+		if precision not in valid_precisions:
+			raise ValueError(
+				f"Invalid precision '{precision}'. "
+				f"Must be one of: {valid_precisions}"
+			)
+
+		if precision == 'auto':
+			if torch.cuda.is_available():
+				precision = '16-mixed'
+				logger.info("Auto-detected GPU: using mixed precision '16-mixed'")
+			else:
+				precision = '32-true'
+				logger.info("No GPU detected: using full precision '32-true'")
+
+		if precision == '32':
+			precision = '32-true'
+		elif precision == '16':
+			precision = '16-mixed'
+
+		return precision
 
 	def train(self, features: np.ndarray, targets: np.ndarray) -> None:
 		"""Train Fastprop model using PyTorch Lightning.
@@ -192,6 +233,7 @@ class FastpropLearner(Learner):
 
 			self.trainer = Trainer(
 				max_epochs=self.max_epochs,
+				precision=self.precision,
 				enable_progress_bar=enable_verbose,
 				enable_model_summary=False,
 				callbacks=callbacks,
@@ -200,7 +242,10 @@ class FastpropLearner(Learner):
 				logger=False
 			)
 
-			logger.info(f"Training {self.get_name()} for up to {self.max_epochs} epochs on {len(features)} samples")
+			logger.info(
+				f"Training {self.get_name()} for up to {self.max_epochs} epochs "
+				f"on {len(features)} samples (precision={self.precision})"
+			)
 			self.trainer.fit(self.model, train_dataloader)
 			logger.info(f"{self.get_name()} training completed successfully")
 
@@ -239,13 +284,25 @@ class FastpropLearner(Learner):
 			dataset = TensorDataset(X)
 			predict_dataloader = fastpropDataLoader(
 				dataset,
-				batch_size=self.batch_size,
+				batch_size=self.predict_batch_size,
 				num_workers=0,
 				persistent_workers=False
 			)
 
-			logger.info(f"Starting {self.get_name()} prediction on {len(features)} samples")
-			predictions = self.trainer.predict(self.model, predict_dataloader)
+			predict_trainer = Trainer(
+				precision=self.precision,
+				accelerator='auto',
+				devices=1,
+				enable_progress_bar=False,
+				enable_model_summary=False,
+				logger=False
+			)
+
+			logger.info(
+				f"Starting {self.get_name()} prediction on {len(features)} samples "
+				f"(batch_size={self.predict_batch_size}, precision={self.precision})"
+			)
+			predictions = predict_trainer.predict(self.model, predict_dataloader)
 			logger.info(f"{self.get_name()} prediction completed, processing results")
 			predictions = torch.cat(predictions).cpu().numpy().squeeze()
 

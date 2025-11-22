@@ -553,3 +553,64 @@ class TestChempropLearnerWithDescriptors:
         pred_gc_off, _ = learner_gc_off.predict(features=None, smiles=smiles)
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
+
+
+class TestChempropLearnerPerformanceConfig:
+
+    def test_predict_batch_size_default(self):
+        learner = ChempropLearner(batch_size=32)
+        assert learner.predict_batch_size == 128
+
+    def test_predict_batch_size_custom(self):
+        learner = ChempropLearner(batch_size=32, predict_batch_size=256)
+        assert learner.predict_batch_size == 256
+
+    def test_precision_auto_cpu(self, monkeypatch):
+        import torch
+        monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
+        learner = ChempropLearner(precision='auto')
+        assert learner.precision == '32-true'
+
+    def test_precision_explicit(self):
+        learner = ChempropLearner(precision='16-mixed')
+        assert learner.precision == '16-mixed'
+
+        learner = ChempropLearner(precision='32-true')
+        assert learner.precision == '32-true'
+
+    def test_precision_invalid(self):
+        with pytest.raises(ValueError, match="Invalid precision"):
+            ChempropLearner(precision='invalid')
+
+    def test_pin_memory_default(self):
+        learner = ChempropLearner()
+        assert learner.pin_memory is True
+
+    def test_pin_memory_custom(self):
+        learner = ChempropLearner(pin_memory=False)
+        assert learner.pin_memory is False
+
+    def test_train_predict_with_performance_params(self, small_real_compounds):
+        import polars as pl
+        learner = ChempropLearner(
+            max_epochs=5,
+            batch_size=8,
+            predict_batch_size=16,
+            precision='32-true',
+            pin_memory=True
+        )
+
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
+
+        learner.train(features=None, targets=targets, smiles=smiles)
+        predictions, _ = learner.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+        assert np.all(np.isfinite(predictions))
