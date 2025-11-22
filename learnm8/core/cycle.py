@@ -156,10 +156,6 @@ def execute_cycle(
 
             if learner.requires_smiles():
                 if featurizer_type is not None:
-                    logger.info(
-                        f"Extracting {featurizer_type} features as x_d descriptors "
-                        f"for {len(labeled_df)} training compounds"
-                    )
                     training_features = extract_features(
                         training_smiles,
                         featurizer_type,
@@ -230,10 +226,6 @@ def execute_cycle(
 
         if learner.requires_smiles():
             if featurizer_type is not None:
-                logger.info(
-                    f"Extracting {featurizer_type} features as x_d descriptors "
-                    f"for {len(prediction_pool)} unlabeled compounds"
-                )
                 prediction_features = extract_features(
                     prediction_smiles,
                     featurizer_type,
@@ -255,7 +247,8 @@ def execute_cycle(
                 features=prediction_features,
                 smiles=prediction_smiles
             )
-            logger.debug(f"Predictions generated for {len(prediction_pool)} compounds (mode={mode})")
+            prediction_time = time.time() - prediction_start_time
+            logger.info(f"Generated predictions for {len(prediction_pool)} compounds (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
         else:
             if featurizer_type is None:
                 raise ValueError(
@@ -271,17 +264,14 @@ def execute_cycle(
             logger.info(f"Extracted {featurizer_type} features: {len(prediction_pool)} unlabeled compounds")
 
             predictions, uncertainties = learner.predict(prediction_features)
-            logger.info(f"Generated predictions for {len(prediction_pool)} compounds (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f})")
+            prediction_time = time.time() - prediction_start_time
+            logger.info(f"Generated predictions for {len(prediction_pool)} compounds (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
     except Exception as e:
         logger.error(f"Prediction failed in cycle {cycle}: {e}")
         raise RuntimeError(f"Prediction failed in cycle {cycle}: {e}")
 
-    prediction_time = time.time() - prediction_start_time
-
     if len(predictions) == 0:
         raise RuntimeError(f"Prediction returned 0 results in cycle {cycle}")
-
-    logger.debug(f"Generated {len(predictions)} predictions ({prediction_time:.2f}s)")
 
     valid_compound_ids = prediction_pool['ID'].to_list()
     compounds_df = add_predictions(

@@ -215,14 +215,14 @@ class ChempropLearner(Learner):
 		if use_descriptors:
 			self.training_feature_dim = features.shape[1]
 			self.x_d_dim = features.shape[1]
-			logger.info(
+			logger.debug(
 				f"Training Chemprop with {features.shape[1]}-D extra descriptors (x_d) "
 				f"on {n_samples} compounds"
 			)
 		else:
 			self.training_feature_dim = None
 			self.x_d_dim = 0
-			logger.info(f"Training Chemprop on {n_samples} compounds (graph-only)")
+			logger.debug(f"Training Chemprop on {n_samples} compounds (graph-only)")
 
 		# Create validation split if early stopping is enabled and we have enough samples
 		# Need at least 2 samples to create a train/val split
@@ -373,7 +373,7 @@ class ChempropLearner(Learner):
 				logger.error(f"Failed to save checkpoint to {next_checkpoint_path}: {e}")
 				# Don't raise - training succeeded, just checkpoint save failed
 
-		logger.info("Training complete")
+		logger.debug("Training complete")
 
 		self._cleanup_gpu_memory("after training")
 
