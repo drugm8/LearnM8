@@ -80,9 +80,75 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'deep': {
+    'pin_memory_false': {
         # Message Passing
-        'depth': 5,
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        # Regularization
+        'dropout': 0.0,
+        'batch_norm': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': False,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
+        'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
+    },
+	'32bit_precision': {
+        # Message Passing
+        'depth': 3,
+        'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        # Regularization
+        'dropout': 0.0,
+        'batch_norm': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': '32',
+        'pin_memory': False,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
+        'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
+    },
+	'ffn_2_layer': {
+        # Message Passing
+        'depth': 3,
         'message_hidden_dim': 300,
         'message_bias': False,
         'atom_messages': False,
@@ -113,7 +179,40 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'wide': {
+    'depth_5': {
+        # Message Passing
+        'depth': 5,
+        'message_hidden_dim': 300,
+        'message_bias': False,
+        'atom_messages': False,
+        'aggregation': 'mean',
+        # FFN Configuration
+        'ffn_hidden_dim': 300,
+        'ffn_num_layers': 1,
+        # Regularization
+        'dropout': 0.0,
+        'batch_norm': False,
+        # Training Configuration
+        'max_epochs': 50,
+        'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
+        'learning_rate': 1e-4,
+        'random_state': 42,
+        'accelerator': 'auto',
+        # Early Stopping
+        'early_stopping': False,
+        'early_stopping_patience': 3,
+        'early_stopping_min_delta': 0.0,
+        'val_fraction': 0.1,
+        # Fine-Tuning
+        'enable_fine_tuning': False,
+        'checkpoint_dir': None,
+        # Memory Management
+        'enable_aggressive_gc': True,
+    },
+    'hidden_dim_500': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 500,
@@ -146,7 +245,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_ft': {
+    'fine_tune_true': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -212,12 +311,12 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_atom': {
+    'atom_messages_true': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
         'message_bias': False,
-        'atom_messages': False,
+        'atom_messages': True,
         'aggregation': 'mean',
         # FFN Configuration
         'ffn_hidden_dim': 300,
@@ -344,7 +443,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_lr_high': {
+    'lr_high': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -377,7 +476,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_lr_low': {
+    'lr_low': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -410,7 +509,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_batch_small': {
+    'batch_small': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -443,7 +542,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_batch_large': {
+    'batch_large': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -458,7 +557,7 @@ MODEL_CONFIGS = {
         'batch_norm': False,
         # Training Configuration
         'max_epochs': 50,
-        'batch_size': 128,
+        'batch_size': 64,
         'predict_batch_size': None,
         'precision': 'auto',
         'pin_memory': True,
@@ -476,73 +575,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_agg_sum': {
-        # Message Passing
-        'depth': 3,
-        'message_hidden_dim': 300,
-        'message_bias': False,
-        'atom_messages': False,
-        'aggregation': 'sum',
-        # FFN Configuration
-        'ffn_hidden_dim': 300,
-        'ffn_num_layers': 1,
-        # Regularization
-        'dropout': 0.0,
-        'batch_norm': False,
-        # Training Configuration
-        'max_epochs': 50,
-        'batch_size': 32,
-        'predict_batch_size': None,
-        'precision': 'auto',
-        'pin_memory': True,
-        'learning_rate': 1e-4,
-        'random_state': 42,
-        'accelerator': 'auto',
-        # Early Stopping
-        'early_stopping': False,
-        'early_stopping_patience': 3,
-        'early_stopping_min_delta': 0.0,
-        'val_fraction': 0.1,
-        # Fine-Tuning
-        'enable_fine_tuning': False,
-        'checkpoint_dir': None,
-        # Memory Management
-        'enable_aggressive_gc': True,
-    },
-    'baseline_agg_norm': {
-        # Message Passing
-        'depth': 3,
-        'message_hidden_dim': 300,
-        'message_bias': False,
-        'atom_messages': False,
-        'aggregation': 'norm',
-        # FFN Configuration
-        'ffn_hidden_dim': 300,
-        'ffn_num_layers': 1,
-        # Regularization
-        'dropout': 0.0,
-        'batch_norm': False,
-        # Training Configuration
-        'max_epochs': 50,
-        'batch_size': 32,
-        'predict_batch_size': None,
-        'precision': 'auto',
-        'pin_memory': True,
-        'learning_rate': 1e-4,
-        'random_state': 42,
-        'accelerator': 'auto',
-        # Early Stopping
-        'early_stopping': False,
-        'early_stopping_patience': 3,
-        'early_stopping_min_delta': 0.0,
-        'val_fraction': 0.1,
-        # Fine-Tuning
-        'enable_fine_tuning': False,
-        'checkpoint_dir': None,
-        # Memory Management
-        'enable_aggressive_gc': True,
-    },
-    'baseline_short': {
+    'max_epochs_25': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -575,7 +608,7 @@ MODEL_CONFIGS = {
         # Memory Management
         'enable_aggressive_gc': True,
     },
-    'baseline_extended': {
+    'max_epochs_100': {
         # Message Passing
         'depth': 3,
         'message_hidden_dim': 300,
@@ -612,11 +645,7 @@ MODEL_CONFIGS = {
 
 FEATURIZERS = [
     None,
-    'morgan',
     'maccs',
-    'ecfp6',
-    'morgan_feat',
-    'descriptors',
 ]
 
 
