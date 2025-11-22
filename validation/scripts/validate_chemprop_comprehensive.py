@@ -63,6 +63,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -93,6 +96,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -123,6 +129,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -153,6 +162,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -183,6 +195,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -213,6 +228,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -243,6 +261,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -273,6 +294,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -303,6 +327,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -333,6 +360,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-3,
         'random_state': 42,
         'accelerator': 'auto',
@@ -363,6 +393,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-5,
         'random_state': 42,
         'accelerator': 'auto',
@@ -393,6 +426,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 16,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -423,6 +459,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 128,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -453,6 +492,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -483,6 +525,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 50,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -513,6 +558,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 25,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -543,6 +591,9 @@ MODEL_CONFIGS = {
         # Training Configuration
         'max_epochs': 100,
         'batch_size': 32,
+        'predict_batch_size': None,
+        'precision': 'auto',
+        'pin_memory': True,
         'learning_rate': 1e-4,
         'random_state': 42,
         'accelerator': 'auto',
@@ -703,6 +754,9 @@ def run_single_experiment(
             # Training Configuration
             max_epochs=config['max_epochs'],
             batch_size=config['batch_size'],
+            predict_batch_size=config['predict_batch_size'],
+            precision=config['precision'],
+            pin_memory=config['pin_memory'],
             learning_rate=config['learning_rate'],
             random_state=seed,
             accelerator=config['accelerator'],
