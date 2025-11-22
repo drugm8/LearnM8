@@ -564,3 +564,59 @@ class TestChempropEnsembleWithDescriptors:
         pred_gc_off, _ = ensemble_gc_off.predict(features=None, smiles=smiles)
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
+
+
+class TestChempropEnsemblePerformanceConfig:
+
+    def test_precision_propagation(self):
+        ensemble = ChempropEnsemble(
+            max_epochs=2,
+            precision='16-mixed'
+        )
+
+        for learner in ensemble.learners:
+            assert learner.precision == '16-mixed'
+
+    def test_predict_batch_size_propagation(self):
+        ensemble = ChempropEnsemble(
+            batch_size=16,
+            predict_batch_size=64
+        )
+
+        for learner in ensemble.learners:
+            assert learner.predict_batch_size == 64
+
+    def test_pin_memory_propagation(self):
+        ensemble = ChempropEnsemble(
+            pin_memory=False
+        )
+
+        for learner in ensemble.learners:
+            assert learner.pin_memory is False
+
+    def test_ensemble_with_performance_params(self, small_real_compounds):
+        import polars as pl
+        ensemble = ChempropEnsemble(
+            max_epochs=3,
+            batch_size=8,
+            predict_batch_size=16,
+            precision='32-true',
+            pin_memory=True
+        )
+
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+
+        smiles = compounds['SMILES'].to_list()
+        targets = compounds['Activity'].to_numpy()
+
+        ensemble.train(features=None, targets=targets, smiles=smiles)
+        predictions, uncertainties = ensemble.predict(features=None, smiles=smiles)
+
+        assert predictions.shape == (len(smiles),)
+        assert uncertainties is not None
+        assert np.all(np.isfinite(predictions))
+        assert np.all(np.isfinite(uncertainties))

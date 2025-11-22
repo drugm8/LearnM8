@@ -43,7 +43,10 @@ class ChempropLearner(Learner):
 
 	Training Configuration:
 		- max_epochs: Maximum training epochs (default: 50)
-		- batch_size: Batch size (default: 32)
+		- batch_size: Training batch size (default: 32)
+		- predict_batch_size: Prediction batch size (default: None, uses 4x batch_size)
+		- precision: Precision mode - 'auto', '16-mixed', '32-true', 'bf16-mixed' (default: 'auto')
+		- pin_memory: Enable pinned memory for GPU transfers (default: True)
 		- learning_rate: Learning rate (default: 1e-4)
 		- random_state: Random seed (default: 42)
 		- accelerator: PyTorch Lightning accelerator (default: 'auto')
@@ -93,6 +96,9 @@ class ChempropLearner(Learner):
 				 dropout: float = 0.0,
 				 max_epochs: int = 50,
 				 batch_size: int = 32,
+				 predict_batch_size: Optional[int] = None,
+				 precision: str = 'auto',
+				 pin_memory: bool = True,
 				 learning_rate: float = 1e-4,
 				 random_state: int = 42,
 				 accelerator: str = 'auto',
@@ -121,6 +127,9 @@ class ChempropLearner(Learner):
 
 		self.max_epochs = max_epochs
 		self.batch_size = batch_size
+		self.predict_batch_size = predict_batch_size if predict_batch_size is not None else (batch_size * 4)
+		self.precision = self._validate_and_resolve_precision(precision)
+		self.pin_memory = pin_memory
 		self.learning_rate = learning_rate
 		self.random_state = random_state
 		self.accelerator = accelerator
@@ -153,6 +162,32 @@ class ChempropLearner(Learner):
 			logger.info(
 				f"Fine-tuning enabled: checkpoints will be saved to {self.checkpoint_dir}"
 			)
+
+	def _validate_and_resolve_precision(self, precision: str) -> str:
+		"""Validate precision parameter and resolve 'auto' setting."""
+		import torch
+
+		valid_precisions = ['auto', '16-mixed', '32-true', 'bf16-mixed', '32', '16']
+		if precision not in valid_precisions:
+			raise ValueError(
+				f"Invalid precision '{precision}'. "
+				f"Must be one of: {valid_precisions}"
+			)
+
+		if precision == 'auto':
+			if torch.cuda.is_available():
+				precision = '16-mixed'
+				logger.info("Auto-detected GPU: using mixed precision '16-mixed'")
+			else:
+				precision = '32-true'
+				logger.info("No GPU detected: using full precision '32-true'")
+
+		if precision == '32':
+			precision = '32-true'
+		elif precision == '16':
+			precision = '16-mixed'
+
+		return precision
 
 	def requires_smiles(self) -> bool:
 		return True
@@ -224,13 +259,15 @@ class ChempropLearner(Learner):
 				train_data,
 				batch_size=self.batch_size,
 				shuffle=True,
-				num_workers=0
+				num_workers=0,
+				pin_memory=self.pin_memory
 			)
 			val_loader = data.build_dataloader(
 				val_data,
 				batch_size=self.batch_size,
 				shuffle=False,
-				num_workers=0
+				num_workers=0,
+				pin_memory=self.pin_memory
 			)
 
 			logger.info(f"Using validation split: {len(train_smiles)} train, {len(val_smiles)} val")
@@ -250,7 +287,8 @@ class ChempropLearner(Learner):
 				train_data,
 				batch_size=self.batch_size,
 				shuffle=True,
-				num_workers=0
+				num_workers=0,
+				pin_memory=self.pin_memory
 			)
 			val_loader = None
 
@@ -307,13 +345,17 @@ class ChempropLearner(Learner):
 		self.trainer = pl.Trainer(
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
+			precision=self.precision,
 			enable_progress_bar=enable_verbose,
 			enable_model_summary=False,
 			logger=False,
 			callbacks=callbacks
 		)
 
-		logger.info(f"Starting Chemprop training: {n_samples} samples, {self.max_epochs} max epochs")
+		logger.info(
+			f"Starting Chemprop training: {n_samples} samples, "
+			f"{self.max_epochs} max epochs, precision={self.precision}"
+		)
 		self.trainer.fit(self.model, train_loader, val_loader)
 		logger.info("Chemprop training completed successfully")
 		self.is_trained = True
@@ -550,15 +592,30 @@ class ChempropLearner(Learner):
 		else:
 			test_data = self._create_dataset(smiles, np.zeros(len(smiles)))
 
+		test_data.cache = True
+		logger.debug("Enabled dataset graph caching for prediction")
+
 		test_loader = data.build_dataloader(
 			test_data,
-			batch_size=self.batch_size,
+			batch_size=self.predict_batch_size,
 			shuffle=False,
-			num_workers=0
+			num_workers=0,
+			pin_memory=self.pin_memory
 		)
 
-		logger.info(f"Starting Chemprop prediction on {len(smiles)} samples")
-		predictions = self.trainer.predict(self.model, test_loader)
+		predict_trainer = pl.Trainer(
+			accelerator=self.accelerator,
+			precision=self.precision,
+			enable_progress_bar=False,
+			enable_model_summary=False,
+			logger=False
+		)
+
+		logger.info(
+			f"Starting Chemprop prediction on {len(smiles)} samples "
+			f"(batch_size={self.predict_batch_size}, precision={self.precision})"
+		)
+		predictions = predict_trainer.predict(self.model, test_loader)
 		logger.info("Chemprop prediction completed, processing results")
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()

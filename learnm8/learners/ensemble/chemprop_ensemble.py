@@ -45,6 +45,9 @@ class ChempropEnsemble(EnsembleLearner):
 				 dropout: float = 0.0,
 				 max_epochs: int = 50,
 				 batch_size: int = 32,
+				 predict_batch_size: Optional[int] = None,
+				 precision: str = 'auto',
+				 pin_memory: bool = True,
 				 learning_rate: float = 1e-4,
 				 random_states: Optional[List[int]] = None,
 				 accelerator: str = 'auto',
@@ -69,7 +72,10 @@ class ChempropEnsemble(EnsembleLearner):
 			ffn_num_layers: Number of FFN layers (default: 1)
 			dropout: Dropout probability (default: 0.0)
 			max_epochs: Maximum training epochs per learner (default: 50)
-			batch_size: Batch size per learner (default: 32)
+			batch_size: Training batch size per learner (default: 32)
+			predict_batch_size: Prediction batch size per learner (default: None, uses 4x batch_size)
+			precision: Precision mode for all members - 'auto', '16-mixed', '32-true', 'bf16-mixed' (default: 'auto')
+			pin_memory: Enable pinned memory for all members (default: True)
 			learning_rate: Learning rate per learner (default: 1e-4)
 			random_states: List of random states for diversity (default: [42, 123, 456])
 			accelerator: PyTorch Lightning accelerator (default: 'auto')
@@ -113,6 +119,9 @@ class ChempropEnsemble(EnsembleLearner):
 				dropout=dropout,
 				max_epochs=max_epochs,
 				batch_size=batch_size,
+				predict_batch_size=predict_batch_size,
+				precision=precision,
+				pin_memory=pin_memory,
 				learning_rate=learning_rate,
 				random_state=rs,
 				accelerator=accelerator,
@@ -142,6 +151,9 @@ class ChempropEnsemble(EnsembleLearner):
 		self.dropout = dropout
 		self.max_epochs = max_epochs
 		self.batch_size = batch_size
+		self.predict_batch_size = predict_batch_size
+		self.precision = precision
+		self.pin_memory = pin_memory
 		self.learning_rate = learning_rate
 		self.random_states = random_states
 		self.accelerator = accelerator

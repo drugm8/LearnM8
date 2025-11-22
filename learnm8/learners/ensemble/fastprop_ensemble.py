@@ -15,6 +15,9 @@ class FastpropEnsemble(EnsembleLearner):
                  max_epochs: int = 50,
                  learning_rate: float = 0.0001,
                  batch_size: int = 32,
+                 predict_batch_size: Optional[int] = None,
+                 precision: str = 'auto',
+                 pin_memory: bool = False,
                  clamp_input: bool = True,
                  early_stopping_patience: int = 5,
                  random_states: Optional[List[int]] = None,
@@ -28,7 +31,10 @@ class FastpropEnsemble(EnsembleLearner):
             hidden_size: Hidden layer size per learner (default: 1800)
             max_epochs: Maximum training epochs per learner (default: 50)
             learning_rate: Learning rate per learner (default: 0.0001)
-            batch_size: Batch size per learner (default: 32)
+            batch_size: Training batch size per learner (default: 32)
+            predict_batch_size: Prediction batch size per learner (default: None, uses 4x batch_size)
+            precision: Precision mode for all members - 'auto', '16-mixed', '32-true' (default: 'auto')
+            pin_memory: Enable pinned memory for all members (may not work with fastpropDataLoader, default: False)
             clamp_input: Apply input winsorization per learner (default: True)
             early_stopping_patience: Early stopping patience per learner (default: 5)
             random_states: List of random states for diversity (default: [42, 123, 456])
@@ -48,6 +54,9 @@ class FastpropEnsemble(EnsembleLearner):
                 max_epochs=max_epochs,
                 learning_rate=learning_rate,
                 batch_size=batch_size,
+                predict_batch_size=predict_batch_size,
+                precision=precision,
+                pin_memory=pin_memory,
                 clamp_input=clamp_input,
                 early_stopping_patience=early_stopping_patience,
                 random_state=rs,
@@ -66,6 +75,9 @@ class FastpropEnsemble(EnsembleLearner):
         self.max_epochs = max_epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
+        self.predict_batch_size = predict_batch_size
+        self.precision = precision
+        self.pin_memory = pin_memory
         self.clamp_input = clamp_input
         self.early_stopping_patience = early_stopping_patience
         self.random_states = random_states
