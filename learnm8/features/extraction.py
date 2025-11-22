@@ -144,7 +144,10 @@ def _extract_features_parallel(
         return np.empty((0, feature_dim), dtype=np.float32)
 
     optimal_n_jobs = _get_optimal_n_jobs(len(smiles_list), n_jobs)
-    logger.debug(f"Extracting {featurizer_type} features for {len(smiles_list)} compounds with n_jobs={optimal_n_jobs}")
+    if len(smiles_list) > 1000 or featurizer_type == 'descriptors':
+        logger.info(f"Extracting {featurizer_type} features for {len(smiles_list)} compounds...")
+    else:
+        logger.debug(f"Extracting {featurizer_type} features for {len(smiles_list)} compounds")
 
     if featurizer_type == 'descriptors':
         desc_df = _compute_mordred_descriptors(smiles_list)
