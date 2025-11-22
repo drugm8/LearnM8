@@ -39,6 +39,7 @@ from learnm8.core.validation import validate_compound_pool
 from learnm8.core.config import parse_cycle_spec, CycleConfig
 from learnm8.acquisition import list_acquisition_functions
 from learnm8.utils.file_loaders import load_compound_file
+from learnm8.utils.logging import configure_learnm8_logging
 
 install()
 console = Console()
@@ -672,6 +673,11 @@ def cmd_validate(args: argparse.Namespace):
 
 def main():
     """Main CLI entry point."""
+    configure_learnm8_logging(
+        console_type='rich',
+        level='INFO'
+    )
+
     parser = create_parser()
 
     if len(sys.argv) == 1:

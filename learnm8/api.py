@@ -58,6 +58,7 @@ from learnm8.core.persistence import save_results
 from learnm8.core.interfaces import Oracle, Learner
 from learnm8.oracles import CSVOracle
 from learnm8.utils.file_loaders import load_compound_file
+from learnm8.utils.logging import configure_learnm8_logging
 from learnm8.learners import (
     RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
     MLPLearner, MCDropoutLearner, FastpropLearner, EnsembleLearner,
@@ -505,15 +506,11 @@ def run_active_learning(
         # Setup checkpoint directory for Chemprop fine-tuning
         chemprop_checkpoint_dir = output_dir / '.checkpoints' / 'chemprop'
 
-        log_file = output_dir / 'learnm8.log'
-        if not any(isinstance(h, logging.FileHandler) and getattr(h, 'baseFilename', None) == str(log_file) for h in logger.handlers):
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(
-                logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            )
-            logger.addHandler(file_handler)
-        logger.setLevel(logging.DEBUG)
+        configure_learnm8_logging(
+            output_dir=output_dir,
+            level='INFO',
+            console_type='auto'
+        )
 
         logger.info(f"Starting active learning experiment at {datetime.now()}")
         logger.info(f"Output directory: {output_dir}")
