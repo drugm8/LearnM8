@@ -354,6 +354,8 @@ def run_active_learning(
     pruning_params: Optional[Dict] = None,
     # Acquisition
     acquisition_params: Optional[Dict] = None,
+    # Memory management
+    prediction_batch_size: Optional[int] = None,
     **kwargs
 ) -> Dict[str, Any]:
     """Execute active learning experiment.
@@ -455,6 +457,12 @@ def run_active_learning(
         pruning_params: Additional pruning parameters
 
         acquisition_params: Additional acquisition parameters
+
+        prediction_batch_size: Optional batch size for memory-efficient prediction.
+            Uses unified always-batch approach: for small datasets (≤10k), batch_size
+            equals dataset length (single iteration, zero overhead). For large datasets,
+            uses auto-calculated batch size based on memory and featurizer type.
+            Set to a specific integer to override auto-calculation.
 
         **kwargs: Additional parameters passed to cycle execution
 
@@ -626,6 +634,21 @@ def run_active_learning(
                     f"Valid options: morgan, maccs, ecfp6, descriptors, morgan_feat"
                 )
 
+        # Validate prediction_batch_size if provided
+        if prediction_batch_size is not None:
+            if not isinstance(prediction_batch_size, int):
+                raise TypeError(f"prediction_batch_size must be an integer, got {type(prediction_batch_size)}")
+            if prediction_batch_size < 100:
+                raise ValueError(
+                    f"prediction_batch_size must be >= 100, got {prediction_batch_size}. "
+                    f"Very small batch sizes may cause performance degradation."
+                )
+            if prediction_batch_size > 100000:
+                logger.warning(
+                    f"prediction_batch_size={prediction_batch_size} is very large. "
+                    f"Consider using smaller batches for better memory management."
+                )
+
         oracle_desc = f"{oracle.__class__.__name__}"
         if hasattr(oracle, 'source_file'):
             oracle_desc += f" ({oracle.source_file})"
@@ -772,7 +795,8 @@ def run_active_learning(
                     score_direction=score_direction,
                     mode=mode,
                     original_pool=original_pool,
-                    cumulative_selected_ids=cumulative_selected_ids
+                    cumulative_selected_ids=cumulative_selected_ids,
+                    prediction_batch_size=prediction_batch_size
                 )
                 all_metrics.append(metrics)
 

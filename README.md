@@ -53,6 +53,34 @@ learnm8 validate compounds.csv
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
 ```
 
+**Memory Management (Large Libraries):**
+```python
+# Auto-calculated batch size (recommended)
+results = run_active_learning(
+    compound_pool='large_library.csv',  # 100k+ compounds
+    learner='rf',
+    target_col='Activity',
+    featurizer_type='morgan',
+    n_cycles=10
+)
+
+# Manual override for specific hardware
+results = run_active_learning(
+    compound_pool='large_library.csv',
+    learner='rf',
+    target_col='Activity',
+    featurizer_type='morgan',
+    n_cycles=10,
+    prediction_batch_size=5000  # Process 5000 compounds per batch
+)
+```
+
+```bash
+# CLI with custom batch size
+learnm8 run large_library.csv --target Activity --learner rf --featurizer morgan \
+  --prediction-batch-size 5000
+```
+
 ## 📖 Examples
 
 Learn LearnM8 through hands-on examples:
@@ -78,6 +106,7 @@ See [examples/README.md](examples/README.md) for complete guide.
 - HDF5 caching for 100x speedup on repeated operations
 - Automatic parallelization (5-10x faster feature extraction)
 - Early validation with datamol (catch SMILES errors before experiments)
+- Memory-efficient batch prediction for large compound libraries (auto-calculated or manual override)
 
 **Machine Learning Models:**
 - 15+ models: Scikit-learn (RF, GP, XGB), PyTorch (MLP, MC Dropout, FastProp), GNNs (Chemprop)

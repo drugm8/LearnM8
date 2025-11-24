@@ -352,6 +352,11 @@ def create_parser() -> argparse.ArgumentParser:
         choices=['run', 'benchmark'],
         help='Execution mode (auto-detected if not specified)'
     )
+    advanced_group.add_argument(
+        '--prediction-batch-size',
+        type=int,
+        help='Prediction batch size for memory management (default: auto-calculated)'
+    )
 
     list_parser = subparsers.add_parser('list', help='List available components')
     list_parser.add_argument(
@@ -490,7 +495,8 @@ def cmd_run(args: argparse.Namespace):
                         random_state=args.random_state,
                         pruning_fraction=args.pruning_fraction,
                         pruning_strategy=args.pruning_strategy,
-                        acquisition_params=acquisition_params
+                        acquisition_params=acquisition_params,
+                        prediction_batch_size=getattr(args, 'prediction_batch_size', None)
                     )
                     progress.update(task, completed=True, description="[green]✓ Complete")
                 except KeyboardInterrupt:
@@ -517,7 +523,8 @@ def cmd_run(args: argparse.Namespace):
                     random_state=args.random_state,
                     pruning_fraction=args.pruning_fraction,
                     pruning_strategy=args.pruning_strategy,
-                    acquisition_params=acquisition_params
+                    acquisition_params=acquisition_params,
+                    prediction_batch_size=getattr(args, 'prediction_batch_size', None)
                 )
             except KeyboardInterrupt:
                 console.print("\n[yellow]Experiment interrupted by user[/yellow]")
