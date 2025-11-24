@@ -170,15 +170,18 @@ def run_active_learning(
 | **pruning_strategy** | `str` or `None` | `None` | Pruning strategy name. Default: `'score'` (prune lowest predicted scores). If `pruning_fraction` is provided but `pruning_strategy` is `None`, defaults to `'score'`. |
 | **pruning_params** | `dict` or `None` | `None` | Additional pruning parameters. If `pruning_fraction` provided, automatically added to this dict as `{'pruning_fraction': value}`. |
 | **acquisition_params** | `dict` or `None` | `None` | Additional acquisition parameters. Strategy-specific parameters: UCB (`{'exploration_weight': 2.0}`), BitBIRCH (`{'n_clusters': 100}`), etc. |
+| **prediction_batch_size** | `int` or `None` | `None` | Batch size for memory-efficient prediction. Uses unified always-batch approach: for small datasets (≤10k), batch_size equals dataset length (single iteration, zero overhead). For large datasets (>10k), uses auto-calculated batch size based on memory and featurizer type. Set to a specific integer to override auto-calculation. Minimum: 100, recommended range: 1000-50000. |
 
 **Performance Notes:**
 - **enable_chemprop_fine_tuning**: Dramatically reduces training time in later cycles (50-90% faster) but requires disk space for checkpoints
 - **pruning_fraction**: Reduces prediction time in later cycles (e.g., 0.3 pruning → 30% fewer compounds to predict)
+- **prediction_batch_size**: Auto-calculated batch sizes prevent out-of-memory errors for large libraries (100k+ compounds). Manual override useful for specific hardware constraints (e.g., limited RAM or GPU memory)
 - Aggressive pruning (>0.5) risks pruning potentially good compounds, use conservatively
 
 **When to Use:**
 - **enable_chemprop_fine_tuning**: For long experiments (>10 cycles) with Chemprop where training time dominates
 - **pruning_fraction**: For large compound pools (>100k compounds) where prediction time is bottleneck
+- **prediction_batch_size**: For very large libraries (>100k compounds) or when working with limited memory. Auto-calculation works well in most cases, only override if experiencing memory issues
 - **acquisition_params**: When fine-tuning acquisition behavior (e.g., more/less exploration in UCB)
 
 #### Return Value

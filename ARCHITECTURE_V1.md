@@ -3066,6 +3066,73 @@ def batch_update(
 
 ---
 
+### Feature 4: Memory-Efficient Batch Prediction
+
+**Implementation:** `core/cycle.py:execute_cycle()` with helper functions
+
+**Motivation:**
+- Large compound libraries (100k+ compounds) can exceed available memory during prediction
+- Featurized compounds consume significant memory (2048-D Morgan = ~16KB per compound)
+- Need to balance memory usage with prediction performance
+
+**Architecture:**
+
+Uses unified always-batch approach (industry standard: PyTorch DataLoader, scikit-learn):
+- **Small datasets (≤10k):** Single batch (batch_size = n_compounds, zero overhead)
+- **Large datasets (>10k):** Auto-calculated batch size based on memory and featurizer type
+- **Manual override:** `prediction_batch_size` parameter
+
+**Helper Functions:**
+
+```python
+def _calculate_optimal_batch_size(
+    n_compounds: int,
+    featurizer_type: Optional[str],
+    available_memory_gb: float = 4.0
+) -> int:
+    """Calculate optimal batch size to stay under memory threshold."""
+    feature_sizes = {'morgan': 2048, 'maccs': 167, 'descriptors': 1613}
+    feature_dim = feature_sizes.get(featurizer_type, 2048)
+    bytes_per_compound = feature_dim * 8  # float64
+    batch_size = int((available_memory_gb * 1e9 * 0.5) / bytes_per_compound)
+    return max(1000, min(batch_size, 50000, n_compounds))
+
+def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
+    """Yield DataFrame chunks for batch processing."""
+    for i in range(0, len(df), chunk_size):
+        yield df[i:i+chunk_size]
+
+def _predict_chunk(
+    chunk_df: pl.DataFrame,
+    learner: Learner,
+    featurizer_type: Optional[str],
+    cache_dir: Path,
+    show_progress: bool = False
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Single source of truth for all prediction logic."""
+    # Handles both SMILES-aware (Chemprop) and feature-based (RF, GP) learners
+```
+
+**Smart Defaults:**
+- Morgan/ECFP6 (2048-D): ~10k compounds/batch (4GB memory)
+- MACCS (167-D): ~80k compounds/batch (4GB memory)
+- Descriptors (1613-D): ~12k compounds/batch (4GB memory)
+- Capped at 50k compounds/batch (maximum safe size)
+- Minimum 1000 compounds/batch (avoid excessive overhead)
+
+**Zero Overhead Optimization:**
+- Single-batch case: Returns array directly without `np.concatenate()`
+- No branching logic: Same code path for all dataset sizes
+- Minimal memory footprint: Processes one chunk at a time
+
+**Benefits:**
+- **Scalable:** Handles 1M+ compound libraries without OOM errors
+- **Automatic:** Smart defaults work for 99% of use cases
+- **Flexible:** Manual override for specific hardware constraints
+- **Zero overhead:** Single-batch case has no performance penalty
+
+---
+
 ## Core Module Details
 
 This section provides in-depth documentation of all 7 core modules that implement the v1.0.0 architecture.
