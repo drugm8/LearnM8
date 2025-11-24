@@ -190,7 +190,7 @@ def execute_cycle(
         original_pool: Required for benchmark mode - full original compound pool
         cumulative_selected_ids: Optional set of previously selected compound IDs
         prediction_batch_size: Optional batch size for chunked prediction.
-            If None, auto-enables for >10k compounds. Set to a specific
+            If None, auto-enables for >100k compounds. Set to a specific
             value to override auto-calculation. Use this to control memory
             usage during prediction on large compound libraries.
 
@@ -338,10 +338,10 @@ def execute_cycle(
         # Auto: full dataset for small, chunked for large
         batch_size = (
             _calculate_optimal_batch_size(n_unlabeled, featurizer_type, 4.0)
-            if n_unlabeled > 10000
+            if n_unlabeled > 100000
             else n_unlabeled
         )
-        if n_unlabeled > 10000:
+        if n_unlabeled > 100000:
             logger.info(f"Auto-batching {n_unlabeled} compounds (batch_size={batch_size})")
     else:
         batch_size = prediction_batch_size
@@ -360,7 +360,7 @@ def execute_cycle(
         try:
             chunk_predictions, chunk_uncertainties = _predict_chunk(
                 chunk_df, learner, featurizer_type, cache_dir,
-                show_progress=(n_batches == 1 and n_unlabeled > 10000)
+                show_progress=(n_batches == 1 and n_unlabeled > 100000)
             )
             all_predictions.append(chunk_predictions)
             all_valid_ids.extend(chunk_df['ID'].to_list())

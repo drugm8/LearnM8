@@ -49,7 +49,7 @@ class TestCycleBatchPrediction:
     """Test batch prediction integration in execute_cycle()."""
 
     def test_auto_batch_size_small_dataset(self, initialized_compounds, tmp_path):
-        """Small dataset (≤10k) should use single batch automatically."""
+        """Small dataset (≤100k) should use single batch automatically."""
         learner = RandomForestLearner(random_state=42)
         oracle = CSVOracle(str(tmp_path / 'oracle.csv'))
 

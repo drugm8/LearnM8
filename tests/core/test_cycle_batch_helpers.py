@@ -17,27 +17,27 @@ class TestCalculateOptimalBatchSize:
     """Test _calculate_optimal_batch_size() helper function."""
 
     def test_small_dataset_returns_full_size(self):
-        """Small datasets (≤10k) should return n_compounds."""
-        batch_size = _calculate_optimal_batch_size(5000, 'morgan', 4.0)
-        assert batch_size == 5000
+        """Small datasets (≤100k) should return n_compounds."""
+        batch_size = _calculate_optimal_batch_size(50000, 'morgan', 4.0)
+        assert batch_size == 50000
 
     def test_large_dataset_returns_calculated_size(self):
-        """Large datasets (>10k) should return calculated batch size."""
-        batch_size = _calculate_optimal_batch_size(50000, 'morgan', 4.0)
+        """Large datasets (>100k) should return calculated batch size."""
+        batch_size = _calculate_optimal_batch_size(500000, 'morgan', 4.0)
         assert 1000 <= batch_size <= 50000
 
     def test_different_featurizers(self):
         """Different featurizers should affect batch size calculation."""
-        batch_maccs = _calculate_optimal_batch_size(50000, 'maccs', 4.0)
-        batch_morgan = _calculate_optimal_batch_size(50000, 'morgan', 4.0)
-        batch_descriptors = _calculate_optimal_batch_size(50000, 'descriptors', 4.0)
+        batch_maccs = _calculate_optimal_batch_size(500000, 'maccs', 4.0)
+        batch_morgan = _calculate_optimal_batch_size(500000, 'morgan', 4.0)
+        batch_descriptors = _calculate_optimal_batch_size(500000, 'descriptors', 4.0)
 
         assert batch_maccs > batch_morgan
         assert batch_morgan > batch_descriptors
 
     def test_unknown_featurizer_uses_default(self):
         """Unknown featurizer should use default feature size."""
-        batch_size = _calculate_optimal_batch_size(50000, 'unknown', 4.0)
+        batch_size = _calculate_optimal_batch_size(500000, 'unknown', 4.0)
         assert 1000 <= batch_size <= 50000
 
     def test_minimum_batch_size_enforced(self):

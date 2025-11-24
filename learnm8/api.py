@@ -459,9 +459,9 @@ def run_active_learning(
         acquisition_params: Additional acquisition parameters
 
         prediction_batch_size: Optional batch size for memory-efficient prediction.
-            Uses unified always-batch approach: for small datasets (≤10k), batch_size
-            equals dataset length (single iteration, zero overhead). For large datasets,
-            uses auto-calculated batch size based on memory and featurizer type.
+            Uses unified always-batch approach: for small datasets (≤100k), batch_size
+            equals dataset length (single iteration, zero overhead). For large datasets
+            (>100k), uses auto-calculated batch size based on memory and featurizer type.
             Set to a specific integer to override auto-calculation.
 
         **kwargs: Additional parameters passed to cycle execution
