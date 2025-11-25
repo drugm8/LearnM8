@@ -16,7 +16,7 @@ from learnm8.core.config import CycleConfig
 
 def create_test_master_df(compounds, initial_labeled_count=3):
     """Helper to create master DataFrame for testing."""
-    from conftest import create_initialized_master_df as initialize_master_dataframe
+    from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
     initial_compounds = compounds.slice(0, initial_labeled_count)
     initial_ids = initial_compounds['ID'].to_list()
@@ -247,7 +247,7 @@ class TestCycleExecution:
     
     def test_score_direction_lower(self, tmp_path, mock_oracle, mock_learner):
         """Test cycle execution with 'lower' score direction."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(8)],
@@ -288,7 +288,7 @@ class TestCycleExecution:
     
     def test_csv_export_mode(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test cycle execution with CSV export enabled."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(6)],
@@ -329,7 +329,7 @@ class TestCycleExecution:
     
     def test_learner_training_failure(self, tmp_path, mock_oracle, mock_learner):
         """Test handling of cycle with no labeled compounds raises error."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002'],
@@ -367,7 +367,7 @@ class TestCycleExecution:
     
     def test_prediction_statistics_calculation(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test calculation of prediction statistics in cycle metrics."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -412,7 +412,7 @@ class TestCycleExecution:
     
     def test_multiple_strategies(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test cycle execution with different acquisition strategies."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
@@ -598,7 +598,7 @@ class TestMasterDataFrameCycleIntegration:
         Both run and benchmark modes now predict on unlabeled compounds only for efficiency.
         The difference is that benchmark mode calculates additional discovery/ranking metrics.
         """
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(12)],
@@ -655,7 +655,7 @@ class TestMasterDataFrameCycleIntegration:
         Both run and benchmark modes now use identical prediction logic (unlabeled only).
         Verify by checking that predictions in master_df are only populated for unlabeled compounds.
         """
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -709,7 +709,7 @@ class TestMasterDataFrameCycleIntegration:
         Both run and benchmark modes now use identical prediction logic (unlabeled only).
         Benchmark mode differs only in calculating additional discovery/ranking metrics.
         """
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -764,7 +764,7 @@ class TestMasterDataFrameCycleIntegration:
         Both modes should predict on the same compound set (unlabeled only).
         The only difference should be in metrics computation.
         """
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(15)],
@@ -839,7 +839,7 @@ class TestMasterDataFrameCycleIntegration:
 
     def test_selected_and_labeled_cycle_consistency(self, tmp_path, mock_oracle, mock_learner):
         """Test selected_cycle and labeled_cycle are set correctly and remain unchanged."""
-        from conftest import create_initialized_master_df as initialize_master_dataframe
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
