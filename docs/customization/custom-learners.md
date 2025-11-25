@@ -450,7 +450,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=custom_learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.01),
         ('ucb', 0.005),
@@ -472,7 +472,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner_instance,
     target_col='Activity',
-    featurizer_type='descriptors'
+    featurizer='descriptors'
 )
 ```
 
@@ -504,7 +504,7 @@ results = run_active_learning(
     oracle=compounds,
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=5,
     batch_fraction=0.2
 )

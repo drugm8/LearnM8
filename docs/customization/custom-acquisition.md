@@ -335,7 +335,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[('custom', 0.01)],  # Strategy name doesn't matter with instance
     acquisition_function=custom_acquisition  # Pass instance directly
 )
@@ -353,7 +353,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig(
             strategy='random',

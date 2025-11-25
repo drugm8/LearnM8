@@ -196,7 +196,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 
@@ -213,7 +213,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=custom_learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -335,7 +335,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     random_state=42  # Fully reproducible
 )
 ```

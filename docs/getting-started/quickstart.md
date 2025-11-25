@@ -18,7 +18,7 @@ results = run_active_learning(
     oracle='compounds.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -37,7 +37,7 @@ This code:
 - `oracle='compounds.csv'`: Oracle for measurements (same file = benchmark mode)
 - `learner='gp'`: Machine learning model (Gaussian Process)
 - `target_col='Activity'`: Column name containing property values
-- `featurizer_type='morgan'`: Molecular representation (Morgan fingerprints)
+- `featurizer='morgan'`: Molecular representation (Morgan fingerprints)
 
 **Optional Parameters:**
 - `n_cycles=10`: Number of active learning cycles (default: 10)
@@ -211,19 +211,19 @@ from learnm8 import run_active_learning
 # Random Forest (fast baseline)
 results_rf = run_active_learning(
     compound_pool='compounds.csv', oracle='oracle.csv',
-    learner='rf', target_col='Activity', featurizer_type='morgan', n_cycles=10
+    learner='rf', target_col='Activity', featurizer='morgan', n_cycles=10
 )
 
 # Ensemble (robust performance)
 results_ensemble = run_active_learning(
     compound_pool='compounds.csv', oracle='oracle.csv',
-    learner='ensemble', target_col='Activity', featurizer_type='morgan', n_cycles=10
+    learner='ensemble', target_col='Activity', featurizer='morgan', n_cycles=10
 )
 
 # XGBoost (high performance)
 results_xgb = run_active_learning(
     compound_pool='compounds.csv', oracle='oracle.csv',
-    learner='xgb', target_col='Activity', featurizer_type='morgan', n_cycles=10
+    learner='xgb', target_col='Activity', featurizer='morgan', n_cycles=10
 )
 ```
 
@@ -244,7 +244,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy='ucb',
     acquisition_params={'exploration_weight': 2.0},
     n_cycles=10
@@ -268,7 +268,7 @@ results = run_active_learning(
     oracle='scoring_module.py:calculate_affinity',
     learner='mc_dropout',
     target_col='binding_score',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20
 )
 ```

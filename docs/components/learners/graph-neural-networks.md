@@ -323,7 +323,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop_ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```

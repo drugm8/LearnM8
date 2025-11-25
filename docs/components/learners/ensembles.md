@@ -172,7 +172,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=ensemble,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -238,7 +238,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=ensemble,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),    # Initial exploration
         ('ucb', 0.01),       # Uncertainty-guided (5 cycles)
@@ -279,7 +279,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=rf_ensemble,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -300,7 +300,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=xgb_ensemble,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15
 )
 ```
@@ -381,7 +381,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=chemprop_hybrid,
     target_col='Activity',
-    featurizer_type='descriptors',  # 1613-D Mordred descriptors as x_d
+    featurizer='descriptors',  # 1613-D Mordred descriptors as x_d
     n_cycles=10
 )
 ```

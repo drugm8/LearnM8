@@ -34,7 +34,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner='gp',
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20,
     pruning_strategy='score_based',
     pruning_fraction=0.1,
@@ -76,7 +76,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner='gp',
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.01),
         CycleConfig('ucb', n_cycles=5, batch_fraction=0.005),
@@ -134,7 +134,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner='ensemble',
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=cycles
 )
 ```
@@ -191,7 +191,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner=learner,
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15,
     batch_fraction=0.01
 )
@@ -234,7 +234,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner=ensemble,
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15
 )
 ```
@@ -261,7 +261,7 @@ results = run_active_learning(
     oracle='oracle.py:score',
     learner='rf_ensemble',
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -464,7 +464,7 @@ compound_pool: screening_library.csv
 oracle: docking_oracle.py:dock_compounds
 learner: chemprop_ensemble
 target_col: docking_score
-featurizer_type: morgan
+featurizer: morgan
 
 score_direction: lower
 random_state: 42
@@ -580,7 +580,7 @@ compound_pool: compounds.csv
 oracle: oracle.py:score
 learner: rf
 target_col: activity
-featurizer_type: morgan
+featurizer: morgan
 n_cycles: 5
 batch_fraction: 0.02
 random_state: 42
@@ -594,7 +594,7 @@ compound_pool: large_library.csv
 oracle: oracle.py:score
 learner: chemprop_ensemble
 target_col: affinity
-featurizer_type: morgan
+featurizer: morgan
 score_direction: higher
 random_state: 42
 

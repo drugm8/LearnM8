@@ -100,7 +100,7 @@ featurizers.FEATURIZER_REGISTRY['simple_desc'] = simple_descriptor_featurizer
 # Now use with caching
 features = extract_features(
     smiles_list=smiles,
-    featurizer_type='simple_desc',
+    featurizer='simple_desc',
     cache_dir=Path('.cache')
 )
 ```
@@ -342,7 +342,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig(
             strategy='random',
@@ -481,7 +481,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     custom_metrics=['precision_at_k', 'roc_metrics']
 )
@@ -521,7 +521,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=ensemble,  # Pass ensemble instance
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```

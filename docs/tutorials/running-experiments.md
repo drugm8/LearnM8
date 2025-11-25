@@ -14,7 +14,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -25,7 +25,7 @@ results = run_active_learning(
 - `oracle=None`: Auto-detect oracle from compound pool (benchmark mode)
 - `learner='gp'`: Gaussian Process model (provides uncertainty)
 - `target_col='Activity'`: Target property column name
-- `featurizer_type='morgan'`: Morgan fingerprints (2048-bit)
+- `featurizer='morgan'`: Morgan fingerprints (2048-bit)
 - `n_cycles=10`: Total number of active learning cycles
 
 **Oracle Auto-Detection:**
@@ -109,7 +109,7 @@ results = run_active_learning(
     oracle=None,
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -134,7 +134,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -159,7 +159,7 @@ results = run_active_learning(
     oracle=None,
     learner='xgb',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -184,7 +184,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01,
     random_state=42
@@ -203,7 +203,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     strategy='random'
 )
@@ -228,7 +228,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     strategy='greedy'
 )
@@ -254,7 +254,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01,
     strategy='ucb',
@@ -287,7 +287,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     cache_dir=Path('.shared_cache')
 )
@@ -331,7 +331,7 @@ results = run_active_learning(
     oracle='scoring_module.py:calculate_affinity',
     learner='ensemble',
     target_col='binding_score',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20
 )
 ```
@@ -350,7 +350,7 @@ results = run_active_learning(
     oracle='oracle_ground_truth.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15
 )
 ```
@@ -372,7 +372,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01,
     strategy='greedy',

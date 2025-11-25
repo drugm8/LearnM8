@@ -32,7 +32,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -54,7 +54,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop',
     target_col='Activity'
-    # No featurizer_type needed
+    # No featurizer needed
 )
 ```
 
@@ -65,7 +65,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop',
     target_col='Activity',
-    featurizer_type='descriptors'  # Optional: enables hybrid mode
+    featurizer='descriptors'  # Optional: enables hybrid mode
 )
 ```
 
@@ -92,7 +92,7 @@ smiles_list = ['CCO', 'CCC', 'CCCO', 'c1ccccc1']
 
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=Path('.cache'),
     n_jobs=-1,
     show_progress=True
@@ -104,7 +104,7 @@ features = extract_features(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `smiles_list` | List[str] | Required | List of SMILES strings |
-| `featurizer_type` | str | Required | Featurizer type (`morgan`, `maccs`, `ecfp6`, `morgan_feat`, `descriptors`) |
+| `featurizer` | str | Required | Featurizer type (`morgan`, `maccs`, `ecfp6`, `morgan_feat`, `descriptors`) |
 | `cache_dir` | Path | `.cache` | Directory for HDF5 cache files |
 | `n_jobs` | int | `-1` | Number of parallel jobs (-1 for auto-optimization) |
 | `show_progress` | bool | `False` | Display progress bar (requires tqdm) |
@@ -122,7 +122,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=Path('.shared_cache')  # Optional: specify cache location
 )
 ```
@@ -211,7 +211,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=Path('.shared_cache')
 )
 ```
@@ -289,7 +289,7 @@ Override automatic optimization when needed:
 ```python
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_jobs=1  # Disable parallelization
 )
 ```
@@ -298,7 +298,7 @@ features = extract_features(
 ```python
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_jobs=8  # Use exactly 8 cores
 )
 ```
@@ -307,7 +307,7 @@ features = extract_features(
 ```python
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_jobs=-1  # Auto-optimize (default)
 )
 ```
@@ -356,7 +356,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -377,7 +377,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='maccs',
+    featurizer='maccs',
     cache_dir=Path('.cache')
 )
 ```
@@ -397,7 +397,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='descriptors'
+    featurizer='descriptors'
 )
 ```
 
@@ -418,7 +418,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop',
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     cache_dir=Path('.cache')
 )
 ```
@@ -442,14 +442,14 @@ shared_cache.mkdir(exist_ok=True)
 # First experiment
 results1 = run_active_learning(
     compound_pool='dataset1.csv', oracle='oracle1.csv',
-    learner='rf', target_col='Activity', featurizer_type='morgan',
+    learner='rf', target_col='Activity', featurizer='morgan',
     cache_dir=shared_cache
 )
 
 # Second experiment (reuses cached features)
 results2 = run_active_learning(
     compound_pool='dataset2.csv', oracle='oracle2.csv',
-    learner='gp', target_col='Activity', featurizer_type='morgan',
+    learner='gp', target_col='Activity', featurizer='morgan',
     cache_dir=shared_cache
 )
 ```

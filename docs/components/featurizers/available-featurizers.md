@@ -49,7 +49,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -58,7 +58,7 @@ results = run_active_learning(
 from learnm8 import extract_features
 
 smiles_list = ['CCO', 'CCC', 'c1ccccc1']
-features = extract_features(smiles_list, featurizer_type='morgan')
+features = extract_features(smiles_list, featurizer='morgan')
 print(features.shape)  # (3, 2048)
 ```
 
@@ -102,7 +102,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='maccs',
+    featurizer='maccs',
     cache_dir=Path('.cache')
 )
 ```
@@ -113,7 +113,7 @@ from learnm8 import extract_features
 
 features = extract_features(
     smiles_list=['CCO', 'CCC'],
-    featurizer_type='maccs'
+    featurizer='maccs'
 )
 print(features.shape)  # (2, 167)
 ```
@@ -158,7 +158,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='ecfp6'
+    featurizer='ecfp6'
 )
 ```
 
@@ -168,8 +168,8 @@ from learnm8 import extract_features
 
 smiles_list = ['CCCCOc1ccc(cc1)C(=O)c1ccccc1']  # Large molecule
 
-morgan_features = extract_features(smiles_list, featurizer_type='morgan')
-ecfp6_features = extract_features(smiles_list, featurizer_type='ecfp6')
+morgan_features = extract_features(smiles_list, featurizer='morgan')
+ecfp6_features = extract_features(smiles_list, featurizer='ecfp6')
 
 print(f"Morgan: {morgan_features.shape}")  # (1, 2048)
 print(f"ECFP6:  {ecfp6_features.shape}")   # (1, 2048)
@@ -218,7 +218,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan_feat'
+    featurizer='morgan_feat'
 )
 ```
 
@@ -228,8 +228,8 @@ from learnm8 import extract_features
 
 smiles = 'CCO'
 
-morgan_standard = extract_features([smiles], featurizer_type='morgan')
-morgan_feature = extract_features([smiles], featurizer_type='morgan_feat')
+morgan_standard = extract_features([smiles], featurizer='morgan')
+morgan_feature = extract_features([smiles], featurizer='morgan_feat')
 
 print(f"Standard Morgan: {morgan_standard.shape}")  # (1, 2048)
 print(f"Feature Morgan:  {morgan_feature.shape}")   # (1, 2048)
@@ -280,7 +280,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='descriptors'
+    featurizer='descriptors'
 )
 ```
 
@@ -296,7 +296,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop',
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     cache_dir=Path('.cache')
 )
 ```
@@ -307,7 +307,7 @@ from learnm8 import extract_features
 
 features = extract_features(
     smiles_list=['CCO', 'CCC'],
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     cache_dir=Path('.cache'),
     show_progress=True
 )
@@ -429,7 +429,7 @@ from pathlib import Path
 
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=Path('.shared_cache')  # Reuse across experiments
 )
 ```
@@ -441,7 +441,7 @@ Let automatic optimization handle parallelization:
 ```python
 features = extract_features(
     smiles_list=large_smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_jobs=-1  # Auto-optimize based on dataset size
 )
 ```
@@ -453,7 +453,7 @@ Enable progress bars for long computations:
 ```python
 features = extract_features(
     smiles_list=very_large_smiles_list,
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     show_progress=True  # Requires tqdm
 )
 ```
@@ -470,7 +470,7 @@ for i in range(0, len(smiles_list), batch_size):
     batch = smiles_list[i:i+batch_size]
     features = extract_features(
         smiles_list=batch,
-        featurizer_type='morgan',
+        featurizer='morgan',
         cache_dir=Path('.cache')
     )
     all_features.append(features)

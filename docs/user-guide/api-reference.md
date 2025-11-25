@@ -31,7 +31,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -45,7 +45,7 @@ def run_active_learning(
     oracle: Union[str, Path, Oracle],
     learner: Union[str, Learner],
     target_col: str,
-    featurizer_type: Optional[str] = None,
+    featurizer: Optional[str] = None,
     # Advanced API
     cycles: Optional[List[CycleConfig]] = None,
     # Simple API
@@ -91,7 +91,7 @@ def run_active_learning(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| **featurizer_type** | `str` or `None` | `None` | Molecular featurizer type. Optional for SMILES-aware learners (e.g., `'chemprop'`). Required for feature-based learners. Valid options: `'morgan'` (2048-bit circular fingerprints, radius=2), `'maccs'` (167-bit structural keys), `'ecfp6'` (2048-bit extended-connectivity, radius=3), `'descriptors'` (1613 Mordred descriptors), `'morgan_feat'` (2048-bit feature fingerprints). |
+| **featurizer** | `str` or `None` | `None` | Molecular featurizer type. Optional for SMILES-aware learners (e.g., `'chemprop'`). Required for feature-based learners. Valid options: `'morgan'` (2048-bit circular fingerprints, radius=2), `'maccs'` (167-bit structural keys), `'ecfp6'` (2048-bit extended-connectivity, radius=3), `'descriptors'` (1613 Mordred descriptors), `'morgan_feat'` (2048-bit feature fingerprints). |
 
 **Performance Notes:**
 - Morgan fingerprints: Fast computation (~1000 compounds/sec), recommended for most applications
@@ -313,7 +313,7 @@ Paths to saved CSV files:
 - Python function oracles (`module.py:function`) automatically trigger `mode='run'`
 
 **Feature Extraction:**
-- All learners use the same featurizer_type if specified
+- All learners use the same featurizer if specified
 - Chemprop can use features as extra descriptors (x_d) or work purely with graphs
 - Features are cached in HDF5 format for 100x speedup on repeated access
 
@@ -471,7 +471,7 @@ from pathlib import Path
 smiles_list = ['CCO', 'CCC', 'CCCC']
 features = extract_features(
     smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=Path('.cache'),
     n_jobs=-1,
     show_progress=True
@@ -485,7 +485,7 @@ print(features.shape)  # (3, 2048)
 ```python
 def extract_features(
     smiles_list: List[str],
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Optional[Path] = None,
     n_jobs: int = -1,
     show_progress: bool = False
@@ -497,7 +497,7 @@ def extract_features(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | **smiles_list** | `List[str]` | required | List of SMILES strings |
-| **featurizer_type** | `str` | required | Type of featurizer. Valid options: `'morgan'` (2048-bit, radius=2), `'maccs'` (167-bit), `'ecfp6'` (2048-bit, radius=3), `'morgan_feat'` (2048-bit feature fingerprints), `'descriptors'` (1613 Mordred descriptors) |
+| **featurizer** | `str` | required | Type of featurizer. Valid options: `'morgan'` (2048-bit, radius=2), `'maccs'` (167-bit), `'ecfp6'` (2048-bit, radius=3), `'morgan_feat'` (2048-bit feature fingerprints), `'descriptors'` (1613 Mordred descriptors) |
 | **cache_dir** | `Path` or `None` | `None` | Directory for HDF5 cache files. If `None`, uses `.cache` in current directory. Cache persists across runs for 100x speedup. |
 | **n_jobs** | `int` | `-1` | Number of parallel jobs. `-1` auto-detects optimal parallelization based on dataset size. `1` for sequential processing. |
 | **show_progress** | `bool` | `False` | Show progress bar for long operations (requires tqdm) |
@@ -533,7 +533,7 @@ NumPy array of features with shape `(n_compounds, n_features)`:
 
 | Exception | When |
 |-----------|------|
-| `ValueError` | If featurizer_type is unknown or SMILES is invalid |
+| `ValueError` | If featurizer is unknown or SMILES is invalid |
 
 #### Example
 
@@ -550,7 +550,7 @@ cache_dir.mkdir(exist_ok=True)
 
 features = extract_features(
     smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=cache_dir,
     n_jobs=-1,
     show_progress=True
@@ -561,7 +561,7 @@ print(f"Cache hits on second run:")
 
 features2 = extract_features(
     smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir=cache_dir
 )
 ```
@@ -618,7 +618,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
@@ -705,7 +705,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -726,7 +726,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
 
@@ -771,7 +771,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01,
     strategy='ucb',
@@ -791,7 +791,7 @@ results = run_active_learning(
     oracle='scoring_module.py:calculate_affinity',
     learner='ensemble',
     target_col='binding_score',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20,
     batch_fraction=0.005,
     strategy='ucb',
@@ -817,7 +817,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='chemprop',
     target_col='Activity',
-    featurizer_type=None,
+    featurizer=None,
     n_cycles=15,
     batch_fraction=0.01,
     strategy='greedy',
@@ -855,7 +855,7 @@ for learner in learners:
             oracle='oracle.csv',
             learner=learner,
             target_col='Activity',
-            featurizer_type='morgan',
+            featurizer='morgan',
             n_cycles=10,
             batch_fraction=0.01,
             strategy=strategy,
@@ -905,7 +905,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -923,7 +923,7 @@ results = run_active_learning(
     oracle='docking_oracle.py:dock_compound',
     learner='chemprop',
     target_col='docking_score',
-    featurizer_type=None,
+    featurizer=None,
     n_cycles=30,
     batch_fraction=0.001,
     strategy='ucb',

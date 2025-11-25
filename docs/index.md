@@ -69,7 +69,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -112,7 +112,7 @@ results = run_active_learning(
     oracle=oracle,
     learner=learner,
     target_col='binding_score',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 

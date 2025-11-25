@@ -77,7 +77,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='mlp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -103,7 +103,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=custom_mlp,
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     n_cycles=10
 )
 ```
@@ -186,7 +186,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='mc_dropout',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[('random', 0.01), ('ucb', 0.005)]
 )
 ```
@@ -213,7 +213,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=mc_learner,
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     cycles=[('random', 0.01), ('ucb', 0.005)],
     acquisition_params={'beta': 2.0}
 )
@@ -297,7 +297,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='fastprop',
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     n_cycles=10
 )
 ```
@@ -324,7 +324,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=fastprop,
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     n_cycles=15
 )
 ```

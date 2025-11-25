@@ -463,7 +463,7 @@ learnm8 run --config experiment.yaml
 compound_pool: compounds.csv
 oracle: oracle.csv
 target_col: Activity
-featurizer_type: morgan
+featurizer: morgan
 learner: ensemble
 cycles:
   - strategy: random

@@ -79,7 +79,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 
@@ -172,7 +172,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     cycles=[('random', 0.02), ('ucb', 0.01)],
     acquisition_params={'beta': 2.0}
 )
@@ -267,7 +267,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15
 )
 
@@ -353,7 +353,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 
@@ -435,7 +435,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     n_cycles=10
 )
 
@@ -537,7 +537,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner=learner,
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[('random', 0.02), ('greedy', 0.01)],
     n_cycles=10
 )
