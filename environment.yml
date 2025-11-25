@@ -163,6 +163,7 @@ dependencies:
   - rlpycairo
   - scikit-criteria
   - scikit-learn
+  - scikit-fingerprints
   - scipy
   - seaborn
   - setuptools
