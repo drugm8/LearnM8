@@ -5,7 +5,7 @@ Uses subprocess.run to invoke CLI in isolation.
 
 Note: Some tests that invoke the 'run' subcommand are marked as xfail due to a known issue
 in the cycle execution code where learner train/predict methods are called with incorrect
-arguments (cache_dir, featurizer_type instead of data_manager).
+arguments (cache_dir, featurizer instead of data_manager).
 """
 
 import subprocess

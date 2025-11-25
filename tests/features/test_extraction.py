@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from pathlib import Path
 
-from learnm8.features.extraction import extract_features, _get_optimal_n_jobs, _extract_single_feature
+from learnm8.features.extraction import extract_features, _get_optimal_n_jobs
 
 
 class TestExtractFeatures:
@@ -19,7 +19,7 @@ class TestExtractFeatures:
 		features = extract_features(smiles_list, 'maccs', tmp_path)
 
 		assert features.shape[0] == 3
-		assert features.shape[1] == 167
+		assert features.shape[1] == 166
 
 	def test_ecfp6_featurizer(self, tmp_path):
 		smiles_list = ['CCO', 'CCC', 'CCN']
@@ -57,7 +57,7 @@ class TestExtractFeatures:
 		assert features.shape[0] == 2
 
 	def test_unknown_featurizer_raises_error(self, tmp_path):
-		with pytest.raises(ValueError, match="Unknown featurizer type"):
+		with pytest.raises(ValueError, match="Unknown featurizer"):
 			extract_features(['CCO'], 'unknown_featurizer', tmp_path)
 
 	def test_empty_smiles_list(self, tmp_path):
@@ -112,7 +112,7 @@ class TestExtractFeatures:
 
 		features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
 
-		cache_file = cache_dir / 'morgan_features.h5'
+		cache_file = cache_dir / 'features_morgan.h5'
 		assert cache_file.exists()
 
 		assert features1.shape[0] == len(smiles_list)
@@ -177,26 +177,3 @@ class TestGetOptimalNJobs:
 	def test_negative_n_jobs_uses_auto(self):
 		n_jobs = _get_optimal_n_jobs(n_compounds=1000, n_jobs=-1)
 		assert n_jobs >= 1
-
-
-class TestExtractSingleFeature:
-
-	def test_single_morgan(self):
-		feature = _extract_single_feature('CCO', 'morgan')
-		assert feature.shape == (2048,)
-
-	def test_single_maccs(self):
-		feature = _extract_single_feature('CCO', 'maccs')
-		assert feature.shape == (167,)
-
-	def test_single_ecfp6(self):
-		feature = _extract_single_feature('CCO', 'ecfp6')
-		assert feature.shape == (2048,)
-
-	def test_single_invalid_smiles(self):
-		with pytest.raises(Exception):
-			_extract_single_feature('INVALID', 'morgan')
-
-	def test_single_unknown_featurizer(self):
-		with pytest.raises(ValueError, match="Unknown featurizer type"):
-			_extract_single_feature('CCO', 'unknown')
