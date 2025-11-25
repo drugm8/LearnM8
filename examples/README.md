@@ -69,7 +69,7 @@ results = run_active_learning(
     oracle=oracle,
     target_col='similarity',
     learner='gp',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
