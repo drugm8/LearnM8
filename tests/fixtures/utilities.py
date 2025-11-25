@@ -15,13 +15,21 @@ import pytest
 
 @pytest.fixture
 def caplog_info(caplog):
-    """Capture INFO level logs."""
-    caplog.set_level(logging.INFO)
+    """Capture INFO level logs from learnm8 logger."""
+    # Enable propagation for test capture
+    logger = logging.getLogger('learnm8')
+    logger.propagate = True
+
+    caplog.set_level(logging.INFO, logger='learnm8')
     return caplog
 
 
 @pytest.fixture
 def caplog_debug(caplog):
-    """Capture DEBUG level logs."""
-    caplog.set_level(logging.DEBUG)
+    """Capture DEBUG level logs from learnm8 logger."""
+    # Enable propagation for test capture
+    logger = logging.getLogger('learnm8')
+    logger.propagate = True
+
+    caplog.set_level(logging.DEBUG, logger='learnm8')
     return caplog
