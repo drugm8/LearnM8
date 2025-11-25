@@ -1,10 +1,6 @@
 """Laggner fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import LaggnerFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import LaggnerFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

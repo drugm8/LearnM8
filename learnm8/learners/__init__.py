@@ -9,84 +9,51 @@ New Architecture (v1.0.0):
 """
 
 # Base classes
-try:
-    from .base import SklearnLearner, TorchLearner
-except ImportError:
-    pass
+from .base import SklearnLearner, TorchLearner
 
-# New architecture scikit-learn learners
-try:
-    from .sklearn import (
-        RandomForestLearner,
-        GaussianProcessLearner,
-        XGBoostLearner,
-        DecisionTreeLearner,
-        LinearRegressionLearner,
-        AdvancedRandomForestLearner
-    )
-except ImportError:
-    pass
+# Scikit-learn learners
+from .sklearn import (
+    RandomForestLearner,
+    GaussianProcessLearner,
+    XGBoostLearner,
+    DecisionTreeLearner,
+    LinearRegressionLearner,
+    AdvancedRandomForestLearner
+)
 
-# New architecture PyTorch learners
-try:
-    from .torch import (
-        MLPLearner,
-        MCDropoutLearner,
-        FastpropLearner
-    )
-except ImportError:
-    pass
+# PyTorch learners
+from .torch import (
+    MLPLearner,
+    MCDropoutLearner,
+    FastpropLearner,
+    ChempropLearner
+)
 
-# Chemprop learner (optional - requires chemprop library)
-try:
-    from .torch import ChempropLearner
-except ImportError:
-    pass
+# Ensemble learners
+from .ensemble import (
+    EnsembleLearner,
+    RFEnsemble,
+    LREnsemble,
+    XGBEnsemble,
+    DTEnsemble,
+    MixedEnsemble,
+    FastpropEnsemble
+)
 
-# New architecture ensemble learners
-try:
-    from .ensemble import (
-        EnsembleLearner,
-        RFEnsemble,
-        LREnsemble,
-        XGBEnsemble,
-        DTEnsemble,
-        MixedEnsemble,
-        FastpropEnsemble
-    )
-except ImportError:
-    pass
 
-# Legacy learners (for backward compatibility)
-try:
-    from .sklearn.legacy import (
-        LegacyXGBoostLearner
-    )
-except ImportError:
-    pass
-
-try:
-    from .torch.legacy import (
-        GaussianPyTorchLearner,
-        PyTorchMLPLearner
-    )
-except ImportError:
-    pass
-
-# Export all available learners
 __all__ = [
     # Base classes
     'SklearnLearner',
     'TorchLearner',
-    
+
     # Sklearn learners
     'RandomForestLearner',
-    'GaussianProcessLearner', 
+    'GaussianProcessLearner',
     'XGBoostLearner',
     'DecisionTreeLearner',
     'LinearRegressionLearner',
     'AdvancedRandomForestLearner',
-    
+
     # PyTorch learners
     'MLPLearner',
     'MCDropoutLearner',
@@ -101,9 +68,4 @@ __all__ = [
     'DTEnsemble',
     'MixedEnsemble',
     'FastpropEnsemble',
-    
-    # Legacy learners
-    'LegacyXGBoostLearner',
-    'GaussianPyTorchLearner',
-    'PyTorchMLPLearner'
 ]

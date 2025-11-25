@@ -11,12 +11,7 @@ import numpy as np
 
 from ..base import SklearnLearner
 
-try:
-    from sklearn.ensemble import RandomForestRegressor
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    RandomForestRegressor = None
-    SKLEARN_AVAILABLE = False
+from sklearn.ensemble import RandomForestRegressor
 
 
 logger = logging.getLogger(__name__)
@@ -61,9 +56,6 @@ class AdvancedRandomForestLearner(SklearnLearner):
             n_jobs: Number of parallel jobs (-1 for all cores)
             **kwargs: Additional arguments passed to SklearnLearner
         """
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn is required for AdvancedRandomForestLearner")
-
         if n_jobs == -1:
             n_jobs = min(os.cpu_count() or 1, 32)
 

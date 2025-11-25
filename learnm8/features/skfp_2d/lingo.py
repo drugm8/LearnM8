@@ -1,10 +1,6 @@
 """Lingo fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import LingoFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import LingoFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

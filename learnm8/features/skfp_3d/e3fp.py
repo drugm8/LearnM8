@@ -6,11 +6,7 @@ Requires 3D conformers.
 
 from typing import Optional
 
-try:
-    from skfp.fingerprints import E3FPFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import E3FPFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

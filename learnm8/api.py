@@ -69,12 +69,8 @@ from learnm8.learners import (
     FastpropEnsemble
 )
 
-try:
-    from learnm8.learners.torch.chemprop_learner import ChempropLearner
-    from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
-    CHEMPROP_AVAILABLE = True
-except ImportError:
-    CHEMPROP_AVAILABLE = False
+from learnm8.learners.torch.chemprop_learner import ChempropLearner
+from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
     format_duration,
@@ -84,46 +80,30 @@ from learnm8.utils.logging_formatters import (
 logger = logging.getLogger(__name__)
 
 
-LEARNER_REGISTRY = {}
+LEARNER_REGISTRY = {
+    # Sklearn-based learners
+    'rf': RandomForestLearner,
+    'gp': GaussianProcessLearner,
+    'xgb': XGBoostLearner,
 
-# Register sklearn-based learners (always available)
-try:
-    LEARNER_REGISTRY.update({
-        'rf': RandomForestLearner,
-        'gp': GaussianProcessLearner,
-        'xgb': XGBoostLearner,
-    })
-except NameError:
-    pass
+    # PyTorch-based learners
+    'mlp': MLPLearner,
+    'mc_dropout': MCDropoutLearner,
+    'fastprop': FastpropLearner,
 
-# Register pytorch-based learners (optional)
-try:
-    LEARNER_REGISTRY.update({
-        'mlp': MLPLearner,
-        'mc_dropout': MCDropoutLearner,
-        'fastprop': FastpropLearner,
-    })
-except NameError:
-    pass
+    # Chemprop learners
+    'chemprop': ChempropLearner,
+    'chemprop_ensemble': ChempropEnsemble,
 
-# Register chemprop learners (optional)
-if CHEMPROP_AVAILABLE:
-    LEARNER_REGISTRY['chemprop'] = ChempropLearner
-    LEARNER_REGISTRY['chemprop_ensemble'] = ChempropEnsemble
-
-# Register ensemble learners (optional)
-try:
-    LEARNER_REGISTRY.update({
-        'ensemble': EnsembleLearner,
-        'rf_ensemble': RFEnsemble,
-        'lr_ensemble': LREnsemble,
-        'xgb_ensemble': XGBEnsemble,
-        'dt_ensemble': DTEnsemble,
-        'mixed_ensemble': MixedEnsemble,
-        'fastprop_ensemble': FastpropEnsemble
-    })
-except NameError:
-    pass
+    # Ensemble learners
+    'ensemble': EnsembleLearner,
+    'rf_ensemble': RFEnsemble,
+    'lr_ensemble': LREnsemble,
+    'xgb_ensemble': XGBEnsemble,
+    'dt_ensemble': DTEnsemble,
+    'mixed_ensemble': MixedEnsemble,
+    'fastprop_ensemble': FastpropEnsemble,
+}
 
 
 LEARNER_DISPLAY_NAMES = {
@@ -212,7 +192,7 @@ def _create_learner(
     learner_class = LEARNER_REGISTRY[learner_str]
 
     # Special handling for ChempropEnsemble with fine-tuning
-    if CHEMPROP_AVAILABLE and learner_class == ChempropEnsemble:
+    if learner_class == ChempropEnsemble:
         if enable_chemprop_fine_tuning:
             if checkpoint_dir is None:
                 raise ValueError(

@@ -4,16 +4,7 @@ import pytest
 import numpy as np
 import polars as pl
 
-try:
-    from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
-    CHEMPROP_AVAILABLE = True
-except ImportError:
-    CHEMPROP_AVAILABLE = False
-
-pytestmark = pytest.mark.skipif(
-    not CHEMPROP_AVAILABLE,
-    reason="Chemprop not available"
-)
+from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 
 
 class TestChempropEnsemble:

@@ -9,12 +9,7 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Optional
 
-try:
-    from skfp.preprocessing import MolFromSmilesTransformer, ConformerGenerator
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
-
+from skfp.preprocessing import MolFromSmilesTransformer, ConformerGenerator
 from learnm8.core.interfaces import Featurizer
 
 logger = logging.getLogger(__name__)
@@ -66,12 +61,6 @@ class SkfpFeaturizer(Featurizer):
             auto_generate_conformers=False, users must provide molecules
             with pre-computed conformers.
         """
-        if not SKFP_AVAILABLE:
-            raise ImportError(
-                "scikit-fingerprints is required but not installed. "
-                "Install it with: pip install scikit-fingerprints"
-            )
-
         self.fingerprint = fingerprint_instance
         self.auto_generate_conformers = auto_generate_conformers
         self.conformer_params = conformer_params or {}

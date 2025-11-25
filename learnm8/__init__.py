@@ -29,44 +29,32 @@ from .core.config import CycleConfig
 # Utility functions
 from .utils.logging import setup_logging
 
+# Sklearn learners
+from .learners.sklearn import RandomForestLearner, GaussianProcessLearner, XGBoostLearner
 
-# Optional components (with graceful import failures)
-try:
-    from .learners.sklearn import RandomForestLearner, GaussianProcessLearner, XGBoostLearner
-    from .learners.ensemble import (
-        EnsembleLearner, RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble
-    )
-except ImportError:
-    pass
+# Ensemble learners
+from .learners.ensemble import (
+    EnsembleLearner, RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble
+)
 
-try:
-    from .learners.torch import MLPLearner, MCDropoutLearner
-except ImportError:
-    pass
+# Torch learners
+from .learners.torch import MLPLearner, MCDropoutLearner
 
-try:
-    from .acquisition.basic import GreedyAcquisition, RandomAcquisition, TopKAcquisition
-    from .acquisition.uncertainty_based import (
-        UCBAcquisition, ExpectedImprovementAcquisition, 
-        ProbabilityImprovementAcquisition, ThompsonSamplingAcquisition, EntropyAcquisition
-    )
-except ImportError:
-    pass
+# Acquisition strategies
+from .acquisition import (
+    GreedyAcquisition, RandomAcquisition, TopKAcquisition,
+    UCBAcquisition, ExpectedImprovementAcquisition,
+    ProbabilityImprovementAcquisition, ThompsonSamplingAcquisition, EntropyAcquisition
+)
 
-try:
-    from .pruning.probabilistic import ProbabilisticPruner, PredictionThresholdPruner
-    from .pruning.adaptive import AdaptivePruner
-except ImportError:
-    pass
+# Pruning strategies
+from .pruning import ScoreBasedPruner, DesignSpacePruner
 
-try:
-    from .oracles.csv_oracle import CSVOracle
-    from .oracles.python_oracle import PythonOracle
-except ImportError:
-    pass
+# Oracles
+from .oracles.csv_oracle import CSVOracle
+from .oracles.python_oracle import PythonOracle
 
 
-# Build __all__ dynamically based on successful imports
 __all__ = [
     # Main functional API
     'run_active_learning',
@@ -81,28 +69,24 @@ __all__ = [
 
     # Core interfaces (for advanced users)
     'Learner', 'Oracle',
+
+    # Sklearn learners
+    'RandomForestLearner', 'GaussianProcessLearner', 'XGBoostLearner',
+
+    # Ensemble learners
+    'EnsembleLearner', 'RFEnsemble', 'LREnsemble', 'XGBEnsemble', 'DTEnsemble', 'MixedEnsemble',
+
+    # Torch learners
+    'MLPLearner', 'MCDropoutLearner',
+
+    # Acquisition strategies
+    'GreedyAcquisition', 'RandomAcquisition', 'TopKAcquisition',
+    'UCBAcquisition', 'ExpectedImprovementAcquisition',
+    'ProbabilityImprovementAcquisition', 'ThompsonSamplingAcquisition', 'EntropyAcquisition',
+
+    # Pruning strategies
+    'ScoreBasedPruner', 'DesignSpacePruner',
+
+    # Oracles
+    'CSVOracle', 'PythonOracle',
 ]
-
-# Add optional components only if imports succeeded
-if 'RandomForestLearner' in dir():
-    __all__.extend(['RandomForestLearner', 'GaussianProcessLearner', 'XGBoostLearner'])
-if 'EnsembleLearner' in dir():
-    __all__.extend(['EnsembleLearner', 'RFEnsemble', 'LREnsemble', 'XGBEnsemble', 'DTEnsemble', 'MixedEnsemble'])
-if 'MLPLearner' in dir():
-    __all__.extend(['MLPLearner', 'MCDropoutLearner'])
-
-if 'GreedyAcquisition' in dir():
-    __all__.extend(['GreedyAcquisition', 'RandomAcquisition', 'TopKAcquisition'])
-if 'UCBAcquisition' in dir():
-    __all__.extend([
-        'UCBAcquisition', 'ExpectedImprovementAcquisition',
-        'ProbabilityImprovementAcquisition', 'ThompsonSamplingAcquisition', 'EntropyAcquisition'
-    ])
-
-if 'ProbabilisticPruner' in dir():
-    __all__.extend(['ProbabilisticPruner', 'PredictionThresholdPruner'])
-if 'AdaptivePruner' in dir():
-    __all__.append('AdaptivePruner')
-
-if 'CSVOracle' in dir():
-    __all__.extend(['CSVOracle', 'PythonOracle'])

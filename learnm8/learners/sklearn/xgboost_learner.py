@@ -11,13 +11,7 @@ import numpy as np
 # Base class import
 from ..base import SklearnLearner
 
-# Optional imports with fallbacks
-try:
-    import xgboost as xgb
-    XGBOOST_AVAILABLE = True
-except ImportError:
-    xgb = None
-    XGBOOST_AVAILABLE = False
+import xgboost as xgb
 
 
 logger = logging.getLogger(__name__)
@@ -58,9 +52,6 @@ class XGBoostLearner(SklearnLearner):
             n_jobs: Number of parallel jobs (-1 for all cores)
             **kwargs: Additional arguments passed to SklearnLearner
         """
-        if not XGBOOST_AVAILABLE:
-            raise ImportError("XGBoost not installed. Please install with: pip install xgboost")
-
         model = xgb.XGBRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,

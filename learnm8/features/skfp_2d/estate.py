@@ -1,10 +1,6 @@
 """EState fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import EStateFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import EStateFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

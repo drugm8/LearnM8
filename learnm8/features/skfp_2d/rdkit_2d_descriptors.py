@@ -1,10 +1,6 @@
 """RDKit 2D descriptors using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import RDKit2DDescriptorsFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import RDKit2DDescriptorsFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

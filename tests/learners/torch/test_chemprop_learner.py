@@ -2,15 +2,7 @@ import pytest
 import numpy as np
 from pathlib import Path
 
-try:
-    from learnm8.learners.torch.chemprop_learner import ChempropLearner, CHEMPROP_AVAILABLE
-except ImportError:
-    CHEMPROP_AVAILABLE = False
-
-pytestmark = pytest.mark.skipif(
-    not CHEMPROP_AVAILABLE,
-    reason="Chemprop not available"
-)
+from learnm8.learners.torch.chemprop_learner import ChempropLearner
 
 
 class TestChempropLearnerBasic:

@@ -10,15 +10,8 @@ from typing import Tuple
 # Base class import
 from ..base import TorchLearner
 
-# Optional imports with fallbacks
-try:
-    import torch
-    import torch.nn as nn
-    TORCH_AVAILABLE = True
-except ImportError:
-    torch = None
-    nn = None
-    TORCH_AVAILABLE = False
+import torch
+import torch.nn as nn
 
 
 logger = logging.getLogger(__name__)
@@ -47,9 +40,6 @@ class MLPLearner(TorchLearner):
             batch_norm: Whether to use batch normalization
             **kwargs: Additional arguments passed to TorchLearner
         """
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for MLPLearner")
-
         super().__init__(**kwargs)
         
         self.hidden_sizes = hidden_sizes
