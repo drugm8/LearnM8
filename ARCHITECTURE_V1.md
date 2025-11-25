@@ -55,7 +55,7 @@ LearnM8 v1.0.0 represents a complete architectural refactor from the monolithic 
 
 v1.0.0 introduced breaking changes:
 - Updated import paths: `from learnm8 import run_active_learning`
-- Renamed parameters: `target_column` → `target_col`, `featurizer` → `featurizer_type` (old names no longer supported)
+- Renamed parameters: `target_column` → `target_col`, `featurizer_type` → `featurizer` (old names no longer supported)
 - New cycle configuration: Tuple lists → `CycleConfig` dataclass
 - CLI requires 'run' subcommand: `learnm8 run compounds.csv ...`
 
@@ -92,7 +92,7 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str,
@@ -965,7 +965,7 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str,
@@ -990,7 +990,7 @@ def execute_cycle(
     # Step 2: Extract features and train learner on labeled data
     training_features = extract_features(
         labeled_df['SMILES'].tolist(),
-        featurizer_type,
+        featurizer,
         cache_dir,
         n_jobs=-1
     )
@@ -1010,7 +1010,7 @@ def execute_cycle(
     # Step 4: Extract features and predict on prediction pool
     prediction_features = extract_features(
         prediction_pool['SMILES'].tolist(),
-        featurizer_type,
+        featurizer,
         cache_dir,
         n_jobs=-1
     )
@@ -1639,7 +1639,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     # ... many optional parameters
 )
 ```
@@ -1659,7 +1659,7 @@ validation_result = validate_compound_pool(
 # Direct feature extraction
 features = extract_features(
     smiles_list=['CCO', 'c1ccccc1'],
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir='.cache'
 )
 ```
@@ -1701,7 +1701,7 @@ results = run_active_learning(
     oracle='oracle.csv',                # Auto-detect CSVOracle, benchmark mode
     learner='rf',                       # Random Forest learner
     target_col='Activity',              # Target property name
-    featurizer_type='morgan'            # Morgan fingerprints
+    featurizer='morgan'            # Morgan fingerprints
 )
 
 # With optional parameters
@@ -1710,7 +1710,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',                       # Gaussian Process
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
 
     # Cycle parameters (simple mode)
     n_cycles=10,                        # Number of cycles (cycle 0 + 9 active learning cycles)
@@ -1798,7 +1798,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',                         # GP for native uncertainty
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=cycles,                        # Advanced API parameter
     score_direction='higher',
     output_dir='results_advanced/'
@@ -1830,7 +1830,7 @@ Comprehensive parameter table:
 | `oracle` | str/Path/Oracle/None | None | No | Measurement source (auto-detect if None) |
 | `learner` | str/Learner | - | Yes | ML model ('rf', 'gp', 'xgb', etc.) |
 | `target_col` | str | - | Yes | Target property column name |
-| `featurizer_type` | str | - | Yes | Feature type ('morgan', 'maccs', 'descriptors') |
+| `featurizer` | str | - | Yes | Feature type ('morgan', 'maccs', 'descriptors') |
 | **Advanced API** |
 | `cycles` | List[CycleConfig] | None | No | Custom cycle schedule (overrides simple API) |
 | **Simple API** |
@@ -1916,7 +1916,7 @@ if isinstance(learner, str):
         )
     learner_class = LEARNER_REGISTRY[learner]
     learner = learner_class(
-        featurizer_type=featurizer_type,
+        featurizer=featurizer,
         random_state=random_state
     )
 ```
@@ -2377,7 +2377,7 @@ Detailed breakdown of each schedule:
 compound_pool: compounds.csv
 oracle: oracle.csv
 target_col: Activity
-featurizer_type: morgan
+featurizer: morgan
 learner: gp
 score_direction: higher
 
@@ -2413,7 +2413,7 @@ random_state: 42
   "compound_pool": "compounds.csv",
   "oracle": "oracle.csv",
   "target_col": "Activity",
-  "featurizer_type": "morgan",
+  "featurizer": "morgan",
   "learner": "gp",
   "score_direction": "higher",
 
@@ -2555,7 +2555,7 @@ def _get_optimal_n_jobs(n_compounds: int, n_jobs: int = -1) -> int:
 @cache_features(cache_dir)
 def extract_features(
     smiles_list: List[str],
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Path = Path('.cache'),
     n_jobs: int = -1,
     show_progress: bool = True
@@ -2569,13 +2569,13 @@ def extract_features(
 
     if n_jobs == 1:
         # Sequential execution
-        return _extract_features_sequential(smiles_list, featurizer_type)
+        return _extract_features_sequential(smiles_list, featurizer)
 
     else:
         # Parallel execution with joblib
         return _extract_features_parallel(
             smiles_list,
-            featurizer_type,
+            featurizer,
             n_jobs,
             show_progress
         )
@@ -2583,7 +2583,7 @@ def extract_features(
 
 def _extract_features_parallel(
     smiles_list: List[str],
-    featurizer_type: str,
+    featurizer: str,
     n_jobs: int,
     show_progress: bool
 ) -> np.ndarray:
@@ -2597,13 +2597,13 @@ def _extract_features_parallel(
     if show_progress:
         try:
             from tqdm import tqdm
-            iterator = tqdm(smiles_list, desc=f"Extracting {featurizer_type} features")
+            iterator = tqdm(smiles_list, desc=f"Extracting {featurizer} features")
         except ImportError:
             pass  # Graceful degradation if tqdm not available
 
     # Parallel execution
     features = Parallel(n_jobs=n_jobs)(
-        delayed(_extract_single_feature)(smiles, featurizer_type)
+        delayed(_extract_single_feature)(smiles, featurizer)
         for smiles in iterator
     )
 
@@ -2643,14 +2643,14 @@ def cache_features(cache_dir: Path):
 
     Usage:
         @cache_features(cache_dir)
-        def extract_features(smiles_list, featurizer_type, ...):
+        def extract_features(smiles_list, featurizer, ...):
             # Actual extraction logic
             ...
     """
     def decorator(func):
         @functools.wraps(func)
-        def wrapper(smiles_list, featurizer_type, cache_dir, *args, **kwargs):
-            cache_file = cache_dir / f'{featurizer_type}_features.h5'
+        def wrapper(smiles_list, featurizer, cache_dir, *args, **kwargs):
+            cache_file = cache_dir / f'{featurizer}_features.h5'
 
             # Ensure cache directory exists
             cache_dir.mkdir(parents=True, exist_ok=True)
@@ -2684,7 +2684,7 @@ def cache_features(cache_dir: Path):
                 # Call original function for missing features
                 new_features = func(
                     missing_smiles,
-                    featurizer_type,
+                    featurizer,
                     cache_dir,
                     *args,
                     **kwargs
@@ -2734,7 +2734,7 @@ def get_smiles_hash(smiles: str) -> str:
 **HDF5 File Structure:**
 
 ```
-{featurizer_type}_features.h5
+{featurizer}_features.h5
 └── features/
     ├── a3f5b8c... -> feature_array [compressed with gzip]
     ├── d4e9a1b... -> feature_array [compressed with gzip]
@@ -3078,8 +3078,8 @@ def batch_update(
 **Architecture:**
 
 Uses unified always-batch approach (industry standard: PyTorch DataLoader, scikit-learn):
-- **Small datasets (≤10k):** Single batch (batch_size = n_compounds, zero overhead)
-- **Large datasets (>10k):** Auto-calculated batch size based on memory and featurizer type
+- **Small datasets (≤100k):** Single batch (batch_size = n_compounds, zero overhead)
+- **Large datasets (>100k):** Auto-calculated batch size based on memory and featurizer type
 - **Manual override:** `prediction_batch_size` parameter
 
 **Helper Functions:**
@@ -3087,12 +3087,12 @@ Uses unified always-batch approach (industry standard: PyTorch DataLoader, sciki
 ```python
 def _calculate_optimal_batch_size(
     n_compounds: int,
-    featurizer_type: Optional[str],
+    featurizer: Optional[str],
     available_memory_gb: float = 4.0
 ) -> int:
     """Calculate optimal batch size to stay under memory threshold."""
     feature_sizes = {'morgan': 2048, 'maccs': 167, 'descriptors': 1613}
-    feature_dim = feature_sizes.get(featurizer_type, 2048)
+    feature_dim = feature_sizes.get(featurizer, 2048)
     bytes_per_compound = feature_dim * 8  # float64
     batch_size = int((available_memory_gb * 1e9 * 0.5) / bytes_per_compound)
     return max(1000, min(batch_size, 50000, n_compounds))
@@ -3105,7 +3105,7 @@ def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
 def _predict_chunk(
     chunk_df: pl.DataFrame,
     learner: Learner,
-    featurizer_type: Optional[str],
+    featurizer: Optional[str],
     cache_dir: Path,
     show_progress: bool = False
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
@@ -3171,7 +3171,7 @@ class ValidationResult:
 ```python
 def validate_compound_pool(
     compound_pool: pd.DataFrame,
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Path = Path('.cache'),
     show_progress: bool = True
 ) -> ValidationResult:
@@ -3365,7 +3365,19 @@ class CycleConfig:
 
 **Purpose:** Parallel feature extraction with HDF5 caching.
 
-**Location:** `learnm8/features/` (~350 lines total)
+**Location:** `learnm8/features/` (modular structure)
+
+```
+learnm8/features/
+├── base.py                         # SkfpFeaturizer base class
+├── extraction.py                   # extract_features() function
+├── cache.py                        # HDF5 caching layer
+├── skfp_2d/                        # 8 2D fingerprints
+│   ├── morgan.py, maccs.py, avalon.py, atom_pair.py,
+│   ├── topological_torsion.py, rdkit.py, pubchem.py, mordred.py
+└── skfp_3d/                        # 3 3D conformational fingerprints
+    └── whim.py, usr.py, e3fp.py
+```
 
 **extraction.py:**
 
@@ -3387,8 +3399,8 @@ class CycleConfig:
 
 ```python
 @cache_features(cache_dir)
-def extract_features(smiles_list, featurizer_type, cache_dir, n_jobs, show_progress):
-    return _extract_features_parallel(smiles_list, featurizer_type, n_jobs, show_progress)
+def extract_features(smiles_list, featurizer, cache_dir, n_jobs, show_progress):
+    return _extract_features_parallel(smiles_list, featurizer, n_jobs, show_progress)
 ```
 
 **Design Patterns:**
@@ -3447,7 +3459,7 @@ Most learners are completely decoupled from feature extraction. Feature extracti
 if not learner.requires_smiles():
     training_features = extract_features(
         labeled_df['SMILES'].tolist(),
-        featurizer_type,
+        featurizer,
         cache_dir,
         n_jobs=-1
     )
@@ -3458,7 +3470,7 @@ if not learner.requires_smiles():
     # Extract features for prediction
     prediction_features = extract_features(
         prediction_pool['SMILES'].tolist(),
-        featurizer_type,
+        featurizer,
         cache_dir,
         n_jobs=-1
     )
@@ -4105,7 +4117,7 @@ learnm8 run compounds.csv --learner my_custom ...
 
 **Best Practices:**
 
-1. **Store featurizer_type:** Ensures consistency across train/predict
+1. **Store featurizer:** Ensures consistency across train/predict
 2. **Handle empty inputs:** Raise clear errors for empty datasets
 3. **Check model state:** Verify model trained before prediction
 4. **Log training progress:** Use logging module for visibility
@@ -4595,7 +4607,7 @@ Required columns: `ID`, `SMILES`, target property column
 compound_pool: compounds.csv
 oracle: oracle.csv
 target_col: Activity
-featurizer_type: morgan
+featurizer: morgan
 learner: rf
 n_cycles: 10
 batch_fraction: 0.01
@@ -4607,7 +4619,7 @@ batch_fraction: 0.01
   "compound_pool": "compounds.csv",
   "oracle": "oracle.csv",
   "target_col": "Activity",
-  "featurizer_type": "morgan",
+  "featurizer": "morgan",
   "learner": "rf",
   "n_cycles": 10,
   "batch_fraction": 0.01
@@ -4714,7 +4726,7 @@ All output files are CSV with metadata comments:
 
 **Symptoms:** TypeError when calling run_active_learning
 
-**Fix:** Use current parameter names: `target_col` and `featurizer_type`
+**Fix:** Use current parameter names: `target_col` and `featurizer`
 
 **Note:** Deprecated parameter names (`target_column`, `featurizer`, `export_csv`, `console_output`) are no longer supported
 
@@ -4909,7 +4921,7 @@ A: Default: '.cache' in current directory.
 
 Specify with `cache_dir` parameter or `--cache-dir` flag.
 
-Structure: `{cache_dir}/{featurizer_type}_features.h5`
+Structure: `{cache_dir}/{featurizer}_features.h5`
 
 ---
 
