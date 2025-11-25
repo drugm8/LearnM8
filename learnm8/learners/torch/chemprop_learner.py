@@ -16,6 +16,7 @@ from learnm8.core.interfaces import Learner
 logger = logging.getLogger(__name__)
 
 warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
+warnings.filterwarnings("ignore", message=".*lr_scheduler.step.*before.*optimizer.step.*", category=UserWarning)
 
 class ChempropLearner(Learner):
 	"""Single Chemprop message passing neural network learner.
@@ -208,6 +209,7 @@ class ChempropLearner(Learner):
 			raise ValueError("ChempropLearner requires SMILES strings")
 
 		warnings.filterwarnings("ignore", category=UserWarning, module="pytorch_lightning")
+		warnings.filterwarnings("ignore", message=".*lr_scheduler.step.*before.*optimizer.step.*", category=UserWarning)
 
 		n_samples = len(targets)
 		use_descriptors = features is not None
