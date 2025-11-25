@@ -61,7 +61,7 @@ class EnsembleLearner(Learner):
         # Check learner consistency
         self._validate_learners()
         
-        logger.info(f"Initialized EnsembleLearner with {len(learners)} base learners")
+        logger.debug(f"Initialized EnsembleLearner with {len(learners)} base learners")
     
     def _validate_learners(self) -> None:
         """Validate that all learners are compatible."""
@@ -323,7 +323,7 @@ class EnsembleLearner(Learner):
         # Invalidate training state
         self.is_trained = False
         
-        logger.info(f"Added learner {learner.get_name()} to ensemble. "
+        logger.debug(f"Added learner {learner.get_name()} to ensemble. "
                    f"Total learners: {len(self.learners)}")
     
     def remove_learner(self, index: int) -> None:
@@ -351,5 +351,5 @@ class EnsembleLearner(Learner):
         # Invalidate training state
         self.is_trained = False
         
-        logger.info(f"Removed learner {removed_learner.get_name()} from ensemble. "
+        logger.debug(f"Removed learner {removed_learner.get_name()} from ensemble. "
                    f"Remaining learners: {len(self.learners)}")

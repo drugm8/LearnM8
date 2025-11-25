@@ -169,7 +169,7 @@ class TorchLearner(Learner):
             torch.cuda.manual_seed(random_state)
             torch.cuda.manual_seed_all(random_state)
 
-        logger.info(f"Initialized TorchLearner on device: {self.device}")
+        logger.debug(f"Initialized TorchLearner on device: {self.device}")
     
     @abstractmethod
     def _create_model(self, input_size: int) -> nn.Module:
@@ -311,7 +311,7 @@ class TorchLearner(Learner):
             patience_counter = 0
             self.training_history = []
 
-            logger.info(f"Training {self.get_name()} for up to {self.max_epochs} epochs")
+            logger.debug(f"Training {self.get_name()} for up to {self.max_epochs} epochs")
 
             for epoch in range(self.max_epochs):
                 train_loss = self._train_epoch(X_train, y_train)
@@ -330,7 +330,7 @@ class TorchLearner(Learner):
                     patience_counter += 1
 
                 if patience_counter >= self.early_stopping_patience:
-                    logger.info(f"Early stopping triggered at epoch {epoch}")
+                    logger.debug(f"Early stopping triggered at epoch {epoch}")
                     break
 
                 if epoch % 10 == 0:
@@ -338,7 +338,7 @@ class TorchLearner(Learner):
 
             self.is_trained = True
             train_time = time.time() - start_time
-            logger.info(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
+            logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
 
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
@@ -426,7 +426,7 @@ class TorchLearner(Learner):
         }
         
         torch.save(state, path)
-        logger.info(f"Saved {self.get_name()} model to {path}")
+        logger.debug(f"Saved {self.get_name()} model to {path}")
     
     def load_model(self, path: Path) -> None:
         """Load model state from file.
@@ -452,4 +452,4 @@ class TorchLearner(Learner):
         self.training_history = state.get('training_history', [])
         self.is_trained = state.get('is_trained', False)
         
-        logger.info(f"Loaded {self.get_name()} model from {path}")
+        logger.debug(f"Loaded {self.get_name()} model from {path}")

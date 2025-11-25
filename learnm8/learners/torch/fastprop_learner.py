@@ -116,7 +116,7 @@ class FastpropLearner(Learner):
 			torch.cuda.manual_seed(random_state)
 			torch.cuda.manual_seed_all(random_state)
 
-		logger.info(f"Initialized FastpropLearner on device: {self.device}")
+		logger.debug(f"Initialized FastpropLearner on device: {self.device}")
 
 	def _validate_and_resolve_precision(self, precision: str) -> str:
 		"""Validate precision parameter and resolve 'auto' setting."""
@@ -132,10 +132,10 @@ class FastpropLearner(Learner):
 		if precision == 'auto':
 			if torch.cuda.is_available():
 				precision = '16-mixed'
-				logger.info("Auto-detected GPU: using mixed precision '16-mixed'")
+				logger.debug("Auto-detected GPU: using mixed precision '16-mixed'")
 			else:
 				precision = '32-true'
-				logger.info("No GPU detected: using full precision '32-true'")
+				logger.debug("No GPU detected: using full precision '32-true'")
 
 		if precision == '32':
 			precision = '32-true'
@@ -222,15 +222,15 @@ class FastpropLearner(Learner):
 				logger=False
 			)
 
-			logger.info(
+			logger.debug(
 				f"Training {self.get_name()} for up to {self.max_epochs} epochs "
 				f"on {len(features)} samples (precision={self.precision})"
 			)
 			self.trainer.fit(self.model, train_dataloader)
-			logger.info(f"{self.get_name()} training completed successfully")
+			logger.debug(f"{self.get_name()} training completed successfully")
 
 			self.is_trained = True
-			logger.info(f"Trained {self.get_name()} on {len(features)} samples")
+			logger.debug(f"Trained {self.get_name()} on {len(features)} samples")
 
 			self._cleanup_gpu_memory("after training")
 
@@ -278,12 +278,12 @@ class FastpropLearner(Learner):
 				logger=False
 			)
 
-			logger.info(
+			logger.debug(
 				f"Starting {self.get_name()} prediction on {len(features)} samples "
 				f"(batch_size={self.predict_batch_size}, precision={self.precision})"
 			)
 			predictions = predict_trainer.predict(self.model, predict_dataloader)
-			logger.info(f"{self.get_name()} prediction completed, processing results")
+			logger.debug(f"{self.get_name()} prediction completed, processing results")
 			predictions = torch.cat(predictions).cpu().numpy().squeeze()
 
 			if predictions.ndim == 0:
@@ -293,7 +293,7 @@ class FastpropLearner(Learner):
 
 			self._cleanup_gpu_memory("after prediction")
 
-			logger.info(f"Predicted {len(predictions)} samples with {self.get_name()}")
+			logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
 
 			return predictions, None
 

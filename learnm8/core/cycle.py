@@ -280,14 +280,13 @@ def execute_cycle(
                         cache_dir=cache_dir
                     )
                     logger.info(
-                        f"Training {learner.get_name()} with SMILES + {training_features.shape[1]}-D "
-                        f"extra descriptors on {len(labeled_df)} compounds"
+                        f"Training {learner.get_name()} on {len(labeled_df)} compounds "
+                        f"(SMILES + {training_features.shape[1]}-D descriptors)"
                     )
                 else:
                     training_features = None
                     logger.info(
-                        f"Training {learner.get_name()} with SMILES (graph-only) "
-                        f"on {len(labeled_df)} compounds"
+                        f"Training {learner.get_name()} on {len(labeled_df)} compounds"
                     )
 
                 learner.train(
@@ -307,9 +306,9 @@ def execute_cycle(
                     featurizer,
                     cache_dir=cache_dir
                 )
-                logger.info(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
+                logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
 
-                logger.info(f"Training model on {len(labeled_df)} labeled compounds")
+                logger.info(f"Training {learner.get_name()} on {len(labeled_df)} compounds ({featurizer})")
                 learner.train(training_features, training_targets)
                 logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
         except Exception as e:
@@ -349,10 +348,10 @@ def execute_cycle(
             else n_unlabeled
         )
         if n_unlabeled > 100000:
-            logger.info(f"Auto-batching {n_unlabeled} compounds (batch_size={batch_size})")
+            logger.debug(f"Auto-batching {n_unlabeled} compounds (batch_size={batch_size})")
     else:
         batch_size = prediction_batch_size
-        logger.info(f"Using batch_size={batch_size} for {n_unlabeled} compounds")
+        logger.debug(f"Using batch_size={batch_size} for {n_unlabeled} compounds")
 
     # Process in batches (unified path for ALL sizes)
     all_predictions = []
@@ -435,7 +434,7 @@ def execute_cycle(
     unlabeled_before_prune = len(selection_pool)
 
     if config.pruning_strategy:
-        logger.info(f"Pruning design space with '{config.pruning_strategy}' strategy")
+        logger.debug(f"Pruning design space with '{config.pruning_strategy}' strategy")
 
         uncertainty_values = None
         if 'uncertainty' in selection_pool.columns:
@@ -458,7 +457,7 @@ def execute_cycle(
 
         if pruning_stats['pruned_count'] > 0:
             prune_pct = (pruning_stats['pruned_count'] / unlabeled_before_prune) * 100
-            logger.info(f"Pruned {pruning_stats['pruned_count']} compounds ({prune_pct:.1f}% of unlabeled pool)")
+            logger.debug(f"Pruned {pruning_stats['pruned_count']} compounds ({prune_pct:.1f}% of unlabeled pool)")
 
         logger.debug(f"Pruning parameters: {config.pruning_params}")
         logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
@@ -495,10 +494,7 @@ def execute_cycle(
 
     # Step 11: Select Compounds Using Acquisition Strategy
     acquisition_start_time = time.time()
-    if config.pruning_strategy and pruning_stats['pruned_count'] > 0:
-        logger.info(f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} remaining candidates")
-    else:
-        logger.info(f"Acquiring compounds with '{config.strategy}' strategy")
+    logger.debug(f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} candidates")
 
     selected_df = _select_compounds(
         selection_pool,
@@ -514,7 +510,7 @@ def execute_cycle(
     if len(selected_ids) == 0:
         raise RuntimeError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
 
-    logger.info(f"Selected {len(selected_ids)}/{len(selection_pool)} compounds using {config.strategy.upper()} (batch_size={batch_size})")
+    logger.debug(f"Selected {len(selected_ids)}/{len(selection_pool)} compounds using {config.strategy.upper()} (batch_size={batch_size})")
 
     # Step 12: Measure Selected Compounds
     oracle_start_time = time.time()
