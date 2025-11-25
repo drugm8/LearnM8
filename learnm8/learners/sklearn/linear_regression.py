@@ -10,13 +10,7 @@ import numpy as np
 
 from ..base import SklearnLearner
 
-try:
-    from sklearn.linear_model import LinearRegression, Ridge
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    LinearRegression = None
-    Ridge = None
-    SKLEARN_AVAILABLE = False
+from sklearn.linear_model import LinearRegression, Ridge
 
 
 logger = logging.getLogger(__name__)
@@ -46,9 +40,6 @@ class LinearRegressionLearner(SklearnLearner):
             random_state: Random seed
             **kwargs: Additional arguments passed to SklearnLearner
         """
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn is required for LinearRegressionLearner")
-
         if alpha is None:
             model = LinearRegression(
                 fit_intercept=fit_intercept,

@@ -15,24 +15,10 @@ import numpy as np
 # Core imports
 from learnm8.core.interfaces import Learner
 
-# Optional imports with fallbacks
-try:
-    import torch
-    import torch.nn as nn
-    TORCH_AVAILABLE = True
-except ImportError:
-    torch = None
-    nn = None
-    TORCH_AVAILABLE = False
-
-try:
-    from sklearn.base import BaseEstimator
-    from sklearn.preprocessing import StandardScaler
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    BaseEstimator = object
-    StandardScaler = None
-    SKLEARN_AVAILABLE = False
+import torch
+import torch.nn as nn
+from sklearn.base import BaseEstimator
+from sklearn.preprocessing import StandardScaler
 
 
 logger = logging.getLogger(__name__)
@@ -55,9 +41,6 @@ class SklearnLearner(Learner):
             model: Scikit-learn compatible model instance
             random_state: Random seed for reproducibility
         """
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn is required for SklearnLearner")
-
         self.model = model
         self.random_state = random_state
         self.is_trained = False
@@ -164,9 +147,6 @@ class TorchLearner(Learner):
             early_stopping_patience: Patience for early stopping
             random_state: Random seed for reproducibility
         """
-        if not TORCH_AVAILABLE:
-            raise ImportError("PyTorch is required for TorchLearner")
-
         if device == 'auto':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -321,9 +301,6 @@ class TorchLearner(Learner):
             if self.model is None:
                 self.model = self._create_model(features.shape[1]).to(self.device)
                 self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-
-            if StandardScaler is None:
-                raise ImportError("scikit-learn is required for feature scaling")
 
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(features)

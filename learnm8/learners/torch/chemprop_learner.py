@@ -4,12 +4,8 @@ import numpy as np
 import logging
 import warnings
 
-try:
-	from chemprop import data, models, nn
-	from lightning import pytorch as pl
-	CHEMPROP_AVAILABLE = True
-except ImportError:
-	CHEMPROP_AVAILABLE = False
+from chemprop import data, models, nn
+from lightning import pytorch as pl
 
 from learnm8.core.interfaces import Learner
 
@@ -110,12 +106,6 @@ class ChempropLearner(Learner):
 				 enable_fine_tuning: bool = False,
 				 checkpoint_dir: Optional[Path] = None,
 				 enable_aggressive_gc: bool = True):
-		if not CHEMPROP_AVAILABLE:
-			raise ImportError(
-				"Chemprop is required for ChempropLearner. "
-				"Install with: pip install chemprop"
-			)
-
 		self.message_hidden_dim = message_hidden_dim
 		self.depth = depth
 		self.aggregation = aggregation

@@ -10,12 +10,7 @@ import numpy as np
 
 from ..base import SklearnLearner
 
-try:
-    from sklearn.tree import DecisionTreeRegressor
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    DecisionTreeRegressor = None
-    SKLEARN_AVAILABLE = False
+from sklearn.tree import DecisionTreeRegressor
 
 
 logger = logging.getLogger(__name__)
@@ -45,9 +40,6 @@ class DecisionTreeLearner(SklearnLearner):
             random_state: Random seed for reproducibility
             **kwargs: Additional arguments passed to SklearnLearner
         """
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn is required for DecisionTreeLearner")
-
         model = DecisionTreeRegressor(
             max_depth=max_depth,
             min_samples_split=min_samples_split,

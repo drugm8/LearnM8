@@ -9,16 +9,9 @@ import logging
 import time
 from typing import List, Tuple, Optional, Dict, Any, Union
 import numpy as np
+from scipy import stats
 
 from ...core.interfaces import Learner
-
-# Optional imports for statistical functions
-try:
-    from scipy import stats
-    SCIPY_AVAILABLE = True
-except ImportError:
-    stats = None
-    SCIPY_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)

@@ -28,11 +28,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.traceback import install
 import polars as pl
 
-try:
-    import yaml
-    YAML_AVAILABLE = True
-except ImportError:
-    YAML_AVAILABLE = False
+import yaml
 
 from learnm8.api import run_active_learning
 from learnm8.core.validation import validate_compound_pool
@@ -116,10 +112,6 @@ def load_config_file(config_path: Path) -> dict:
 
     try:
         if suffix in ['.yaml', '.yml']:
-            if not YAML_AVAILABLE:
-                raise ImportError(
-                    "PyYAML not installed. Install with: pip install pyyaml"
-                )
             with open(config_path) as f:
                 return yaml.safe_load(f)
         elif suffix == '.json':

@@ -1,10 +1,6 @@
 """Topological torsion fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import TopologicalTorsionFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import TopologicalTorsionFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

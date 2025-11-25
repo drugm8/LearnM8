@@ -9,6 +9,8 @@ import numpy as np
 import polars as pl
 from typing import List
 
+import bitbirch.bitbirch as bb
+
 from .base import AcquisitionFunction
 
 logger = logging.getLogger(__name__)
@@ -62,25 +64,11 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		if featurizer not in ['morgan', 'ecfp6', 'maccs']:
 			logger.warning(f"BitBIRCH is optimized for binary fingerprints. "
 						 f"'{featurizer}' may not work optimally.")
-		
-		# Check BitBIRCH availability
-		self._bitbirch_available = self._check_bitbirch_availability()
-		
+
 		# Storage for clustering results (for validation/visualization)
 		self.cluster_labels_ = None
 		self.n_clusters_ = None
 		self.cluster_mol_ids_ = None
-		
-	def _check_bitbirch_availability(self) -> bool:
-		"""Check if BitBIRCH package is available."""
-		try:
-			import importlib.util
-			spec = importlib.util.find_spec("bitbirch.bitbirch")
-			return spec is not None
-		except ImportError:
-			logger.error("BitBIRCH package not found. Install with: "
-						"pip install git+https://github.com/mqcomplab/bitbirch.git")
-			return False
 	
 	def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
 		"""Select compounds using BitBIRCH clustering.
@@ -93,15 +81,10 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 			DataFrame subset with selected compounds
 
 		Raises:
-			ImportError: If BitBIRCH package is not available
 			ValueError: If required columns are missing or n_select is invalid
 		"""
 		# Validate input
 		self.validate_input(compounds, n_select)
-
-		if not self._bitbirch_available:
-			raise ImportError("BitBIRCH package is required but not available. "
-							"Install with: pip install git+https://github.com/mqcomplab/bitbirch.git")
 
 		if n_select >= len(compounds):
 			return compounds.clone()
@@ -169,15 +152,13 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 	
 	def _bitbirch_clustering(self, fingerprints: np.ndarray) -> List[List[int]]:
 		"""Perform basic BitBIRCH clustering.
-		
+
 		Args:
 			fingerprints: Binary fingerprint array
-			
+
 		Returns:
 			List of clusters, where each cluster is a list of molecule indices
 		"""
-		import bitbirch.bitbirch as bb
-		
 		# Set merging strategy to diameter
 		bb.set_merge('diameter')
 		

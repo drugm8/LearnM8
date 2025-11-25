@@ -11,16 +11,8 @@ import numpy as np
 # Base class import
 from ..base import SklearnLearner
 
-# Optional imports with fallbacks
-try:
-    from sklearn.gaussian_process import GaussianProcessRegressor
-    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    GaussianProcessRegressor = None
-    RBF = None
-    C = None
-    SKLEARN_AVAILABLE = False
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 
 logger = logging.getLogger(__name__)
@@ -51,9 +43,6 @@ class GaussianProcessLearner(SklearnLearner):
             random_state: Random seed for reproducibility
             **kwargs: Additional arguments passed to SklearnLearner
         """
-        if not SKLEARN_AVAILABLE:
-            raise ImportError("scikit-learn is required for GaussianProcessLearner")
-
         if kernel is None:
             kernel = C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
 

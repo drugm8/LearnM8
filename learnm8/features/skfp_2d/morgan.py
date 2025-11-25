@@ -4,11 +4,7 @@ Supports both ECFP (connectivity-based) and FCFP (feature-based) modes.
 Provides sklearn-compatible API with full parameter customization.
 """
 
-try:
-    from skfp.fingerprints import ECFPFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import ECFPFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

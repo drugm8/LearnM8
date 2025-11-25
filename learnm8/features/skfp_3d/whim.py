@@ -6,11 +6,7 @@ molecular geometry. Requires 3D conformers.
 
 from typing import Optional
 
-try:
-    from skfp.fingerprints import WHIMFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import WHIMFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

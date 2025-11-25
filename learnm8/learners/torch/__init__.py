@@ -3,18 +3,11 @@
 from .mlp import MLPLearner
 from .mc_dropout import MCDropoutLearner
 from .fastprop_learner import FastpropLearner
-
-try:
-    from .chemprop_learner import ChempropLearner
-    _chemprop_available = True
-except ImportError:
-    _chemprop_available = False
+from .chemprop_learner import ChempropLearner
 
 __all__ = [
     'MLPLearner',
     'MCDropoutLearner',
-    'FastpropLearner'
+    'FastpropLearner',
+    'ChempropLearner'
 ]
-
-if _chemprop_available:
-    __all__.append('ChempropLearner')

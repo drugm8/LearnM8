@@ -1,10 +1,6 @@
 """Atom pair fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import AtomPairFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import AtomPairFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

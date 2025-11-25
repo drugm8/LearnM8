@@ -8,16 +8,9 @@ import logging
 from typing import Optional
 import numpy as np
 import polars as pl
+from scipy.stats import norm
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
-
-# Optional imports for statistical functions
-try:
-    from scipy.stats import norm
-    SCIPY_AVAILABLE = True
-except ImportError:
-    norm = None
-    SCIPY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +63,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
         Raises:
             ValueError: If uncertainty estimates are not available
-            RuntimeError: If scipy is not available for normal distribution calculations
         """
-        if not SCIPY_AVAILABLE:
-            raise RuntimeError("scipy is required for Probability of Improvement. Install with: pip install scipy")
-
         # Validate input
         self.validate_input(compounds, n_select)
 

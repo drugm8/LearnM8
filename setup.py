@@ -23,30 +23,6 @@ setup(
         "datamol>=0.12.0",
         "matplotlib>=3.5.0",
     ],
-    extras_require={
-        "test": [
-            "pytest>=7.0.0",
-            "pytest-cov>=4.0.0",
-            "hypothesis>=6.0.0",
-            "psutil>=5.0.0",
-        ],
-        "diversity": [
-            "umap-learn>=0.5.0",  # For UMAP dimensionality reduction
-            "hdbscan>=0.8.0",     # For improved clustering (optional)
-        ],
-        "bitbirch": [
-            # BitBIRCH installation via pip install git+https://github.com/mqcomplab/bitbirch.git
-            # Note: This cannot be specified as a regular dependency due to git source
-        ],
-        "cli": [
-            "tqdm>=4.0.0",  # For progress bars (optional, graceful fallback)
-        ],
-        "full": [
-            "umap-learn>=0.5.0",
-            "hdbscan>=0.8.0",
-            "tqdm>=4.0.0",
-        ],
-    },
     entry_points={
         "console_scripts": [
             "learnm8=learnm8.cli.main:main",

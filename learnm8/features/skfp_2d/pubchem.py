@@ -1,10 +1,6 @@
 """PubChem CACTVS fingerprints using scikit-fingerprints."""
 
-try:
-    from skfp.fingerprints import PubChemFingerprint
-    SKFP_AVAILABLE = True
-except ImportError:
-    SKFP_AVAILABLE = False
+from skfp.fingerprints import PubChemFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
 

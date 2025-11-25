@@ -12,24 +12,12 @@ import numpy as np
 
 from learnm8.core.interfaces import Learner
 
-try:
-	import torch
-	from torch.utils.data import TensorDataset
-	from pytorch_lightning import Trainer
-	from pytorch_lightning.callbacks import EarlyStopping
-	from fastprop.model import fastprop
-	from fastprop.data import fastpropDataLoader, fastpropDataset, standard_scale
-	FASTPROP_AVAILABLE = True
-except ImportError:
-	torch = None
-	TensorDataset = None
-	Trainer = None
-	EarlyStopping = None
-	fastprop = None
-	fastpropDataLoader = None
-	fastpropDataset = None
-	standard_scale = None
-	FASTPROP_AVAILABLE = False
+import torch
+from torch.utils.data import TensorDataset
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping
+from fastprop.model import fastprop
+from fastprop.data import fastpropDataLoader, fastpropDataset, standard_scale
 
 logger = logging.getLogger(__name__)
 
@@ -94,15 +82,7 @@ class FastpropLearner(Learner):
 				training and prediction. Recommended for active learning.
 				Default: True.
 
-		Raises:
-			ImportError: If fastprop or PyTorch Lightning not available
 		"""
-		if not FASTPROP_AVAILABLE:
-			raise ImportError(
-				"Fastprop requires: pip install fastprop pytorch-lightning\n"
-				"These dependencies are optional for LearnM8."
-			)
-
 		self.fnn_layers = fnn_layers
 		self.hidden_size = hidden_size
 		self.max_epochs = max_epochs
