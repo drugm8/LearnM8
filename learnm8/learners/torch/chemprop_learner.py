@@ -150,7 +150,7 @@ class ChempropLearner(Learner):
 					"checkpoint_dir is required when enable_fine_tuning=True"
 				)
 			self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-			logger.info(
+			logger.debug(
 				f"Fine-tuning enabled: checkpoints will be saved to {self.checkpoint_dir}"
 			)
 
@@ -168,10 +168,10 @@ class ChempropLearner(Learner):
 		if precision == 'auto':
 			if torch.cuda.is_available():
 				precision = '16-mixed'
-				logger.info("Auto-detected GPU: using mixed precision '16-mixed'")
+				logger.debug("Auto-detected GPU: using mixed precision '16-mixed'")
 			else:
 				precision = '32-true'
-				logger.info("No GPU detected: using full precision '32-true'")
+				logger.debug("No GPU detected: using full precision '32-true'")
 
 		if precision == '32':
 			precision = '32-true'
@@ -262,7 +262,7 @@ class ChempropLearner(Learner):
 				pin_memory=self.pin_memory
 			)
 
-			logger.info(f"Using validation split: {len(train_smiles)} train, {len(val_smiles)} val")
+			logger.debug(f"Using validation split: {len(train_smiles)} train, {len(val_smiles)} val")
 		else:
 			# No validation split - either disabled or too few samples
 			if self.early_stopping and not can_create_val_split:
@@ -288,9 +288,9 @@ class ChempropLearner(Learner):
 		if self.enable_fine_tuning and self.current_checkpoint_path is not None:
 			if self.current_checkpoint_path.exists():
 				try:
-					logger.info(f"Loading checkpoint for fine-tuning: {self.current_checkpoint_path}")
+					logger.debug(f"Loading checkpoint for fine-tuning: {self.current_checkpoint_path}")
 					self.model = models.MPNN.load_from_checkpoint(str(self.current_checkpoint_path))
-					logger.info("Checkpoint loaded successfully, fine-tuning from previous state")
+					logger.debug("Checkpoint loaded successfully, fine-tuning from previous state")
 				except FileNotFoundError:
 					logger.warning(f"Checkpoint file not found: {self.current_checkpoint_path}. Training fresh model.")
 					self.model = None
@@ -326,7 +326,7 @@ class ChempropLearner(Learner):
 				mode='min'
 			)
 			callbacks.append(early_stop_callback)
-			logger.info(f"Early stopping enabled (patience={self.early_stopping_patience})")
+			logger.debug(f"Early stopping enabled (patience={self.early_stopping_patience})")
 
 		# Enable progress bar and model summary if DEBUG logging is active
 		enable_verbose = logging.getLogger().level <= logging.DEBUG
@@ -344,12 +344,12 @@ class ChempropLearner(Learner):
 			callbacks=callbacks
 		)
 
-		logger.info(
+		logger.debug(
 			f"Starting Chemprop training: {n_samples} samples, "
 			f"{self.max_epochs} max epochs, precision={self.precision}"
 		)
 		self.trainer.fit(self.model, train_loader, val_loader)
-		logger.info("Chemprop training completed successfully")
+		logger.debug("Chemprop training completed successfully")
 		self.is_trained = True
 
 		# Save checkpoint if fine-tuning enabled
@@ -359,7 +359,7 @@ class ChempropLearner(Learner):
 
 			try:
 				self.trainer.save_checkpoint(str(next_checkpoint_path))
-				logger.info(f"Checkpoint saved: {next_checkpoint_path}")
+				logger.debug(f"Checkpoint saved: {next_checkpoint_path}")
 				self.current_checkpoint_path = next_checkpoint_path
 			except Exception as e:
 				logger.error(f"Failed to save checkpoint to {next_checkpoint_path}: {e}")
@@ -603,16 +603,16 @@ class ChempropLearner(Learner):
 			logger=False
 		)
 
-		logger.info(
+		logger.debug(
 			f"Starting Chemprop prediction on {len(smiles)} samples "
 			f"(batch_size={self.predict_batch_size}, precision={self.precision})"
 		)
 		predictions = predict_trainer.predict(self.model, test_loader)
-		logger.info("Chemprop prediction completed, processing results")
+		logger.debug("Chemprop prediction completed, processing results")
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()
 
 		self._cleanup_gpu_memory("after prediction")
-		logger.info(f"Chemprop prediction finalized: {len(predictions)} predictions")
+		logger.debug(f"Chemprop prediction finalized: {len(predictions)} predictions")
 
 		return predictions
