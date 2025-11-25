@@ -42,7 +42,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -60,7 +60,7 @@ results = run_active_learning(
     compound_pool='large_library.csv',  # 100k+ compounds
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 
@@ -69,7 +69,7 @@ results = run_active_learning(
     compound_pool='large_library.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     prediction_batch_size=5000  # Process 5000 compounds per batch
 )
