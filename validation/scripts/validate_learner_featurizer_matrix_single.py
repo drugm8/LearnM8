@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from learnm8 import run_active_learning
 from learnm8.api import LEARNER_REGISTRY, _create_learner
 from learnm8.oracles import CSVOracle
+from learnm8.features import FEATURIZER_REGISTRY, FEATURIZERS_2D, FEATURIZERS_3D
 from validation.lib import (
     load_validation_dataset,
     get_dataset_path,
@@ -19,12 +20,6 @@ from validation.lib import (
 from validation.lib.featurizer_visualizations import (
     generate_comprehensive_visualizations,
     create_all_cost_performance_plots
-)
-from validation.lib.seed_aggregation import (
-    aggregate_seed_results,
-    check_existing_seed_results,
-    save_aggregated_results,
-    load_existing_seed_results
 )
 
 from learnm8 import setup_logging
@@ -35,38 +30,51 @@ DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10
 BATCH_FRACTION = 0.01
 ACQUISITION = 'greedy'
-RANDOM_SEEDS = [42, 123, 456]
-OUTPUT_BASE = Path('validation/reports/learner_featurizer_matrix')
+RANDOM_SEED = 42
+OUTPUT_BASE = Path('validation/reports/learner_featurizer_matrix_single')
+
+SKIP_3D_FEATURIZERS = True
+
+ENSEMBLE_LEARNERS = ['ensemble', 'rf_ensemble', 'lr_ensemble', 'xgb_ensemble',
+                     'dt_ensemble', 'mixed_ensemble', 'fastprop_ensemble',
+                     'chemprop_ensemble']
 
 
 def print_header():
     print("=" * 80)
-    print("LEARNER-FEATURIZER MATRIX VALIDATION (Multi-Seed)")
+    print("LEARNER-FEATURIZER MATRIX VALIDATION (Single Seed)")
     print("=" * 80)
     print(f"Dataset: {DATASET_NAME}")
     print(f"Cycles: {N_CYCLES}")
     print(f"Batch Fraction: {BATCH_FRACTION}")
     print(f"Acquisition: {ACQUISITION}")
-    print(f"Random Seeds: {RANDOM_SEEDS}")
-    print(f"Random Seeds: {RANDOM_SEEDS}")
+    print(f"Random Seed: {RANDOM_SEED}")
+    print(f"Skip 3D Featurizers: {SKIP_3D_FEATURIZERS}")
     print("=" * 80)
     print()
 
 
-def get_compatible_combinations() -> List[Tuple[Union[str, object], Optional[str], str]]:
-    """Returns (learner_spec, featurizer, display_name) tuples."""
+def get_available_featurizers() -> List[str]:
+    """Get list of available featurizers, optionally excluding 3D."""
+    if SKIP_3D_FEATURIZERS:
+        return sorted([f for f in FEATURIZER_REGISTRY.keys() if f not in FEATURIZERS_3D])
+    return sorted(FEATURIZER_REGISTRY.keys())
+
+
+def get_compatible_combinations() -> List[Tuple[str, Optional[str], str]]:
+    """Returns (learner_name, featurizer, display_name) tuples."""
     combinations = []
 
-    available_featurizers = ['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
+    available_featurizers = get_available_featurizers()
 
-    # Create explicit learner instances with custom parameters
-    learner_instances = {}
     for learner_name in sorted(LEARNER_REGISTRY.keys()):
-        if learner_name in ['ensemble', 'gp']:
+        if learner_name in ENSEMBLE_LEARNERS:
+            continue
+        if learner_name == 'gp':
             continue
 
         try:
-            learner = _create_learner(learner_name, RANDOM_SEEDS[0])
+            learner = _create_learner(learner_name, RANDOM_SEED)
 
             if learner.requires_smiles():
                 combinations.append((learner_name, None, learner_name))
@@ -82,9 +90,9 @@ def get_compatible_combinations() -> List[Tuple[Union[str, object], Optional[str
     return combinations
 
 
-def check_existing_results(learner: str, featurizer: Optional[str], seed: int) -> bool:
+def check_existing_results(learner: str, featurizer: Optional[str]) -> bool:
     featurizer_str = featurizer if featurizer is not None else 'none'
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}' / f'seed_{seed}'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}'
 
     required_files = [
         'compounds_final.csv',
@@ -95,11 +103,11 @@ def check_existing_results(learner: str, featurizer: Optional[str], seed: int) -
     return all((output_dir / f).exists() for f in required_files)
 
 
-def load_existing_results(learner: str, featurizer: Optional[str], seed: int) -> Dict:
+def load_existing_results(learner: str, featurizer: Optional[str]) -> Dict:
     import polars as pl
 
     featurizer_str = featurizer if featurizer is not None else 'none'
-    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}' / f'seed_{seed}'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner}_{featurizer_str}'
 
     compounds_df = pl.read_csv(output_dir / 'compounds_final.csv', comment_prefix='#')
     cycle_metrics_df = pl.read_csv(output_dir / 'cycle_metrics.csv', comment_prefix='#')
@@ -121,11 +129,10 @@ def run_single_experiment(
     oracle,
     target_col: str,
     score_direction: str,
-    cache_dir: Path,
-    seed: int
+    cache_dir: Path
 ) -> Dict:
     featurizer_str = featurizer_name if featurizer_name is not None else 'none'
-    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}' / f'seed_{seed}'
+    output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}'
 
     start_time = time.time()
 
@@ -140,7 +147,7 @@ def run_single_experiment(
             batch_fraction=BATCH_FRACTION,
             strategy=ACQUISITION,
             score_direction=score_direction,
-            random_state=seed,
+            random_state=RANDOM_SEED,
             cache_dir=cache_dir,
             output_dir=output_dir,
             mode='benchmark'
@@ -151,6 +158,7 @@ def run_single_experiment(
         return {
             'compounds_df': results['compounds_df'],
             'cycle_metrics': results['cycle_metrics'],
+            'output_dir': output_dir,
             'elapsed_time': elapsed_time
         }
 
@@ -166,35 +174,43 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     compound_pool, metadata = load_validation_dataset(
         dataset_name=DATASET_NAME,
         clean_invalid_scores=True,
-        random_state=RANDOM_SEEDS[0]
+        random_state=RANDOM_SEED
     )
     target_col = metadata['target_column']
     score_direction = metadata['score_direction']
     n_compounds = len(compound_pool)
-    print(f"✓ Loaded {n_compounds:,} compounds")
+    print(f"Loaded {n_compounds:,} compounds")
     print(f"  Score direction: {score_direction}")
     print()
 
     print("Creating oracle...")
     dataset_path = get_dataset_path(DATASET_NAME)
     oracle = CSVOracle(str(dataset_path), id_column='ID')
-    print(f"✓ Oracle created from {dataset_path}")
+    print(f"Oracle created from {dataset_path}")
     print()
 
     print("Setting up cache directory...")
     cache_dir = OUTPUT_BASE / '.cache'
     cache_dir.mkdir(parents=True, exist_ok=True)
-    print(f"✓ Cache directory: {cache_dir}")
+    print(f"Cache directory: {cache_dir}")
+    print()
+
+    print("Available featurizers:")
+    available_featurizers = get_available_featurizers()
+    print(f"  {len(available_featurizers)} featurizers: {', '.join(available_featurizers[:10])}...")
     print()
 
     print("Identifying compatible learner-featurizer combinations...")
     combinations = get_compatible_combinations()
-    print(f"✓ Found {len(combinations)} compatible combinations")
+    print(f"Found {len(combinations)} compatible combinations")
     print()
 
-    print("Compatible combinations:")
+    print("Compatible learners:")
+    learners_seen = set()
     for learner_spec, featurizer, display_name in combinations:
-        print(f"  - {display_name:20s} + {featurizer}")
+        if display_name not in learners_seen:
+            learners_seen.add(display_name)
+            print(f"  - {display_name}")
     print()
 
     all_results = {}
@@ -202,79 +218,51 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     skipped = 0
     failed = 0
 
-    total_experiments = len(combinations) * len(RANDOM_SEEDS)
-    print(f"Starting experiments ({len(combinations)} combinations × {len(RANDOM_SEEDS)} seeds = {total_experiments} total)...")
+    print(f"Starting experiments ({len(combinations)} total)...")
     print("=" * 80)
     print()
 
-    pbar_combinations = tqdm(combinations, desc="Combinations", unit="comb", smoothing=0, position=0)
+    pbar = tqdm(combinations, desc="Experiments", unit="exp", smoothing=0)
 
-    for learner_spec, featurizer_name, display_name in pbar_combinations:
+    for learner_spec, featurizer_name, display_name in pbar:
         learner_name = display_name if display_name else learner_spec
         featurizer_display = featurizer_name if featurizer_name is not None else 'none'
-        pbar_combinations.set_description(f"{learner_name} + {featurizer_display}")
+        pbar.set_description(f"{learner_name} + {featurizer_display}")
 
-        seed_results = {}
+        if check_existing_results(learner_name, featurizer_name):
+            try:
+                result_data = load_existing_results(learner_name, featurizer_name)
+                all_results[(learner_name, featurizer_name)] = result_data
+                skipped += 1
+                continue
+            except Exception as e:
+                pbar.write(f"Warning: Could not load existing results: {e}")
+                pbar.write(f"Will re-run experiment...")
 
-        pbar_seeds = tqdm(RANDOM_SEEDS, desc="  Seeds", unit="seed", smoothing=0, position=1, leave=False)
-        for seed in pbar_seeds:
-            pbar_seeds.set_description(f"  Seed {seed}")
+        try:
+            result_data = run_single_experiment(
+                learner_name,
+                featurizer_name,
+                compound_pool,
+                oracle,
+                target_col,
+                score_direction,
+                cache_dir
+            )
+            all_results[(learner_name, featurizer_name)] = result_data
+            completed += 1
 
-            if check_existing_results(learner_name, featurizer_name, seed):
-                try:
-                    result_data = load_existing_results(learner_name, featurizer_name, seed)
-                    seed_results[seed] = result_data
-                    skipped += 1
-                    pbar_seeds.write(f"  Seed {seed}: Skipping (results already exist)")
-                except Exception as e:
-                    pbar_seeds.write(f"  Warning: Could not load existing results for seed {seed}: {e}")
-                    pbar_seeds.write(f"  Will re-run experiment...")
+        except Exception as e:
+            pbar.write(f"FAILED {learner_name} + {featurizer_display}: {e}")
+            failed += 1
 
-            if seed not in seed_results:
-                try:
-                    result_data = run_single_experiment(
-                        learner_name,
-                        featurizer_name,
-                        compound_pool,
-                        oracle,
-                        target_col,
-                        score_direction,
-                        cache_dir,
-                        seed
-                    )
-                    seed_results[seed] = result_data
-                    completed += 1
-
-                except Exception as e:
-                    pbar_seeds.write(f"  Seed {seed}: Failed - {e}")
-                    failed += 1
-
-        pbar_seeds.close()
-
-        if len(seed_results) > 0:
-            pbar_combinations.write(f"  Aggregating results across {len(seed_results)} seeds...")
-            aggregated = aggregate_seed_results(seed_results)
-
-            featurizer_str = featurizer_name if featurizer_name is not None else 'none'
-            combination_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}'
-            save_aggregated_results(seed_results, aggregated, combination_dir)
-
-            all_results[(learner_name, featurizer_name)] = {
-                'seed_results': seed_results,
-                'aggregated': aggregated,
-                'cycle_metrics': aggregated['cycle_metrics_mean'],
-                'compounds_df': seed_results[RANDOM_SEEDS[0]]['compounds_df'],
-                'output_dir': combination_dir
-            }
-            pbar_combinations.write(f"  ✓ Aggregation complete")
-
-    pbar_combinations.close()
+    pbar.close()
     print()
 
     print("=" * 80)
-    print(f"Individual experiments completed: {completed}")
-    print(f"Individual experiments skipped (existing): {skipped}")
-    print(f"Individual experiments failed: {failed}")
+    print(f"Experiments completed: {completed}")
+    print(f"Experiments skipped (existing): {skipped}")
+    print(f"Experiments failed: {failed}")
     print(f"Total combinations with results: {len(all_results)}")
     print()
 
@@ -302,7 +290,7 @@ def main():
             'batch_fraction': BATCH_FRACTION,
             'batch_size': int(n_compounds * BATCH_FRACTION),
             'acquisition': ACQUISITION,
-            'random_seeds': RANDOM_SEEDS
+            'random_seeds': [RANDOM_SEED]
         }
 
         viz_paths = generate_comprehensive_visualizations(
@@ -311,7 +299,6 @@ def main():
             config
         )
 
-        # Generate cost/performance analysis
         cost_perf_paths = create_all_cost_performance_plots(
             all_results,
             OUTPUT_BASE,

@@ -327,7 +327,7 @@ def run_ensemble_experiment(ensemble_key, ensemble_config, compound_pool, oracle
             oracle=oracle,
             learner=learner_instance,
             target_col=target_col,
-            featurizer_type='morgan',
+            featurizer='morgan',
             n_cycles=N_CYCLES,
             batch_fraction=BATCH_FRACTION,
             score_direction=score_direction,

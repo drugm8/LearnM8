@@ -655,7 +655,7 @@ def load_dataset(dataset_name: str) -> tuple[pl.DataFrame, str, CSVOracle]:
     target_col = metadata['target_column']
 
     dataset_path = get_dataset_path(dataset_name)
-    oracle = CSVOracle(str(dataset_path), id_column='ID')
+    oracle = CSVOracle(str(dataset_path), id_column='zincid')
 
     return df, target_col, oracle
 
@@ -809,7 +809,7 @@ def run_single_experiment(
                 oracle=oracle,
                 learner=learner,
                 target_col=target_col,
-                featurizer_type=featurizer,
+                featurizer=featurizer,
                 n_cycles=n_cycles,
                 batch_fraction=batch_fraction,
                 random_state=seed,
@@ -1471,7 +1471,7 @@ def main():
     score_direction = metadata['score_direction']
 
     dataset_path = get_dataset_path(args.dataset)
-    oracle = CSVOracle(str(dataset_path), id_column='ID')
+    oracle = CSVOracle(str(dataset_path), id_column='zincid')
 
     console.print(f"[green]✓ Loaded {len(compound_pool)} compounds[/green]")
     console.print(f"[cyan]Target column: {target_col}[/cyan]")

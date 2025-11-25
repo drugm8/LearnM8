@@ -245,7 +245,7 @@ def main():
                 compound_pool=compound_pool,
                 oracle=oracle,
                 learner='mc_dropout',
-                featurizer_type='morgan_feat',
+                featurizer='morgan_feat',
                 target_col=metadata['target_column'],
                 cycles=cycles,
                 score_direction=metadata['score_direction'],

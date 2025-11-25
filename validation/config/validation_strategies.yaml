@@ -12,7 +12,7 @@ global:
   n_cycles: 10
   batch_fraction: 0.01
 
-  featurizer_type: 'morgan'
+  featurizer: 'morgan'
   cache_dir: '../.shared_cache'
 
   learner: 'rf_ensemble'

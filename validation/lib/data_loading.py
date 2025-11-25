@@ -100,7 +100,7 @@ def load_validation_dataset(
 
 def validate_compounds_with_features(
     compounds_df: pl.DataFrame,
-    featurizer_type: str = 'morgan',
+    featurizer: str = 'morgan',
     cache_dir: Path = Path('.cache')
 ) -> pl.DataFrame:
 
@@ -108,12 +108,12 @@ def validate_compounds_with_features(
 
     try:
         logger.info("Validating compounds using v1.0.0 API...")
-        logger.info(f"  Featurizer: {featurizer_type}")
+        logger.info(f"  Featurizer: {featurizer}")
         logger.info(f"  Cache directory: {cache_dir}")
 
         validation_result = validate_compound_pool(
             compound_pool=compounds_df,
-            featurizer_type=featurizer_type,
+            featurizer=featurizer,
             cache_dir=cache_dir
         )
 

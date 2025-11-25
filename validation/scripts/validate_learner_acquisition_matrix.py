@@ -130,7 +130,7 @@ def run_single_experiment(
 
     start_time = time.time()
 
-    featurizer_type = None if learner_name in ['chemprop', 'chemprop_ensemble'] else FEATURIZER_TYPE
+    featurizer = None if learner_name in ['chemprop', 'chemprop_ensemble'] else FEATURIZER_TYPE
 
     try:
         results = run_active_learning(
@@ -138,7 +138,7 @@ def run_single_experiment(
             oracle=oracle,
             learner=learner_name,
             target_col=target_col,
-            featurizer_type=featurizer_type,
+            featurizer=featurizer,
             n_cycles=N_CYCLES,
             batch_fraction=BATCH_FRACTION,
             strategy=acquisition_name,
@@ -301,7 +301,7 @@ def main():
             'n_cycles': N_CYCLES,
             'batch_fraction': BATCH_FRACTION,
             'batch_size': int(n_compounds * BATCH_FRACTION),
-            'featurizer_type': f"{FEATURIZER_TYPE} (chemprop: None)",
+            'featurizer': f"{FEATURIZER_TYPE} (chemprop: None)",
             'random_seeds': RANDOM_SEEDS
         }
 
