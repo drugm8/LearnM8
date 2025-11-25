@@ -36,6 +36,12 @@ from typing import Tuple, Dict, Any, List, Optional, Literal
 import polars as pl
 import numpy as np
 
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
+
 from learnm8.features.extraction import extract_features
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
@@ -358,8 +364,22 @@ def execute_cycle(
     all_valid_ids = []
 
     n_batches = math.ceil(n_unlabeled / batch_size)
-    for batch_idx, chunk_df in enumerate(_chunk_dataframe(prediction_pool, batch_size), 1):
-        if n_batches > 1:
+    chunks = list(_chunk_dataframe(prediction_pool, batch_size))
+
+    if n_batches > 1 and TQDM_AVAILABLE:
+        batch_iterator = tqdm(
+            enumerate(chunks, 1),
+            total=n_batches,
+            desc="Predicting batches",
+            unit="batch",
+            smoothing=0,
+            leave=False
+        )
+    else:
+        batch_iterator = enumerate(chunks, 1)
+
+    for batch_idx, chunk_df in batch_iterator:
+        if n_batches > 1 and not TQDM_AVAILABLE:
             logger.debug(f"Processing batch {batch_idx}/{n_batches} ({len(chunk_df)} compounds)")
 
         try:
