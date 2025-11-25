@@ -46,14 +46,14 @@ logger = logging.getLogger(__name__)
 
 def _calculate_optimal_batch_size(
     n_compounds: int,
-    featurizer_type: Optional[str],
+    featurizer: Optional[str],
     available_memory_gb: float = 4.0
 ) -> int:
     """Calculate optimal batch size to stay under memory threshold.
 
     Args:
         n_compounds: Number of compounds to predict on
-        featurizer_type: Type of featurizer (morgan, maccs, etc.)
+        featurizer: Type of featurizer (morgan, maccs, etc.)
         available_memory_gb: Available memory budget in GB
 
     Returns:
@@ -64,14 +64,19 @@ def _calculate_optimal_batch_size(
         - Use 50% of available memory for safety margin
         - Apply reasonable min/max bounds
     """
-    # Feature dimensions (float64 = 8 bytes)
-    feature_sizes = {
-        'morgan': 2048, 'ecfp6': 2048, 'morgan_feat': 2048,
-        'maccs': 167, 'descriptors': 1613
-    }
+    # Get feature dimension from featurizer if available
+    if featurizer is not None:
+        from learnm8.features import FEATURIZER_REGISTRY
+        if featurizer in FEATURIZER_REGISTRY:
+            temp_featurizer = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            feature_dim = temp_featurizer.get_dimension()
+        else:
+            # Fallback for unknown types
+            feature_dim = 2048
+    else:
+        # Default to 2048 for SMILES-aware learners (no featurization)
+        feature_dim = 2048
 
-    # Default to morgan if unknown or None (SMILES-aware learners)
-    feature_dim = feature_sizes.get(featurizer_type, 2048)
     bytes_per_compound = feature_dim * 8  # float64
 
     # Use 50% of available memory for features + predictions
@@ -105,7 +110,7 @@ def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
 def _predict_chunk(
     chunk_df: pl.DataFrame,
     learner: Learner,
-    featurizer_type: Optional[str],
+    featurizer: Optional[str],
     cache_dir: Path,
     show_progress: bool = False
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
@@ -119,7 +124,7 @@ def _predict_chunk(
     Args:
         chunk_df: DataFrame with ID and SMILES columns
         learner: Trained learner instance
-        featurizer_type: Type of featurizer (morgan, maccs, etc.) or None
+        featurizer: Type of featurizer (morgan, maccs, etc.) or None
         cache_dir: Feature cache directory
         show_progress: Whether to show progress bar for feature extraction
 
@@ -130,9 +135,9 @@ def _predict_chunk(
 
     if learner.requires_smiles():
         # SMILES-aware learners (Chemprop, Fastprop)
-        if featurizer_type is not None:
+        if featurizer is not None:
             chunk_features = extract_features(
-                chunk_smiles, featurizer_type,
+                chunk_smiles, featurizer,
                 cache_dir=cache_dir, show_progress=show_progress
             )
         else:
@@ -140,10 +145,10 @@ def _predict_chunk(
         return learner.predict(features=chunk_features, smiles=chunk_smiles)
     else:
         # Feature-based learners (RF, XGBoost, GP, etc.)
-        if featurizer_type is None:
-            raise ValueError(f"featurizer_type is required for {learner.get_name()}")
+        if featurizer is None:
+            raise ValueError(f"featurizer is required for {learner.get_name()}")
         chunk_features = extract_features(
-            chunk_smiles, featurizer_type,
+            chunk_smiles, featurizer,
             cache_dir=cache_dir, show_progress=show_progress
         )
         return learner.predict(chunk_features)
@@ -156,7 +161,7 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer_type: Optional[str],
+    featurizer: Optional[str],
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str = 'higher',
@@ -182,7 +187,7 @@ def execute_cycle(
         learner: Trained machine learning model implementing Learner interface
         oracle: Oracle for measuring compound properties
         target_col: Name of target property column
-        featurizer_type: Type of molecular features (morgan, maccs, ecfp6, descriptors)
+        featurizer: Type of molecular features (morgan, maccs, ecfp6, descriptors)
         cache_dir: Directory for feature caching
         original_pool_size: Size of original compound pool (for batch calculation)
         score_direction: 'higher' or 'lower' for optimization direction
@@ -266,10 +271,10 @@ def execute_cycle(
             training_smiles = labeled_df['SMILES'].to_list()
 
             if learner.requires_smiles():
-                if featurizer_type is not None:
+                if featurizer is not None:
                     training_features = extract_features(
                         training_smiles,
-                        featurizer_type,
+                        featurizer,
                         cache_dir=cache_dir
                     )
                     logger.info(
@@ -290,17 +295,17 @@ def execute_cycle(
                 )
                 logger.debug(f"Model trained on {len(training_smiles)} compounds")
             else:
-                if featurizer_type is None:
+                if featurizer is None:
                     raise ValueError(
-                        f"featurizer_type is required for {learner.get_name()}"
+                        f"featurizer is required for {learner.get_name()}"
                     )
 
                 training_features = extract_features(
                     training_smiles,
-                    featurizer_type,
+                    featurizer,
                     cache_dir=cache_dir
                 )
-                logger.info(f"Extracted {featurizer_type} features: {len(labeled_df)} training compounds")
+                logger.info(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
 
                 logger.info(f"Training model on {len(labeled_df)} labeled compounds")
                 learner.train(training_features, training_targets)
@@ -337,7 +342,7 @@ def execute_cycle(
     if prediction_batch_size is None:
         # Auto: full dataset for small, chunked for large
         batch_size = (
-            _calculate_optimal_batch_size(n_unlabeled, featurizer_type, 4.0)
+            _calculate_optimal_batch_size(n_unlabeled, featurizer, 4.0)
             if n_unlabeled > 100000
             else n_unlabeled
         )
@@ -359,7 +364,7 @@ def execute_cycle(
 
         try:
             chunk_predictions, chunk_uncertainties = _predict_chunk(
-                chunk_df, learner, featurizer_type, cache_dir,
+                chunk_df, learner, featurizer, cache_dir,
                 show_progress=(n_batches == 1 and n_unlabeled > 100000)
             )
             all_predictions.append(chunk_predictions)

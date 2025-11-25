@@ -170,7 +170,7 @@ def save_results(
     logger.info("═══════════════════════════════════════════════════════════════")
 
     target_col = config.get('target_col', 'target')
-    featurizer_type = config.get('featurizer_type', 'unknown')
+    featurizer = config.get('featurizer', 'unknown')
     n_cycles = config.get('n_cycles', len([c for c in compounds_df.columns if c.startswith('prediction_cycle_')]))
     mode = config.get('mode', 'run')
     score_direction = config.get('score_direction', 'higher')
@@ -194,7 +194,7 @@ def save_results(
         metadata = {
             'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
             'Target': target_col,
-            'Featurizer': featurizer_type,
+            'Featurizer': featurizer,
             'Score Direction': score_direction,
             'Total Cycles': n_cycles,
             'Total Compounds': len(compounds_final),

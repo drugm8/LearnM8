@@ -212,7 +212,7 @@ def select_initial_batch(
     target_col: str,
     strategy: str,
     batch_fraction: float,
-    featurizer_type: str,
+    featurizer: str,
     cache_dir: Path,
     original_pool_size: int,
     random_state: int = 42,
@@ -232,7 +232,7 @@ def select_initial_batch(
         target_col: Target property column name
         strategy: Acquisition strategy ('random' or 'bitbirch')
         batch_fraction: Fraction of pool to select
-        featurizer_type: Molecular featurizer ('morgan', 'ecfp6', etc.)
+        featurizer: Molecular featurizer ('morgan', 'ecfp6', etc.)
         cache_dir: Feature cache directory
         original_pool_size: Original pool size for batch calculation
         random_state: Random seed for reproducibility
@@ -257,7 +257,7 @@ def select_initial_batch(
         ...     target_col='Activity',
         ...     strategy='random',
         ...     batch_fraction=0.01,
-        ...     featurizer_type='morgan',
+        ...     featurizer='morgan',
         ...     cache_dir=Path('.cache'),
         ...     original_pool_size=10000,
         ...     score_direction='higher',

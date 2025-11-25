@@ -30,7 +30,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 	def __init__(self,
 				 features: np.ndarray,
 				 compound_ids: List[str],
-				 featurizer_type: str = 'morgan',
+				 featurizer: str = 'morgan',
 				 threshold: float = 0.5,
 				 branching_factor: int = 50,
 				 random_state: int = 42):
@@ -39,7 +39,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		Args:
 			features: Pre-computed molecular fingerprints (n_compounds, n_features)
 			compound_ids: List of compound IDs corresponding to feature rows
-			featurizer_type: Type of molecular features ('morgan', 'ecfp6', 'maccs')
+			featurizer: Type of molecular features ('morgan', 'ecfp6', 'maccs')
 			threshold: BitBIRCH threshold parameter (molecular similarity threshold)
 			branching_factor: Maximum number of subclusters in a node
 			random_state: Random seed for reproducibility
@@ -48,7 +48,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		self.features = features
 		self.compound_ids = compound_ids
 		self._id_to_idx = {cid: idx for idx, cid in enumerate(compound_ids)}
-		self.featurizer_type = featurizer_type
+		self.featurizer = featurizer
 		self.threshold = threshold
 		self.branching_factor = branching_factor
 		self.random_state = random_state
@@ -59,9 +59,9 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		if branching_factor <= 2:
 			raise ValueError("branching_factor must be greater than 2")
 		
-		if featurizer_type not in ['morgan', 'ecfp6', 'maccs']:
+		if featurizer not in ['morgan', 'ecfp6', 'maccs']:
 			logger.warning(f"BitBIRCH is optimized for binary fingerprints. "
-						 f"'{featurizer_type}' may not work optimally.")
+						 f"'{featurizer}' may not work optimally.")
 		
 		# Check BitBIRCH availability
 		self._bitbirch_available = self._check_bitbirch_availability()
@@ -294,7 +294,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 	
 	def get_name(self) -> str:
 		"""Return descriptive name for this acquisition function."""
-		return f"BitBIRCH({self.featurizer_type})"
+		return f"BitBIRCH({self.featurizer})"
 	
 	def requires_uncertainty(self) -> bool:
 		"""BitBIRCH does not require uncertainty estimates."""

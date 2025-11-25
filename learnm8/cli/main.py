@@ -239,11 +239,16 @@ def create_parser() -> argparse.ArgumentParser:
         required=True,
         help='Target property column'
     )
+    # Get available featurizers from registry
+    from learnm8.features import list_available_featurizers
+    available_featurizers = list_available_featurizers()
+    featurizer_choices = available_featurizers['all']
+
     core_group.add_argument(
         '--featurizer',
         required=True,
-        choices=['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'],
-        help='Featurizer type'
+        choices=featurizer_choices,
+        help='Featurizer type (2D or 3D molecular representations)'
     )
     # Get available learners from registry
     from learnm8.api import list_available_learners
@@ -482,7 +487,7 @@ def cmd_run(args: argparse.Namespace):
                         oracle=args.oracle,
                         learner=args.learner,
                         target_col=args.target_col,
-                        featurizer_type=args.featurizer,
+                        featurizer=args.featurizer,
                         cycles=cycles,
                         n_cycles=args.n_cycles,
                         batch_fraction=args.batch_fraction,
@@ -510,7 +515,7 @@ def cmd_run(args: argparse.Namespace):
                     oracle=args.oracle,
                     learner=args.learner,
                     target_col=args.target_col,
-                    featurizer_type=args.featurizer,
+                    featurizer=args.featurizer,
                     cycles=cycles,
                     n_cycles=args.n_cycles,
                     batch_fraction=args.batch_fraction,
@@ -591,10 +596,59 @@ def cmd_list(args: argparse.Namespace):
             console.print(f"  • {strategy}")
 
     elif args.component == 'featurizers':
-        featurizers = ['morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-        console.print("[bold cyan]Available Featurizers:[/bold cyan]")
-        for featurizer in featurizers:
-            console.print(f"  • {featurizer}")
+        from learnm8.features import list_available_featurizers, FEATURIZER_REGISTRY
+        from rich.table import Table
+
+        available = list_available_featurizers()
+
+        table = Table(title="Available Molecular Featurizers", show_header=True, header_style="bold cyan")
+        table.add_column("Name", style="blue", no_wrap=True)
+        table.add_column("Type", style="green")
+        table.add_column("Dimension", justify="right", style="yellow")
+        table.add_column("Description", style="white")
+
+        # Add 2D featurizers
+        for name in available['2d']:
+            if name in FEATURIZER_REGISTRY:
+                featurizer_class = FEATURIZER_REGISTRY[name]
+                try:
+                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
+                    dim = temp_feat.get_dimension()
+                    desc = {
+                        'morgan': 'Circular fingerprints (ECFP4)',
+                        'ecfp': 'Circular fingerprints (ECFP4)',
+                        'ecfp6': 'Extended circular fingerprints (radius=3)',
+                        'morgan_feat': 'Morgan with feature vectors',
+                        'maccs': 'MACCS structural keys',
+                        'avalon': 'Avalon fingerprints',
+                        'atom_pair': 'Atom pair fingerprints',
+                        'topological_torsion': 'Topological torsion fingerprints',
+                        'rdkit': 'RDKit fingerprints',
+                        'pubchem': 'PubChem fingerprints',
+                        'mordred': 'Mordred molecular descriptors',
+                        'descriptors': 'Mordred molecular descriptors'
+                    }.get(name, '')
+                    table.add_row(name, "2D", str(dim), desc)
+                except Exception:
+                    table.add_row(name, "2D", "N/A", "")
+
+        # Add 3D featurizers
+        for name in available['3d']:
+            if name in FEATURIZER_REGISTRY:
+                featurizer_class = FEATURIZER_REGISTRY[name]
+                try:
+                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
+                    dim = temp_feat.get_dimension()
+                    desc = {
+                        'whim': 'WHIM 3D molecular descriptors',
+                        'usr': 'USR 3D shape descriptors',
+                        'e3fp': 'Extended 3D fingerprints'
+                    }.get(name, '')
+                    table.add_row(name, "3D", str(dim), desc)
+                except Exception:
+                    table.add_row(name, "3D", "N/A", "")
+
+        console.print(table)
 
     elif args.component == 'schedules':
         schedules = {

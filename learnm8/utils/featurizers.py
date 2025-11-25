@@ -106,13 +106,13 @@ def smiles_to_ecfp6_fingerprint(smiles: str) -> np.ndarray:
     return arr
 
 
-def smiles_to_fingerprints(smiles_list: list[str], featurizer_type: str = "morgan", n_jobs: int = -1) -> np.ndarray:
+def smiles_to_fingerprints(smiles_list: list[str], featurizer: str = "morgan", n_jobs: int = -1) -> np.ndarray:
     """
     Convert list of SMILES to fingerprints in parallel.
     
     Args:
         smiles_list: List of SMILES strings
-        featurizer_type: Type of fingerprint ("morgan", "maccs", "ecfp6")
+        featurizer: Type of fingerprint ("morgan", "maccs", "ecfp6")
         n_jobs: Number of parallel jobs (-1 uses all CPUs, capped at 32)
         
     Returns:
@@ -121,14 +121,14 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer_type: str = "morga
     if n_jobs == -1:
         n_jobs = min(os.cpu_count() or 1, 32)
     
-    if featurizer_type == "morgan":
+    if featurizer == "morgan":
         fingerprint_func = smiles_to_morgan_fingerprint
-    elif featurizer_type == "maccs":
+    elif featurizer == "maccs":
         fingerprint_func = smiles_to_maccs_fingerprint
-    elif featurizer_type == "ecfp6":
+    elif featurizer == "ecfp6":
         fingerprint_func = smiles_to_ecfp6_fingerprint
     else:
-        raise ValueError(f"Unknown featurizer type: {featurizer_type}")
+        raise ValueError(f"Unknown featurizer type: {featurizer}")
     
     fingerprints = Parallel(n_jobs=n_jobs)(
         delayed(fingerprint_func)(smiles) 
@@ -210,52 +210,52 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
         return pl.from_pandas(final_df)  # Convert to Polars for consistency
 
 
-def _get_representation_file(results_dir: Path, featurizer_type: str) -> Path:
+def _get_representation_file(results_dir: Path, featurizer: str) -> Path:
     """Get the file path for storing representations."""
     cache_dir = results_dir / ".representations"
     cache_dir.mkdir(exist_ok=True)
-    return cache_dir / f"{featurizer_type}.pkl"
+    return cache_dir / f"{featurizer}.pkl"
 
 
 def _compute_and_store_representations(
     compounds: pl.DataFrame,
-    featurizer_type: str,
+    featurizer: str,
     results_dir: Path,
     logger: Optional[logging.Logger] = None
 ) -> None:
     """Compute and store representations to file."""
     if logger:
-        logger.info(f"Computing {featurizer_type} representations for {len(compounds)} compounds")
+        logger.info(f"Computing {featurizer} representations for {len(compounds)} compounds")
 
     representations = {}
 
-    if featurizer_type in ["morgan", "maccs", "ecfp6"]:
+    if featurizer in ["morgan", "maccs", "ecfp6"]:
         # Compute fingerprints
-        fingerprints = smiles_to_fingerprints(compounds.get_column('SMILES').to_list(), featurizer_type)
+        fingerprints = smiles_to_fingerprints(compounds.get_column('SMILES').to_list(), featurizer)
         for idx, compound_id in enumerate(compounds.get_column('ID').to_list()):
             representations[compound_id] = fingerprints[idx]
 
-    elif featurizer_type == "descriptors":
+    elif featurizer == "descriptors":
         # Compute Mordred descriptors
         descriptors_df = _compute_mordred_descriptors(compounds.get_column('SMILES').to_list())
         for idx, compound_id in enumerate(compounds.get_column('ID').to_list()):
             representations[compound_id] = descriptors_df.row(idx)
 
     else:
-        raise ValueError(f"Unknown featurizer type: {featurizer_type}. Supported: morgan, maccs, ecfp6, descriptors")
+        raise ValueError(f"Unknown featurizer type: {featurizer}. Supported: morgan, maccs, ecfp6, descriptors")
 
     # Store to file
-    representation_file = _get_representation_file(results_dir, featurizer_type)
+    representation_file = _get_representation_file(results_dir, featurizer)
     with open(representation_file, 'wb') as f:
         pickle.dump(representations, f)
 
     if logger:
-        logger.info(f"Stored {featurizer_type} representations to {representation_file}")
+        logger.info(f"Stored {featurizer} representations to {representation_file}")
 
 
-def _load_representations(results_dir: Path, featurizer_type: str) -> Dict:
+def _load_representations(results_dir: Path, featurizer: str) -> Dict:
     """Load representations from file."""
-    representation_file = _get_representation_file(results_dir, featurizer_type)
+    representation_file = _get_representation_file(results_dir, featurizer)
     
     if not representation_file.exists():
         return {}
@@ -264,9 +264,9 @@ def _load_representations(results_dir: Path, featurizer_type: str) -> Dict:
         return pickle.load(f)
 
 
-def get_fingerprints(compound_ids: List[str], results_dir: Path, featurizer_type: str = "morgan") -> np.ndarray:
+def get_fingerprints(compound_ids: List[str], results_dir: Path, featurizer: str = "morgan") -> np.ndarray:
     """Get fingerprints for specified compound IDs."""
-    representations = _load_representations(results_dir, featurizer_type)
+    representations = _load_representations(results_dir, featurizer)
     
     fingerprints = []
     for compound_id in compound_ids:
@@ -294,16 +294,16 @@ def get_descriptors(compound_ids: List[str], results_dir: Path) -> np.ndarray:
 
 def precompute_representations(
     compounds: pl.DataFrame,
-    featurizer_type: str,
+    featurizer: str,
     results_dir: Path,
     logger: Optional[logging.Logger] = None
 ) -> None:
     """Precompute and store representations for all compounds."""
-    representation_file = _get_representation_file(results_dir, featurizer_type)
+    representation_file = _get_representation_file(results_dir, featurizer)
 
     if representation_file.exists():
         if logger:
             logger.info(f"Representations already exist at {representation_file}")
         return
 
-    _compute_and_store_representations(compounds, featurizer_type, results_dir, logger)
+    _compute_and_store_representations(compounds, featurizer, results_dir, logger)
