@@ -20,19 +20,22 @@ Examples:
         oracle='oracle.csv',
         learner='rf',
         target_col='Activity',
-        featurizer_type='morgan',
+        featurizer='morgan',
         n_cycles=10,
         batch_fraction=0.01
     )
 
-    # Advanced API
+    # Advanced API with custom featurizer
     from learnm8.core.config import CycleConfig
+    from learnm8.features import MorganFeaturizer
+
+    custom_featurizer = MorganFeaturizer(radius=3, fp_size=4096)
     results = run_active_learning(
         compound_pool=df,
         oracle=my_oracle,
         learner=my_learner,
         target_col='Activity',
-        featurizer_type='morgan',
+        featurizer=custom_featurizer,
         cycles=[
             CycleConfig('random', n_cycles=3, batch_fraction=0.02),
             CycleConfig('greedy', n_cycles=5, batch_fraction=0.01,
@@ -332,7 +335,7 @@ def run_active_learning(
     oracle: Union[str, Path, Oracle],
     learner: Union[str, Learner],
     target_col: str,
-    featurizer_type: Optional[str] = None,
+    featurizer: Union[str, 'Featurizer', None] = None,
     # Advanced API
     cycles: Optional[List[CycleConfig]] = None,
     # Simple API
@@ -371,7 +374,7 @@ def run_active_learning(
             oracle='oracle.csv',
             learner='rf',
             target_col='Activity',
-            featurizer_type='morgan',
+            featurizer='morgan',
             n_cycles=10,
             batch_fraction=0.01,       # 1% per cycle (ALL cycles)
             initial_strategy='random',  # Strategy for cycle 0
@@ -384,7 +387,7 @@ def run_active_learning(
             oracle=my_oracle,
             learner=my_learner,
             target_col='Activity',
-            featurizer_type='morgan',
+            featurizer='morgan',
             cycles=[
                 CycleConfig('random', n_cycles=1, batch_fraction=0.02),
                 CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
@@ -409,9 +412,16 @@ def run_active_learning(
 
         target_col: Target property column name
 
-        featurizer_type: Molecular featurizer type. Optional for SMILES-aware
+        featurizer: Molecular featurizer specification. Optional for SMILES-aware
             learners (e.g., 'chemprop'). Required for feature-based learners.
-            Valid options: 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat'
+            Can be:
+            - str: Featurizer name ('morgan', 'maccs', 'ecfp6', 'descriptors', etc.)
+            - Featurizer instance: Custom featurizer with specific configuration
+            - None: No featurization (only valid for SMILES-aware learners)
+
+            Examples:
+                featurizer='morgan'  # Default Morgan fingerprints
+                featurizer=MorganFeaturizer(radius=3, fp_size=4096)  # Custom config
 
         cycles: Advanced API - List of CycleConfig objects
             If provided, overrides simple API parameters
@@ -491,7 +501,7 @@ def run_active_learning(
 
         **Other Notes:**
         - Pruning is enabled automatically if pruning_fraction is provided
-        - All learners receive featurizer_type and random_state parameters
+        - Featurizer instances are used for feature extraction and caching
         - Results are automatically saved to CSV files in output_dir
     """
 
@@ -583,9 +593,23 @@ def run_active_learning(
             logger.debug(f"Using provided oracle instance: {oracle.__class__.__name__}")
             if mode is None:
                 mode = 'run'
+        elif isinstance(oracle, pl.DataFrame):
+            # DataFrame oracle for benchmark mode (in-memory)
+            logger.debug("Creating in-memory oracle from DataFrame")
+            from learnm8.oracles.csv_oracle import CSVOracle
+            # Save to temp file for CSVOracle
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+                temp_oracle_path = Path(f.name)
+                oracle.write_csv(temp_oracle_path)
+            oracle = CSVOracle(str(temp_oracle_path))
+            if mode is None:
+                mode = 'benchmark'
+                mode_detected = True
+            logger.debug(f"Created CSV oracle from DataFrame, mode={mode}")
         else:
             raise TypeError(
-                f"oracle must be None, str, Path, or Oracle instance, got {type(oracle)}"
+                f"oracle must be None, str, Path, DataFrame, or Oracle instance, got {type(oracle)}"
             )
 
         logger.debug(f"Detected {mode} mode (oracle type: {type(oracle).__name__})")
@@ -621,18 +645,48 @@ def run_active_learning(
             )
 
         if learner.requires_smiles():
-            if featurizer_type is not None:
+            if featurizer is not None:
+                featurizer_name = featurizer if isinstance(featurizer, str) else featurizer.get_name()
                 logger.info(
-                    f"{learner.get_name()} will use {featurizer_type} features as extra descriptors (x_d). "
-                    f"For pure graph-based learning, set featurizer_type=None."
+                    f"{learner.get_name()} will use {featurizer_name} features as extra descriptors (x_d). "
+                    f"For pure graph-based learning, set featurizer=None."
                 )
         else:
-            if featurizer_type is None:
+            if featurizer is None:
+                from learnm8.features import list_available_featurizers
+                available = list_available_featurizers()
+                featurizer_options = ', '.join(sorted(available['all']))
                 raise ValueError(
                     f"{learner.get_name()} requires a featurizer. "
-                    f"Specify featurizer_type parameter. "
-                    f"Valid options: morgan, maccs, ecfp6, descriptors, morgan_feat"
+                    f"Specify featurizer parameter. "
+                    f"Valid options: {featurizer_options}"
                 )
+
+        # Convert string featurizer to instance if needed
+        featurizer_obj = None
+        if featurizer is not None:
+            if isinstance(featurizer, str):
+                from learnm8.features import FEATURIZER_REGISTRY
+                if featurizer not in FEATURIZER_REGISTRY:
+                    from learnm8.features import list_available_featurizers
+                    available = list_available_featurizers()
+                    featurizer_options = ', '.join(sorted(available['all']))
+                    raise ValueError(
+                        f"Unknown featurizer: '{featurizer}'. "
+                        f"Valid options: {featurizer_options}"
+                    )
+                featurizer_class = FEATURIZER_REGISTRY[featurizer]
+                featurizer_obj = featurizer_class(n_jobs=-1)
+                logger.debug(f"Instantiated featurizer: {featurizer_obj.get_name()}")
+            else:
+                from learnm8.core.interfaces import Featurizer
+                if not isinstance(featurizer, Featurizer):
+                    raise TypeError(
+                        f"featurizer must be str or Featurizer instance, "
+                        f"got {type(featurizer).__name__}"
+                    )
+                featurizer_obj = featurizer
+                logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
 
         # Validate prediction_batch_size if provided
         if prediction_batch_size is not None:
@@ -737,7 +791,7 @@ def run_active_learning(
             target_col=target_col,
             strategy=init_config.strategy,
             batch_fraction=init_config.batch_fraction,
-            featurizer_type=featurizer_type,
+            featurizer=featurizer_obj.get_name() if featurizer_obj else None,
             cache_dir=cache_dir,
             original_pool_size=original_pool_size,
             random_state=random_state,
@@ -789,7 +843,7 @@ def run_active_learning(
                     learner=learner,
                     oracle=oracle,
                     target_col=target_col,
-                    featurizer_type=featurizer_type,
+                    featurizer=featurizer_obj.get_name() if featurizer_obj else None,
                     cache_dir=cache_dir,
                     original_pool_size=original_pool_size,
                     score_direction=score_direction,
@@ -834,7 +888,7 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         config_dict = {
             'target_col': target_col,
-            'featurizer_type': featurizer_type,
+            'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
             'score_direction': score_direction,
             'mode': mode,
             'n_cycles': len(all_metrics),

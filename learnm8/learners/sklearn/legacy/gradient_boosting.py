@@ -11,7 +11,7 @@ class XGBoostLearner(SklearnLearner):
     
     def __init__(self, n_estimators: int = 100, learning_rate: float = 0.1, max_depth: int = 3,
                  n_jobs: int = -1, random_state: int = 42, results_dir: Path = None, 
-                 featurizer_type: str = 'morgan'):
+                 featurizer: str = 'morgan'):
         """
         Initialize XGBoost learner.
         
@@ -22,7 +22,7 @@ class XGBoostLearner(SklearnLearner):
             n_jobs: Number of CPU cores to use (-1 for all cores)
             random_state: Random seed for reproducibility
             results_dir: Directory for storing representations
-            featurizer_type: Type of molecular featurizer ('morgan' or 'descriptors')
+            featurizer: Type of molecular featurizer ('morgan' or 'descriptors')
         """
         # Limit CPU cores to prevent oversubscription
         if n_jobs == -1:
@@ -38,7 +38,7 @@ class XGBoostLearner(SklearnLearner):
             objective='reg:squarederror'
         )
         
-        super().__init__(model, results_dir, featurizer_type)
+        super().__init__(model, results_dir, featurizer)
     
     def get_name(self) -> str:
         """Return the model name."""

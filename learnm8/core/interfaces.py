@@ -9,6 +9,8 @@ from typing import Tuple, Optional, List, Dict, Any
 from pathlib import Path
 import polars as pl
 import numpy as np
+import hashlib
+import json
 
 
 class Oracle(ABC):
@@ -168,8 +170,191 @@ class AcquisitionFunction(ABC):
     
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function.
-        
+
         Returns:
             String identifier for the acquisition function
         """
         return self.__class__.__name__
+
+
+class Featurizer(ABC):
+    """Base class for all molecular featurizers.
+
+    Featurizers convert SMILES strings into numerical feature representations
+    suitable for machine learning. This interface enables custom featurizers
+    to be easily integrated into the LearnM8 framework.
+
+    This version is designed for scikit-fingerprints integration with
+    built-in 3D conformer support.
+
+    Example:
+        class MyCustomFeaturizer(Featurizer):
+            def transform(self, smiles_list):
+                return features_array
+
+            def get_dimension(self):
+                return 2048
+
+            def get_name(self):
+                return 'custom_fp'
+
+            def requires_3d(self):
+                return False
+    """
+
+    @abstractmethod
+    def transform(self, smiles_list: List[str]) -> np.ndarray:
+        """Transform SMILES strings to feature matrix.
+
+        Args:
+            smiles_list: List of SMILES strings to featurize
+
+        Returns:
+            Feature matrix of shape (n_compounds, n_features)
+
+        Raises:
+            ValueError: If all SMILES are invalid
+            RuntimeError: If featurization fails
+
+        Note:
+            Invalid SMILES should raise exceptions (not return zero vectors).
+            This allows LearnM8's validation system to catch data quality issues.
+
+            For 3D fingerprints (requires_3d() == True), conformers will be
+            auto-generated if auto_generate_conformers=True (default).
+        """
+        pass
+
+    @abstractmethod
+    def get_dimension(self) -> int:
+        """Get the feature dimension produced by this featurizer.
+
+        Returns:
+            Integer dimension of feature vectors
+
+        Note:
+            This should return a constant value for the featurizer type.
+            Used for initializing empty arrays and validation.
+        """
+        pass
+
+    @abstractmethod
+    def get_name(self) -> str:
+        """Get a descriptive name for this featurizer.
+
+        Returns:
+            String identifier (e.g., 'morgan', 'maccs', 'usr', 'whim')
+
+        Note:
+            Used for logging, cache file naming, and error messages.
+        """
+        pass
+
+    def requires_3d(self) -> bool:
+        """Return True if this featurizer requires 3D conformers.
+
+        Returns:
+            Boolean indicating if 3D molecular conformers are required
+
+        Note:
+            3D fingerprints (USR, WHIM, E3FP, GETAWAY, MORSE, RDF, etc.)
+            return True. These fingerprints encode shape, spatial, or
+            geometry-dependent information.
+
+            Matches scikit-fingerprints' `requires_conformers` attribute.
+
+            If True and auto_generate_conformers=True, conformers will be
+            automatically generated using RDKit's ETKDG algorithm.
+        """
+        return False
+
+    def supports_caching(self) -> bool:
+        """Return True if this featurizer's output can be cached.
+
+        Returns:
+            Boolean indicating if features are deterministic and cacheable
+
+        Note:
+            Non-deterministic featurizers (e.g., using random projections)
+            should return False to disable HDF5 caching.
+
+            3D fingerprints with auto-generated conformers are still cacheable
+            if conformer generation uses a fixed random seed.
+        """
+        return True
+
+    def supports_batching(self) -> bool:
+        """Return True if this featurizer can process batches efficiently.
+
+        Returns:
+            Boolean indicating if batched processing is more efficient than
+            iterating over individual molecules
+
+        Note:
+            Most featurizers benefit from batching. Return False only if
+            your implementation requires molecule-by-molecule processing.
+        """
+        return True
+
+    def get_description(self) -> str:
+        """Get a human-readable description of this featurizer.
+
+        Returns:
+            String description for documentation and CLI display
+
+        Note:
+            Optional method for better user experience. Default returns name.
+        """
+        return self.get_name()
+
+    def get_config(self) -> Dict[str, Any]:
+        """Get the configuration dictionary for this featurizer.
+
+        Returns:
+            Dictionary containing all configuration parameters
+
+        Note:
+            Used for cache key generation and serialization.
+            Default returns empty dict. Override to include parameters.
+
+            Should include all parameters that affect featurization output
+            (e.g., radius, fp_size, include_chirality, etc.)
+        """
+        return {}
+
+    def get_config_hash(self) -> str:
+        """Get a hash of the featurizer configuration.
+
+        Returns:
+            MD5 hash string of the sorted configuration parameters
+
+        Note:
+            Used in cache key generation to prevent incorrect cache hits
+            when parameters change. Automatically sorts keys for consistency.
+
+            Critical for preventing bugs where changing parameters (e.g.,
+            radius=2 → radius=3) returns wrong cached features.
+
+            Includes featurizer name to prevent collisions between different
+            featurizers with identical configurations.
+        """
+        config = self.get_config()
+        config['_featurizer_name'] = self.get_name()
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.md5(config_str.encode()).hexdigest()
+
+    def validate_smiles(self, smiles_list: List[str]) -> List[bool]:
+        """Validate SMILES strings before featurization.
+
+        Args:
+            smiles_list: List of SMILES strings to validate
+
+        Returns:
+            List of booleans indicating validity of each SMILES
+
+        Note:
+            Optional pre-validation to provide better error messages.
+            Default implementation returns all True (assumes valid).
+            Override to implement custom validation logic.
+        """
+        return [True] * len(smiles_list)
