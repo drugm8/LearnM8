@@ -405,7 +405,7 @@ class TestChempropLearnerWithDescriptors:
         with pytest.raises(ValueError, match="Feature dimension mismatch"):
             learner.predict(features=test_features, smiles=smiles)
 
-    def test_multiple_featurizer_types(self, small_real_compounds, tmp_path):
+    def test_multiple_featurizers(self, small_real_compounds, tmp_path):
         """Test compatibility with different featurizer types."""
         from learnm8.features.extraction import extract_features
 
@@ -413,9 +413,9 @@ class TestChempropLearnerWithDescriptors:
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
-        for featurizer_type in ['morgan', 'maccs', 'ecfp6']:
+        for featurizer in ['morgan', 'maccs', 'ecfp6']:
             learner = ChempropLearner(max_epochs=5)
-            features = extract_features(smiles, featurizer_type, tmp_path)
+            features = extract_features(smiles, featurizer, tmp_path)
 
             learner.train(features=features, targets=targets, smiles=smiles)
             predictions, _ = learner.predict(features=features, smiles=smiles)

@@ -4,6 +4,7 @@ import h5py
 from pathlib import Path
 
 from learnm8.features.cache import get_smiles_hash, cache_features
+from learnm8.features import MorganFeaturizer, MACCSFeaturizer
 
 
 class TestGetSmilesHash:
@@ -38,13 +39,18 @@ class TestGetSmilesHash:
         assert len(hash_value) == 32
 
 
-def mock_extract_features_func(smiles_list, featurizer_type, cache_dir=None):
+def mock_extract_features_func(smiles_list, featurizer, cache_dir=None):
+    """Mock featurization function that accepts Featurizer instances."""
     features = []
+    featurizer_name = featurizer.get_name() if hasattr(featurizer, 'get_name') else str(featurizer)
+
     for smiles in smiles_list:
-        if featurizer_type == 'morgan':
+        if 'morgan' in featurizer_name or 'ecfp' in featurizer_name:
             features.append(np.random.rand(2048).astype(np.float32))
-        elif featurizer_type == 'maccs':
-            features.append(np.random.rand(167).astype(np.float32))
+        elif 'maccs' in featurizer_name:
+            features.append(np.random.rand(166).astype(np.float32))
+        else:
+            features.append(np.random.rand(100).astype(np.float32))
     return np.array(features)
 
 mock_extract_features_cached = cache_features(Path('.cache'))(mock_extract_features_func)
@@ -55,36 +61,40 @@ class TestCacheFeaturesDecorator:
     def test_cache_file_creation(self, tmp_path):
         smiles_list = ['CCO', 'CCC']
         cache_dir = tmp_path / 'cache'
+        featurizer = MorganFeaturizer()
 
-        features = mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
+        features = mock_extract_features_cached(smiles_list, featurizer, cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         assert cache_file.exists()
 
     def test_cache_hit(self, tmp_path):
         smiles_list = ['CCO']
         cache_dir = tmp_path / 'cache'
+        featurizer = MorganFeaturizer()
 
-        features_1 = mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
-        features_2 = mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
+        features_1 = mock_extract_features_cached(smiles_list, featurizer, cache_dir=cache_dir)
+        features_2 = mock_extract_features_cached(smiles_list, featurizer, cache_dir=cache_dir)
 
         assert np.allclose(features_1, features_2)
 
     def test_cache_miss_then_hit(self, tmp_path):
         cache_dir = tmp_path / 'cache'
+        featurizer = MorganFeaturizer()
 
-        features_1 = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
-        features_2 = mock_extract_features_cached(['CCC'], 'morgan', cache_dir=cache_dir)
-        features_3 = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+        features_1 = mock_extract_features_cached(['CCO'], featurizer, cache_dir=cache_dir)
+        features_2 = mock_extract_features_cached(['CCC'], featurizer, cache_dir=cache_dir)
+        features_3 = mock_extract_features_cached(['CCO'], featurizer, cache_dir=cache_dir)
 
         assert np.allclose(features_1, features_3)
         assert not np.allclose(features_1, features_2)
 
     def test_partial_caching(self, tmp_path):
         cache_dir = tmp_path / 'cache'
+        featurizer = MorganFeaturizer()
 
-        features_1 = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
-        features_mixed = mock_extract_features_cached(['CCO', 'CCC'], 'morgan', cache_dir=cache_dir)
+        features_1 = mock_extract_features_cached(['CCO'], featurizer, cache_dir=cache_dir)
+        features_mixed = mock_extract_features_cached(['CCO', 'CCC'], featurizer, cache_dir=cache_dir)
 
         assert features_mixed.shape[0] == 2
         assert np.allclose(features_1[0], features_mixed[0])
@@ -93,9 +103,9 @@ class TestCacheFeaturesDecorator:
         cache_dir = tmp_path / 'cache'
         smiles_list = ['CCO', 'CCC']
 
-        mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
+        mock_extract_features_cached(smiles_list, MorganFeaturizer(), cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         with h5py.File(cache_file, 'r') as h5f:
             features_group = h5f['features']
             for key in features_group.keys():
@@ -110,11 +120,14 @@ class TestCacheFeaturesDecorator:
     def test_blosc_lz4_compression(self, tmp_path):
         cache_dir = tmp_path / 'cache'
 
-        mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+        mock_extract_features_cached(['CCO'], MorganFeaturizer(), cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         with h5py.File(cache_file, 'r') as h5f:
-            ds = h5f['features'][get_smiles_hash('CCO')]
+            # Get any key from features group (config-aware keys)
+            features_group = h5f['features']
+            cache_key = list(features_group.keys())[0]
+            ds = features_group[cache_key]
             # Check blosc compression using plist
             plist = ds.id.get_create_plist()
             filter_info = plist.get_filter(0)
@@ -126,56 +139,58 @@ class TestCacheFeaturesDecorator:
         cache_dir = tmp_path / 'cache'
         smiles_list = ['CCO']
 
-        features_morgan = mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
-        features_maccs = mock_extract_features_cached(smiles_list, 'maccs', cache_dir=cache_dir)
+        features_morgan = mock_extract_features_cached(smiles_list, MorganFeaturizer(), cache_dir=cache_dir)
+        features_maccs = mock_extract_features_cached(smiles_list, MACCSFeaturizer(), cache_dir=cache_dir)
 
         assert features_morgan.shape[1] == 2048
-        assert features_maccs.shape[1] == 167
+        assert features_maccs.shape[1] == 166
 
-        morgan_file = cache_dir / 'morgan_features.h5'
-        maccs_file = cache_dir / 'maccs_features.h5'
+        morgan_file = cache_dir / 'features_morgan.h5'
+        maccs_file = cache_dir / 'features_maccs.h5'
 
         assert morgan_file.exists()
         assert maccs_file.exists()
 
     def test_empty_smiles_list(self, tmp_path):
         cache_dir = tmp_path / 'cache'
-        features = mock_extract_features_cached([], 'morgan', cache_dir=cache_dir)
+        features = mock_extract_features_cached([], MorganFeaturizer(), cache_dir=cache_dir)
 
         assert features.shape[0] == 0
 
     def test_cache_handles_errors_gracefully(self, tmp_path):
         cache_dir = tmp_path / 'cache'
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         cache_dir.mkdir(parents=True)
 
         cache_file.write_text("corrupted data")
 
-        features = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+        features = mock_extract_features_cached(['CCO'], MorganFeaturizer(), cache_dir=cache_dir)
 
         assert features.shape[0] == 1
 
     def test_hdf5_structure(self, tmp_path):
+        from learnm8.features.cache import _generate_cache_key
         cache_dir = tmp_path / 'cache'
         smiles = 'CCO'
+        featurizer = MorganFeaturizer()
 
-        mock_extract_features_cached([smiles], 'morgan', cache_dir=cache_dir)
+        mock_extract_features_cached([smiles], featurizer, cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         with h5py.File(cache_file, 'r') as h5f:
             assert 'features' in h5f
             features_group = h5f['features']
 
-            smiles_hash = get_smiles_hash(smiles)
-            assert smiles_hash in features_group
+            cache_key = _generate_cache_key(smiles, featurizer)
+            assert cache_key in features_group
 
     def test_cache_inspection(self, tmp_path):
         cache_dir = tmp_path / 'cache'
         smiles_list = ['CCO', 'CCC', 'CCN']
 
-        mock_extract_features_cached(smiles_list, 'morgan', cache_dir=cache_dir)
+        mock_extract_features_cached(smiles_list, MorganFeaturizer(), cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         with h5py.File(cache_file, 'r') as h5f:
             features_group = h5f['features']
             assert len(features_group.keys()) == 3
@@ -183,18 +198,18 @@ class TestCacheFeaturesDecorator:
     def test_cache_read_error_handling(self, tmp_path):
         cache_dir = tmp_path / 'cache'
         cache_dir.mkdir(parents=True)
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
 
         with h5py.File(cache_file, 'w') as h5f:
             pass
 
-        features = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+        features = mock_extract_features_cached(['CCO'], MorganFeaturizer(), cache_dir=cache_dir)
         assert features.shape[0] == 1
 
     def test_cache_write_error_handling(self, tmp_path):
         cache_dir = tmp_path / 'cache'
 
-        features = mock_extract_features_cached(['CCO'], 'morgan', cache_dir=cache_dir)
+        features = mock_extract_features_cached(['CCO'], MorganFeaturizer(), cache_dir=cache_dir)
         assert features.shape[0] == 1
 
     def test_cache_with_real_featurization(self, small_real_compounds, tmp_path):
@@ -215,7 +230,7 @@ class TestCacheFeaturesDecorator:
 
         np.testing.assert_array_equal(features1, features2)
 
-        assert features1.dtype == np.uint8
+        assert features1.dtype == np.float32
         assert np.any(features1 > 0)
 
     def test_cache_corruption_recovery(self, tmp_path):
@@ -227,7 +242,7 @@ class TestCacheFeaturesDecorator:
         features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
         assert features1.shape[0] == 3
 
-        cache_file = cache_dir / 'morgan_features.h5'
+        cache_file = cache_dir / 'features_morgan.h5'
         assert cache_file.exists()
 
         with open(cache_file, 'wb') as f:

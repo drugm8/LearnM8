@@ -128,7 +128,7 @@ def test_save_results_basic(tmp_path):
 
     config = {
         'target_col': 'Activity',
-        'featurizer_type': 'morgan',
+        'featurizer': 'morgan',
         'score_direction': 'higher',
         'mode': 'run',
         'n_cycles': 2,
@@ -179,7 +179,7 @@ def test_save_results_compounds_final_structure(tmp_path):
         validation_errors={}
     )
 
-    config = {'target_col': 'Activity', 'featurizer_type': 'morgan', 'n_cycles': 1}
+    config = {'target_col': 'Activity', 'featurizer': 'morgan', 'n_cycles': 1}
 
     saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
 
@@ -228,7 +228,7 @@ def test_save_results_cycle_metrics_no_list_columns(tmp_path):
         validation_errors={}
     )
 
-    config = {'target_col': 'Activity', 'featurizer_type': 'morgan'}
+    config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
     saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
 
@@ -274,7 +274,7 @@ def test_save_results_selection_history(tmp_path):
         validation_errors={}
     )
 
-    config = {'target_col': 'Activity', 'featurizer_type': 'morgan'}
+    config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
     saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
 
@@ -324,7 +324,7 @@ def test_save_results_validation_report(tmp_path):
         validation_errors=validation_errors
     )
 
-    config = {'target_col': 'Activity', 'featurizer_type': 'morgan'}
+    config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
     saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
 
@@ -366,7 +366,7 @@ def test_save_results_config_json(tmp_path):
 
     config = {
         'target_col': 'Activity',
-        'featurizer_type': 'morgan',
+        'featurizer': 'morgan',
         'score_direction': 'higher',
         'mode': 'run',
         'n_cycles': 1,

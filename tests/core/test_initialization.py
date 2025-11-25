@@ -104,7 +104,7 @@ class TestSelectInitialBatch:
             target_col='Activity',
             strategy='random',
             batch_fraction=0.1,
-            featurizer_type='morgan',
+            featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
             random_state=42
@@ -149,7 +149,7 @@ class TestSelectInitialBatch:
                 target_col='Activity',
                 strategy='random',
                 batch_fraction=fraction,
-                featurizer_type='morgan',
+                featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=len(sample_compounds),
                 random_state=42
@@ -178,7 +178,7 @@ class TestSelectInitialBatch:
             target_col='Activity',
             strategy='random',
             batch_fraction=0.1,
-            featurizer_type='morgan',
+            featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
             random_state=42
@@ -205,7 +205,7 @@ class TestSelectInitialBatch:
                 target_col='Activity',
                 strategy='ucb',
                 batch_fraction=0.1,
-                featurizer_type='morgan',
+                featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=len(sample_compounds),
                 random_state=42
@@ -235,7 +235,7 @@ class TestSelectInitialBatch:
                 target_col='Activity',
                 strategy='random',
                 batch_fraction=0.1,
-                featurizer_type='morgan',
+                featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=0,
                 random_state=42

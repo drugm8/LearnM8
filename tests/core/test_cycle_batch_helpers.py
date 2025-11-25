@@ -117,14 +117,14 @@ class TestPredictChunk:
             mock_learner.predict.assert_called_once()
 
     def test_feature_based_learner_requires_featurizer(self, tmp_path, sample_compounds):
-        """Feature-based learner should raise error if featurizer_type is None."""
+        """Feature-based learner should raise error if featurizer is None."""
         chunk_df = sample_compounds.head(5)
 
         mock_learner = Mock()
         mock_learner.requires_smiles.return_value = False
         mock_learner.get_name.return_value = 'MockLearner'
 
-        with pytest.raises(ValueError, match="featurizer_type is required"):
+        with pytest.raises(ValueError, match="featurizer is required"):
             _predict_chunk(chunk_df, mock_learner, None, tmp_path, show_progress=False)
 
     def test_smiles_aware_learner_without_features(self, tmp_path, sample_compounds):
