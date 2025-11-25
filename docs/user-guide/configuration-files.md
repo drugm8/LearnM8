@@ -28,7 +28,7 @@ target_col: "Activity"
 
 # Model Configuration
 learner: "rf"  # Learner shortcut string
-featurizer_type: "morgan"  # Required for non-GNN learners
+featurizer: "morgan"  # Required for non-GNN learners
 
 # Cycle Configuration (choose one of these approaches)
 
@@ -87,7 +87,7 @@ Minimal configuration for a standard experiment:
 compound_pool: "compounds.csv"
 target_col: "Activity"
 learner: "gp"
-featurizer_type: "morgan"
+featurizer: "morgan"
 n_cycles: 10
 batch_fraction: 0.01
 ```
@@ -102,7 +102,7 @@ compound_pool: "compound_library.csv"
 oracle: "scoring_module.py:calculate_affinity"
 target_col: "binding_score"
 learner: "ensemble"
-featurizer_type: "morgan"
+featurizer: "morgan"
 score_direction: "lower"
 random_state: 123
 
@@ -135,7 +135,7 @@ Example using advanced features:
 compound_pool: "large_library.csv"
 target_col: "Activity"
 learner: "mixed_ensemble"
-featurizer_type: "descriptors"
+featurizer: "descriptors"
 score_direction: "higher"
 
 cycles:
@@ -172,7 +172,7 @@ JSON format is also supported, with identical schema to YAML but different synta
   "oracle": "oracle.csv",
   "target_col": "Activity",
   "learner": "gp",
-  "featurizer_type": "morgan",
+  "featurizer": "morgan",
   "n_cycles": 10,
   "batch_fraction": 0.01,
   "strategy": "greedy",
@@ -193,7 +193,7 @@ JSON format is also supported, with identical schema to YAML but different synta
   "oracle": "scoring_module.py:calculate_affinity",
   "target_col": "binding_score",
   "learner": "ensemble",
-  "featurizer_type": "morgan",
+  "featurizer": "morgan",
   "score_direction": "lower",
   "cycles": [
     {
@@ -231,7 +231,7 @@ JSON format is also supported, with identical schema to YAML but different synta
   "oracle": "docking_oracle.py:dock_compounds",
   "target_col": "docking_score",
   "learner": "chemprop_ensemble",
-  "featurizer_type": "descriptors",
+  "featurizer": "descriptors",
   "score_direction": "lower",
   "enable_chemprop_fine_tuning": true,
   "cycles": [
@@ -408,7 +408,7 @@ target_col: "Activity"
 
 # Using RF for fast baseline comparison
 learner: "rf"
-featurizer_type: "morgan"  # 2048-bit Morgan fingerprints
+featurizer: "morgan"  # 2048-bit Morgan fingerprints
 
 # Conservative exploration-exploitation balance
 cycles:
@@ -481,7 +481,7 @@ All parameters from `run_active_learning()` are supported in configuration files
 | `oracle` | str/Path | Oracle specification (CSV file or module.py:function) |
 | `target_col` | str | Target property column name |
 | `learner` | str | Learner shortcut (rf, gp, ensemble, etc.) |
-| `featurizer_type` | str | Molecular featurizer (morgan, maccs, ecfp6, descriptors) |
+| `featurizer` | str | Molecular featurizer (morgan, maccs, ecfp6, descriptors) |
 
 ### Cycle Configuration (Simple API)
 
@@ -538,7 +538,7 @@ Cycle dictionary structure:
 # benchmark_rf_vs_gp.yaml
 compound_pool: "benchmark_datasets/ADA.csv"
 target_col: "Activity"
-featurizer_type: "morgan"
+featurizer: "morgan"
 score_direction: "higher"
 mode: "benchmark"
 
@@ -565,7 +565,7 @@ compound_pool: "screening_library_100k.csv"
 oracle: "docking_pipeline.py:dock_and_score"
 target_col: "docking_score"
 learner: "mc_dropout"
-featurizer_type: "descriptors"
+featurizer: "descriptors"
 score_direction: "lower"
 
 cycles:
@@ -598,7 +598,7 @@ random_state: 123
 compound_pool: "compounds.csv"
 target_col: "Activity"
 learner: "chemprop_ensemble"
-featurizer_type: "descriptors"  # Hybrid mode
+featurizer: "descriptors"  # Hybrid mode
 enable_chemprop_fine_tuning: true
 
 cycles:

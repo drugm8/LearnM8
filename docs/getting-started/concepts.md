@@ -44,7 +44,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -68,7 +68,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
@@ -140,7 +140,7 @@ results = run_active_learning(
     oracle='oracle.csv',  # Contains ID, Activity columns
     target_col='Activity',
     learner='gp',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -154,7 +154,7 @@ results = run_active_learning(
     oracle='scoring_module.py:calculate_binding',
     target_col='binding_score',
     learner='gp',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -250,7 +250,7 @@ results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
     learner='chemprop',
-    featurizer_type='descriptors',  # Additional features
+    featurizer='descriptors',  # Additional features
     target_col='Activity'
 )
 ```
@@ -276,7 +276,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),    # Cycle 0: Initial random sample (2%)
         ('greedy', 0.01),    # Cycle 1: Greedy selection (1%)
@@ -337,7 +337,7 @@ results = run_active_learning(
     oracle='benchmark_compounds.csv',  # Same file = benchmark mode
     target_col='Activity',
     learner='gp',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -364,7 +364,7 @@ results = run_active_learning(
     oracle='docking.py:score_binding',  # Custom function
     target_col='binding_affinity',
     learner='ensemble',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -386,7 +386,7 @@ results = run_active_learning(
     mode='benchmark',  # Force benchmark mode
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 

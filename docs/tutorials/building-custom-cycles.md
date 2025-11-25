@@ -51,7 +51,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     initial_strategy='random',
     strategy='greedy',
     n_cycles=10
@@ -75,7 +75,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy='greedy',
     n_cycles=10,
     batch_fraction=0.01
@@ -97,7 +97,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy='random',
     n_cycles=10,
     batch_fraction=0.01
@@ -121,7 +121,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),      # Phase 1: Initial exploration
         ('greedy', 0.01),      # Phase 2: Exploit best regions
@@ -151,7 +151,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.01),                # Initial random
         ('ucb', 0.01),                   # High exploration
@@ -183,7 +183,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
 
@@ -253,7 +253,7 @@ results = run_active_learning(
     oracle=None,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=cycles
 )
 ```

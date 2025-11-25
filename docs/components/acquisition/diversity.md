@@ -79,7 +79,7 @@ Memory usage scales linearly with library size, making it suitable for productio
 |-----------|------|---------|-------------|
 | `features` | ndarray | Required | Pre-computed molecular fingerprints (n_compounds, n_features). |
 | `compound_ids` | List[str] | Required | List of compound IDs corresponding to feature rows. |
-| `featurizer_type` | str | 'morgan' | Type of molecular features ('morgan', 'ecfp6', 'maccs'). |
+| `featurizer` | str | 'morgan' | Type of molecular features ('morgan', 'ecfp6', 'maccs'). |
 | `threshold` | float | 0.5 | Tanimoto similarity threshold for clustering (0.0-1.0). |
 | `branching_factor` | int | 50 | Maximum number of subclusters in each node. |
 | `random_state` | int | 42 | Random seed for reproducible selection within clusters. |
@@ -135,7 +135,7 @@ compound_ids = compounds['ID'].to_list()
 
 features = extract_features(
     smiles_list=smiles_list,
-    featurizer_type='morgan',
+    featurizer='morgan',
     cache_dir='.cache',
     n_jobs=-1
 )
@@ -143,7 +143,7 @@ features = extract_features(
 bitbirch_acq = BitBIRCHAcquisition(
     features=features,
     compound_ids=compound_ids,
-    featurizer_type='morgan',
+    featurizer='morgan',
     threshold=0.5,
     branching_factor=50
 )
@@ -153,7 +153,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),
         ('greedy', 0.005),
@@ -171,7 +171,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=3, batch_fraction=0.005),
@@ -301,7 +301,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),
         ('simulated_annealing', 0.005)
@@ -324,7 +324,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='xgb',
     target_col='Activity',
-    featurizer_type='ecfp6',
+    featurizer='ecfp6',
     cycles=[
         CycleConfig('random', batch_fraction=0.02),
         CycleConfig('simulated_annealing', n_cycles=3, batch_fraction=0.01,
@@ -462,7 +462,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', batch_fraction=0.01),
         CycleConfig('bitbirch', n_cycles=2, batch_fraction=0.01,

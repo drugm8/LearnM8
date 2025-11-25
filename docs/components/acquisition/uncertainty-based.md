@@ -82,7 +82,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=5, batch_fraction=0.005,
@@ -169,7 +169,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),
         ('ei', 0.005)
@@ -250,7 +250,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),
         ('pi', 0.005)
@@ -334,7 +334,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         ('random', 0.02),
         ('thompson', 0.005)
@@ -353,7 +353,7 @@ for seed in [42, 43, 44, 45, 46]:
         oracle='oracle.csv',
         learner='gp',
         target_col='Activity',
-        featurizer_type='morgan',
+        featurizer='morgan',
         cycles=[('random', 0.02), ('thompson', 0.005)],
         acquisition_params={'random_state': seed},
         output_dir=f'results/thompson_seed_{seed}'
@@ -439,7 +439,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', batch_fraction=0.02),
         CycleConfig('entropy', n_cycles=3, batch_fraction=0.01,

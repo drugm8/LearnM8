@@ -39,7 +39,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10,
     batch_fraction=0.01
 )
@@ -72,7 +72,7 @@ results = run_active_learning(
     oracle=None,  # Auto-detect from compound pool
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=15,
     batch_fraction=0.01
 )
@@ -166,7 +166,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='mc_dropout',
     target_col='binding_affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20,
     batch_fraction=0.005
 )
@@ -238,7 +238,7 @@ results = run_active_learning(
     oracle='docking_oracle.py:dock_compounds',
     learner='ensemble',
     target_col='docking_score',
-    featurizer_type='morgan',
+    featurizer='morgan',
     score_direction='lower',
     n_cycles=25
 )
@@ -281,7 +281,7 @@ results = run_active_learning(
     mode='production',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -363,7 +363,7 @@ benchmark_results = run_active_learning(
     oracle=None,
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
@@ -377,7 +377,7 @@ production_results = run_active_learning(
     oracle='docking_oracle.py:score',
     learner='ensemble',
     target_col='affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),

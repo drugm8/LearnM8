@@ -71,7 +71,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=2, batch_fraction=0.01),
         CycleConfig('ucb', n_cycles=5, batch_fraction=0.005,
@@ -93,7 +93,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy=greedy,
     n_cycles=10
 )
@@ -167,7 +167,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('thompson', n_cycles=9, batch_fraction=0.005)
@@ -187,7 +187,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy=random_acq,
     n_cycles=10
 )
@@ -271,7 +271,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='xgb',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     strategy='topk',
     acquisition_params={
         'k_fraction': 0.1,
@@ -294,7 +294,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='ensemble',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=2, batch_fraction=0.01),
         CycleConfig('ucb', n_cycles=4, batch_fraction=0.005),
@@ -317,7 +317,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='rf',
     target_col='toxicity',
-    featurizer_type='descriptors',
+    featurizer='descriptors',
     strategy=topk_minimize,
     n_cycles=10
 )

@@ -104,7 +104,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=10
 )
 ```
@@ -184,7 +184,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='mc_dropout',
     target_col='binding_affinity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20
 )
 ```
@@ -208,7 +208,7 @@ results = run_active_learning(
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 
 # Python function → run mode
@@ -217,7 +217,7 @@ results = run_active_learning(
     oracle='scoring.py:score',
     learner='rf',
     target_col='score',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -231,7 +231,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='gp',
     target_col='Activity',
-    featurizer_type='morgan',
+    featurizer='morgan',
     mode='benchmark'  # Force benchmark mode
 )
 ```

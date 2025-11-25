@@ -258,7 +258,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='gp',
     target_col='score',
-    featurizer_type='morgan',
+    featurizer='morgan',
     n_cycles=20
 )
 ```
@@ -400,7 +400,7 @@ results = run_active_learning(
     oracle=oracle,
     learner='ensemble',
     target_col='score',
-    featurizer_type='morgan'
+    featurizer='morgan'
 )
 ```
 
@@ -740,7 +740,7 @@ def main():
         oracle=oracle,
         learner='ensemble',
         target_col='vina_score',
-        featurizer_type='morgan',
+        featurizer='morgan',
         n_cycles=20,
         batch_fraction=0.01,
         strategy='ucb',
