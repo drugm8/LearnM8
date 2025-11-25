@@ -216,7 +216,7 @@ results = run_active_learning(
     oracle=oracle,
     target_col='similarity',           # Property name from oracle.measure()
     learner='gp',                      # Gaussian Process learner
-    featurizer_type='morgan',          # Feature type for ML model
+    featurizer='morgan',          # Feature type for ML model
     cycles=[
         ('random', 0.01),              # 1% random initial sampling
         ('ucb', 0.005),                # 0.5% exploitation (5 cycles)
