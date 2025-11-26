@@ -576,7 +576,7 @@ def run_active_learning(
         elif isinstance(oracle, pl.DataFrame):
             # DataFrame oracle for benchmark mode (in-memory)
             logger.debug("Creating in-memory oracle from DataFrame")
-            from learnm8.oracles.csv_oracle import CSVOracle
+            # Note: CSVOracle already imported at module level
             # Save to temp file for CSVOracle
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
@@ -816,6 +816,9 @@ def run_active_learning(
             logger.info("─────────────────────────────────────────────────────────────")
 
             try:
+                # Get previous metrics for change indicators in logging
+                previous_metrics = all_metrics[-1] if all_metrics else None
+
                 compounds_df, metrics = execute_cycle(
                     compounds_df=compounds_df,
                     cycle=cycle_num,
@@ -830,7 +833,8 @@ def run_active_learning(
                     mode=mode,
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
-                    prediction_batch_size=prediction_batch_size
+                    prediction_batch_size=prediction_batch_size,
+                    previous_metrics=previous_metrics
                 )
                 all_metrics.append(metrics)
 
