@@ -170,7 +170,8 @@ def execute_cycle(
     mode: Literal['run', 'benchmark'] = 'run',
     original_pool: Optional[pl.DataFrame] = None,
     cumulative_selected_ids: Optional[set] = None,
-    prediction_batch_size: Optional[int] = None
+    prediction_batch_size: Optional[int] = None,
+    previous_metrics: Optional[Dict[str, Any]] = None
 ) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -200,6 +201,7 @@ def execute_cycle(
             If None, auto-enables for >100k compounds. Set to a specific
             value to override auto-calculation. Use this to control memory
             usage during prediction on large compound libraries.
+        previous_metrics: Optional metrics from previous cycle for change indicators
 
     Returns:
         (updated_compounds_df, metrics_dict)
@@ -635,20 +637,16 @@ def execute_cycle(
 
     # Step 15: Display Rich Metrics Table
     try:
-        # Get previous cycle metrics if available (for change indicators)
-        previous_metrics = None
-        if cycle > 1:
-            # This will be passed from api.py in a future enhancement
-            pass
-
         metrics_table = format_cycle_metrics_table(
             metrics=metrics,
             oracle_type=mode,
-            previous_metrics=previous_metrics
+            previous_metrics=previous_metrics,
+            score_direction=score_direction
         )
 
         if metrics_table:
-            logger.info("\n" + metrics_table)
+            # Disable highlighter to prevent Rich from overriding our markup colors
+            logger.info("\n" + metrics_table, extra={"highlighter": None})
 
     except ImportError:
         logger.debug("Rich not installed, skipping metrics table display")

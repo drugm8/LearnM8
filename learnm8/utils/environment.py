@@ -95,24 +95,36 @@ def get_change_indicator_style() -> str:
 
 
 def format_change_indicator(
-    diff: float, 
-    is_improvement: bool, 
-    style: str = 'auto'
+    diff: float,
+    is_improvement: bool,
+    style: str = 'auto',
+    stagnation_threshold: float = 0.01
 ) -> tuple[str, str]:
     """
     Format change indicator based on environment and style preference.
-    
+
     Args:
         diff: Numeric difference (positive or negative)
         is_improvement: Whether the change represents an improvement
         style: 'arrow', 'emoji', or 'auto' for automatic detection
-        
+        stagnation_threshold: Absolute threshold below which change is considered stagnant (default 1%)
+
     Returns:
         tuple: (symbol, color) for the change indicator
+               - Green ↑/📈 for improvement
+               - Red ↓/📉 for worsening
+               - Yellow →/➡️ for stagnation (|diff| < threshold)
     """
     if style == 'auto':
         style = get_change_indicator_style()
-    
+
+    # Check for stagnation first
+    if abs(diff) < stagnation_threshold:
+        if style == 'emoji':
+            return "➡️", "yellow"
+        else:
+            return "→", "yellow"
+
     if style == 'emoji':
         # Jupyter-friendly emoji indicators
         if is_improvement:
@@ -125,5 +137,5 @@ def format_change_indicator(
         # Terminal arrow indicators (default)
         symbol = "↑" if diff > 0 else "↓"
         color = "green" if is_improvement else "red"
-    
+
     return symbol, color

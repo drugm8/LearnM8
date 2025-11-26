@@ -311,221 +311,122 @@ def evaluate_cycle(
 
 def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', previous_metrics: Optional[Dict[str, Any]] = None) -> str:
 	"""
-	Format cycle metrics as a compact rich table for clean console output.
-	Automatically adapts formatting for terminal vs Jupyter notebook environments.
-	
+	Format cycle metrics as compact plain-text output with change indicators.
+
+	Format (benchmark mode):
+	```
+	Cycle 9 | 291 selected | 2910 labeled
+	───────────────────────────────────────────────────────────
+	Discovery │ Top10:80%↑  Top100:87%→  Top1K:92%↑
+	          │ Top0.1%:45%↑  Top1%:67%→
+	Ranking   │ Spearman:0.67↓  EF@1%:2.3→  EF@5%:1.8↑
+	Selection │ Avg:-38.5↑  Div:0.45→  Nov:0.78↑
+	```
+
 	Args:
 		metrics: Metrics dictionary from evaluate_cycle
 		oracle_type: Oracle type for mode-specific formatting
 		previous_metrics: Previous cycle metrics for change indicators
-		
+
 	Returns:
-		Formatted string for console output
+		Formatted string for console output (plain text, no ANSI codes)
 	"""
-	try:
-		from rich.table import Table
-		from rich.console import Console
-		from io import StringIO
-		
-		# Import environment utilities with fallback
-		try:
-			from ..utils.environment import get_console_config, detect_jupyter_environment, format_change_indicator
-			console_config = get_console_config()
-			in_jupyter = detect_jupyter_environment()
-		except ImportError as e:
-			logger.warning(f"Could not import environment utilities: {e}. Using default configuration.")
-			console_config = {'width': 100, 'force_terminal': True}
-			in_jupyter = False
-			def format_change_indicator(diff, is_improvement):
-				symbol = "↑" if diff > 0 else "↓"
-				color = "green" if is_improvement else "red"
-				return symbol, color
-		
-		# Create console that captures output
-		string_io = StringIO()
-		
-		# For Jupyter environments, we need to force string output
-		if console_config.get('force_jupyter', False):
-			# Override Jupyter detection to get string output for our use case
-			console_config_modified = console_config.copy()
-			console_config_modified['force_jupyter'] = False
-			console_config_modified['force_terminal'] = True
-			console = Console(file=string_io, **console_config_modified)
-		else:
-			console = Console(file=string_io, **console_config)
-		
-		cycle = metrics.get('cycle', '?')
-		batch_size = metrics.get('batch_size', '?')
-		
-		def format_value_with_change(key: str, current_val: Any, digits: int = 3) -> str:
-			"""Format value with change indicator vs previous cycle."""
-			if current_val is None:
-				return "N/A"
-			
-			formatted = f"{current_val:.{digits}f}"
-			
-			# Check if we have previous metrics and can show change
-			if (previous_metrics and 
-				isinstance(previous_metrics, dict) and 
-				key in previous_metrics and 
-				previous_metrics[key] is not None):
-				
-				try:
-					prev_val = float(previous_metrics[key])
-					current_float = float(current_val)
-					diff = current_float - prev_val
-					
-					# Show change if difference is significant
-					threshold = 10**(-digits)
-					if abs(diff) > threshold:
-						# Determine if change is good or bad (higher is generally better except for RMSE, MAE)
-						bad_metrics = {'rmse', 'mae', 'mse', 'inter_cycle_similarity'}
-						is_improvement = diff > 0 if key not in bad_metrics else diff < 0
-						
-						# Get environment-appropriate change indicator
-						symbol, color = format_change_indicator(diff, is_improvement)
-						
-						if in_jupyter and symbol in ['📈', '📉']:
-							# Jupyter environment with emoji indicators
-							return f"[{color}]{formatted} {symbol}[/{color}]"
-						else:
-							# Terminal environment with arrow indicators
-							return f"[{color}]{formatted}{symbol}[/{color}]"
-				except (ValueError, TypeError):
-					pass
-			
-			return formatted
-		
-		# Create horizontally compact table with 3 columns
-		table = Table(show_header=True, header_style="bold white", 
-					 title=f"📊 Cycle {cycle} ({batch_size} selected)",
-					 title_style="bold white", padding=(0, 1))
-		
-		# Add 3 columns with headers for logical grouping
-		table.add_column("Selection Quality", style="white", width=22)
-		table.add_column("Discovery Metrics", style="white", width=24)
-		table.add_column("Ranking (Unlabeled)", style="white", width=22)
-		
-		# Helper to format metric with optional unit and label
-		def format_metric_with_label(label: str, key: str, digits: int = 3, unit: str = "") -> str:
-			if metrics.get(key) is not None:
-				value = format_value_with_change(key, metrics[key], digits) + unit
-				return f"{label}: {value}"
+	cycle = metrics.get('cycle', '?')
+	batch_size = metrics.get('batch_size', '?')
+	cumulative_labeled = metrics.get('cumulative_labeled', '?')
+	is_benchmark = (oracle_type == 'benchmark')
+
+	# Metrics where lower is better (error metrics, similarity to previous)
+	# Note: avg_score_selected follows score_direction which defaults to 'higher is better'
+	bad_metrics = {'rmse', 'mae', 'mse', 'inter_cycle_similarity'}
+
+	def get_change_symbol(key: str, current_val: float, is_pct: bool = False) -> str:
+		"""Return change indicator symbol: ↑ (improved), ↓ (worsened), → (stagnant), or empty."""
+		if previous_metrics is None or key not in previous_metrics:
 			return ""
-		
-		# Organize metrics into logical groups (now as single strings per column)
-		# Column 1: Selection Quality (replaces model performance)
-		selection_quality = []
-		# Batch selection metrics
-		if metrics.get('batch_size') is not None:
-			selection_quality.append(f"Batch Size: {metrics['batch_size']}")
-		if metrics.get('avg_score_selected') is not None:
-			selection_quality.append(format_metric_with_label('Batch Avg', 'avg_score_selected', 3))
-		if metrics.get('ground_truth_avg_score') is not None:
-			selection_quality.append(format_metric_with_label('GT Avg', 'ground_truth_avg_score', 3))
-		if metrics.get('cumulative_labeled') is not None:
-			selection_quality.append(f"Total Labeled: {metrics['cumulative_labeled']}")
 
-		# Uncertainty metrics (if available)
-		if metrics.get('uncertainty_mean') is not None:
-			selection_quality.append(format_metric_with_label('Uncert μ', 'uncertainty_mean', 3))
-		if metrics.get('uncertainty_std') is not None:
-			selection_quality.append(format_metric_with_label('Uncert σ', 'uncertainty_std', 3))
+		prev_val = previous_metrics.get(key)
+		if prev_val is None or current_val is None:
+			return ""
 
-		# Molecular metrics
-		if metrics.get('intra_batch_diversity') is not None:
-			selection_quality.append(format_metric_with_label('Diversity', 'intra_batch_diversity', 3))
-		if metrics.get('batch_novelty_score') is not None:
-			selection_quality.append(format_metric_with_label('Novelty', 'batch_novelty_score', 3))
+		try:
+			diff = float(current_val) - float(prev_val)
+		except (ValueError, TypeError):
+			return ""
 
-		# Column 2: Discovery Metrics
-		discovery = []
-		if oracle_type == 'benchmark':
-			# Top-K Discovery Rates
-			for key, name in [('top_10_discovery', 'Top-10'), ('top_100_discovery', 'Top-100'),
-							  ('top_1000_discovery', 'Top-1K'), ('top_1_pct_discovery', 'Top-1%')]:
-				if metrics.get(key) is not None:
-					discovery.append(format_metric_with_label(name, key, 1, '%'))
+		# Determine stagnation threshold based on metric type
+		# For percentage metrics (0-100), use 1.0 as threshold
+		# For ratio/score metrics, use 0.01
+		if is_pct or 'discovery' in key or 'overlap' in key:
+			stagnation_threshold = 1.0
+		else:
+			stagnation_threshold = 0.01
 
-			# Batch Quality
-			if metrics.get('batch_hit_rate') is not None:
-				discovery.append(format_metric_with_label('Batch HR', 'batch_hit_rate', 3))
-			if metrics.get('batch_ef') is not None:
-				discovery.append(format_metric_with_label('Batch EF', 'batch_ef', 2))
-			if metrics.get('batch_avg_score_ratio') is not None:
-				discovery.append(format_metric_with_label('Batch Ratio', 'batch_avg_score_ratio', 2))
+		# Check for stagnation first
+		if abs(diff) < stagnation_threshold:
+			return "→"
 
-			# Cumulative Quality
-			if metrics.get('cumulative_ef') is not None:
-				discovery.append(format_metric_with_label('Cumul EF', 'cumulative_ef', 2))
-			if metrics.get('cumulative_avg_score_ratio') is not None:
-				discovery.append(format_metric_with_label('Cumul Ratio', 'cumulative_avg_score_ratio', 2))
+		# Determine if higher is better for this metric
+		is_higher_better = key not in bad_metrics
+		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
 
-		# Column 3: Ranking (Unlabeled Only)
-		ranking = []
-		if oracle_type == 'benchmark':
-			# Unlabeled ranking metrics
-			for key, name in [('unlabeled_top_100_overlap', 'U-Top100'),
-							  ('unlabeled_top_1000_overlap', 'U-Top1K')]:
-				if metrics.get(key) is not None:
-					ranking.append(format_metric_with_label(name, key, 1, '%'))
+		return "↑" if is_improvement else "↓"
 
-			for key, name in [('unlabeled_ef_1_0', 'U-EF@1%'),
-							  ('unlabeled_ef_5_0', 'U-EF@5%')]:
-				if metrics.get(key) is not None:
-					ranking.append(format_metric_with_label(name, key, 2))
+	def format_metric(key: str, label: str, digits: int = 1, is_pct: bool = False) -> str:
+		"""Format a single metric with optional change indicator."""
+		val = metrics.get(key)
+		if val is None:
+			return f"{label}:N/A"
 
-			if metrics.get('unlabeled_spearman_correlation') is not None:
-				ranking.append(format_metric_with_label('U-Spear', 'unlabeled_spearman_correlation', 3))
+		change = get_change_symbol(key, val, is_pct)
+		if is_pct:
+			return f"{label}:{val:.{digits}f}%{change}"
+		else:
+			return f"{label}:{val:.{digits}f}{change}"
 
-			# Ground truth EFs (still valid)
-			for key, name in [('ground_truth_ef_5_0', 'GT@5%'), ('ground_truth_ef_1_0', 'GT@1%')]:
-				if metrics.get(key) is not None:
-					ranking.append(format_metric_with_label(name, key, 2, 'x'))
+	# Build output lines
+	lines = []
 
-		# Find max length for rows
-		max_rows = max(len(selection_quality), len(discovery), len(ranking))
-		
-		# Pad lists to same length
-		while len(selection_quality) < max_rows:
-			selection_quality.append("")
-		while len(discovery) < max_rows:
-			discovery.append("")
-		while len(ranking) < max_rows:
-			ranking.append("")
+	# Header line
+	lines.append(f"Cycle {cycle} | {batch_size} selected | {cumulative_labeled} labeled")
+	lines.append("─" * 60)
 
-		# Add rows
-		for i in range(max_rows):
-			table.add_row(
-				selection_quality[i],
-				discovery[i],
-				ranking[i]
-			)
-		
-		console.print(table)
-		
-		# Get the rendered output
-		output = string_io.getvalue()
-		string_io.close()
-		
-		return output
-	except ImportError:
-		# Show rich error if rich is not installed
-		logger.error("Rich library not installed. Please install it to see formatted output.")
-		return ""
-	except Exception as e:
-		# Fallback for any other errors
-		logger.error(f"Error formatting progress output: {e}")
-		# Provide basic text fallback
-		cycle = metrics.get('cycle', '?')
-		batch_size = metrics.get('batch_size', '?')
-		avg_score = metrics.get('avg_score_selected')
+	if is_benchmark:
+		# Discovery metrics - split into two rows for readability
+		discovery_row1 = [
+			format_metric('top_10_discovery', 'Top10', 1, True),
+			format_metric('top_100_discovery', 'Top100', 1, True),
+			format_metric('top_1000_discovery', 'Top1K', 1, True),
+		]
+		discovery_row2 = [
+			format_metric('top_0_1_pct_discovery', 'Top0.1%', 1, True),
+			format_metric('top_1_pct_discovery', 'Top1%', 1, True),
+		]
 
-		fallback = f"Cycle {cycle} ({batch_size} selected)"
-		if avg_score is not None:
-			fallback += f" | Avg Score: {avg_score:.3f}"
+		lines.append(f"Discovery │ {' '.join(discovery_row1)}")
+		lines.append(f"          │ {' '.join(discovery_row2)}")
 
-		return fallback
+		# Ranking metrics
+		ranking_parts = [
+			format_metric('unlabeled_spearman_correlation', 'Spearman', 3, False),
+			format_metric('unlabeled_ef_1_0', 'EF@1%', 2, False),
+			format_metric('unlabeled_ef_5_0', 'EF@5%', 2, False),
+		]
+		lines.append(f"Ranking   │ {' '.join(ranking_parts)}")
+
+	# Selection metrics (always shown)
+	selection_parts = [format_metric('avg_score_selected', 'Avg', 2, False)]
+
+	if metrics.get('uncertainty_mean') is not None:
+		selection_parts.append(format_metric('uncertainty_mean', 'Unc', 3, False))
+	if metrics.get('intra_batch_diversity') is not None:
+		selection_parts.append(format_metric('intra_batch_diversity', 'Div', 2, False))
+	if metrics.get('batch_novelty_score') is not None:
+		selection_parts.append(format_metric('batch_novelty_score', 'Nov', 2, False))
+
+	lines.append(f"Selection │ {' '.join(selection_parts)}")
+
+	return "\n".join(lines)
 
 
 def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: str = 'auto', score_direction: str = 'higher', target_col: str = 'Activity') -> None:
