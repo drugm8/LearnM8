@@ -9,7 +9,7 @@ from typing import Tuple, List
 import numpy as np
 
 # Base class import
-from ..base import TorchLearner
+from ..base import TorchLearner, _preprocess_features
 
 import torch
 import torch.nn as nn
@@ -135,6 +135,13 @@ class MCDropoutLearner(TorchLearner):
             raise RuntimeError("Model must be trained before prediction")
 
         try:
+            features, _ = _preprocess_features(
+                features,
+                valid_feature_mask=self._valid_feature_mask,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=False
+            )
+
             X_scaled = self.scaler.transform(features)
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 

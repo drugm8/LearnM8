@@ -15,7 +15,7 @@ from .probability_improvement import ProbabilityImprovementAcquisition
 from .thompson_sampling import ThompsonSamplingAcquisition
 from .entropy import EntropyAcquisition
 from .simulated_annealing import SimulatedAnnealingAcquisition
-from .bitbirch import BitBIRCHAcquisition
+
 
 __all__ = [
     # Base classes
@@ -59,7 +59,7 @@ ACQUISITION_REGISTRY = {
     'simulated_annealing': SimulatedAnnealingAcquisition,
 
     # Diversity-based methods
-    'bitbirch': BitBIRCHAcquisition,
+    #'bitbirch': BitBIRCHAcquisition,
 }
 
 
