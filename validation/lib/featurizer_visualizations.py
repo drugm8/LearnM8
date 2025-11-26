@@ -95,7 +95,9 @@ def create_all_heatmaps(
         ('top_100_discovery', 'Top 100')
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
+    n_featurizers = results_df['featurizer'].n_unique()
+    fig_width = max(20, 1.2 * n_featurizers)
+    fig, axes = plt.subplots(2, 2, figsize=(fig_width, 16), dpi=300)
     axes = axes.flatten()
 
     title = 'Learner-Featurizer Performance Matrix: Discovery Rates'
@@ -135,10 +137,10 @@ def create_all_heatmaps(
         # Extract learner names before selecting columns
         learner_names = mean_pivot.get_column('learner').to_list()
 
-        desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-        existing_cols = [col for col in desired_order if col in mean_pivot.columns]
-        mean_pivot = mean_pivot.select(existing_cols)
-        std_pivot = std_pivot.select(existing_cols)
+        featurizer_cols = [c for c in mean_pivot.columns if c != 'learner']
+        ordered_cols = (['none'] if 'none' in featurizer_cols else []) + sorted(c for c in featurizer_cols if c != 'none')
+        mean_pivot = mean_pivot.select(ordered_cols)
+        std_pivot = std_pivot.select(ordered_cols)
 
         create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx], learner_names)
 
@@ -508,16 +510,18 @@ def create_time_heatmap(
     # Extract row names before reordering columns
     row_names = time_pivot.get_column(index_col).to_list()
 
-    # Reorder columns
-    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-    existing_cols = [col for col in desired_order if col in time_pivot.columns]
-    time_pivot = time_pivot.select(existing_cols)
+    # Reorder columns: 'none' first (if present), then alphabetically
+    featurizer_cols = [c for c in time_pivot.columns if c != index_col]
+    ordered_cols = (['none'] if 'none' in featurizer_cols else []) + sorted(c for c in featurizer_cols if c != 'none')
+    time_pivot = time_pivot.select(ordered_cols)
 
     # Convert to pandas for heatmap
     time_pd = time_pivot.to_pandas()
 
-    # Create figure
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+    # Create figure with dynamic width based on number of featurizers
+    n_featurizers = len(ordered_cols)
+    fig_width = max(12, 0.8 * n_featurizers)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
 
     title = f'Time Matrix: Cumulative Training + Prediction Time (seconds)\n{metric_label} Discovery Rate'
     if dataset_name:
@@ -609,16 +613,18 @@ def create_performance_heatmap(
     # Extract row names before reordering columns
     row_names = perf_pivot.get_column(index_col).to_list()
 
-    # Reorder columns
-    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-    existing_cols = [col for col in desired_order if col in perf_pivot.columns]
-    perf_pivot = perf_pivot.select(existing_cols)
+    # Reorder columns: 'none' first (if present), then alphabetically
+    featurizer_cols = [c for c in perf_pivot.columns if c != index_col]
+    ordered_cols = (['none'] if 'none' in featurizer_cols else []) + sorted(c for c in featurizer_cols if c != 'none')
+    perf_pivot = perf_pivot.select(ordered_cols)
 
     # Convert to pandas for heatmap
     perf_pd = perf_pivot.to_pandas()
 
-    # Create figure
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+    # Create figure with dynamic width based on number of featurizers
+    n_featurizers = len(ordered_cols)
+    fig_width = max(12, 0.8 * n_featurizers)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
 
     title = f'Performance Matrix: {metric_label} Discovery Rate (%)'
     if dataset_name:
@@ -715,16 +721,18 @@ def create_efficiency_heatmap(
     # Extract row names before reordering columns
     row_names = efficiency_pivot.get_column(index_col).to_list()
 
-    # Reorder columns
-    desired_order = ['none', 'morgan', 'maccs', 'ecfp6', 'descriptors', 'morgan_feat']
-    existing_cols = [col for col in desired_order if col in efficiency_pivot.columns]
-    efficiency_pivot = efficiency_pivot.select(existing_cols)
+    # Reorder columns: 'none' first (if present), then alphabetically
+    featurizer_cols = [c for c in efficiency_pivot.columns if c != index_col]
+    ordered_cols = (['none'] if 'none' in featurizer_cols else []) + sorted(c for c in featurizer_cols if c != 'none')
+    efficiency_pivot = efficiency_pivot.select(ordered_cols)
 
     # Convert to pandas for heatmap
     efficiency_pd = efficiency_pivot.to_pandas()
 
-    # Create figure
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+    # Create figure with dynamic width based on number of featurizers
+    n_featurizers = len(ordered_cols)
+    fig_width = max(12, 0.8 * n_featurizers)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
 
     title = f'Efficiency Matrix: {metric_label} Discovery Rate per Second (%/s)'
     if dataset_name:
