@@ -24,6 +24,48 @@ from sklearn.preprocessing import StandardScaler
 logger = logging.getLogger(__name__)
 
 
+ZERO_VARIANCE_THRESHOLD = 1e-10
+
+
+def _preprocess_features(
+    features: np.ndarray,
+    valid_feature_mask: Optional[np.ndarray] = None,
+    remove_zero_variance: bool = True,
+    is_training: bool = True
+) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    """Preprocess features by handling NaN/inf and optionally removing zero-variance columns.
+
+    Args:
+        features: Input feature matrix (n_samples, n_features)
+        valid_feature_mask: Boolean mask from training (required if is_training=False)
+        remove_zero_variance: Whether to remove zero-variance columns
+        is_training: If True, compute mask; if False, apply existing mask
+
+    Returns:
+        Tuple of (preprocessed_features, valid_feature_mask)
+        - During training: returns computed mask
+        - During prediction: returns the input mask unchanged
+    """
+    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+
+    if not remove_zero_variance:
+        return features, None
+
+    if is_training:
+        variance = np.var(features, axis=0)
+        valid_feature_mask = variance > ZERO_VARIANCE_THRESHOLD
+        n_removed = (~valid_feature_mask).sum()
+        if n_removed > 0:
+            logger.debug(f"Removing {n_removed} zero-variance features "
+                        f"({features.shape[1]} -> {valid_feature_mask.sum()})")
+        features = features[:, valid_feature_mask]
+    else:
+        if valid_feature_mask is not None:
+            features = features[:, valid_feature_mask]
+
+    return features, valid_feature_mask
+
+
 class SklearnLearner(Learner):
     """Base class for scikit-learn compatible models.
 
@@ -31,19 +73,24 @@ class SklearnLearner(Learner):
     work with numpy feature matrices, promoting clean separation of concerns
     between ML algorithms and molecular feature extraction.
     """
-    
+
     def __init__(self,
                  model: BaseEstimator,
-                 random_state: int = 42):
+                 random_state: int = 42,
+                 remove_zero_variance: bool = True):
         """Initialize sklearn learner.
 
         Args:
             model: Scikit-learn compatible model instance
             random_state: Random seed for reproducibility
+            remove_zero_variance: Remove zero-variance features during training (default: True).
+                                 NaN/inf values are always replaced with 0 regardless of this setting.
         """
         self.model = model
         self.random_state = random_state
+        self.remove_zero_variance = remove_zero_variance
         self.is_trained = False
+        self._valid_feature_mask = None
 
         if hasattr(self.model, 'random_state'):
             self.model.random_state = random_state
@@ -70,6 +117,12 @@ class SklearnLearner(Learner):
         start_time = time.time()
 
         try:
+            features, self._valid_feature_mask = _preprocess_features(
+                features,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=True
+            )
+
             self.model.fit(features, targets)
             self.is_trained = True
 
@@ -101,6 +154,13 @@ class SklearnLearner(Learner):
         start_time = time.time()
 
         try:
+            features, _ = _preprocess_features(
+                features,
+                valid_feature_mask=self._valid_feature_mask,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=False
+            )
+
             predictions = self.model.predict(features)
 
             pred_time = time.time() - start_time
@@ -129,14 +189,15 @@ class TorchLearner(Learner):
     training loops, and model persistence while following the featurizer-agnostic
     architecture where learners work with numpy feature matrices.
     """
-    
+
     def __init__(self,
                  device: str = 'auto',
                  batch_size: int = 1024,
                  max_epochs: int = 100,
                  learning_rate: float = 0.001,
                  early_stopping_patience: int = 10,
-                 random_state: int = 42):
+                 random_state: int = 42,
+                 remove_zero_variance: bool = True):
         """Initialize PyTorch learner.
 
         Args:
@@ -146,6 +207,8 @@ class TorchLearner(Learner):
             learning_rate: Learning rate for optimizer
             early_stopping_patience: Patience for early stopping
             random_state: Random seed for reproducibility
+            remove_zero_variance: Remove zero-variance features during training (default: True).
+                                 NaN/inf values are always replaced with 0 regardless of this setting.
         """
         if device == 'auto':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -157,12 +220,14 @@ class TorchLearner(Learner):
         self.learning_rate = learning_rate
         self.early_stopping_patience = early_stopping_patience
         self.random_state = random_state
+        self.remove_zero_variance = remove_zero_variance
 
         self.model = None
         self.optimizer = None
         self.scaler = None
         self.is_trained = False
         self.training_history = []
+        self._valid_feature_mask = None
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -298,6 +363,12 @@ class TorchLearner(Learner):
         start_time = time.time()
 
         try:
+            features, self._valid_feature_mask = _preprocess_features(
+                features,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=True
+            )
+
             if self.model is None:
                 self.model = self._create_model(features.shape[1]).to(self.device)
                 self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -363,6 +434,13 @@ class TorchLearner(Learner):
         start_time = time.time()
 
         try:
+            features, _ = _preprocess_features(
+                features,
+                valid_feature_mask=self._valid_feature_mask,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=False
+            )
+
             X_scaled = self.scaler.transform(features)
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 
