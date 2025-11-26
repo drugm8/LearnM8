@@ -98,112 +98,122 @@ def format_duration(seconds: float) -> str:
 def format_cycle_metrics_table(
 	metrics: Dict[str, Any],
 	oracle_type: str = 'auto',
-	previous_metrics: Optional[Dict[str, Any]] = None
+	previous_metrics: Optional[Dict[str, Any]] = None,
+	score_direction: str = 'higher'
 ) -> str:
 	"""
-	Format cycle metrics as simple lines with optional change indicators.
+	Format cycle metrics as compact key-value lines with change indicators.
 
-	Creates clean line-by-line output automatically adapting for benchmark vs run modes.
+	Creates clean multi-line output automatically adapting for benchmark vs run modes.
+	Uses colored arrows: [green]↑[/green] (improvement), [red]↓[/red] (worsening),
+	[yellow]→[/yellow] (stagnant) with Rich markup.
 
 	Args:
 		metrics: Metrics dictionary from evaluate_cycle
 		oracle_type: Oracle type for mode-specific formatting ('benchmark' or 'run')
 		previous_metrics: Previous cycle metrics for change indicators
+		score_direction: 'higher' or 'lower' - indicates optimization direction
 
 	Returns:
-		Formatted string for console output
+		Formatted string for console output with Rich markup
 
 	Note:
 		This function provides mode-aware display:
-		- Benchmark mode: Shows Selection, Discovery, and Ranking metrics
-		- Run mode: Shows only Selection Quality metrics
+		- Benchmark mode: Shows Discovery (2 rows), Ranking, and Selection metrics
+		- Run mode: Shows only Selection metrics
 	"""
 	lines = []
-	
+
 	cycle = metrics.get('cycle', '?')
 	batch_size = metrics.get('batch_size', '?')
+	cumulative_labeled = metrics.get('cumulative_labeled', '?')
 	is_benchmark = (oracle_type == 'benchmark')
-	
-	def get_change(key: str, is_higher_better: bool = True) -> str:
-		"""Return change indicator if metrics improved/worsened."""
-		if previous_metrics is None or key not in metrics or key not in previous_metrics:
+
+	# Metrics where lower is better (error metrics, similarity to previous)
+	bad_metrics = {'rmse', 'mae', 'mse', 'inter_cycle_similarity'}
+	# Add avg_score_selected to bad_metrics if score_direction is 'lower'
+	if score_direction == 'lower':
+		bad_metrics = bad_metrics | {'avg_score_selected'}
+
+	def get_change(key: str, current_val: float, is_pct: bool = False) -> str:
+		"""Return Rich-markup colored change indicator with stagnation support."""
+		if previous_metrics is None or key not in previous_metrics:
 			return ""
-		
-		current = metrics[key]
-		previous = previous_metrics[key]
-		
-		if current is None or previous is None:
+
+		prev_val = previous_metrics.get(key)
+		if prev_val is None or current_val is None:
 			return ""
-		
-		diff = current - previous
-		if abs(diff) < 0.001:
+
+		try:
+			diff = float(current_val) - float(prev_val)
+		except (ValueError, TypeError):
 			return ""
-		
+
+		# Determine stagnation threshold
+		if is_pct or 'discovery' in key or 'overlap' in key:
+			stagnation_threshold = 1.0
+		else:
+			stagnation_threshold = 0.01
+
+		# Check for stagnation
+		if abs(diff) < stagnation_threshold:
+			return "[yellow]→[/yellow]"
+
+		is_higher_better = key not in bad_metrics
 		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
-		symbol = "↑" if diff > 0 else "↓"
-		return f" {symbol}" if is_improvement else f" {symbol}"
-	
-	lines.append(f"\nCycle {cycle} ({batch_size} selected)")
-	lines.append("=" * 50)
-	
-	lines.append("\nSelection Quality:")
-	if metrics.get('avg_score_selected') is not None:
-		val = metrics['avg_score_selected']
-		change = get_change('avg_score_selected', True)
-		lines.append(f"  Batch Avg: {val:.3f}{change}")
-	
-	if metrics.get('avg_score_ground_truth') is not None:
-		lines.append(f"  GT Avg: {metrics['avg_score_ground_truth']:.3f}")
-	
-	if metrics.get('cumulative_labeled') is not None:
-		lines.append(f"  Total Labeled: {metrics['cumulative_labeled']}")
-	
-	if metrics.get('diversity_score') is not None:
-		lines.append(f"  Diversity: {metrics['diversity_score']:.3f}")
-	
+
+		return "[green]↑[/green]" if is_improvement else "[red]↓[/red]"
+
+	def format_metric(key: str, label: str, digits: int = 1, is_pct: bool = False) -> str:
+		"""Format a single metric with optional change indicator."""
+		val = metrics.get(key)
+		if val is None:
+			return f"{label}:N/A"
+
+		change = get_change(key, val, is_pct)
+		if is_pct:
+			return f"{label}:{val:.{digits}f}%{change}"
+		else:
+			return f"{label}:{val:.{digits}f}{change}"
+
+	# Header
+	lines.append(f"Cycle {cycle} | {batch_size} selected | {cumulative_labeled} labeled")
+	lines.append("─" * 60)
+
 	if is_benchmark:
-		lines.append("\nDiscovery Metrics:")
-		
-		if metrics.get('top_10_discovery') is not None:
-			val = metrics['top_10_discovery']
-			change = get_change('top_10_discovery', True)
-			lines.append(f"  Top-10: {val:.1f}%{change}")
-		
-		if metrics.get('top_100_discovery') is not None:
-			val = metrics['top_100_discovery']
-			change = get_change('top_100_discovery', True)
-			lines.append(f"  Top-100: {val:.1f}%{change}")
-		
-		if metrics.get('top_1k_discovery') is not None:
-			val = metrics['top_1k_discovery']
-			change = get_change('top_1k_discovery', True)
-			lines.append(f"  Top-1K: {val:.1f}%{change}")
-		
-		if metrics.get('enrichment_factor_10') is not None:
-			val = metrics['enrichment_factor_10']
-			change = get_change('enrichment_factor_10', True)
-			lines.append(f"  EF@10: {val:.2f}{change}")
-		
-		if metrics.get('score_ratio') is not None:
-			val = metrics['score_ratio']
-			change = get_change('score_ratio', True)
-			lines.append(f"  Score Ratio: {val:.2f}{change}")
-		
-		lines.append("\nRanking (Unlabeled):")
-		
-		if metrics.get('unlabeled_top_10_discovery') is not None:
-			lines.append(f"  Unlbl Top-10: {metrics['unlabeled_top_10_discovery']:.1f}%")
-		
-		if metrics.get('unlabeled_enrichment_factor_10') is not None:
-			val = metrics['unlabeled_enrichment_factor_10']
-			change = get_change('unlabeled_enrichment_factor_10', True)
-			lines.append(f"  Unlbl EF@10: {val:.2f}{change}")
-		
-		if metrics.get('spearman_correlation') is not None:
-			val = metrics['spearman_correlation']
-			change = get_change('spearman_correlation', True)
-			lines.append(f"  Spearman: {val:.3f}{change}")
-	
+		# Discovery metrics - split into two rows
+		discovery_row1 = [
+			format_metric('top_10_discovery', 'Top10', 1, True),
+			format_metric('top_100_discovery', 'Top100', 1, True),
+			format_metric('top_1000_discovery', 'Top1K', 1, True),
+		]
+		discovery_row2 = [
+			format_metric('top_0_1_pct_discovery', 'Top0.1%', 1, True),
+			format_metric('top_1_pct_discovery', 'Top1%', 1, True),
+		]
+		lines.append(f"Discovery │ {' '.join(discovery_row1)}")
+		lines.append(f"          │ {' '.join(discovery_row2)}")
+
+		# Ranking line
+		ranking_parts = [
+			format_metric('unlabeled_spearman_correlation', 'Spearman', 3, False),
+			format_metric('unlabeled_ef_1_0', 'EF@1%', 2, False),
+			format_metric('unlabeled_ef_5_0', 'EF@5%', 2, False),
+		]
+		lines.append(f"Ranking   │ {' '.join(ranking_parts)}")
+
+	# Selection line
+	selection_parts = [format_metric('avg_score_selected', 'Avg', 2, False)]
+
+	if metrics.get('uncertainty_mean') is not None:
+		selection_parts.append(format_metric('uncertainty_mean', 'Unc', 3, False))
+	if metrics.get('intra_batch_diversity') is not None:
+		selection_parts.append(format_metric('intra_batch_diversity', 'Div', 2, False))
+	if metrics.get('batch_novelty_score') is not None:
+		selection_parts.append(format_metric('batch_novelty_score', 'Nov', 2, False))
+
+	lines.append(f"Selection │ {' '.join(selection_parts)}")
+
 	return "\n".join(lines)
 
 
