@@ -21,6 +21,7 @@ from validation.lib.featurizer_visualizations import (
     generate_comprehensive_visualizations,
     create_all_cost_performance_plots
 )
+from validation.lib.seed_aggregation import aggregate_seed_results
 
 from learnm8 import setup_logging
 setup_logging(level='INFO')
@@ -33,11 +34,11 @@ ACQUISITION = 'greedy'
 RANDOM_SEED = 42
 OUTPUT_BASE = Path('validation/reports/learner_featurizer_matrix_single')
 
-SKIP_3D_FEATURIZERS = True
-
 ENSEMBLE_LEARNERS = ['ensemble', 'rf_ensemble', 'lr_ensemble', 'xgb_ensemble',
                      'dt_ensemble', 'mixed_ensemble', 'fastprop_ensemble',
                      'chemprop_ensemble']
+
+MATRIX_FEATURIZERS = sorted(FEATURIZERS_2D+FEATURIZERS_3D)
 
 
 def print_header():
@@ -49,23 +50,14 @@ def print_header():
     print(f"Batch Fraction: {BATCH_FRACTION}")
     print(f"Acquisition: {ACQUISITION}")
     print(f"Random Seed: {RANDOM_SEED}")
-    print(f"Skip 3D Featurizers: {SKIP_3D_FEATURIZERS}")
+    print(f"Featurizers: {MATRIX_FEATURIZERS}")
     print("=" * 80)
     print()
-
-
-def get_available_featurizers() -> List[str]:
-    """Get list of available featurizers, optionally excluding 3D."""
-    if SKIP_3D_FEATURIZERS:
-        return sorted([f for f in FEATURIZER_REGISTRY.keys() if f not in FEATURIZERS_3D])
-    return sorted(FEATURIZER_REGISTRY.keys())
 
 
 def get_compatible_combinations() -> List[Tuple[str, Optional[str], str]]:
     """Returns (learner_name, featurizer, display_name) tuples."""
     combinations = []
-
-    available_featurizers = get_available_featurizers()
 
     for learner_name in sorted(LEARNER_REGISTRY.keys()):
         if learner_name in ENSEMBLE_LEARNERS:
@@ -78,10 +70,10 @@ def get_compatible_combinations() -> List[Tuple[str, Optional[str], str]]:
 
             if learner.requires_smiles():
                 combinations.append((learner_name, None, learner_name))
-                for featurizer_name in available_featurizers:
+                for featurizer_name in MATRIX_FEATURIZERS:
                     combinations.append((learner_name, featurizer_name, learner_name))
             else:
-                for featurizer_name in available_featurizers:
+                for featurizer_name in MATRIX_FEATURIZERS:
                     combinations.append((learner_name, featurizer_name, learner_name))
         except Exception as e:
             print(f"Warning: Could not create learner {learner_name}: {e}")
@@ -119,6 +111,19 @@ def load_existing_results(learner: str, featurizer: Optional[str]) -> Dict:
         'cycle_metrics': cycle_metrics,
         'output_dir': output_dir,
         'elapsed_time': None
+    }
+
+
+def wrap_single_seed_result(result_data: Dict, output_dir: Path) -> Dict:
+    """Wrap single-seed result into multi-seed format for visualization compatibility."""
+    seed_results = {RANDOM_SEED: result_data}
+    aggregated = aggregate_seed_results(seed_results)
+    return {
+        'seed_results': seed_results,
+        'aggregated': aggregated,
+        'cycle_metrics': aggregated['cycle_metrics_mean'],
+        'compounds_df': result_data['compounds_df'],
+        'output_dir': output_dir
     }
 
 
@@ -195,11 +200,6 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
     print(f"Cache directory: {cache_dir}")
     print()
 
-    print("Available featurizers:")
-    available_featurizers = get_available_featurizers()
-    print(f"  {len(available_featurizers)} featurizers: {', '.join(available_featurizers[:10])}...")
-    print()
-
     print("Identifying compatible learner-featurizer combinations...")
     combinations = get_compatible_combinations()
     print(f"Found {len(combinations)} compatible combinations")
@@ -229,10 +229,15 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
         featurizer_display = featurizer_name if featurizer_name is not None else 'none'
         pbar.set_description(f"{learner_name} + {featurizer_display}")
 
+        featurizer_str = featurizer_name if featurizer_name is not None else 'none'
+        output_dir = OUTPUT_BASE / 'data' / f'{learner_name}_{featurizer_str}'
+
         if check_existing_results(learner_name, featurizer_name):
             try:
                 result_data = load_existing_results(learner_name, featurizer_name)
-                all_results[(learner_name, featurizer_name)] = result_data
+                all_results[(learner_name, featurizer_name)] = wrap_single_seed_result(
+                    result_data, output_dir
+                )
                 skipped += 1
                 continue
             except Exception as e:
@@ -249,7 +254,9 @@ def run_all_experiments() -> Dict[Tuple[str, Optional[str]], Dict]:
                 score_direction,
                 cache_dir
             )
-            all_results[(learner_name, featurizer_name)] = result_data
+            all_results[(learner_name, featurizer_name)] = wrap_single_seed_result(
+                result_data, output_dir
+            )
             completed += 1
 
         except Exception as e:
