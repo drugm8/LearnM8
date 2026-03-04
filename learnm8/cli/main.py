@@ -309,8 +309,8 @@ def create_parser() -> argparse.ArgumentParser:
     pruning_group.add_argument(
         '--pruning-strategy',
         type=str,
-        default='score_based',
-        help='Pruning strategy (default: score_based)'
+        default=None,
+        help='Pruning strategy (default: None)'
     )
 
     acquisition_group = run_parser.add_argument_group('Acquisition Parameters')
