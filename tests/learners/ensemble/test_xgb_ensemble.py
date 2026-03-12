@@ -8,6 +8,7 @@ from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestXGBEnsemble:
     """Test XGBEnsemble functionality with real molecular data."""
 

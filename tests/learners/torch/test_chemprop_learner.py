@@ -5,6 +5,8 @@ from pathlib import Path
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerBasic:
 
     def test_initialization(self):
@@ -65,6 +67,8 @@ class TestChempropLearnerBasic:
             learner.predict(features=None, smiles=['CC', 'CCO'])
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerTrainPredict:
 
     def test_train_predict_integration(self, small_real_compounds):
@@ -112,6 +116,8 @@ class TestChempropLearnerTrainPredict:
         assert np.all(np.isfinite(predictions))
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerModelParameters:
 
     def test_custom_architecture_params(self, small_real_compounds):
@@ -203,6 +209,8 @@ class TestChempropLearnerModelParameters:
             assert predictions.shape == (len(smiles),)
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerEarlyStopping:
 
     def test_early_stopping_enabled_by_default(self):
@@ -301,6 +309,8 @@ class TestChempropLearnerEarlyStopping:
         assert learner.val_fraction == 0.15
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerWithDescriptors:
     """Test ChempropLearner with extra descriptors (x_d)."""
 
@@ -547,6 +557,8 @@ class TestChempropLearnerWithDescriptors:
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropLearnerPerformanceConfig:
 
     def test_predict_batch_size_default(self):

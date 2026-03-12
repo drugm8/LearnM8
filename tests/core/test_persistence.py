@@ -8,6 +8,8 @@ from pathlib import Path
 from learnm8.core.persistence import save_results, _add_csv_metadata, _organize_columns
 from learnm8.core.validation import ValidationResult
 
+pytestmark = pytest.mark.unit
+
 
 def test_organize_columns():
     df = pl.DataFrame({

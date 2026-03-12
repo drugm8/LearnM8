@@ -17,6 +17,8 @@ from learnm8.core.data_structures import (
 )
 from tests.fixtures.master_dataframe import create_initialized_master_df
 
+pytestmark = pytest.mark.unit
+
 
 def test_initialize_master_dataframe(sample_compounds):
     """Test initialization with valid compound pool."""

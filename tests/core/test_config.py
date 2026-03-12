@@ -2,6 +2,7 @@ import pytest
 from learnm8.core.config import CycleConfig, parse_cycle_spec, parse_cycle_schedule
 
 
+@pytest.mark.unit
 class TestCycleConfig:
 
     def test_valid_config_with_batch_fraction(self):
@@ -58,6 +59,7 @@ class TestCycleConfig:
         assert config.batch_fraction == 0.0001
 
 
+@pytest.mark.unit
 class TestParseCycleSpec:
 
     def test_single_cycle_spec(self):
@@ -122,6 +124,7 @@ class TestParseCycleSpec:
             parse_cycle_spec("greedy:0.01*-5")
 
 
+@pytest.mark.unit
 class TestParseCycleSchedule:
 
     def test_simple_api_default_parameters(self):

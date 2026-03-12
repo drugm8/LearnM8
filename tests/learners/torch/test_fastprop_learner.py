@@ -8,6 +8,8 @@ from learnm8.learners.torch.fastprop_learner import FastpropLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestFastpropLearner:
     """Test FastpropLearner functionality with real molecular data."""
 

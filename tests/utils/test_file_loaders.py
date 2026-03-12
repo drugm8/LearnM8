@@ -12,6 +12,7 @@ from learnm8.utils.file_loaders import (
 )
 
 
+@pytest.mark.unit
 class TestDetectFileFormat:
     def test_detect_csv(self):
         assert _detect_file_format(Path('test.csv')) == 'csv'
@@ -42,6 +43,7 @@ class TestDetectFileFormat:
             _detect_file_format(Path('test.xlsx'))
 
 
+@pytest.mark.unit
 class TestLoadCSV:
     @pytest.fixture
     def csv_file(self, tmp_path):
@@ -107,6 +109,7 @@ class TestLoadCSV:
             load_compound_file(csv_path)
 
 
+@pytest.mark.unit
 class TestLoadSDF:
     @pytest.fixture
     def sdf_file(self):
@@ -153,6 +156,7 @@ class TestLoadSDF:
         assert 'ID' in df.columns
 
 
+@pytest.mark.unit
 class TestLoadSMI:
     @pytest.fixture
     def smi_file(self):
@@ -183,6 +187,7 @@ class TestLoadSMI:
             load_compound_file(smi_path)
 
 
+@pytest.mark.unit
 class TestErrorHandling:
     def test_file_not_found(self):
         with pytest.raises(FileNotFoundError, match="Compound pool file not found"):
@@ -203,6 +208,7 @@ class TestErrorHandling:
         assert len(df) == 0
 
 
+@pytest.mark.unit
 class TestIntegration:
     @pytest.fixture
     def csv_file(self):
@@ -238,6 +244,7 @@ class TestIntegration:
             assert required.issubset(set(df.columns)), f"Missing columns in {file_path.suffix}"
 
 
+@pytest.mark.unit
 class TestBackwardCompatibility:
     def test_csv_loading_unchanged(self, tmp_path):
         csv_path = tmp_path / "compounds.csv"

@@ -13,6 +13,7 @@ from learnm8.core.cycle import (
 )
 
 
+@pytest.mark.unit
 class TestCalculateOptimalBatchSize:
     """Test _calculate_optimal_batch_size() helper function."""
 
@@ -51,6 +52,7 @@ class TestCalculateOptimalBatchSize:
         assert batch_size <= 50000
 
 
+@pytest.mark.unit
 class TestChunkDataFrame:
     """Test _chunk_dataframe() helper function."""
 
@@ -89,6 +91,7 @@ class TestChunkDataFrame:
         assert len(chunks) == 0
 
 
+@pytest.mark.unit
 class TestPredictChunk:
     """Test _predict_chunk() helper function."""
 

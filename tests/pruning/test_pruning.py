@@ -13,6 +13,8 @@ import json
 from learnm8.pruning import create_pruning_strategy
 from learnm8.pruning.score_based import ScoreBasedPruner
 
+pytestmark = pytest.mark.unit
+
 
 def test_create_pruning_strategy_valid_params():
     """Test factory with valid ScoreBasedPruner parameters."""

@@ -7,6 +7,7 @@ from learnm8.features.cache import get_smiles_hash, cache_features
 from learnm8.features import MorganFeaturizer, MACCSFeaturizer
 
 
+@pytest.mark.unit
 class TestGetSmilesHash:
 
     def test_hash_determinism(self):
@@ -56,6 +57,7 @@ def mock_extract_features_func(smiles_list, featurizer, cache_dir=None):
 mock_extract_features_cached = cache_features(Path('.cache'))(mock_extract_features_func)
 
 
+@pytest.mark.unit
 class TestCacheFeaturesDecorator:
 
     def test_cache_file_creation(self, tmp_path):

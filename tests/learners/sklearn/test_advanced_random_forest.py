@@ -8,6 +8,8 @@ from learnm8.learners.sklearn.advanced_random_forest import AdvancedRandomForest
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestAdvancedRandomForestLearner:
     """Test AdvancedRandomForestLearner functionality with real molecular data."""
 

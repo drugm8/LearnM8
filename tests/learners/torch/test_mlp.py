@@ -9,6 +9,8 @@ from learnm8.learners.torch.mlp import MLPLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestMLPLearner:
     """Test MLPLearner functionality with real molecular data."""
 

@@ -5,6 +5,8 @@ import polars as pl
 import numpy as np
 from learnm8.utils.polars_utils import map_values_via_join
 
+pytestmark = pytest.mark.unit
+
 
 def test_map_values_via_join_basic():
     """Test basic dictionary mapping via join."""

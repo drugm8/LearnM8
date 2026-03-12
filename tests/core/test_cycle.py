@@ -9,6 +9,7 @@ from learnm8.core.config import CycleConfig
 from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
 
+@pytest.mark.integration
 class TestExecuteCycle:
 
     def test_cycle_1_with_initialization(self, sample_compounds, mock_learner, mock_oracle, tmp_path):
@@ -330,6 +331,7 @@ class TestExecuteCycle:
         assert metrics['remaining_unlabeled'] == 0
 
 
+@pytest.mark.integration
 class TestCalculateCycleMetrics:
 
     def test_basic_metrics_structure(self, sample_master_df):
@@ -419,6 +421,7 @@ class TestCalculateCycleMetrics:
         assert 'uncertainty_std' in metrics
 
 
+@pytest.mark.integration
 class TestApplyPruning:
 
     def test_pruning_reduces_pool(self, sample_compounds):
@@ -481,6 +484,7 @@ class TestApplyPruning:
             )
 
 
+@pytest.mark.integration
 class TestSelectCompounds:
 
     def test_greedy_selection(self, sample_compounds):
@@ -548,6 +552,7 @@ class TestSelectCompounds:
             )
 
 
+@pytest.mark.integration
 class TestEdgeCaseHandling:
 
     def test_nan_predictions_handling(self, sample_master_df, mock_oracle, tmp_path):

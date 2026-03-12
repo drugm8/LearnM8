@@ -8,6 +8,8 @@ from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestFastpropEnsemble:
     """Test FastpropEnsemble functionality with real molecular data."""
 

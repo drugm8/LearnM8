@@ -15,7 +15,7 @@ __all__ = [
 try:
     from .cdpkit_pharmacophore import CDPKitPharmacophoreOracle
     __all__.append('CDPKitPharmacophoreOracle')
-except ImportError:
+except (ImportError, NameError):
     pass
 
 try:

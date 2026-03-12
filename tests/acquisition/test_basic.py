@@ -10,6 +10,7 @@ import polars as pl
 from learnm8.acquisition import GreedyAcquisition, RandomAcquisition, TopKAcquisition
 
 
+@pytest.mark.unit
 class TestGreedyAcquisition:
     """Test GreedyAcquisition functionality."""
     
@@ -85,6 +86,7 @@ class TestGreedyAcquisition:
         assert lower_ids != higher_ids
 
 
+@pytest.mark.unit
 class TestRandomAcquisition:
     """Test RandomAcquisition functionality."""
     
@@ -148,6 +150,7 @@ class TestRandomAcquisition:
         assert 0 < overlap < 20  # Some but not complete overlap
 
 
+@pytest.mark.unit
 class TestTopKAcquisition:
     """Test TopKAcquisition functionality."""
     
@@ -188,6 +191,7 @@ class TestTopKAcquisition:
         assert all(id in compound_ids for id in selected_large.get_column('ID').to_list())
 
 
+@pytest.mark.unit
 class TestBasicAcquisitionIntegration:
     """Integration tests for basic acquisition functions."""
     

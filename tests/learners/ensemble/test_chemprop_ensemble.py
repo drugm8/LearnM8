@@ -7,6 +7,8 @@ import polars as pl
 from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropEnsemble:
     """Test ChempropEnsemble functionality with real molecular data."""
 
@@ -384,6 +386,8 @@ class TestChempropEnsemble:
             assert learner.batch_norm is True
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropEnsembleWithDescriptors:
     """Test ChempropEnsemble with extra descriptors (x_d)."""
 
@@ -557,6 +561,8 @@ class TestChempropEnsembleWithDescriptors:
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestChempropEnsemblePerformanceConfig:
 
     def test_precision_propagation(self):

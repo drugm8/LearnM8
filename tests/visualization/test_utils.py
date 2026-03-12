@@ -9,6 +9,7 @@ from learnm8.visualization.utils import (
 )
 
 
+@pytest.mark.unit
 class TestDownsampleForViz:
     def test_no_downsampling_needed(self):
         data = np.arange(100)
@@ -36,6 +37,7 @@ class TestDownsampleForViz:
         np.testing.assert_array_equal(idx1, idx2)
 
 
+@pytest.mark.unit
 class TestGetStatusColors:
     def test_all_unlabeled(self):
         colors = get_status_colors(n_compounds=100, labeled_ids=set(), selected_ids=set())
@@ -71,6 +73,7 @@ class TestGetStatusColors:
         assert colors[20] == 1
 
 
+@pytest.mark.unit
 class TestDetectBenchmarkMode:
     def test_benchmark_mode_detected(self):
         metrics_df = pl.DataFrame({
@@ -99,6 +102,7 @@ class TestDetectBenchmarkMode:
         assert detect_benchmark_mode(metrics_df) is True
 
 
+@pytest.mark.unit
 class TestFormatMetricValue:
     def test_format_none(self):
         assert format_metric_value(None, 'any_metric') == 'N/A'

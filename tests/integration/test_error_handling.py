@@ -16,6 +16,8 @@ from learnm8.oracles.csv_oracle import CSVOracle
 from learnm8.oracles.python_oracle import PythonOracle
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestDataValidationErrors:
     """Test essential data validation error handling."""
     
@@ -105,6 +107,8 @@ class TestDataValidationErrors:
             pass
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestAcquisitionErrors:
     """Test acquisition function error handling."""
     
@@ -169,6 +173,8 @@ class TestAcquisitionErrors:
             assert "duplicate" in str(e).lower() or "unique" in str(e).lower()
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestOracleErrors:
     """Test oracle error handling."""
     
@@ -237,6 +243,8 @@ class TestOracleErrors:
         assert 'Activity' in result.columns
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestFeatureExtractionErrors:
     """Test feature extraction error handling."""
 
@@ -268,6 +276,8 @@ class TestFeatureExtractionErrors:
             assert "HDF5" in str(e) or "corrupt" in str(e).lower()
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestIntegrationErrors:
     """Test error handling in integrated workflows."""
     
@@ -323,6 +333,8 @@ class TestIntegrationErrors:
                     assert h5_file.stat().st_size == 0 or h5_file.stat().st_size > 100
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestErrorRecovery:
     """Test error recovery and graceful degradation."""
     

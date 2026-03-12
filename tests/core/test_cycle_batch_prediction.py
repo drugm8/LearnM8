@@ -45,6 +45,7 @@ def initialized_compounds(sample_compounds, tmp_path):
     return compounds_df
 
 
+@pytest.mark.integration
 class TestCycleBatchPrediction:
     """Test batch prediction integration in execute_cycle()."""
 

@@ -78,6 +78,7 @@ class MockOracle(Oracle):
         return result
 
 
+@pytest.mark.unit
 class TestLearnerInterface:
     """Test Learner interface compliance."""
     
@@ -163,6 +164,7 @@ class TestLearnerInterface:
             assert len(uncertainty) == len(compounds)
 
 
+@pytest.mark.unit
 class TestOracleInterface:
     """Test Oracle interface compliance."""
     
@@ -244,6 +246,7 @@ class TestOracleInterface:
         assert result['Activity'].to_list() == [0.5, 0.2, 0.1, 0.4, 0.3]
 
 
+@pytest.mark.unit
 class TestInterfaceIntegration:
     """Test integration between interface components."""
     

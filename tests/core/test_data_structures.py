@@ -14,6 +14,7 @@ from learnm8.core.data_structures import (
 from tests.fixtures.master_dataframe import create_initialized_master_df
 
 
+@pytest.mark.unit
 class TestConstants:
 
     def test_status_constants_defined(self):
@@ -26,6 +27,7 @@ class TestConstants:
         assert len(VALID_STATUSES) == 3
 
 
+@pytest.mark.unit
 class TestGetPredictionColumns:
 
     def test_get_prediction_columns_no_predictions(self, sample_master_df):
@@ -120,6 +122,7 @@ class TestGetPredictionColumns:
         assert unc_cols == []
 
 
+@pytest.mark.unit
 class TestValidateMasterDataframe:
 
     def test_valid_master_dataframe_passes(self, sample_master_df):

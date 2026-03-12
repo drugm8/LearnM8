@@ -26,6 +26,7 @@ from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig
 
 
+@pytest.mark.integration
 class TestAPIBasicSimple:
     """Test basic simple-API functionality with minimal parameters."""
 
@@ -118,6 +119,7 @@ class TestAPIBasicSimple:
         assert len(labeled_in_cycle_2) == 0
 
 
+@pytest.mark.integration
 class TestAPIAdvancedCycleConfig:
     """Test advanced API with CycleConfig list."""
 
@@ -199,6 +201,7 @@ class TestAPIAdvancedCycleConfig:
         assert len(results['labeled_data']) > 0
 
 
+@pytest.mark.integration
 class TestAPIPruning:
     """Test pruning functionality via pruning_fraction parameter."""
 
@@ -302,6 +305,7 @@ class TestAPIPruning:
             )
 
 
+@pytest.mark.integration
 class TestAPIModeDetection:
     """Test mode auto-detection for CSV oracle (benchmark mode)."""
 
@@ -395,6 +399,7 @@ class TestAPIModeDetection:
         assert len(results['cycle_metrics']) == 2
 
 
+@pytest.mark.integration
 class TestAPISavedFiles:
     """Test saved_files dictionary in results."""
 
@@ -465,6 +470,7 @@ class TestAPISavedFiles:
         assert output_dir.exists()
 
 
+@pytest.mark.integration
 class TestAPIResultsStructure:
     """Test complete results structure and data integrity."""
 
@@ -612,6 +618,7 @@ class TestAPIResultsStructure:
         assert hasattr(validation_result, 'success_rate')
 
 
+@pytest.mark.integration
 class TestAPILearnerIntegration:
     """Test learner string shortcuts and instantiation."""
 
@@ -660,6 +667,7 @@ class TestAPILearnerIntegration:
             )
 
 
+@pytest.mark.integration
 class TestAPIErrorHandling:
     """Test error handling and validation."""
 
@@ -740,6 +748,7 @@ class TestAPIErrorHandling:
             )
 
 
+@pytest.mark.integration
 class TestAPIFeaturizerTypes:
     """Test different featurizer types."""
 
@@ -765,6 +774,7 @@ class TestAPIFeaturizerTypes:
         assert len(results['cycle_metrics']) == 2
 
 
+@pytest.mark.integration
 class TestAPIEvaluationMetrics:
     """Test evaluation metrics integration in run_active_learning."""
 
@@ -897,6 +907,7 @@ class TestAPIEvaluationMetrics:
             assert 'best_so_far' in cycle_metric or cycle_metric.get('best_so_far') is None
 
 
+@pytest.mark.integration
 class TestValidateCompoundPoolAPI:
 
     def test_validate_returns_validation_result(self, sample_compounds):
@@ -947,6 +958,7 @@ class TestValidateCompoundPoolAPI:
         assert len(results['compounds_df']) == len(validation_result.valid_compounds)
 
 
+@pytest.mark.integration
 class TestCacheDirParameter:
 
     def test_cache_dir_used_for_feature_extraction(self, tmp_path):
@@ -983,6 +995,7 @@ class TestCacheDirParameter:
         assert results['output_dir'] == output_dir
 
 
+@pytest.mark.integration
 class TestLoggingBehavior:
     """Test logging level behavior after refactoring."""
 
@@ -1079,6 +1092,7 @@ class TestLoggingBehavior:
         assert any('Phase 5:' in msg for msg in info_messages)
 
 
+@pytest.mark.integration
 class TestChempropWithExtraDescriptors:
     """Test Chemprop learner with extra descriptors (x_d) integration."""
 
@@ -1133,6 +1147,7 @@ class TestChempropWithExtraDescriptors:
         assert 'compounds_df' in results
 
 
+@pytest.mark.integration
 class TestPredictionBatchSizeParameter:
     """Test prediction_batch_size parameter at API level."""
 

@@ -70,6 +70,7 @@ def sample_data_files(temp_output_dir):
     return temp_output_dir
 
 
+@pytest.mark.unit
 class TestLoadCsvData:
     def test_load_all_files(self, sample_data_files):
         data = load_csv_data(sample_data_files)
@@ -109,6 +110,7 @@ class TestLoadCsvData:
         assert data['selections'].height == 0
 
 
+@pytest.mark.unit
 class TestGetStrategyColorMap:
     def test_standard_strategies(self):
         strategies = ['random', 'greedy', 'ucb']
@@ -134,6 +136,7 @@ class TestGetStrategyColorMap:
         assert 'custom_strategy' in color_map
 
 
+@pytest.mark.unit
 class TestCreateDashboardAnimation:
     @pytest.mark.slow
     def test_create_animation_gif(self, sample_data_files, temp_output_dir):
