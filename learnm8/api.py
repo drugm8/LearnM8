@@ -59,6 +59,7 @@ from learnm8.core.config import parse_cycle_schedule, CycleConfig
 from learnm8.core.cycle import execute_cycle
 from learnm8.core.persistence import save_results
 from learnm8.core.interfaces import Oracle, Learner
+from learnm8.core.resources import validate_n_jobs, validate_device, parse_device_for_lightning
 from learnm8.oracles import CSVOracle
 from learnm8.utils.file_loaders import load_compound_file
 from learnm8.utils.logging import configure_learnm8_logging
@@ -140,7 +141,9 @@ def _create_learner(
     learner_str: str,
     random_state: int,
     enable_chemprop_fine_tuning: bool = False,
-    checkpoint_dir: Optional[Path] = None
+    checkpoint_dir: Optional[Path] = None,
+    n_jobs: int = -1,
+    device: str = 'auto',
 ) -> Learner:
     """Instantiate learner from string shortcut.
 
@@ -202,16 +205,24 @@ def _create_learner(
             logger.info(f"Creating ChempropEnsemble with fine-tuning enabled (checkpoint_dir={checkpoint_dir})")
             return ChempropEnsemble(
                 enable_fine_tuning=True,
-                checkpoint_dir=checkpoint_dir
+                checkpoint_dir=checkpoint_dir,
+                device=device
             )
         else:
             logger.debug("Creating ChempropEnsemble without fine-tuning")
-            return ChempropEnsemble()
+            return ChempropEnsemble(device=device)
 
     # Standard learner instantiation
     try:
         sig = inspect.signature(learner_class.__init__)
         params = sig.parameters
+
+        kwargs = {}
+
+        if 'n_jobs' in params:
+            kwargs['n_jobs'] = n_jobs
+        if 'device' in params:
+            kwargs['device'] = device
 
         if 'random_states' in params:
             random_states = [random_state, random_state + 81, random_state + 314]
@@ -219,15 +230,15 @@ def _create_learner(
                 f"Creating {learner_class.__name__} with random_states={random_states} "
                 f"(derived from random_state={random_state})"
             )
-            return learner_class(random_states=random_states)
+            return learner_class(random_states=random_states, **kwargs)
 
         elif 'random_state' in params:
             logger.debug(f"Creating {learner_class.__name__} with random_state={random_state}")
-            return learner_class(random_state=random_state)
+            return learner_class(random_state=random_state, **kwargs)
 
         else:
             logger.debug(f"Creating {learner_class.__name__} without random state parameter")
-            return learner_class()
+            return learner_class(**kwargs)
 
     except Exception as e:
         raise RuntimeError(
@@ -339,6 +350,9 @@ def run_active_learning(
     acquisition_params: Optional[Dict] = None,
     # Memory management
     prediction_batch_size: Optional[int] = None,
+    # Resource control
+    n_jobs: int = -1,
+    device: str = 'auto',
     **kwargs
 ) -> Dict[str, Any]:
     """Execute active learning experiment.
@@ -488,6 +502,9 @@ def run_active_learning(
     start_time = time.time()
 
     try:
+        n_jobs = validate_n_jobs(n_jobs)
+        device = validate_device(device)
+
         original_compound_pool_path = None
 
         if output_dir is None:
@@ -607,7 +624,9 @@ def run_active_learning(
                 learner,
                 random_state,
                 enable_chemprop_fine_tuning=enable_chemprop_fine_tuning,
-                checkpoint_dir=chemprop_checkpoint_dir if enable_chemprop_fine_tuning else None
+                checkpoint_dir=chemprop_checkpoint_dir if enable_chemprop_fine_tuning else None,
+                n_jobs=n_jobs,
+                device=device
             )
             logger.info(f"Using learner: {learner.__class__.__name__}")
             logger.debug(f"Instantiated learner from string: {learner_str}")
@@ -656,7 +675,7 @@ def run_active_learning(
                         f"Valid options: {featurizer_options}"
                     )
                 featurizer_class = FEATURIZER_REGISTRY[featurizer]
-                featurizer_obj = featurizer_class(n_jobs=-1)
+                featurizer_obj = featurizer_class(n_jobs=n_jobs)
                 logger.debug(f"Instantiated featurizer: {featurizer_obj.get_name()}")
             else:
                 from learnm8.core.interfaces import Featurizer
@@ -691,7 +710,7 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 1: Validating compound pool")
         logger.info("═══════════════════════════════════════════════════════════════")
-        validation_result = validate_compound_pool(compound_pool, n_jobs=-1, progress=True)
+        validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
 
         if len(validation_result.valid_compounds) == 0:
             logger.error(
@@ -834,7 +853,8 @@ def run_active_learning(
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
                     prediction_batch_size=prediction_batch_size,
-                    previous_metrics=previous_metrics
+                    previous_metrics=previous_metrics,
+                    n_jobs=n_jobs
                 )
                 all_metrics.append(metrics)
 
