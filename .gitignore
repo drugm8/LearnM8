@@ -270,3 +270,6 @@ examples/notebooks/results/vina_pruning/compounds_final.csv
 examples/notebooks/results/vina_pruning/config.json
 examples/notebooks/results/vina_pruning/cycle_metrics.csv
 examples/notebooks/results/vina_pruning/selection_history.csv
+
+.claude/
+.specify/
