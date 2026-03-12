@@ -4,6 +4,8 @@ from rdkit import Chem
 
 from learnm8.utils.featurizers import smiles_to_ecfp6_fingerprint, smiles_to_morgan_fingerprint
 
+pytestmark = [pytest.mark.unit, pytest.mark.molecular]
+
 
 class TestECFP6BasicFunctionality:
 

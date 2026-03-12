@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
 
 
+@pytest.mark.unit
 class TestSelectCompoundsByStrategy:
     """Test compound selection with different strategies."""
 

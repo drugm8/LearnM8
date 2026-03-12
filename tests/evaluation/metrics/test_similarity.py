@@ -12,6 +12,7 @@ from learnm8.evaluation.metrics.similarity import (
 )
 
 
+@pytest.mark.unit
 class TestSimilarityMetrics:
     """Test molecular similarity and diversity metrics."""
 

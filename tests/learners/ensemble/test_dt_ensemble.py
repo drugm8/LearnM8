@@ -9,6 +9,7 @@ from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestDTEnsemble:
     """Test DTEnsemble functionality with real molecular data."""
 

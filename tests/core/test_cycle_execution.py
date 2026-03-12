@@ -34,6 +34,7 @@ def create_test_master_df(compounds, initial_labeled_count=3):
     )
 
 
+@pytest.mark.integration
 class TestCycleExecution:
     """Test cycle execution functions."""
 
@@ -457,6 +458,7 @@ class TestCycleExecution:
             assert labeled_count == 6
 
 
+@pytest.mark.integration
 class TestMasterDataFrameCycleIntegration:
     """Test master DataFrame integration in cycle execution."""
 

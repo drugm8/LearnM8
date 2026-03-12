@@ -6,6 +6,8 @@ from learnm8.utils.featurizers import smiles_to_maccs_fingerprint
 
 RDLogger.DisableLog('rdApp.*')
 
+pytestmark = [pytest.mark.unit, pytest.mark.molecular]
+
 
 class TestSmilesToMaccsFingerprint:
 

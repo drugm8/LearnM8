@@ -12,6 +12,7 @@ from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestMixedEnsemble:
     """Test MixedEnsemble functionality with real molecular data."""
 

@@ -11,6 +11,7 @@ from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestEnsembleLearner:
     """Test EnsembleLearner functionality with real molecular data."""
 

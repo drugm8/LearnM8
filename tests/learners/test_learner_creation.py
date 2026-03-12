@@ -9,6 +9,7 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 
 
+@pytest.mark.unit
 class TestLearnerCreation:
     """Test learner instantiation through API."""
 
@@ -62,6 +63,7 @@ class TestLearnerCreation:
             _create_learner('nonexistent_learner', random_state=42)
 
 
+@pytest.mark.unit
 class TestAPIWithEnsembles:
     """Test run_active_learning with ensemble learners."""
 

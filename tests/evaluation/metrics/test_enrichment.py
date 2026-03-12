@@ -18,6 +18,7 @@ from learnm8.evaluation.metrics.enrichment import (
 )
 
 
+@pytest.mark.unit
 class TestEnrichmentMetrics:
     """Test enrichment and virtual screening metrics."""
 

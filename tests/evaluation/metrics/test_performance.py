@@ -14,6 +14,7 @@ from learnm8.evaluation.metrics.performance import (
 )
 
 
+@pytest.mark.unit
 class TestPerformanceMetrics:
     """Test ML performance metrics."""
 

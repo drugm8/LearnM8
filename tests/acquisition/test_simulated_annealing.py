@@ -13,6 +13,7 @@ import polars as pl
 from learnm8.acquisition.simulated_annealing import SimulatedAnnealingAcquisition
 
 
+@pytest.mark.unit
 class TestSimulatedAnnealingAcquisition:
     """Test SimulatedAnnealingAcquisition with real molecular data."""
     

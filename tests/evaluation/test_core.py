@@ -16,6 +16,7 @@ from learnm8.evaluation.core import (
 )
 
 
+@pytest.mark.unit
 class TestEvaluateCore:
     """Test core evaluation functionality with real molecular data."""
     
@@ -146,6 +147,7 @@ class TestEvaluateCore:
         assert 'cycle' in result
 
 
+@pytest.mark.unit
 class TestEvaluationIntegration:
     """Test evaluation system integration."""
     
@@ -256,6 +258,7 @@ class TestEvaluationIntegration:
         assert result['avg_score_selected'] is None  # Should be None for missing column
 
 
+@pytest.mark.unit
 class TestEvaluationEdgeCases:
     """Test edge cases and error conditions."""
     

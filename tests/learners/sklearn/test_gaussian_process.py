@@ -9,6 +9,8 @@ from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestGaussianProcessLearner:
     """Test GaussianProcessLearner functionality with real molecular data."""
 

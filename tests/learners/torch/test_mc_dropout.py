@@ -9,6 +9,8 @@ from learnm8.learners.torch.mc_dropout import MCDropoutLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.slow
+@pytest.mark.integration
 class TestMCDropoutLearner:
     """Test MCDropoutLearner functionality with real molecular data."""
 

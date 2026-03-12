@@ -11,6 +11,8 @@ from polars.testing import assert_frame_equal
 from learnm8.pruning.score_based import ScoreBasedPruner
 from learnm8.pruning.base import PruningError
 
+pytestmark = pytest.mark.unit
+
 
 def test_score_based_pruner_initialization():
     """Test ScoreBasedPruner initialization and parameter validation."""

@@ -5,6 +5,8 @@ from pathlib import Path
 from learnm8.features.extraction import extract_features, _get_optimal_n_jobs
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestExtractFeatures:
 
 	def test_morgan_featurizer(self, tmp_path):
@@ -152,6 +154,8 @@ class TestExtractFeatures:
 			extract_features(smiles_list, 'morgan', cache_dir=tmp_path)
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestGetOptimalNJobs:
 
 	def test_small_dataset_uses_sequential(self):

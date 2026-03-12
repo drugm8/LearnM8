@@ -8,6 +8,7 @@ from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestLREnsemble:
     """Test LREnsemble functionality with real molecular data."""
 

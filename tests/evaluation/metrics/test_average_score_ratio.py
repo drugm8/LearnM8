@@ -15,6 +15,7 @@ from learnm8.evaluation.metrics.enrichment import (
 )
 
 
+@pytest.mark.unit
 class TestAverageScoreRatio:
     """Test average score ratio calculation with various score types."""
 

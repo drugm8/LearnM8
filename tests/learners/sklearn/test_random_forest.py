@@ -8,6 +8,8 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestRandomForestLearner:
     """Test RandomForestLearner functionality with real molecular data."""
 

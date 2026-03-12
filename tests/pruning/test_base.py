@@ -13,6 +13,8 @@ from learnm8.pruning.base import (
     PruningError,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class MockPruner(DesignSpacePruner):
     """Mock pruner for testing base functionality."""

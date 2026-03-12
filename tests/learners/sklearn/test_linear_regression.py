@@ -8,6 +8,8 @@ from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestLinearRegressionLearner:
     """Test LinearRegressionLearner functionality with real molecular data."""
 

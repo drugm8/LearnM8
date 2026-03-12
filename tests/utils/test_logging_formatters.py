@@ -12,6 +12,7 @@ from learnm8.utils.logging_formatters import (
 from learnm8.core.config import CycleConfig
 
 
+@pytest.mark.unit
 class TestFormatCycleSchedule:
     """Test cycle schedule formatting."""
 
@@ -65,6 +66,7 @@ class TestFormatCycleSchedule:
         assert '30% pruned per cycle' in result
 
 
+@pytest.mark.unit
 class TestFormatDuration:
     """Test duration formatting."""
 
@@ -94,6 +96,7 @@ class TestFormatDuration:
         assert '1 hours 0 minutes' in result
 
 
+@pytest.mark.unit
 class TestFormatCycleMetricsTable:
     """Test Rich table formatting."""
 
@@ -179,6 +182,7 @@ class TestFormatCycleMetricsTable:
         assert result is not None
 
 
+@pytest.mark.unit
 class TestFormatExperimentSummary:
     """Test experiment summary formatting."""
 

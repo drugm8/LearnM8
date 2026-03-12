@@ -5,6 +5,8 @@ from pathlib import Path
 from learnm8.core.validation import validate_compound_pool, ValidationResult, _validate_smiles
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestValidateSMILES:
 
     def test_validate_smiles_valid(self):
@@ -38,6 +40,8 @@ class TestValidateSMILES:
         assert len(error) > 0
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestValidateCompoundPool:
 
     def test_all_valid_compounds(self, sample_compounds):
@@ -367,6 +371,8 @@ class TestValidateCompoundPool:
         assert result.success_rate == 1.0
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestValidationResult:
 
     def test_success_rate_all_valid(self):

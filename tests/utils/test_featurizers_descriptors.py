@@ -5,10 +5,10 @@ import polars as pl
 from learnm8.utils.featurizers import _compute_mordred_descriptors
 
 
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.unit, pytest.mark.molecular, pytest.mark.skipif(
     not pytest.importorskip("mordred", reason="Mordred not available"),
     reason="Mordred not available"
-)
+)]
 
 
 class TestComputeMordredDescriptors:

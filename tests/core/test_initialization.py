@@ -7,6 +7,7 @@ from learnm8.core.initialization import initialize_master_dataframe_empty
 from learnm8.core.data_structures import STATUS_LABELED, STATUS_UNLABELED
 
 
+@pytest.mark.integration
 class TestInitializeMasterDataframeEmpty:
 
     def test_basic_initialization(self, sample_compounds):
@@ -89,6 +90,7 @@ class TestInitializeMasterDataframeEmpty:
         assert master_df['ID'].to_list() == ['COMP_001', 'COMP_002', 'COMP_001']
 
 
+@pytest.mark.integration
 class TestSelectInitialBatch:
     """Tests for select_initial_batch function."""
 

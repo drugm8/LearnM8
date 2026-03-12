@@ -13,6 +13,7 @@ from learnm8.acquisition import (
 )
 
 
+@pytest.mark.unit
 class TestUCBAcquisition:
     """Test Upper Confidence Bound acquisition."""
     
@@ -112,6 +113,7 @@ class TestUCBAcquisition:
         assert selected_ids == expected_ids
 
 
+@pytest.mark.unit
 class TestExpectedImprovementAcquisition:
     """Test Expected Improvement acquisition."""
     
@@ -180,6 +182,7 @@ class TestExpectedImprovementAcquisition:
         assert np.all(ei_scores >= 0)
 
 
+@pytest.mark.unit
 class TestProbabilityImprovementAcquisition:
     """Test Probability of Improvement acquisition."""
     
@@ -227,6 +230,7 @@ class TestProbabilityImprovementAcquisition:
         assert np.all(pi_scores <= 1)
 
 
+@pytest.mark.unit
 class TestThompsonSampling:
     """Test Thompson Sampling acquisition."""
     
@@ -276,6 +280,7 @@ class TestThompsonSampling:
         assert selected1.get_column('ID').to_list() != selected2.get_column('ID').to_list()
 
 
+@pytest.mark.unit
 class TestUncertaintyBasedIntegration:
     """Integration tests for uncertainty-based acquisition."""
     
@@ -369,6 +374,7 @@ class TestUncertaintyBasedIntegration:
             acq.select(compounds, n_select=5)
 
 
+@pytest.mark.unit
 class TestEIPIRegressionTests:
     """Regression tests to ensure EI and PI are different and mathematically correct.
 
@@ -526,6 +532,7 @@ class TestEIPIRegressionTests:
         assert ei_scores[1] > ei_scores[0], "Larger uncertainty should increase EI score"
 
 
+@pytest.mark.unit
 class TestThompsonSamplingCorrectness:
     """Tests to verify Thompson Sampling uses correct distribution."""
 

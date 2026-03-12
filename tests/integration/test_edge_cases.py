@@ -12,6 +12,8 @@ from learnm8.acquisition import GreedyAcquisition, RandomAcquisition
 from learnm8.evaluation.core import evaluate_cycle
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestFeatureExtractionEdgeCases:
     """Edge cases for feature extraction functionality."""
     
@@ -42,6 +44,8 @@ class TestFeatureExtractionEdgeCases:
         assert features.shape == (0, 2048)  # Empty array preserves feature dimension
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestAcquisitionEdgeCases:
     """Edge cases for acquisition functions."""
     
@@ -102,6 +106,8 @@ class TestAcquisitionEdgeCases:
         assert list(selected1['ID']) == list(selected2['ID'])
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestEvaluationEdgeCases:
     """Edge cases for evaluation functionality."""
     
@@ -170,6 +176,8 @@ class TestEvaluationEdgeCases:
         assert 'batch_size' in result
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestIntegratedEdgeCases:
     """Edge cases that span multiple components."""
     

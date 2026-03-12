@@ -9,6 +9,8 @@ from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
+@pytest.mark.molecular
 class TestXGBoostLearner:
     """Test XGBoostLearner functionality with real molecular data."""
 

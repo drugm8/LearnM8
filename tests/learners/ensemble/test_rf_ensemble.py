@@ -9,6 +9,7 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.features.extraction import extract_features
 
 
+@pytest.mark.integration
 class TestRFEnsemble:
     """Test RFEnsemble functionality with real molecular data."""
 
