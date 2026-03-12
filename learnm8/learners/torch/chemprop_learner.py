@@ -8,6 +8,7 @@ from chemprop import data, models, nn
 from lightning import pytorch as pl
 
 from learnm8.core.interfaces import Learner
+from learnm8.core.resources import parse_device_for_lightning
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ class ChempropLearner(Learner):
 				 learning_rate: float = 1e-4,
 				 random_state: int = 42,
 				 accelerator: str = 'auto',
+				 device: str = 'auto',
 				 early_stopping: bool = True,
 				 early_stopping_patience: int = 10,
 				 early_stopping_min_delta: float = 0.0,
@@ -123,7 +125,14 @@ class ChempropLearner(Learner):
 		self.pin_memory = pin_memory
 		self.learning_rate = learning_rate
 		self.random_state = random_state
-		self.accelerator = accelerator
+
+		if device != 'auto':
+			lightning_accel, lightning_devices = parse_device_for_lightning(device)
+			self.accelerator = lightning_accel
+			self._lightning_devices = lightning_devices
+		else:
+			self.accelerator = accelerator
+			self._lightning_devices = 'auto' if accelerator == 'auto' else 1
 		self.early_stopping = early_stopping
 		self.early_stopping_patience = early_stopping_patience
 		self.early_stopping_min_delta = early_stopping_min_delta
@@ -337,6 +346,7 @@ class ChempropLearner(Learner):
 		self.trainer = pl.Trainer(
 			max_epochs=self.max_epochs,
 			accelerator=self.accelerator,
+			devices=self._lightning_devices,
 			precision=self.precision,
 			enable_progress_bar=enable_verbose,
 			enable_model_summary=False,
@@ -597,6 +607,7 @@ class ChempropLearner(Learner):
 
 		predict_trainer = pl.Trainer(
 			accelerator=self.accelerator,
+			devices=self._lightning_devices,
 			precision=self.precision,
 			enable_progress_bar=False,
 			enable_model_summary=False,

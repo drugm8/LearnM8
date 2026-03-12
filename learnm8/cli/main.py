@@ -337,6 +337,20 @@ def create_parser() -> argparse.ArgumentParser:
         help='Suppress progress output'
     )
 
+    resource_group = run_parser.add_argument_group('Resource Control')
+    resource_group.add_argument(
+        '--n-jobs',
+        type=int,
+        default=-1,
+        help='Number of parallel CPU jobs. -1 = all cores (default: -1)'
+    )
+    resource_group.add_argument(
+        '--device',
+        type=str,
+        default='auto',
+        help='Compute device: auto, cpu, cuda, cuda:N, mps (default: auto)'
+    )
+
     advanced_group = run_parser.add_argument_group('Advanced')
     advanced_group.add_argument(
         '--random-state',
@@ -367,6 +381,12 @@ def create_parser() -> argparse.ArgumentParser:
         'compound_pool',
         type=Path,
         help='Compound file (CSV/SDF/SMI) with ID and SMILES. Supported: .csv, .sdf, .smi'
+    )
+    validate_parser.add_argument(
+        '--n-jobs',
+        type=int,
+        default=-1,
+        help='Number of parallel CPU jobs. -1 = all cores (default: -1)'
     )
     validate_parser.add_argument(
         '-o', '--output',
@@ -493,7 +513,9 @@ def cmd_run(args: argparse.Namespace):
                         pruning_fraction=args.pruning_fraction,
                         pruning_strategy=args.pruning_strategy,
                         acquisition_params=acquisition_params,
-                        prediction_batch_size=getattr(args, 'prediction_batch_size', None)
+                        prediction_batch_size=getattr(args, 'prediction_batch_size', None),
+                        n_jobs=getattr(args, 'n_jobs', -1),
+                        device=getattr(args, 'device', 'auto')
                     )
                     progress.update(task, completed=True, description="[green]✓ Complete")
                 except KeyboardInterrupt:
@@ -521,7 +543,9 @@ def cmd_run(args: argparse.Namespace):
                     pruning_fraction=args.pruning_fraction,
                     pruning_strategy=args.pruning_strategy,
                     acquisition_params=acquisition_params,
-                    prediction_batch_size=getattr(args, 'prediction_batch_size', None)
+                    prediction_batch_size=getattr(args, 'prediction_batch_size', None),
+                    n_jobs=getattr(args, 'n_jobs', -1),
+                    device=getattr(args, 'device', 'auto')
                 )
             except KeyboardInterrupt:
                 console.print("\n[yellow]Experiment interrupted by user[/yellow]")
@@ -669,13 +693,16 @@ def cmd_validate(args: argparse.Namespace):
         compounds = load_compound_file(args.compound_pool, progress=False)
         console.print(f"Total compounds: {len(compounds)}")
 
+        from learnm8.core.resources import validate_n_jobs
+        n_jobs = validate_n_jobs(args.n_jobs)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console
         ) as progress:
             task = progress.add_task("Validating compounds...", total=None)
-            result = validate_compound_pool(compounds, n_jobs=-1, progress=False)
+            result = validate_compound_pool(compounds, n_jobs=n_jobs, progress=False)
             progress.update(task, completed=True, description="[green]✓ Complete")
 
         console.print("\n[green]✓ Validation complete[/green]")

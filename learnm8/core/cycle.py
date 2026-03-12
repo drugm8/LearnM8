@@ -70,7 +70,7 @@ def _calculate_optimal_batch_size(
     if featurizer is not None:
         from learnm8.features import FEATURIZER_REGISTRY
         if featurizer in FEATURIZER_REGISTRY:
-            temp_featurizer = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            temp_featurizer = FEATURIZER_REGISTRY[featurizer](n_jobs=1)  # n_jobs=1 OK here: only reading dimension
             feature_dim = temp_featurizer.get_dimension()
         else:
             # Fallback for unknown types
@@ -114,7 +114,8 @@ def _predict_chunk(
     learner: Learner,
     featurizer: Optional[str],
     cache_dir: Path,
-    show_progress: bool = False
+    show_progress: bool = False,
+    n_jobs: int = -1
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     """
     Generate predictions for a chunk of compounds.
@@ -140,7 +141,8 @@ def _predict_chunk(
         if featurizer is not None:
             chunk_features = extract_features(
                 chunk_smiles, featurizer,
-                cache_dir=cache_dir, show_progress=show_progress
+                cache_dir=cache_dir, show_progress=show_progress,
+                n_jobs=n_jobs
             )
         else:
             chunk_features = None
@@ -151,7 +153,8 @@ def _predict_chunk(
             raise ValueError(f"featurizer is required for {learner.get_name()}")
         chunk_features = extract_features(
             chunk_smiles, featurizer,
-            cache_dir=cache_dir, show_progress=show_progress
+            cache_dir=cache_dir, show_progress=show_progress,
+            n_jobs=n_jobs
         )
         return learner.predict(chunk_features)
 
@@ -171,7 +174,8 @@ def execute_cycle(
     original_pool: Optional[pl.DataFrame] = None,
     cumulative_selected_ids: Optional[set] = None,
     prediction_batch_size: Optional[int] = None,
-    previous_metrics: Optional[Dict[str, Any]] = None
+    previous_metrics: Optional[Dict[str, Any]] = None,
+    n_jobs: int = -1
 ) -> Tuple[pl.DataFrame, Dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -279,7 +283,8 @@ def execute_cycle(
                     training_features = extract_features(
                         training_smiles,
                         featurizer,
-                        cache_dir=cache_dir
+                        cache_dir=cache_dir,
+                        n_jobs=n_jobs
                     )
                     logger.info(
                         f"Training {learner.get_name()} on {len(labeled_df)} compounds "
@@ -306,7 +311,8 @@ def execute_cycle(
                 training_features = extract_features(
                     training_smiles,
                     featurizer,
-                    cache_dir=cache_dir
+                    cache_dir=cache_dir,
+                    n_jobs=n_jobs
                 )
                 logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
 
@@ -380,7 +386,8 @@ def execute_cycle(
         try:
             chunk_predictions, chunk_uncertainties = _predict_chunk(
                 chunk_df, learner, featurizer, cache_dir,
-                show_progress=(n_batches == 1 and n_unlabeled > 100000)
+                show_progress=(n_batches == 1 and n_unlabeled > 100000),
+                n_jobs=n_jobs
             )
             all_predictions.append(chunk_predictions)
             all_valid_ids.extend(chunk_df['ID'].to_list())
