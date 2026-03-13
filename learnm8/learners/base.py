@@ -228,6 +228,7 @@ class TorchLearner(Learner):
         self.is_trained = False
         self.training_history = []
         self._valid_feature_mask = None
+        self._input_dim = None
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -369,8 +370,10 @@ class TorchLearner(Learner):
                 is_training=True
             )
 
-            if self.model is None:
-                self.model = self._create_model(features.shape[1]).to(self.device)
+            input_dim = features.shape[1]
+            if self.model is None or self._input_dim != input_dim:
+                self._input_dim = input_dim
+                self.model = self._create_model(input_dim).to(self.device)
                 self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
             self.scaler = StandardScaler()
