@@ -7,6 +7,7 @@ from learnm8.features.skfp_2d.mordred import MordredFeaturizer
 
 @pytest.mark.molecular
 @pytest.mark.integration
+@pytest.mark.slow
 class TestMordredFeaturizer:
     """Test Mordred molecular descriptors featurizer."""
 

@@ -20,6 +20,11 @@ pytest_plugins = [
 ]
 
 
+import warnings
+
+REQUIRED_MARKERS = {"unit", "integration", "slow", "molecular"}
+
+
 def pytest_configure(config):
     """Configure pytest markers and settings."""
     config.addinivalue_line(
@@ -34,3 +39,21 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: slow running tests"
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Warn about tests missing required markers."""
+    unmarked = []
+    for item in items:
+        marker_names = {m.name for m in item.iter_markers()}
+        if not marker_names & REQUIRED_MARKERS:
+            unmarked.append(item.nodeid)
+    if unmarked:
+        warnings.warn(
+            f"{len(unmarked)} test(s) missing required markers "
+            f"(unit/integration/slow/molecular):\n"
+            + "\n".join(f"  - {nid}" for nid in unmarked[:10])
+            + (f"\n  ... and {len(unmarked) - 10} more" if len(unmarked) > 10 else ""),
+            UserWarning,
+            stacklevel=1,
+        )
