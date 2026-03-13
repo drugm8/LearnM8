@@ -56,7 +56,12 @@ def initialize_master_dataframe(
         -1
     """
     if 'ID' not in compound_pool.columns or 'SMILES' not in compound_pool.columns:
-        raise ValueError("compound_pool must contain 'ID' and 'SMILES' columns")
+        missing = [c for c in ['ID', 'SMILES'] if c not in compound_pool.columns]
+        raise ValueError(
+            f"compound_pool is missing required columns: {missing}. "
+            f"Available columns: {list(compound_pool.columns)}. "
+            f"Ensure your compound pool has 'ID' and 'SMILES' columns."
+        )
 
     master_df = compound_pool[['ID', 'SMILES']].copy()
 
@@ -145,11 +150,20 @@ def validate_master_dataframe(
 
     missing_cols = [col for col in required_columns if col not in master_df.columns]
     if missing_cols:
-        raise ValueError(f"Master DataFrame missing required columns: {missing_cols}")
+        raise ValueError(
+            f"Master DataFrame missing required columns: {missing_cols}. "
+            f"Available columns: {list(master_df.columns)}. "
+            f"Required columns are: {required_columns}. "
+            f"This may indicate the DataFrame was not properly initialized."
+        )
 
     if master_df['ID'].is_duplicated().any():
         dupes = master_df.filter(pl.col('ID').is_duplicated())['ID'].unique().to_list()
-        raise ValueError(f"Duplicate IDs found: {dupes[:5]}{'...' if len(dupes)>5 else ''}")
+        from learnm8.exceptions import _truncate_list
+        raise ValueError(
+            f"Duplicate compound IDs found in master DataFrame: {_truncate_list(dupes)}. "
+            f"Each compound must have a unique ID. Check your input data for duplicate entries."
+        )
 
     if master_df['status'].dtype == pl.Categorical:
         current_categories = master_df['status'].cat.get_categories().to_list()
@@ -160,12 +174,19 @@ def validate_master_dataframe(
         if set(current_categories) != set(VALID_STATUSES):
             logger.warning(f"Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}")
     elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
-        raise ValueError(f"Status column must be categorical, enum, or string type, got {master_df['status'].dtype}")
+        raise ValueError(
+            f"Status column must be categorical, enum, or string type, "
+            f"got {master_df['status'].dtype}. "
+            f"This may indicate the DataFrame was not properly initialized."
+        )
 
     invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(VALID_STATUSES)
     if invalid_statuses:
-        raise ValueError(f"Invalid status values found: {invalid_statuses}. "
-                        f"Must be one of {VALID_STATUSES}")
+        raise ValueError(
+            f"Invalid status values found: {invalid_statuses}. "
+            f"Valid status values are: {VALID_STATUSES}. "
+            f"Check that compound statuses are set correctly during initialization."
+        )
 
     logger.debug("Master DataFrame validation passed")
     return True

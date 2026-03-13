@@ -19,7 +19,10 @@ def validate_n_jobs(n_jobs: int) -> int:
         ValueError: If n_jobs is 0 or less than -1.
     """
     if not isinstance(n_jobs, int):
-        raise TypeError(f"n_jobs must be an integer, got {type(n_jobs).__name__}")
+        raise TypeError(
+            f"n_jobs must be an integer, got {type(n_jobs).__name__}. "
+            f"Use -1 for all cores or a positive integer for a specific number of workers."
+        )
     if n_jobs == 0:
         raise ValueError("n_jobs must be -1 (all cores) or a positive integer, got 0")
     if n_jobs < -1:
@@ -43,7 +46,10 @@ def validate_device(device: str) -> str:
             is not available.
     """
     if not isinstance(device, str):
-        raise TypeError(f"device must be a string, got {type(device).__name__}")
+        raise TypeError(
+            f"device must be a string, got {type(device).__name__}. "
+            f"Valid values: 'auto', 'cpu', 'cuda', 'cuda:N', 'mps'."
+        )
 
     valid_patterns = {'auto', 'cpu', 'cuda', 'mps'}
     cuda_n_pattern = re.compile(r'^cuda:\d+$')

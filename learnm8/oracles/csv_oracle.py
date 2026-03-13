@@ -22,7 +22,10 @@ class CSVOracle(Oracle):
         self.csv_path = Path(data_path)
 
         if not self.csv_path.exists():
-            raise FileNotFoundError(f"CSV file not found: {self.csv_path}")
+            raise FileNotFoundError(
+                f"Oracle CSV file not found: {self.csv_path}. "
+                f"Verify the file path is correct and the file exists."
+            )
 
         # Load the ground truth data
         self.ground_truth = pl.read_csv(self.csv_path)
@@ -69,7 +72,11 @@ class CSVOracle(Oracle):
         # Validate the ID column exists
         if id_column not in self.ground_truth.columns:
             available = list(self.ground_truth.columns)
-            raise ValueError(f"ID column '{id_column}' not found. Available columns: {available}")
+            raise ValueError(
+                f"ID column '{id_column}' not found in oracle CSV. "
+                f"Available columns: {available}. "
+                f"Specify the correct column name with id_column parameter."
+            )
 
         # Rename the specified column to 'ID' if it's not already 'ID'
         if id_column != 'ID':
@@ -92,8 +99,12 @@ class CSVOracle(Oracle):
         # Validate requested properties exist
         missing_props = [p for p in properties if p not in self.ground_truth.columns]
         if missing_props:
-            available = list(self.ground_truth.columns)
-            raise ValueError(f"Properties not found: {missing_props}. Available: {available}")
+            available = [c for c in self.ground_truth.columns if c not in ['ID', 'SMILES']]
+            raise ValueError(
+                f"Requested properties not found in oracle CSV: {missing_props}. "
+                f"Available property columns: {available}. "
+                f"Check that target_col matches a column name in your CSV file."
+            )
 
         # Determine which columns to preserve from input compounds
         preserve_cols = ['ID']

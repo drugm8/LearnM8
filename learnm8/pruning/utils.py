@@ -48,7 +48,11 @@ def validate_pruning_parameters(strategy_name: str,
             errors.append(f"Unexpected parameters: {', '.join(unexpected_params)}")
     
     else:
-        errors.append(f"Unknown pruning strategy '{strategy_name}'. Only 'score' is supported.")
+        errors.append(
+            f"Unknown pruning strategy '{strategy_name}'. "
+            f"Only 'score' is currently supported. "
+            f"Use pruning_strategy='score' with pruning_params={{'pruning_fraction': 0.3}}."
+        )
 
     return len(errors) == 0, errors
 
@@ -70,7 +74,10 @@ def create_pruning_strategy(strategy_name: str,
     # Validate parameters first
     is_valid, errors = validate_pruning_parameters(strategy_name, parameters)
     if not is_valid:
-        raise ValueError(f"Invalid parameters for {strategy_name}: {'; '.join(errors)}")
+        raise ValueError(
+            f"Invalid parameters for pruning strategy '{strategy_name}': {'; '.join(errors)}. "
+            f"Valid parameters for 'score': pruning_fraction (0.0-0.9), score_direction ('higher'/'lower')."
+        )
 
     # Import strategy class
     from .score_based import ScoreBasedPruner
@@ -80,11 +87,17 @@ def create_pruning_strategy(strategy_name: str,
     }
 
     if strategy_name not in strategy_registry:
-        raise ValueError(f"Unknown pruning strategy '{strategy_name}'. Only 'score' is supported.")
+        raise ValueError(
+            f"Unknown pruning strategy '{strategy_name}'. Only 'score' is currently supported. "
+            f"Use pruning_strategy='score' with pruning_params={{'pruning_fraction': 0.3}}."
+        )
 
     strategy_class = strategy_registry[strategy_name]
 
     try:
         return strategy_class(**parameters)
     except Exception as e:
-        raise ValueError(f"Failed to create {strategy_name} with parameters {parameters}: {e}") from e
+        raise ValueError(
+            f"Failed to create pruning strategy '{strategy_name}' with parameters {parameters}: {e}. "
+            f"Valid parameters: pruning_fraction (0.0-0.9), score_direction ('higher'/'lower')."
+        ) from e
