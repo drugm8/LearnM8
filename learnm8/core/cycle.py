@@ -42,6 +42,9 @@ from learnm8.features.extraction import extract_features
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
 from learnm8.utils.logging_formatters import format_cycle_metrics_table
+from learnm8.exceptions import (
+    LearnerError, AcquisitionError, OracleError, PruningError, ConfigurationError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +269,7 @@ def execute_cycle(
     logger.debug(f"Cycle {cycle} configuration: strategy={config.strategy}, batch_fraction={config.batch_fraction}, pruning={config.pruning_strategy or 'disabled'}")
 
     if len(labeled_df) == 0:
-        raise RuntimeError(
+        raise LearnerError(
             f"Cycle {cycle}: No labeled compounds available. "
             f"This should not happen after initialization (cycle 0). "
             f"Check that select_initial_batch() ran successfully before cycles."
@@ -321,7 +324,7 @@ def execute_cycle(
                 logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
         except Exception as e:
             logger.error(f"Training failed in cycle {cycle}: {e}")
-            raise RuntimeError(f"Training failed in cycle {cycle}: {e}")
+            raise LearnerError(f"Training failed in cycle {cycle}: {e}") from e
 
         training_time = time.time() - training_start_time
         logger.info(f"Training complete ({training_time:.2f}s)")
@@ -395,7 +398,7 @@ def execute_cycle(
                 all_uncertainties.append(chunk_uncertainties)
         except Exception as e:
             logger.error(f"Batch {batch_idx} prediction failed: {e}")
-            raise RuntimeError(f"Prediction failed in cycle {cycle}, batch {batch_idx}: {e}")
+            raise LearnerError(f"Prediction failed in cycle {cycle}, batch {batch_idx}: {e}") from e
 
     # Combine results (optimized for single-batch case)
     predictions = (
@@ -412,7 +415,7 @@ def execute_cycle(
     logger.info(f"Prediction complete: {len(predictions)} predictions (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
 
     if len(predictions) == 0:
-        raise RuntimeError(f"Prediction returned 0 results in cycle {cycle}")
+        raise LearnerError(f"Prediction returned 0 results in cycle {cycle}")
 
     compounds_df = add_predictions(
         compounds_df, cycle, valid_compound_ids, predictions, uncertainties
@@ -434,7 +437,7 @@ def execute_cycle(
         )
 
     if len(selection_pool) == 0:
-        raise RuntimeError(f"No unlabeled compounds with predictions available for selection in cycle {cycle}")
+        raise AcquisitionError(f"No unlabeled compounds with predictions available for selection in cycle {cycle}")
 
     logger.debug(f"Selection pool: {len(selection_pool)} unlabeled compounds with predictions")
 
@@ -472,7 +475,7 @@ def execute_cycle(
         logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
 
     if len(selection_pool) == 0:
-        raise RuntimeError(f"No compounds remaining after pruning in cycle {cycle}")
+        raise PruningError(f"No compounds remaining after pruning in cycle {cycle}")
 
     # Step 9: Calculate Batch Size from Fraction
     batch_size = min(
@@ -481,7 +484,7 @@ def execute_cycle(
     )
 
     if batch_size == 0:
-        raise RuntimeError(
+        raise ConfigurationError(
             f"Calculated batch size is 0 (original_pool_size={original_pool_size}, "
             f"batch_fraction={config.batch_fraction}). Increase batch_fraction."
         )
@@ -517,7 +520,7 @@ def execute_cycle(
     acquisition_time = time.time() - acquisition_start_time
 
     if len(selected_ids) == 0:
-        raise RuntimeError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
+        raise AcquisitionError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
 
     logger.debug(f"Selected {len(selected_ids)}/{len(selection_pool)} compounds using {config.strategy.upper()} (batch_size={batch_size})")
 
@@ -536,13 +539,13 @@ def execute_cycle(
         measurements = oracle.measure(selected_compounds, [target_col])
     except Exception as e:
         logger.error(f"Oracle measurement failed in cycle {cycle}: {e}")
-        raise RuntimeError(f"Oracle measurement failed in cycle {cycle}: {e}")
+        raise OracleError(f"Oracle measurement failed in cycle {cycle}: {e}") from e
 
     oracle_time = time.time() - oracle_start_time
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
-        raise RuntimeError(f"Oracle did not return measurements for all selected compounds in cycle {cycle}")
+        raise OracleError(f"Oracle did not return measurements for all selected compounds in cycle {cycle}")
 
     logger.debug(f"Measured {len(measurements)} compounds")
 
@@ -854,7 +857,7 @@ def _apply_pruning(
 
     except Exception as e:
         logger.error(f"Pruning failed with strategy '{strategy}': {e}")
-        raise RuntimeError(f"Pruning configuration invalid for strategy '{strategy}': {e}") from e
+        raise PruningError(f"Pruning configuration invalid for strategy '{strategy}': {e}") from e
 
 
 def _select_compounds(
@@ -921,11 +924,11 @@ def _select_compounds(
     try:
         selected_df = acq_func.select(pool, batch_size)
     except Exception as e:
-        raise RuntimeError(f"Acquisition strategy '{strategy}' failed during selection: {e}")
+        raise AcquisitionError(f"Acquisition strategy '{strategy}' failed during selection: {e}") from e
 
     # Validate selection
     if len(selected_df) == 0:
-        raise RuntimeError(f"Acquisition strategy '{strategy}' selected 0 compounds")
+        raise AcquisitionError(f"Acquisition strategy '{strategy}' selected 0 compounds")
 
     if len(selected_df) > batch_size:
         logger.warning(

@@ -4,6 +4,7 @@ from typing import List, Optional
 import numpy as np
 from .ensemble import EnsembleLearner
 from ..torch.fastprop_learner import FastpropLearner
+from learnm8.exceptions import LearnerError
 
 
 class FastpropEnsemble(EnsembleLearner):
@@ -115,7 +116,7 @@ class FastpropEnsemble(EnsembleLearner):
             Tuple of (predictions, uncertainties)
         """
         if not self.is_trained:
-            raise RuntimeError("Ensemble must be trained before prediction")
+            raise LearnerError("Ensemble must be trained before prediction")
 
         # Get predictions from each learner
         predictions_list = []
@@ -143,7 +144,7 @@ class FastpropEnsemble(EnsembleLearner):
             Dictionary mapping learner names to their predictions
         """
         if not self.is_trained:
-            raise RuntimeError("Ensemble must be trained before prediction")
+            raise LearnerError("Ensemble must be trained before prediction")
 
         individual_predictions = {}
         for i, learner in enumerate(self.learners):

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple, Any, List, Set
 from .data_structures import STATUS_UNLABELED, VALID_STATUSES
 from .interfaces import Oracle
+from learnm8.exceptions import AcquisitionError, OracleError
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +291,7 @@ def select_initial_batch(
     ).select(['ID', 'SMILES'])
 
     if len(unlabeled) == 0:
-        raise RuntimeError("No unlabeled compounds available for initialization")
+        raise AcquisitionError("No unlabeled compounds available for initialization")
 
     if strategy != 'random':
         logger.warning(
@@ -311,7 +312,7 @@ def select_initial_batch(
     selected_ids = selected_df['ID'].to_list()
 
     if len(selected_ids) == 0:
-        raise RuntimeError("Acquisition strategy selected 0 compounds")
+        raise AcquisitionError("Acquisition strategy selected 0 compounds")
 
     logger.info(f"Measuring {len(selected_ids)} selected compounds...")
 
@@ -328,12 +329,12 @@ def select_initial_batch(
         measurements = oracle.measure(selected_compounds, [target_col])
     except Exception as e:
         logger.error(f"Oracle measurement failed during initialization: {e}")
-        raise RuntimeError(f"Initialization failed - oracle measurement error: {e}")
+        raise OracleError(f"Initialization failed - oracle measurement error: {e}") from e
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
         missing = set(selected_ids) - set(measurement_ids)
-        raise RuntimeError(
+        raise OracleError(
             f"Oracle did not return measurements for {len(missing)} compounds"
         )
 

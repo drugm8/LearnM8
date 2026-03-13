@@ -72,6 +72,7 @@ from learnm8.learners import (
 
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
 from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
     format_duration,
@@ -241,7 +242,7 @@ def _create_learner(
             return learner_class(**kwargs)
 
     except Exception as e:
-        raise RuntimeError(
+        raise ConfigurationError(
             f"Failed to instantiate {learner_class.__name__}: {e}"
         ) from e
 
@@ -865,9 +866,11 @@ def run_active_learning(
                     logger.info("Pool exhausted, stopping early")
                     break
 
+            except LearnM8Error:
+                raise
             except Exception as e:
                 logger.error(f"Cycle {cycle_num} failed: {e}")
-                raise RuntimeError(f"Cycle {cycle_num} failed: {e}") from e
+                raise LearnM8Error(f"Cycle {cycle_num} failed: {e}") from e
 
         logger.debug("Calculating aggregate metrics")
         aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)

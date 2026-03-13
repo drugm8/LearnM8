@@ -12,6 +12,7 @@ import numpy as np
 from scipy import stats
 
 from ...core.interfaces import Learner
+from learnm8.exceptions import LearnerError
 
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,7 @@ class EnsembleLearner(Learner):
                           f"Remaining learners: {len(self.learners)}")
 
             if not self.learners:
-                raise RuntimeError("All ensemble learners failed to train")
+                raise LearnerError("All ensemble learners failed to train")
 
         self.is_trained = True
         train_time = time.time() - start_time
@@ -131,7 +132,7 @@ class EnsembleLearner(Learner):
             RuntimeError: If ensemble is not trained or prediction fails
         """
         if not self.is_trained:
-            raise RuntimeError("Ensemble must be trained before prediction")
+            raise LearnerError("Ensemble must be trained before prediction")
 
         start_time = time.time()
 
@@ -148,7 +149,7 @@ class EnsembleLearner(Learner):
                     failed_predictions.append(i)
 
             if not predictions_list:
-                raise RuntimeError("All ensemble learners failed to predict")
+                raise LearnerError("All ensemble learners failed to predict")
 
             if failed_predictions:
                 logger.warning(f"{len(failed_predictions)} learners failed to predict")
@@ -168,7 +169,7 @@ class EnsembleLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise RuntimeError(f"Ensemble prediction failed: {e}") from e
+            raise LearnerError(f"Ensemble prediction failed: {e}") from e
     
     def _aggregate_predictions(self, predictions_array: np.ndarray) -> np.ndarray:
         """Aggregate predictions from ensemble members.
@@ -277,7 +278,7 @@ class EnsembleLearner(Learner):
             RuntimeError: If ensemble is not trained
         """
         if not self.is_trained:
-            raise RuntimeError("Ensemble must be trained before prediction")
+            raise LearnerError("Ensemble must be trained before prediction")
 
         individual_predictions = {}
 
