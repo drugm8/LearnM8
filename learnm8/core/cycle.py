@@ -153,7 +153,12 @@ def _predict_chunk(
     else:
         # Feature-based learners (RF, XGBoost, GP, etc.)
         if featurizer is None:
-            raise ValueError(f"featurizer is required for {learner.get_name()}")
+            raise ValueError(
+                f"featurizer is required for {learner.get_name()} because it is a "
+                f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
+                f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
+                f"a featurizer (featurizer=None)."
+            )
         chunk_features = extract_features(
             chunk_smiles, featurizer,
             cache_dir=cache_dir, show_progress=show_progress,
@@ -240,13 +245,24 @@ def execute_cycle(
 
     # Step 1: Setup and Validation
     if mode not in ['run', 'benchmark']:
-        raise ValueError(f"mode must be 'run' or 'benchmark', got '{mode}'")
+        raise ValueError(
+            f"mode must be 'run' or 'benchmark', got '{mode}'. "
+            f"Mode is auto-detected from oracle type: CSV oracle → 'benchmark', "
+            f"Python oracle → 'run'. Override with mode='run' or mode='benchmark'."
+        )
 
     if mode == 'benchmark' and original_pool is None:
-        raise ValueError("original_pool required for benchmark mode")
+        raise ValueError(
+            "original_pool is required for benchmark mode because discovery and "
+            "ranking metrics need ground truth. Provide original_pool or use mode='run'."
+        )
 
     if score_direction not in ['higher', 'lower']:
-        raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+        raise ValueError(
+            f"score_direction must be 'higher' or 'lower', got '{score_direction}'. "
+            f"Use 'higher' when larger target values are better (e.g., activity), "
+            f"or 'lower' when smaller values are better (e.g., IC50)."
+        )
 
     # Extract cumulative selected IDs if not provided
     if cumulative_selected_ids is None:
@@ -270,9 +286,10 @@ def execute_cycle(
 
     if len(labeled_df) == 0:
         raise LearnerError(
-            f"Cycle {cycle}: No labeled compounds available. "
-            f"This should not happen after initialization (cycle 0). "
-            f"Check that select_initial_batch() ran successfully before cycles."
+            f"No labeled compounds available for training in cycle {cycle}. "
+            f"This typically means initialization (cycle 0) failed to label any compounds. "
+            f"Check that select_initial_batch() ran successfully, that your oracle returned "
+            f"measurements, and that batch_fraction is large enough to select at least 1 compound."
         )
     else:
         # Extract features and train learner
@@ -308,7 +325,10 @@ def execute_cycle(
             else:
                 if featurizer is None:
                     raise ValueError(
-                        f"featurizer is required for {learner.get_name()}"
+                        f"featurizer is required for {learner.get_name()} because it is a "
+                        f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
+                        f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
+                        f"a featurizer (featurizer=None)."
                     )
 
                 training_features = extract_features(
@@ -324,7 +344,13 @@ def execute_cycle(
                 logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
         except Exception as e:
             logger.error(f"Training failed in cycle {cycle}: {e}")
-            raise LearnerError(f"Training failed in cycle {cycle}: {e}") from e
+            err = LearnerError(
+                f"Training failed in cycle {cycle}: {e}. "
+                f"Check that the training data is valid, the featurizer is compatible "
+                f"with the learner, and there are enough labeled compounds."
+            )
+            err.add_note(f"Failed during cycle {cycle} with {len(labeled_df)} labeled compounds")
+            raise err from e
 
         training_time = time.time() - training_start_time
         logger.info(f"Training complete ({training_time:.2f}s)")
@@ -398,7 +424,13 @@ def execute_cycle(
                 all_uncertainties.append(chunk_uncertainties)
         except Exception as e:
             logger.error(f"Batch {batch_idx} prediction failed: {e}")
-            raise LearnerError(f"Prediction failed in cycle {cycle}, batch {batch_idx}: {e}") from e
+            err = LearnerError(
+                f"Prediction failed in cycle {cycle}, batch {batch_idx}/{n_batches}: {e}. "
+                f"Check featurizer compatibility with your learner and that training "
+                f"completed successfully."
+            )
+            err.add_note(f"Failed during cycle {cycle}, predicting batch {batch_idx} of {n_batches}")
+            raise err from e
 
     # Combine results (optimized for single-batch case)
     predictions = (
@@ -415,7 +447,12 @@ def execute_cycle(
     logger.info(f"Prediction complete: {len(predictions)} predictions (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
 
     if len(predictions) == 0:
-        raise LearnerError(f"Prediction returned 0 results in cycle {cycle}")
+        raise LearnerError(
+            f"Prediction returned 0 results in cycle {cycle}. "
+            f"This may indicate a featurizer incompatibility, an untrained model, "
+            f"or that all unlabeled compounds were filtered out. Check that the "
+            f"featurizer produces valid features for your compound pool."
+        )
 
     compounds_df = add_predictions(
         compounds_df, cycle, valid_compound_ids, predictions, uncertainties
@@ -437,7 +474,12 @@ def execute_cycle(
         )
 
     if len(selection_pool) == 0:
-        raise AcquisitionError(f"No unlabeled compounds with predictions available for selection in cycle {cycle}")
+        raise AcquisitionError(
+            f"No unlabeled compounds with predictions available for selection in cycle {cycle}. "
+            f"The compound pool may be exhausted. Consider reducing n_cycles or increasing "
+            f"the pool size. Current pool: {len(unlabeled_df)} unlabeled, "
+            f"{len(labeled_df)} labeled."
+        )
 
     logger.debug(f"Selection pool: {len(selection_pool)} unlabeled compounds with predictions")
 
@@ -475,7 +517,12 @@ def execute_cycle(
         logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
 
     if len(selection_pool) == 0:
-        raise PruningError(f"No compounds remaining after pruning in cycle {cycle}")
+        raise PruningError(
+            f"No compounds remaining after pruning in cycle {cycle}. "
+            f"Pruning removed all {unlabeled_before_prune} candidates. "
+            f"Reduce pruning_fraction (current: {config.pruning_params.get('pruning_fraction', 'N/A') if config.pruning_params else 'N/A'}) "
+            f"or disable pruning by setting pruning_strategy=None."
+        )
 
     # Step 9: Calculate Batch Size from Fraction
     batch_size = min(
@@ -486,7 +533,10 @@ def execute_cycle(
     if batch_size == 0:
         raise ConfigurationError(
             f"Calculated batch size is 0 (original_pool_size={original_pool_size}, "
-            f"batch_fraction={config.batch_fraction}). Increase batch_fraction."
+            f"batch_fraction={config.batch_fraction}, product={original_pool_size * config.batch_fraction:.4f}). "
+            f"Increase batch_fraction so that pool_size * batch_fraction >= 1. "
+            f"For a pool of {original_pool_size} compounds, minimum batch_fraction is "
+            f"{1.0 / original_pool_size:.6f}."
         )
 
     # Step 10: Prepare acquisition params with current_best from labeled data
@@ -520,7 +570,11 @@ def execute_cycle(
     acquisition_time = time.time() - acquisition_start_time
 
     if len(selected_ids) == 0:
-        raise AcquisitionError(f"Acquisition strategy selected 0 compounds in cycle {cycle}")
+        raise AcquisitionError(
+            f"Acquisition strategy '{config.strategy}' selected 0 compounds in cycle {cycle}. "
+            f"Pool had {len(selection_pool)} candidates with batch_size={batch_size}. "
+            f"Check acquisition strategy parameters and remaining pool size."
+        )
 
     logger.debug(f"Selected {len(selected_ids)}/{len(selection_pool)} compounds using {config.strategy.upper()} (batch_size={batch_size})")
 
@@ -539,13 +593,26 @@ def execute_cycle(
         measurements = oracle.measure(selected_compounds, [target_col])
     except Exception as e:
         logger.error(f"Oracle measurement failed in cycle {cycle}: {e}")
-        raise OracleError(f"Oracle measurement failed in cycle {cycle}: {e}") from e
+        err = OracleError(
+            f"Oracle measurement failed in cycle {cycle}: {e}. "
+            f"Check that your oracle function handles the requested compound IDs "
+            f"and returns valid measurements for target column '{target_col}'."
+        )
+        err.add_note(f"Failed during cycle {cycle} while measuring {len(selected_ids)} compounds")
+        raise err from e
 
     oracle_time = time.time() - oracle_start_time
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
-        raise OracleError(f"Oracle did not return measurements for all selected compounds in cycle {cycle}")
+        missing = set(selected_ids) - set(measurement_ids)
+        from learnm8.exceptions import _truncate_list
+        raise OracleError(
+            f"Oracle did not return measurements for {len(missing)} of "
+            f"{len(selected_ids)} selected compounds in cycle {cycle}. "
+            f"Missing IDs: {_truncate_list(missing)}. "
+            f"Check that your oracle contains data for all compound IDs in the pool."
+        )
 
     logger.debug(f"Measured {len(measurements)} compounds")
 
@@ -857,7 +924,13 @@ def _apply_pruning(
 
     except Exception as e:
         logger.error(f"Pruning failed with strategy '{strategy}': {e}")
-        raise PruningError(f"Pruning configuration invalid for strategy '{strategy}': {e}") from e
+        err = PruningError(
+            f"Pruning failed with strategy '{strategy}': {e}. "
+            f"Check pruning parameters (e.g., pruning_fraction must be 0.0-0.9). "
+            f"To disable pruning, set pruning_strategy=None."
+        )
+        err.add_note(f"Pruning failed on pool of {len(pool)} compounds with params: {params}")
+        raise err from e
 
 
 def _select_compounds(
@@ -899,7 +972,9 @@ def _select_compounds(
         available = list_acquisition_functions()
         raise ValueError(
             f"Unknown acquisition strategy '{strategy}'. "
-            f"Available strategies: {available}"
+            f"Available strategies: {', '.join(available)}. "
+            f"Basic strategies (any learner): greedy, random, topk. "
+            f"Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy."
         )
 
     # Note: current_best must be set from labeled data at cycle level, not predictions
@@ -909,7 +984,10 @@ def _select_compounds(
     try:
         acq_func = acq_class(score_direction=score_direction, **acquisition_params)
     except Exception as e:
-        raise ValueError(f"Failed to create acquisition function '{strategy}': {e}")
+        raise ValueError(
+            f"Failed to create acquisition function '{strategy}': {e}. "
+            f"Check that the acquisition parameters are valid for this strategy."
+        )
 
     # Validate requirements
     if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:
@@ -924,11 +1002,18 @@ def _select_compounds(
     try:
         selected_df = acq_func.select(pool, batch_size)
     except Exception as e:
-        raise AcquisitionError(f"Acquisition strategy '{strategy}' failed during selection: {e}") from e
+        raise AcquisitionError(
+            f"Acquisition strategy '{strategy}' failed during selection: {e}. "
+            f"Pool had {len(pool)} candidates. Check strategy parameters and "
+            f"ensure predictions/uncertainties are valid."
+        ) from e
 
-    # Validate selection
     if len(selected_df) == 0:
-        raise AcquisitionError(f"Acquisition strategy '{strategy}' selected 0 compounds")
+        raise AcquisitionError(
+            f"Acquisition strategy '{strategy}' selected 0 compounds from "
+            f"{len(pool)} candidates (batch_size={batch_size}). "
+            f"Check remaining pool size and strategy parameters."
+        )
 
     if len(selected_df) > batch_size:
         logger.warning(

@@ -42,7 +42,10 @@ class EnsembleLearner(Learner):
             enable_parallel_training: Whether to train learners in parallel (not implemented)
         """
         if not learners:
-            raise ValueError("At least one learner must be provided")
+            raise LearnerError(
+                "EnsembleLearner requires at least one base learner. "
+                "Provide a list of Learner instances, e.g., learners=[rf_learner, gp_learner]."
+            )
         
         self.learners = learners
         self.aggregation_method = aggregation_method
@@ -54,9 +57,15 @@ class EnsembleLearner(Learner):
         # Validate weights if provided
         if weights is not None:
             if len(weights) != len(learners):
-                raise ValueError("Number of weights must match number of learners")
+                raise LearnerError(
+                    f"Number of weights ({len(weights)}) must match number of learners ({len(learners)}). "
+                    f"Provide one weight per ensemble member."
+                )
             if not np.isclose(sum(weights), 1.0):
-                raise ValueError("Weights must sum to 1.0")
+                raise LearnerError(
+                    f"Weights must sum to 1.0, got {sum(weights):.4f}. "
+                    f"Normalize your weights so they sum to exactly 1.0."
+                )
             self.weights = np.array(weights)
         
         # Check learner consistency
@@ -67,7 +76,11 @@ class EnsembleLearner(Learner):
     def _validate_learners(self) -> None:
         """Validate that all learners are compatible."""
         if not all(isinstance(learner, Learner) for learner in self.learners):
-            raise ValueError("All ensemble members must be Learner instances")
+            invalid_types = [type(l).__name__ for l in self.learners if not isinstance(l, Learner)]
+            raise LearnerError(
+                f"All ensemble members must be Learner instances. "
+                f"Found invalid types: {invalid_types}."
+            )
     
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Train all ensemble learners on feature matrix.
@@ -81,10 +94,18 @@ class EnsembleLearner(Learner):
             RuntimeError: If training fails for any learner
         """
         if features.shape[0] != targets.shape[0]:
-            raise ValueError(f"Features and targets must have same length: {features.shape[0]} vs {targets.shape[0]}")
+            raise LearnerError(
+                f"Feature and target arrays have mismatched lengths: "
+                f"{features.shape[0]} features vs {targets.shape[0]} targets. "
+                f"Ensure each sample has exactly one target value."
+            )
 
         if features.shape[0] == 0:
-            raise ValueError("Cannot train on empty dataset")
+            raise LearnerError(
+                f"Cannot train {self.get_name()} on an empty dataset (0 samples). "
+                f"This usually means no labeled compounds are available. "
+                f"Check that batch_fraction is large enough to select at least one compound."
+            )
 
         start_time = time.time()
 
@@ -112,7 +133,12 @@ class EnsembleLearner(Learner):
                           f"Remaining learners: {len(self.learners)}")
 
             if not self.learners:
-                raise LearnerError("All ensemble learners failed to train")
+                failed_names = [name for _, name, _ in failed_learners]
+                raise LearnerError(
+                    f"All {len(failed_learners)} ensemble learners failed to train: "
+                    f"{', '.join(failed_names)}. "
+                    f"Check that the training data is valid and the featurizer is compatible."
+                )
 
         self.is_trained = True
         train_time = time.time() - start_time
@@ -132,7 +158,10 @@ class EnsembleLearner(Learner):
             RuntimeError: If ensemble is not trained or prediction fails
         """
         if not self.is_trained:
-            raise LearnerError("Ensemble must be trained before prediction")
+            raise LearnerError(
+                f"{self.get_name()} must be trained before prediction. "
+                f"Call train() with labeled data first."
+            )
 
         start_time = time.time()
 
@@ -149,7 +178,10 @@ class EnsembleLearner(Learner):
                     failed_predictions.append(i)
 
             if not predictions_list:
-                raise LearnerError("All ensemble learners failed to predict")
+                raise LearnerError(
+                    f"All {len(self.learners)} ensemble learners failed to predict. "
+                    f"Check that the input features have the same shape as training features."
+                )
 
             if failed_predictions:
                 logger.warning(f"{len(failed_predictions)} learners failed to predict")
@@ -169,7 +201,10 @@ class EnsembleLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise LearnerError(f"Ensemble prediction failed: {e}") from e
+            raise LearnerError(
+                f"Ensemble prediction failed for {self.get_name()}: {e}. "
+                f"Check that the input features have the same shape as training features."
+            ) from e
     
     def _aggregate_predictions(self, predictions_array: np.ndarray) -> np.ndarray:
         """Aggregate predictions from ensemble members.
@@ -278,7 +313,10 @@ class EnsembleLearner(Learner):
             RuntimeError: If ensemble is not trained
         """
         if not self.is_trained:
-            raise LearnerError("Ensemble must be trained before prediction")
+            raise LearnerError(
+                f"{self.get_name()} must be trained before getting individual predictions. "
+                f"Call train() with labeled data first."
+            )
 
         individual_predictions = {}
 

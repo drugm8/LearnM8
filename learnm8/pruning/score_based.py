@@ -39,10 +39,17 @@ class ScoreBasedPruner(DesignSpacePruner):
             PruningError: If parameters are invalid
         """
         if not 0.0 <= pruning_fraction <= 0.9:
-            raise PruningError(f"pruning_fraction must be between 0.0 and 0.9, got {pruning_fraction}")
-        
+            raise PruningError(
+                f"pruning_fraction must be between 0.0 and 0.9, got {pruning_fraction}. "
+                f"Values above 0.9 risk removing too many candidates. "
+                f"Use 0.0 to disable pruning or set pruning_strategy=None."
+            )
+
         if score_direction not in ['higher', 'lower']:
-            raise PruningError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+            raise PruningError(
+                f"score_direction must be 'higher' or 'lower', got '{score_direction}'. "
+                f"Use 'higher' to maximize the target property or 'lower' to minimize it."
+            )
         
         self.pruning_fraction = pruning_fraction
         self.score_direction = score_direction

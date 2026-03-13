@@ -111,10 +111,19 @@ class SklearnLearner(Learner):
             raise ValueError(f"Features must be 2D array, got {features.ndim}D")
 
         if features.shape[0] != targets.shape[0]:
-            raise ValueError(f"Features and targets must have same length: {features.shape[0]} vs {targets.shape[0]}")
+            raise LearnerError(
+                f"Feature and target arrays have mismatched lengths: "
+                f"{features.shape[0]} features vs {targets.shape[0]} targets. "
+                f"Ensure each sample has exactly one target value."
+            )
 
         if features.shape[0] == 0:
-            raise ValueError("Cannot train on empty dataset")
+            raise LearnerError(
+                f"Cannot train {self.get_name()} on an empty dataset (0 samples). "
+                f"This usually means no labeled compounds are available. "
+                f"Check that batch_fraction is large enough to select at least one compound, "
+                f"or increase the initial pool size."
+            )
 
         logger.debug(f"Training {self.get_name()} on features shape: {features.shape}, targets shape: {targets.shape}")
 
@@ -133,9 +142,15 @@ class SklearnLearner(Learner):
             train_time = time.time() - start_time
             logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
 
+        except LearnerError:
+            raise
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
-            raise LearnerError(f"Training failed: {e}") from e
+            raise LearnerError(
+                f"Training failed for {self.get_name()} with {features.shape[0]} samples: {e}. "
+                f"Check that the training data is valid, the featurizer is compatible "
+                f"with the learner, and there are enough labeled compounds."
+            ) from e
     
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
@@ -151,7 +166,11 @@ class SklearnLearner(Learner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise LearnerError("Model must be trained before prediction")
+            raise LearnerError(
+                f"{self.get_name()} must be trained before prediction. "
+                f"Call train() with labeled data first. If using the active learning API, "
+                f"ensure at least one training cycle has completed before predicting."
+            )
 
         logger.debug(f"Predicting with {self.get_name()} on {len(features)} samples")
 
@@ -172,10 +191,16 @@ class SklearnLearner(Learner):
 
             return predictions, None
 
+        except LearnerError:
+            raise
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise LearnerError(f"Prediction failed: {e}") from e
-    
+            raise LearnerError(
+                f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
+                f"Check that the input features have the same shape as training features "
+                f"and that the featurizer is compatible with the model."
+            ) from e
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"Sklearn{self.model.__class__.__name__}"
@@ -360,10 +385,19 @@ class TorchLearner(Learner):
             RuntimeError: If training fails
         """
         if features.shape[0] != targets.shape[0]:
-            raise ValueError(f"Features and targets must have same length: {features.shape[0]} vs {targets.shape[0]}")
+            raise LearnerError(
+                f"Feature and target arrays have mismatched lengths: "
+                f"{features.shape[0]} features vs {targets.shape[0]} targets. "
+                f"Ensure each sample has exactly one target value."
+            )
 
         if features.shape[0] == 0:
-            raise ValueError("Cannot train on empty dataset")
+            raise LearnerError(
+                f"Cannot train {self.get_name()} on an empty dataset (0 samples). "
+                f"This usually means no labeled compounds are available. "
+                f"Check that batch_fraction is large enough to select at least one compound, "
+                f"or increase the initial pool size."
+            )
 
         start_time = time.time()
 
@@ -418,9 +452,16 @@ class TorchLearner(Learner):
             train_time = time.time() - start_time
             logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
 
+        except LearnerError:
+            raise
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
-            raise LearnerError(f"Training failed: {e}") from e
+            raise LearnerError(
+                f"Training failed for {self.get_name()} on device '{self.device}' "
+                f"with {features.shape[0]} samples: {e}. "
+                f"Check that the training data is valid, the featurizer is compatible "
+                f"with the learner, and there are enough labeled compounds."
+            ) from e
     
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
@@ -436,7 +477,11 @@ class TorchLearner(Learner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise LearnerError("Model must be trained before prediction")
+            raise LearnerError(
+                f"{self.get_name()} must be trained before prediction. "
+                f"Call train() with labeled data first. If using the active learning API, "
+                f"ensure at least one training cycle has completed before predicting."
+            )
 
         start_time = time.time()
 
@@ -465,9 +510,16 @@ class TorchLearner(Learner):
 
             return predictions, None
 
+        except LearnerError:
+            raise
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise LearnerError(f"Prediction failed: {e}") from e
+            raise LearnerError(
+                f"Prediction failed for {self.get_name()} on {len(features)} samples "
+                f"(device: {self.device}): {e}. "
+                f"Check that the input features have the same shape as training features "
+                f"and that the featurizer is compatible with the model."
+            ) from e
     
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
@@ -493,7 +545,10 @@ class TorchLearner(Learner):
             path: Path to save model
         """
         if self.model is None:
-            raise LearnerError("No model to save")
+            raise LearnerError(
+                f"No model to save for {self.get_name()}. "
+                f"The model has not been created yet. Call train() first to create and train the model."
+            )
         
         state = {
             'model_state_dict': self.model.state_dict(),
@@ -520,7 +575,10 @@ class TorchLearner(Learner):
             path: Path to load model from
         """
         if not path.exists():
-            raise FileNotFoundError(f"Model file not found: {path}")
+            raise FileNotFoundError(
+                f"Model file not found: {path}. "
+                f"Verify the path is correct and that the model was previously saved with save_model()."
+            )
         
         state = torch.load(path, map_location=self.device)
         

@@ -133,7 +133,10 @@ class MCDropoutLearner(TorchLearner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise LearnerError("Model must be trained before prediction")
+            raise LearnerError(
+                f"{self.get_name()} must be trained before prediction. "
+                f"Call train() with labeled data first."
+            )
 
         try:
             features, _ = _preprocess_features(
@@ -170,7 +173,10 @@ class MCDropoutLearner(TorchLearner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise LearnerError(f"Prediction failed: {e}") from e
+            raise LearnerError(
+                f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
+                f"Check that the input features have the same shape as training features."
+            ) from e
     
     def supports_uncertainty(self) -> bool:
         """Return True since MC Dropout provides uncertainty estimates."""

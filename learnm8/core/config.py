@@ -57,9 +57,15 @@ class CycleConfig:
     def __post_init__(self):
         """Validate that batch_fraction is provided."""
         if self.batch_fraction is None:
-            raise ValueError("Must provide batch_fraction")
+            raise ValueError(
+                "CycleConfig requires batch_fraction. "
+                "Specify the fraction of the pool to select per cycle (e.g., batch_fraction=0.01 for 1%)."
+            )
         if not (0 < float(self.batch_fraction) <= 1.0):
-            raise ValueError(f"batch_fraction must be between 0 and 1, got {self.batch_fraction}")
+            raise ValueError(
+                f"batch_fraction must be between 0 (exclusive) and 1 (inclusive), "
+                f"got {self.batch_fraction}. Use a value like 0.01 (1%) or 0.1 (10%)."
+            )
 
 
 def parse_cycle_spec(spec: str) -> List[Dict[str, Any]]:
@@ -117,9 +123,15 @@ def parse_cycle_spec(spec: str) -> List[Dict[str, Any]]:
                 n_cycles = 1
 
             if not (0 < batch_fraction <= 1.0):
-                raise ValueError(f"batch_fraction must be between 0 and 1, got {batch_fraction}")
+                raise ValueError(
+                    f"batch_fraction must be between 0 (exclusive) and 1 (inclusive), "
+                    f"got {batch_fraction} in specification '{part}'. "
+                    f"Use a value like 0.01 (1%) or 0.1 (10%)."
+                )
             if n_cycles < 1:
-                raise ValueError(f"n_cycles must be >= 1, got {n_cycles}")
+                raise ValueError(
+                    f"n_cycles must be >= 1, got {n_cycles} in specification '{part}'."
+                )
 
             configs.append({
                 'strategy': strategy,
@@ -212,12 +224,19 @@ def parse_cycle_schedule(
 
     if cycles is not None:
         if not isinstance(cycles, list):
-            raise ValueError("cycles must be a list of CycleConfig objects")
+            raise ValueError(
+                f"cycles must be a list of CycleConfig objects, got {type(cycles).__name__}. "
+                f"Example: cycles=[CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)]"
+            )
 
         expanded = []
         for config in cycles:
             if not isinstance(config, CycleConfig):
-                raise ValueError("Each element in cycles must be a CycleConfig instance")
+                raise ValueError(
+                    f"Each element in cycles must be a CycleConfig instance, "
+                    f"got {type(config).__name__}. "
+                    f"Example: CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)"
+                )
 
             for _ in range(config.n_cycles):
                 new_config = CycleConfig(

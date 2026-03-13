@@ -50,7 +50,12 @@ def initialize_master_dataframe_empty(
         valid_compounds = pl.from_pandas(valid_compounds)
 
     if 'ID' not in valid_compounds.columns or 'SMILES' not in valid_compounds.columns:
-        raise ValueError("valid_compounds must contain 'ID' and 'SMILES' columns")
+        missing = [c for c in ['ID', 'SMILES'] if c not in valid_compounds.columns]
+        raise ValueError(
+            f"valid_compounds is missing required columns: {missing}. "
+            f"Available columns: {list(valid_compounds.columns)}. "
+            f"Ensure your compound pool CSV has 'ID' and 'SMILES' columns."
+        )
 
     master_df = valid_compounds.select(['ID', 'SMILES']).clone()
 
@@ -277,7 +282,9 @@ def select_initial_batch(
     if batch_size == 0:
         raise ValueError(
             f"Calculated batch size is 0 (pool_size={original_pool_size}, "
-            f"batch_fraction={batch_fraction})"
+            f"batch_fraction={batch_fraction}). "
+            f"The pool is too small for the given batch_fraction. "
+            f"Increase batch_fraction or use a larger compound pool."
         )
 
     logger.debug(f"Starting initialization phase (cycle 0)")
@@ -291,7 +298,11 @@ def select_initial_batch(
     ).select(['ID', 'SMILES'])
 
     if len(unlabeled) == 0:
-        raise AcquisitionError("No unlabeled compounds available for initialization")
+        raise AcquisitionError(
+            "No unlabeled compounds available for initialization (cycle 0). "
+            "All compounds may have been pre-labeled or filtered out during validation. "
+            "Check that your compound pool contains valid, unlabeled compounds."
+        )
 
     if strategy != 'random':
         logger.warning(
@@ -312,7 +323,11 @@ def select_initial_batch(
     selected_ids = selected_df['ID'].to_list()
 
     if len(selected_ids) == 0:
-        raise AcquisitionError("Acquisition strategy selected 0 compounds")
+        raise AcquisitionError(
+            f"Acquisition strategy '{strategy}' selected 0 compounds during initialization. "
+            f"The pool had {len(unlabeled)} unlabeled compounds with batch_size={batch_size}. "
+            f"This is unexpected — check the acquisition strategy implementation."
+        )
 
     logger.info(f"Measuring {len(selected_ids)} selected compounds...")
 
@@ -327,15 +342,25 @@ def select_initial_batch(
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
+    except OracleError:
+        raise
     except Exception as e:
         logger.error(f"Oracle measurement failed during initialization: {e}")
-        raise OracleError(f"Initialization failed - oracle measurement error: {e}") from e
+        raise OracleError(
+            f"Oracle measurement failed during initialization (cycle 0) "
+            f"for {len(selected_ids)} compounds: {e}. "
+            f"Check that your oracle function/CSV contains data for the selected compound IDs."
+        ) from e
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
         missing = set(selected_ids) - set(measurement_ids)
+        from learnm8.exceptions import _truncate_list
         raise OracleError(
-            f"Oracle did not return measurements for {len(missing)} compounds"
+            f"Oracle did not return measurements for {len(missing)} of "
+            f"{len(selected_ids)} compounds during initialization. "
+            f"Missing IDs: {_truncate_list(missing)}. "
+            f"Check that your oracle contains data for all compound IDs in the pool."
         )
 
     logger.debug(f"Oracle measured {len(selected_ids)} compounds")

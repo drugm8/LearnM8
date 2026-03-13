@@ -36,7 +36,10 @@ class AcquisitionFunction(ABC):
 
         # Validate and store score direction
         if score_direction not in ['higher', 'lower']:
-            raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+            raise ValueError(
+                f"score_direction must be 'higher' or 'lower', got '{score_direction}'. "
+                f"Use 'higher' to maximize the target property or 'lower' to minimize it."
+            )
 
         self.score_direction = score_direction
         self.maximize = score_direction == 'higher'
@@ -88,21 +91,38 @@ class AcquisitionFunction(ABC):
         """
         # Check basic DataFrame structure
         if len(compounds) == 0:
-            raise ValueError("compounds DataFrame is empty")
+            raise ValueError(
+                f"Cannot run {self.get_name()} on an empty compound pool. "
+                f"All compounds may have been labeled or pruned. "
+                f"Check n_cycles and pruning_fraction settings."
+            )
 
         # Check required columns
         required_cols = ['ID', 'SMILES', 'prediction']
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
+            raise ValueError(
+                f"{self.get_name()} requires columns {required_cols}, "
+                f"but {missing_cols} are missing. "
+                f"Available columns: {list(compounds.columns)}."
+            )
 
         # Check uncertainty column if required
         if self.requires_uncertainty() and 'uncertainty' not in compounds.columns:
-            raise ValueError(f"{self.get_name()} requires 'uncertainty' column")
+            uncertainty_strategies = ['greedy', 'random', 'topk']
+            raise ValueError(
+                f"{self.get_name()} requires an 'uncertainty' column, but the learner did not "
+                f"provide uncertainty estimates. Use a learner that supports uncertainty "
+                f"(gp, mc_dropout, or ensemble variants), or switch to an acquisition "
+                f"strategy that doesn't require uncertainty (e.g., {', '.join(uncertainty_strategies)})."
+            )
 
         # Check n_select
         if n_select <= 0:
-            raise ValueError("n_select must be positive")
+            raise ValueError(
+                f"n_select must be positive, got {n_select}. "
+                f"This is usually caused by batch_fraction being too small for the pool size."
+            )
 
         if n_select > len(compounds):
             logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
@@ -111,20 +131,37 @@ class AcquisitionFunction(ABC):
         # Check for NaN/null values in predictions
         pred_col = compounds.get_column('prediction')
         if pred_col.is_null().any() or pred_col.is_nan().any():
-            raise ValueError("Predictions contain NaN values")
+            nan_count = pred_col.is_null().sum() + pred_col.is_nan().sum()
+            raise ValueError(
+                f"Predictions contain {nan_count} NaN/null values out of {len(compounds)} compounds. "
+                f"This may indicate a featurizer or learner issue. "
+                f"Check that all SMILES are valid and the model trained successfully."
+            )
 
         # Check for duplicate IDs
         if compounds.get_column('ID').n_unique() != len(compounds):
-            raise ValueError("Duplicate compound IDs found in input data")
+            n_dupes = len(compounds) - compounds.get_column('ID').n_unique()
+            raise ValueError(
+                f"Found {n_dupes} duplicate compound IDs in input data. "
+                f"Each compound must have a unique ID for acquisition selection."
+            )
 
         # Check uncertainty values if present
         if 'uncertainty' in compounds.columns:
             unc_col = compounds.get_column('uncertainty')
             if unc_col.is_null().any() or unc_col.is_nan().any():
-                raise ValueError("Uncertainties contain NaN values")
+                nan_count = unc_col.is_null().sum() + unc_col.is_nan().sum()
+                raise ValueError(
+                    f"Uncertainties contain {nan_count} NaN/null values out of {len(compounds)} compounds. "
+                    f"This may indicate an issue with the uncertainty estimation in the learner."
+                )
 
             if (unc_col < 0).any():
-                raise ValueError("Uncertainties must be non-negative")
+                neg_count = (unc_col < 0).sum()
+                raise ValueError(
+                    f"Uncertainties contain {neg_count} negative values. "
+                    f"Uncertainty estimates must be non-negative (>= 0)."
+                )
 
     def _safe_select_top_k(self, compounds: pl.DataFrame, scores: np.ndarray,
                           n_select: int, ascending: bool = False) -> pl.DataFrame:
@@ -143,7 +180,11 @@ class AcquisitionFunction(ABC):
             ValueError: If scores array length doesn't match compounds
         """
         if len(scores) != len(compounds):
-            raise ValueError(f"Scores length ({len(scores)}) doesn't match compounds length ({len(compounds)})")
+            raise ValueError(
+                f"Acquisition scores length ({len(scores)}) doesn't match "
+                f"compounds length ({len(compounds)}). "
+                f"This is an internal error in the acquisition function implementation."
+            )
 
         # Handle infinite or NaN scores
         valid_mask = np.isfinite(scores)
@@ -197,23 +238,45 @@ def validate_uncertainty_inputs(compounds: pl.DataFrame) -> tuple[np.ndarray, np
         AcquisitionError: If required columns are missing or contain invalid values
     """
     if 'prediction' not in compounds.columns:
-        raise AcquisitionError("Compounds must have 'prediction' column for acquisition strategies")
+        raise AcquisitionError(
+            f"Compounds DataFrame is missing required 'prediction' column. "
+            f"Available columns: {list(compounds.columns)}. "
+            f"Ensure the learner has been trained and predictions were generated."
+        )
 
     if 'uncertainty' not in compounds.columns:
-        raise AcquisitionError("Compounds must have 'uncertainty' column for acquisition strategies")
+        raise AcquisitionError(
+            f"Compounds DataFrame is missing required 'uncertainty' column for "
+            f"uncertainty-based acquisition. Available columns: {list(compounds.columns)}. "
+            f"Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants), "
+            f"or switch to an acquisition strategy that doesn't require uncertainty "
+            f"(greedy, random, topk)."
+        )
 
     predictions = compounds.get_column('prediction').to_numpy()
     uncertainties = compounds.get_column('uncertainty').to_numpy()
 
     # Check for NaN values
     if np.any(np.isnan(predictions)):
-        raise AcquisitionError("Predictions contain NaN values")
+        nan_count = int(np.isnan(predictions).sum())
+        raise AcquisitionError(
+            f"Predictions contain {nan_count} NaN values out of {len(predictions)} compounds. "
+            f"Check that the learner trained successfully and all SMILES are valid."
+        )
 
     if np.any(np.isnan(uncertainties)):
-        raise AcquisitionError("Uncertainties contain NaN values")
+        nan_count = int(np.isnan(uncertainties).sum())
+        raise AcquisitionError(
+            f"Uncertainties contain {nan_count} NaN values out of {len(uncertainties)} compounds. "
+            f"This may indicate an issue with the uncertainty estimation in the learner."
+        )
 
     # Check for negative uncertainties
     if np.any(uncertainties < 0):
-        raise AcquisitionError("Uncertainties must be non-negative")
+        neg_count = int((uncertainties < 0).sum())
+        raise AcquisitionError(
+            f"Uncertainties contain {neg_count} negative values. "
+            f"Uncertainty estimates must be non-negative (>= 0)."
+        )
 
     return predictions, uncertainties

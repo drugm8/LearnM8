@@ -50,11 +50,22 @@ def _add_predictions_inplace(
         The same DataFrame (modified in-place)
     """
     if len(compound_ids) != len(predictions):
-        raise ValueError("compound_ids and predictions must have the same length")
+        raise ValueError(
+            f"compound_ids and predictions must have the same length: "
+            f"{len(compound_ids)} IDs vs {len(predictions)} predictions. "
+            f"Ensure the learner returned predictions for all input compounds."
+        )
     if uncertainties is not None and len(uncertainties) != len(compound_ids):
-        raise ValueError("uncertainties length must match compound_ids length")
+        raise ValueError(
+            f"uncertainties length ({len(uncertainties)}) must match "
+            f"compound_ids length ({len(compound_ids)}). "
+            f"Ensure the learner returned uncertainties for all input compounds."
+        )
     if len(set(compound_ids)) != len(compound_ids):
-        raise ValueError("compound_ids contains duplicates")
+        raise ValueError(
+            f"compound_ids contains {len(compound_ids) - len(set(compound_ids))} duplicates. "
+            f"Each compound ID must appear exactly once in the prediction batch."
+        )
 
     logger.debug(f"Adding predictions for {len(compound_ids)} compounds in cycle {cycle}")
 
@@ -157,7 +168,9 @@ def _update_status_inplace(
         ValueError: If new_status is not in VALID_STATUSES
     """
     if new_status not in VALID_STATUSES:
-        raise ValueError(f"new_status must be one of {VALID_STATUSES}, got '{new_status}'")
+        raise ValueError(
+            f"Invalid status '{new_status}'. Must be one of {VALID_STATUSES}."
+        )
 
     logger.debug(f"Updating status to '{new_status}' for {len(compound_ids)} compounds")
 
@@ -196,7 +209,11 @@ def _update_status_inplace(
                 # For pandas Series, use to_dict() for index-value mapping
                 id_to_value = target_values.to_dict()
             else:
-                raise TypeError(f"target_values must be dict, pl.Series, or pd.Series, got {type(target_values)}")
+                raise TypeError(
+                    f"target_values must be dict, pl.Series, or pd.Series, "
+                    f"got {type(target_values).__name__}. "
+                    f"Pass measured values as a Polars Series, pandas Series, or dict mapping ID → value."
+                )
 
             df = map_values_via_join(df, id_to_value, 'ID', target_col)
 
@@ -306,7 +323,9 @@ def get_compounds_by_status(
         >>> labeled = get_compounds_by_status(df, 'labeled', columns=['ID', 'SMILES', 'Activity'])
     """
     if status not in VALID_STATUSES:
-        raise ValueError(f"status must be one of {VALID_STATUSES}, got '{status}'")
+        raise ValueError(
+            f"Invalid status filter '{status}'. Must be one of {VALID_STATUSES}."
+        )
 
     filtered = df.filter(pl.col('status') == status)
 

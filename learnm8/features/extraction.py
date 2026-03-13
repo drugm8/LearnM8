@@ -135,7 +135,14 @@ def extract_features(
         if isinstance(featurizer, str):
             from learnm8.features import FEATURIZER_REGISTRY
             if featurizer not in FEATURIZER_REGISTRY:
-                raise ValueError(f"Unknown featurizer: {featurizer}")
+                from learnm8.features import list_available_featurizers
+                available = list_available_featurizers()
+                all_featurizers = ', '.join(sorted(available['all']))
+                raise ValueError(
+                    f"Unknown featurizer: '{featurizer}'. "
+                    f"Available featurizers: {all_featurizers}. "
+                    f"Run 'learnm8 list featurizers' to see all options."
+                )
             featurizer_obj = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
         else:
             featurizer_obj = featurizer
@@ -151,7 +158,8 @@ def extract_features(
             all_featurizers = ', '.join(sorted(available['all']))
             raise ValueError(
                 f"Unknown featurizer: '{featurizer}'. "
-                f"Available featurizers: {all_featurizers}"
+                f"Available featurizers: {all_featurizers}. "
+                f"Run 'learnm8 list featurizers' to see all options."
             )
 
         featurizer_class = FEATURIZER_REGISTRY[featurizer]
@@ -162,8 +170,9 @@ def extract_features(
 
     else:
         raise TypeError(
-            f"featurizer must be string or Featurizer instance, "
-            f"got {type(featurizer).__name__}"
+            f"featurizer must be a string name (e.g., 'morgan') or a Featurizer instance, "
+            f"got {type(featurizer).__name__}. "
+            f"Use a string for built-in featurizers or pass a custom Featurizer object."
         )
 
     return _extract_features_with_featurizer(

@@ -88,34 +88,62 @@ class DesignSpacePruner(ABC):
         """
         # Check DataFrame structure
         if len(compounds) == 0:
-            raise PruningError("compounds DataFrame is empty")
+            raise PruningError(
+                f"Cannot prune an empty compound pool. "
+                f"All compounds may have been labeled or already pruned. "
+                f"Reduce pruning_fraction or n_cycles to retain more compounds."
+            )
 
         required_cols = ['ID', 'SMILES']
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
-            raise PruningError(f"Missing required columns: {missing_cols}")
-        
+            raise PruningError(
+                f"Compounds DataFrame missing required columns: {missing_cols}. "
+                f"Available columns: {list(compounds.columns)}."
+            )
+
         # Check predictions array
         if len(predictions) != len(compounds):
-            raise PruningError(f"Predictions length ({len(predictions)}) doesn't match compounds length ({len(compounds)})")
-        
+            raise PruningError(
+                f"Predictions length ({len(predictions)}) doesn't match compounds "
+                f"length ({len(compounds)}). Ensure the model predicted all compounds."
+            )
+
         if np.any(np.isnan(predictions)):
-            raise PruningError("Predictions contain NaN values")
-        
+            nan_count = int(np.isnan(predictions).sum())
+            raise PruningError(
+                f"Predictions contain {nan_count} NaN values out of {len(predictions)} compounds. "
+                f"Check that the model trained successfully and all compounds have valid features."
+            )
+
         # Check uncertainties if provided
         if uncertainties is not None:
             if len(uncertainties) != len(compounds):
-                raise PruningError(f"Uncertainties length ({len(uncertainties)}) doesn't match compounds length ({len(compounds)})")
-            
+                raise PruningError(
+                    f"Uncertainties length ({len(uncertainties)}) doesn't match "
+                    f"compounds length ({len(compounds)})."
+                )
+
             if np.any(np.isnan(uncertainties)):
-                raise PruningError("Uncertainties contain NaN values")
-            
+                nan_count = int(np.isnan(uncertainties).sum())
+                raise PruningError(
+                    f"Uncertainties contain {nan_count} NaN values. "
+                    f"Check the learner's uncertainty estimation."
+                )
+
             if np.any(uncertainties < 0):
-                raise PruningError("Uncertainties must be non-negative")
-        
+                neg_count = int((uncertainties < 0).sum())
+                raise PruningError(
+                    f"Uncertainties contain {neg_count} negative values. "
+                    f"Uncertainty estimates must be non-negative (>= 0)."
+                )
+
         # Check if uncertainties are required but not provided
         if self.requires_uncertainty() and uncertainties is None:
-            raise PruningError(f"{self.get_name()} requires uncertainty estimates")
+            raise PruningError(
+                f"{self.get_name()} requires uncertainty estimates, but none were provided. "
+                f"Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants)."
+            )
     
     def _calculate_pruning_fraction(self, original_count: int, pruned_count: int) -> float:
         """Calculate the fraction of compounds pruned.
@@ -156,12 +184,19 @@ class DesignSpacePruner(ABC):
             # Handle boolean indexing
             if keep_indices.dtype == bool:
                 if len(keep_indices) != len(compounds):
-                    raise PruningError(f"Boolean index length ({len(keep_indices)}) doesn't match compounds length ({len(compounds)})")
+                    raise PruningError(
+                        f"Boolean index length ({len(keep_indices)}) doesn't match "
+                        f"compounds length ({len(compounds)}). "
+                        f"This is an internal error in the pruning strategy implementation."
+                    )
                 pruned_compounds = compounds.filter(pl.Series(keep_indices))
             else:
                 # Handle integer indexing
                 if np.any(keep_indices >= len(compounds)) or np.any(keep_indices < 0):
-                    raise PruningError("Invalid compound indices for pruning")
+                    raise PruningError(
+                        f"Invalid compound indices for pruning (out of range 0-{len(compounds) - 1}). "
+                        f"This is an internal error in the pruning strategy implementation."
+                    )
                 pruned_compounds = compounds[keep_indices]
 
             return pruned_compounds

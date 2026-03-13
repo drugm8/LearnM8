@@ -31,10 +31,17 @@ class PythonOracle(Oracle):
         elif oracle_path is not None:
             self.oracle_path = Path(oracle_path)
         else:
-            raise ValueError("Either module_path or oracle_path must be provided")
-        
+            raise OracleError(
+                "PythonOracle requires a path to the oracle Python file. "
+                "Provide module_path='path/to/oracle.py' pointing to a Python file "
+                "that defines an oracle function accepting a list of compound IDs."
+            )
+
         if not self.oracle_path.exists():
-            raise FileNotFoundError(f"Oracle file not found: {self.oracle_path}")
+            raise FileNotFoundError(
+                f"Oracle Python file not found: {self.oracle_path}. "
+                f"Verify the file path is correct and the file exists."
+            )
         
         # Load the oracle function
         self.oracle_function = self._load_oracle_function(function_name)
@@ -49,15 +56,25 @@ class PythonOracle(Oracle):
         # Find oracle function
         if function_name:
             if not hasattr(oracle_module, function_name):
-                raise ValueError(f"Function '{function_name}' not found in {self.oracle_path}")
+                available_funcs = [name for name, obj in inspect.getmembers(oracle_module, inspect.isfunction)
+                                   if not name.startswith('_')]
+                raise OracleError(
+                    f"Function '{function_name}' not found in {self.oracle_path}. "
+                    f"Available functions: {available_funcs or 'none'}. "
+                    f"Check the function_name parameter or define a function with that name."
+                )
             oracle_function = getattr(oracle_module, function_name)
         else:
             # Auto-detect oracle function
             functions = [obj for name, obj in inspect.getmembers(oracle_module, inspect.isfunction)
                         if not name.startswith('_')]
-            
+
             if len(functions) == 0:
-                raise ValueError(f"No functions found in {self.oracle_path}")
+                raise OracleError(
+                    f"No public functions found in {self.oracle_path}. "
+                    f"Define an oracle function that accepts a list of compound IDs "
+                    f"and returns a DataFrame with 'ID' and target columns."
+                )
             elif len(functions) == 1:
                 oracle_function = functions[0]
                 logger.info("Using oracle function: %s", oracle_function.__name__)
@@ -71,17 +88,19 @@ class PythonOracle(Oracle):
                     logger.info("Using oracle function: %s", oracle_function.__name__)
                 else:
                     function_names = [f.__name__ for f in functions]
-                    raise ValueError(
+                    raise OracleError(
                         f"Multiple functions found in {self.oracle_path}: {function_names}. "
-                        f"Please specify function_name parameter."
+                        f"Specify which function to use with function_name parameter. "
+                        f"Common names that are auto-detected: oracle, oracle_function, measure, evaluate."
                     )
         
         # Validate function signature
         sig = inspect.signature(oracle_function)
         if len(sig.parameters) != 1:
-            raise ValueError(
-                f"Oracle function must take exactly 1 parameter (compound_ids: List[str]). "
-                f"Found: {sig}"
+            raise OracleError(
+                f"Oracle function '{oracle_function.__name__}' must take exactly 1 parameter "
+                f"(compound_ids: List[str]), but has signature: {sig}. "
+                f"The function should accept a list of compound ID strings and return a DataFrame."
             )
         
         return oracle_function
@@ -113,10 +132,18 @@ class PythonOracle(Oracle):
             # Convert pandas to Polars
             result = pl.from_pandas(result)
         else:
-            raise ValueError(f"Oracle function must return pandas or polars DataFrame, got {type(result)}")
+            raise OracleError(
+                f"Oracle function must return a pandas or polars DataFrame, "
+                f"got {type(result).__name__}. "
+                f"Return a DataFrame with 'ID' column and target property columns."
+            )
 
         if 'ID' not in result.columns:
-            raise ValueError("Oracle function result must contain 'ID' column")
+            raise OracleError(
+                f"Oracle function result must contain an 'ID' column. "
+                f"Available columns: {list(result.columns)}. "
+                f"Ensure your oracle function returns a DataFrame with 'ID' matching the input compound IDs."
+            )
 
         # Check that all requested compounds have results
         result_ids = set(result.get_column('ID').to_list())

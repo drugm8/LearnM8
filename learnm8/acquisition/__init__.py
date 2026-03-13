@@ -78,7 +78,13 @@ def get_acquisition_function(name: str):
     """
     if name not in ACQUISITION_REGISTRY:
         available = ', '.join(sorted(ACQUISITION_REGISTRY.keys()))
-        raise KeyError(f"Unknown acquisition function '{name}'. Available: {available}")
+        basic = ['greedy', 'random', 'topk']
+        uncertainty = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
+        raise KeyError(
+            f"Unknown acquisition strategy '{name}'. Available: {available}. "
+            f"Basic strategies (no uncertainty required): {', '.join(basic)}. "
+            f"Uncertainty-based strategies: {', '.join(uncertainty)}."
+        )
 
     return ACQUISITION_REGISTRY[name]
 

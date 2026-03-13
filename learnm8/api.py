@@ -190,7 +190,9 @@ def _create_learner(
         available = ', '.join(sorted(LEARNER_REGISTRY.keys()))
         raise ValueError(
             f"Unknown learner '{learner_str}'. "
-            f"Available learners: {available}"
+            f"Available learners: {available}. "
+            f"Uncertainty-capable: gp, mc_dropout, *_ensemble. "
+            f"SMILES-native (no featurizer needed): chemprop, fastprop."
         )
 
     learner_class = LEARNER_REGISTRY[learner_str]
@@ -243,7 +245,8 @@ def _create_learner(
 
     except Exception as e:
         raise ConfigurationError(
-            f"Failed to instantiate {learner_class.__name__}: {e}"
+            f"Failed to instantiate learner '{learner_str}' ({learner_class.__name__}): {e}. "
+            f"Check that all required dependencies are installed and parameters are valid."
         ) from e
 
 
@@ -537,20 +540,27 @@ def run_active_learning(
             compound_pool_path = Path(compound_pool)
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
-                raise FileNotFoundError(f"Compound pool file not found: {compound_pool_path}")
+                raise FileNotFoundError(
+                    f"Compound pool file not found: {compound_pool_path}. "
+                    f"Verify the file path and ensure the file exists. "
+                    f"Supported formats: CSV, SDF, SMI."
+                )
             compound_pool = load_compound_file(compound_pool_path, progress=True)
             logger.debug(f"Loaded DataFrame: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
         elif isinstance(compound_pool, pl.DataFrame):
             logger.debug("Using provided DataFrame as compound pool")
         else:
             raise TypeError(
-                f"compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool)}"
+                f"compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool).__name__}. "
+                f"Pass a file path (CSV/SDF/SMI) or a Polars DataFrame with 'ID' and 'SMILES' columns."
             )
 
         if 'ID' not in compound_pool.columns or 'SMILES' not in compound_pool.columns:
+            missing = {'ID', 'SMILES'} - set(compound_pool.columns)
             raise ValueError(
-                f"Compound pool must have 'ID' and 'SMILES' columns. "
-                f"Found columns: {list(compound_pool.columns)}"
+                f"Compound pool missing required column(s): {missing}. "
+                f"Found columns: {list(compound_pool.columns)}. "
+                f"Ensure your data has 'ID' (unique identifier) and 'SMILES' (molecular structure) columns."
             )
 
         mode_detected = False
@@ -564,8 +574,10 @@ def run_active_learning(
                 logger.debug(f"Auto-detected CSV oracle from compound pool, mode=benchmark")
             else:
                 raise ValueError(
-                    "Oracle required when compound_pool is DataFrame. "
-                    "Provide oracle parameter or use CSV file for compound_pool."
+                    "Oracle is required when compound_pool is a DataFrame. "
+                    "Provide an oracle parameter: a CSV path (benchmark mode), "
+                    "'module.py:function' (run mode), or an Oracle instance. "
+                    "Alternatively, pass compound_pool as a CSV file path for auto-detection."
                 )
         elif isinstance(oracle, (str, Path)):
             oracle_path = Path(oracle)
@@ -578,7 +590,9 @@ def run_active_learning(
             else:
                 if ':' not in str(oracle):
                     raise ValueError(
-                        f"Non-CSV oracle must be 'module.py:function', got: {oracle}"
+                        f"Non-CSV oracle path must use 'module.py:function' format, got: '{oracle}'. "
+                        f"Example: oracle='my_oracle.py:measure_activity'. "
+                        f"For CSV-based oracles, use a .csv file extension."
                     )
                 module_path, function_name = str(oracle).split(':', 1)
                 from learnm8.oracles.python_oracle import PythonOracle
@@ -607,7 +621,10 @@ def run_active_learning(
             logger.debug(f"Created CSV oracle from DataFrame, mode={mode}")
         else:
             raise TypeError(
-                f"oracle must be None, str, Path, DataFrame, or Oracle instance, got {type(oracle)}"
+                f"oracle must be None, str, Path, DataFrame, or Oracle instance, "
+                f"got {type(oracle).__name__}. "
+                f"Use a CSV path for benchmark mode, 'module.py:function' for run mode, "
+                f"or pass an Oracle instance."
             )
 
         logger.debug(f"Detected {mode} mode (oracle type: {type(oracle).__name__})")
@@ -641,7 +658,9 @@ def run_active_learning(
                 )
         else:
             raise TypeError(
-                f"learner must be str or Learner instance, got {type(learner)}"
+                f"learner must be str or Learner instance, got {type(learner).__name__}. "
+                f"Use a string shortcut (e.g., 'rf', 'gp', 'chemprop') or pass "
+                f"a Learner instance."
             )
 
         if learner.requires_smiles():
@@ -657,9 +676,10 @@ def run_active_learning(
                 available = list_available_featurizers()
                 featurizer_options = ', '.join(sorted(available['all']))
                 raise ValueError(
-                    f"{learner.get_name()} requires a featurizer. "
-                    f"Specify featurizer parameter. "
-                    f"Valid options: {featurizer_options}"
+                    f"{learner.get_name()} requires a featurizer because it is a feature-based "
+                    f"learner. Specify featurizer parameter (e.g., featurizer='morgan'). "
+                    f"Valid options: {featurizer_options}. "
+                    f"Learners that work without a featurizer: chemprop, fastprop."
                 )
 
         # Convert string featurizer to instance if needed
@@ -672,8 +692,9 @@ def run_active_learning(
                     available = list_available_featurizers()
                     featurizer_options = ', '.join(sorted(available['all']))
                     raise ValueError(
-                        f"Unknown featurizer: '{featurizer}'. "
-                        f"Valid options: {featurizer_options}"
+                        f"Unknown featurizer '{featurizer}'. "
+                        f"Valid options: {featurizer_options}. "
+                        f"Use 'learnm8 list featurizers' to see all available featurizers."
                     )
                 featurizer_class = FEATURIZER_REGISTRY[featurizer]
                 featurizer_obj = featurizer_class(n_jobs=n_jobs)
@@ -682,8 +703,9 @@ def run_active_learning(
                 from learnm8.core.interfaces import Featurizer
                 if not isinstance(featurizer, Featurizer):
                     raise TypeError(
-                        f"featurizer must be str or Featurizer instance, "
-                        f"got {type(featurizer).__name__}"
+                        f"featurizer must be a string name or Featurizer instance, "
+                        f"got {type(featurizer).__name__}. "
+                        f"Use a string (e.g., 'morgan') or a Featurizer subclass instance."
                     )
                 featurizer_obj = featurizer
                 logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
@@ -691,7 +713,10 @@ def run_active_learning(
         # Validate prediction_batch_size if provided
         if prediction_batch_size is not None:
             if not isinstance(prediction_batch_size, int):
-                raise TypeError(f"prediction_batch_size must be an integer, got {type(prediction_batch_size)}")
+                raise TypeError(
+                    f"prediction_batch_size must be an integer, got {type(prediction_batch_size).__name__}. "
+                    f"Use None for auto-detection or an integer >= 100."
+                )
             if prediction_batch_size < 100:
                 raise ValueError(
                     f"prediction_batch_size must be >= 100, got {prediction_batch_size}. "
@@ -720,7 +745,9 @@ def run_active_learning(
                 f"Invalid: {len(validation_result.invalid_compounds)}"
             )
             raise ValueError(
-                "No valid compounds after validation. Check validation_report for details."
+                f"No valid compounds after validation. All {len(compound_pool)} compounds failed "
+                f"SMILES validation. Run 'learnm8 validate <file>' to identify invalid compounds, "
+                f"or check that SMILES strings are valid molecular structures."
             )
 
         if len(validation_result.invalid_compounds) > 0:
@@ -738,7 +765,11 @@ def run_active_learning(
         expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
         if not expected_cols.issubset(compounds_df.columns):
             missing = expected_cols - set(compounds_df.columns)
-            raise ValueError(f"Master DataFrame missing columns: {missing}")
+            raise ValueError(
+                f"Master DataFrame missing required columns: {missing}. "
+                f"This is an internal error — initialization may have failed. "
+                f"Check that target_col='{target_col}' matches a column in your data."
+            )
 
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
@@ -866,11 +897,23 @@ def run_active_learning(
                     logger.info("Pool exhausted, stopping early")
                     break
 
-            except LearnM8Error:
+            except LearnM8Error as e:
+                e.add_note(
+                    f"Failed during cycle {cycle_num} of {total_cycles} "
+                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+                )
                 raise
             except Exception as e:
                 logger.error(f"Cycle {cycle_num} failed: {e}")
-                raise LearnM8Error(f"Cycle {cycle_num} failed: {e}") from e
+                err = LearnM8Error(
+                    f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
+                    f"Check the error details above for the specific cause."
+                )
+                err.add_note(
+                    f"Failed during cycle {cycle_num} of {total_cycles} "
+                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+                )
+                raise err from e
 
         logger.debug("Calculating aggregate metrics")
         aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)

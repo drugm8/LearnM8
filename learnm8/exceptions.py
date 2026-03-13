@@ -11,6 +11,16 @@ with Python's standard :mod:`warnings` filter system.
 
 from __future__ import annotations
 
+MAX_LIST_ITEMS = 10
+
+
+def _truncate_list(items, max_items: int = MAX_LIST_ITEMS) -> str:
+    items = list(items)
+    if len(items) <= max_items:
+        return ", ".join(str(i) for i in items)
+    shown = ", ".join(str(i) for i in items[:max_items])
+    return f"{shown} (and {len(items) - max_items} more)"
+
 
 class LearnM8Error(Exception):
     """Base exception for all LearnM8 library errors.
