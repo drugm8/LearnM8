@@ -5,6 +5,19 @@ logger = logging.getLogger(__name__)
 
 
 def validate_n_jobs(n_jobs: int) -> int:
+    """Validate and normalize the n_jobs parameter for parallel processing.
+
+    Args:
+        n_jobs: Number of parallel jobs. -1 for all cores, positive integer
+            for a specific number of workers.
+
+    Returns:
+        Validated n_jobs value (always -1 or a positive integer).
+
+    Raises:
+        TypeError: If n_jobs is not an integer.
+        ValueError: If n_jobs is 0 or less than -1.
+    """
     if not isinstance(n_jobs, int):
         raise TypeError(f"n_jobs must be an integer, got {type(n_jobs).__name__}")
     if n_jobs == 0:
@@ -15,6 +28,20 @@ def validate_n_jobs(n_jobs: int) -> int:
 
 
 def validate_device(device: str) -> str:
+    """Validate device specification and check hardware availability.
+
+    Args:
+        device: Device string. Valid values: 'auto', 'cpu', 'cuda',
+            'cuda:N' (specific GPU index), 'mps'.
+
+    Returns:
+        Validated device string.
+
+    Raises:
+        TypeError: If device is not a string.
+        ValueError: If device is unknown or the requested hardware
+            is not available.
+    """
     if not isinstance(device, str):
         raise TypeError(f"device must be a string, got {type(device).__name__}")
 
@@ -57,6 +84,17 @@ def validate_device(device: str) -> str:
 
 
 def parse_device_for_lightning(device: str) -> tuple:
+    """Convert a device string to PyTorch Lightning accelerator/devices format.
+
+    Args:
+        device: Validated device string (e.g. 'auto', 'cpu', 'cuda', 'cuda:0', 'mps').
+
+    Returns:
+        Tuple of (accelerator, devices) suitable for PyTorch Lightning Trainer.
+
+    Raises:
+        ValueError: If device string is not recognized.
+    """
     if device == 'auto':
         return ('auto', 'auto')
     elif device == 'cpu':
