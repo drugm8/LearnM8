@@ -179,9 +179,7 @@ class AcquisitionFunction(ABC):
         return selected_compounds
 
 
-class AcquisitionError(Exception):
-    """Exception raised when acquisition strategy encounters an error."""
-    pass
+from learnm8.exceptions import AcquisitionError  # noqa: E402 — re-exported for backward compat
 
 
 # Utility functions for acquisition calculations

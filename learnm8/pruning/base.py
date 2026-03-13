@@ -170,9 +170,7 @@ class DesignSpacePruner(ABC):
             raise PruningError(f"Failed to prune compounds: {e}") from e
 
 
-class PruningError(Exception):
-    """Exception raised when design space pruning encounters an error."""
-    pass
+from learnm8.exceptions import PruningError  # noqa: E402 — re-exported for backward compat
 
 
 class StatefulPruner(DesignSpacePruner):

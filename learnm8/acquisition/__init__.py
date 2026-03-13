@@ -5,7 +5,8 @@ in active learning cycles, including basic greedy/random selection,
 sophisticated uncertainty-based methods, and advanced diversity-based approaches.
 """
 
-from .base import AcquisitionFunction, AcquisitionError
+from .base import AcquisitionFunction
+from learnm8.exceptions import AcquisitionError
 from .greedy import GreedyAcquisition
 from .random import RandomAcquisition
 from .top_k import TopKAcquisition
