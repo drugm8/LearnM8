@@ -208,3 +208,4 @@ dependencies:
     - git+https://github.com/mqcomplab/bitbirch.git
     - fastprop
     - chemprop
+    - pytest-xdist>=3.5.0

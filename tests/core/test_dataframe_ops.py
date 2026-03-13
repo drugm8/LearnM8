@@ -67,8 +67,8 @@ def test_get_labeled_compounds(sample_master_df):
     labeled = get_compounds_by_status(sample_master_df, 'labeled', columns=['ID', 'SMILES', 'Activity'])
 
     # Verify only labeled compounds returned
-    assert len(labeled) == 3
-    assert all(comp_id in ['COMP_000', 'COMP_001', 'COMP_002'] for comp_id in labeled['ID'])
+    assert len(labeled) == 2
+    assert all(comp_id in ['COMP_000', 'COMP_001'] for comp_id in labeled['ID'])
 
     # Verify Activity column present (renamed from target_value)
     assert 'Activity' in labeled.columns
@@ -84,8 +84,8 @@ def test_get_unlabeled_compounds(sample_master_df):
     unlabeled = get_compounds_by_status(sample_master_df, 'unlabeled', columns=['ID', 'SMILES'])
 
     # Verify only unlabeled compounds returned
-    assert len(unlabeled) == 97
-    assert all(comp_id not in ['COMP_000', 'COMP_001', 'COMP_002'] for comp_id in unlabeled['ID'])
+    assert len(unlabeled) == 3
+    assert all(comp_id not in ['COMP_000', 'COMP_001'] for comp_id in unlabeled['ID'])
 
     # Verify ID and SMILES columns present
     assert 'ID' in unlabeled.columns
@@ -95,7 +95,7 @@ def test_get_unlabeled_compounds(sample_master_df):
 def test_update_compound_status_to_labeled(sample_master_df):
     """Test status update to labeled."""
     original_df = sample_master_df.clone()
-    compound_ids = ['COMP_010', 'COMP_011']
+    compound_ids = ['COMP_002', 'COMP_003']
     target_values = pd.Series([0.8, 0.9], index=compound_ids)
 
     updated_df = update_status(
@@ -131,7 +131,7 @@ def test_update_compound_status_to_labeled(sample_master_df):
 
 def test_update_compound_status_to_pruned(sample_master_df):
     """Test status update to pruned."""
-    compound_ids = ['COMP_020', 'COMP_021']
+    compound_ids = ['COMP_003', 'COMP_004']
 
     updated_df = update_status(
         df=sample_master_df,
@@ -155,7 +155,7 @@ def test_update_compound_status_invalid_status(sample_master_df):
     with pytest.raises(ValueError, match="new_status must be one of"):
         update_status(
             df=sample_master_df,
-            compound_ids=['COMP_030'],
+            compound_ids=['COMP_002'],
             new_status='invalid',
             cycle=0,
             target_col='Activity'
@@ -164,7 +164,7 @@ def test_update_compound_status_invalid_status(sample_master_df):
 
 def test_add_predictions_to_master(sample_master_df):
     """Test adding predictions."""
-    compound_ids = ['COMP_010', 'COMP_011', 'COMP_012']
+    compound_ids = ['COMP_002', 'COMP_003', 'COMP_004']
     predictions = np.array([0.6, 0.7, 0.8])
 
     updated_df = add_predictions(
@@ -183,13 +183,13 @@ def test_add_predictions_to_master(sample_master_df):
         assert pred_val == predictions[i]
 
     # Verify NaN for compounds not predicted
-    other_compound = updated_df.filter(pl.col('ID') == 'COMP_050')['prediction_cycle_0'][0]
+    other_compound = updated_df.filter(pl.col('ID') == 'COMP_000')['prediction_cycle_0'][0]
     assert pd.isna(other_compound)
 
 
 def test_add_predictions_with_uncertainties(sample_master_df):
     """Test adding predictions and uncertainties."""
-    compound_ids = ['COMP_010', 'COMP_011']
+    compound_ids = ['COMP_002', 'COMP_003']
     predictions = np.array([0.6, 0.7])
     uncertainties = np.array([0.1, 0.15])
 
@@ -217,7 +217,7 @@ def test_add_predictions_multiple_cycles(sample_master_df):
     updated_df = add_predictions(
         df=sample_master_df,
         cycle=0,
-        compound_ids=['COMP_010'],
+        compound_ids=['COMP_002'],
         predictions=np.array([0.5])
     )
 
@@ -225,7 +225,7 @@ def test_add_predictions_multiple_cycles(sample_master_df):
     updated_df = add_predictions(
         df=updated_df,
         cycle=1,
-        compound_ids=['COMP_010'],
+        compound_ids=['COMP_002'],
         predictions=np.array([0.6])
     )
 
@@ -233,7 +233,7 @@ def test_add_predictions_multiple_cycles(sample_master_df):
     updated_df = add_predictions(
         df=updated_df,
         cycle=2,
-        compound_ids=['COMP_010'],
+        compound_ids=['COMP_002'],
         predictions=np.array([0.7])
     )
 
@@ -243,9 +243,9 @@ def test_add_predictions_multiple_cycles(sample_master_df):
     assert 'prediction_cycle_2' in updated_df.columns
 
     # Verify prediction values for all cycles
-    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_0'][0] == 0.5
-    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_1'][0] == 0.6
-    assert updated_df.filter(pl.col('ID') == 'COMP_010')['prediction_cycle_2'][0] == 0.7
+    assert updated_df.filter(pl.col('ID') == 'COMP_002')['prediction_cycle_0'][0] == 0.5
+    assert updated_df.filter(pl.col('ID') == 'COMP_002')['prediction_cycle_1'][0] == 0.6
+    assert updated_df.filter(pl.col('ID') == 'COMP_002')['prediction_cycle_2'][0] == 0.7
 
 
 def test_get_prediction_columns(sample_master_df):
@@ -256,7 +256,7 @@ def test_get_prediction_columns(sample_master_df):
         updated_df = add_predictions(
             df=updated_df,
             cycle=cycle,
-            compound_ids=['COMP_010'],
+            compound_ids=['COMP_002'],
             predictions=np.array([0.5]),
             uncertainties=np.array([0.1])
         )
@@ -316,17 +316,17 @@ def test_immutability(sample_master_df):
     # Call update functions
     _ = update_status(
         df=sample_master_df,
-        compound_ids=['COMP_010'],
+        compound_ids=['COMP_002'],
         new_status=STATUS_LABELED,
         cycle=0,
         target_col='Activity',
-        target_values=pd.Series([0.5], index=['COMP_010'])
+        target_values=pd.Series([0.5], index=['COMP_002'])
     )
 
     _ = add_predictions(
         df=sample_master_df,
         cycle=0,
-        compound_ids=['COMP_010'],
+        compound_ids=['COMP_002'],
         predictions=np.array([0.5])
     )
 

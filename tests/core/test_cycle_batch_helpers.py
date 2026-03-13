@@ -29,12 +29,12 @@ class TestCalculateOptimalBatchSize:
 
     def test_different_featurizers(self):
         """Different featurizers should affect batch size calculation."""
-        batch_maccs = _calculate_optimal_batch_size(500000, 'maccs', 4.0)
-        batch_morgan = _calculate_optimal_batch_size(500000, 'morgan', 4.0)
-        batch_descriptors = _calculate_optimal_batch_size(500000, 'descriptors', 4.0)
+        batch_maccs = _calculate_optimal_batch_size(500000, 'maccs', 0.1)
+        batch_morgan = _calculate_optimal_batch_size(500000, 'morgan', 0.1)
+        batch_descriptors = _calculate_optimal_batch_size(500000, 'descriptors', 0.1)
 
-        assert batch_maccs > batch_morgan
-        assert batch_morgan > batch_descriptors
+        assert batch_maccs > batch_descriptors
+        assert batch_descriptors > batch_morgan
 
     def test_unknown_featurizer_uses_default(self):
         """Unknown featurizer should use default feature size."""

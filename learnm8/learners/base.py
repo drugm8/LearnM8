@@ -106,6 +106,9 @@ class SklearnLearner(Learner):
             ValueError: If input shapes invalid
             RuntimeError: If training fails
         """
+        if features.ndim != 2:
+            raise ValueError(f"Features must be 2D array, got {features.ndim}D")
+
         if features.shape[0] != targets.shape[0]:
             raise ValueError(f"Features and targets must have same length: {features.shape[0]} vs {targets.shape[0]}")
 

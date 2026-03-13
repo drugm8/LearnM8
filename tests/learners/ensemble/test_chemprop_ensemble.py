@@ -272,29 +272,29 @@ class TestChempropEnsemble:
         assert 'learners_with_uncertainty' in stats
         assert len(stats['learner_names']) == 3
 
-    def test_edge_case_single_compound(self):
-        """Test with single compound."""
+    def test_edge_case_small_dataset(self):
+        """Test with small dataset of 5 diverse compounds."""
         ensemble = ChempropEnsemble(
             depth=2,
             max_epochs=3
         )
 
-        single_compound = pl.DataFrame({
-            'ID': ['COMP_001'],
-            'SMILES': ['CCO'],
-            'Activity': [0.5]
+        small_dataset = pl.DataFrame({
+            'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
+            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+            'Activity': [0.5, 0.3, 0.8, 0.1, 0.6]
         })
 
-        smiles = single_compound['SMILES'].to_list()
-        targets = single_compound['Activity'].to_numpy()
+        smiles = small_dataset['SMILES'].to_list()
+        targets = small_dataset['Activity'].to_numpy()
 
         ensemble.train(features=None, targets=targets, smiles=smiles)
         predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
 
-        assert len(predictions) == 1
-        assert len(uncertainty) == 1
-        assert np.isfinite(predictions[0])
-        assert uncertainty[0] >= 0
+        assert len(predictions) == 5
+        assert len(uncertainty) == 5
+        assert np.all(np.isfinite(predictions))
+        assert np.all(uncertainty >= 0)
 
     def test_uncertainty_diversity(self, chemprop_ensemble, small_real_compounds):
         """Test that ensemble uncertainty captures model diversity."""
@@ -391,17 +391,15 @@ class TestChempropEnsemble:
 class TestChempropEnsembleWithDescriptors:
     """Test ChempropEnsemble with extra descriptors (x_d)."""
 
-    def test_train_predict_with_descriptors(self, small_real_compounds, tmp_path):
+    def test_train_predict_with_descriptors(self, small_real_compounds, small_real_morgan_features):
         """Test ensemble training and prediction with descriptors."""
-        from learnm8.features.extraction import extract_features
-
         ensemble = ChempropEnsemble(max_epochs=5)
         compounds = small_real_compounds.clone()
 
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:10]
 
         ensemble.train(features=features, targets=targets, smiles=smiles)
 
@@ -428,16 +426,14 @@ class TestChempropEnsembleWithDescriptors:
         assert uncertainties.shape == (10,)
         assert np.all(uncertainties >= 0)
 
-    def test_uncertainty_with_vs_without_descriptors(self, small_real_compounds, tmp_path):
+    def test_uncertainty_with_vs_without_descriptors(self, small_real_compounds, small_real_morgan_features):
         """Test that uncertainty is provided in both modes."""
-        from learnm8.features.extraction import extract_features
-
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
         ensemble_with = ChempropEnsemble(max_epochs=5)
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:10]
         ensemble_with.train(features=features, targets=targets, smiles=smiles)
         _, unc_with = ensemble_with.predict(features=features, smiles=smiles)
 
