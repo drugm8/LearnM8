@@ -40,7 +40,7 @@ class TestValidateSMILES:
         assert len(error) > 0
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 @pytest.mark.molecular
 class TestValidateCompoundPool:
 
