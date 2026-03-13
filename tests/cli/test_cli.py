@@ -85,7 +85,7 @@ def run_cli(*args, timeout=60):
     return result
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestRunSubcommand:
     """Test 'run' subcommand functionality."""
 
@@ -405,7 +405,7 @@ class TestRunSubcommand:
         assert result.returncode == 0
 
 
-@pytest.mark.unit
+@pytest.mark.slow
 class TestListSubcommand:
     """Test 'list' subcommand functionality."""
 
@@ -442,7 +442,7 @@ class TestListSubcommand:
         assert result.returncode != 0
 
 
-@pytest.mark.unit
+@pytest.mark.slow
 class TestValidateSubcommand:
     """Test 'validate' subcommand functionality."""
 
@@ -480,7 +480,7 @@ class TestValidateSubcommand:
         assert result.returncode != 0
 
 
-@pytest.mark.unit
+@pytest.mark.slow
 class TestHelpAndErrors:
     """Test help messages and error handling."""
 
@@ -509,7 +509,7 @@ class TestHelpAndErrors:
         assert 'compound_pool' in result.stdout
 
 
-@pytest.mark.unit
+@pytest.mark.slow
 class TestEdgeCases:
     """Test edge cases and error scenarios."""
 
@@ -574,6 +574,7 @@ class TestEdgeCases:
 
         assert result.returncode != 0
 
+    @pytest.mark.slow
     def test_invalid_pruning_fraction(self, minimal_compounds, tmp_path):
         result = run_cli(
             'run',
@@ -587,7 +588,7 @@ class TestEdgeCases:
 
         assert result.returncode != 0
 
-    @pytest.mark.integration
+    @pytest.mark.slow
     def test_acquisition_params_json(self, minimal_compounds, tmp_path):
         output_dir = tmp_path / "output"
 
@@ -620,7 +621,7 @@ class TestEdgeCases:
         assert result.returncode != 0
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestIntegration:
     """Integration tests across CLI features."""
 

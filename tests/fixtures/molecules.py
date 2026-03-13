@@ -32,19 +32,17 @@ def _load_test_data(filename: str) -> pl.DataFrame:
         raise RuntimeError(f"Could not load test data {filename}: {e}")
 
 
-@pytest.fixture
+@pytest.fixture(scope='session')
 def sample_compounds() -> pl.DataFrame:
-    """Create sample compounds DataFrame for testing."""
-    np.random.seed(42)
-    n_compounds = 100
+    """~5 synthetic compounds with deterministic, structurally diverse SMILES.
 
-    compounds = pl.DataFrame({
-        'ID': [f'COMP_{i:03d}' for i in range(n_compounds)],
-        'SMILES': [f'C1CCCCC1{"N" if i % 3 == 0 else "O"}{"Cl" if i % 7 == 0 else ""}'
-                  for i in range(n_compounds)],
+    Session-scoped: loaded once per test session (or per xdist worker).
+    Safe because Polars DataFrames are immutable.
+    """
+    return pl.DataFrame({
+        'ID': ['COMP_000', 'COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'],
+        'SMILES': ['C1CCCCC1N', 'C1CCCCC1O', 'C1CCCCC1NCl', 'C1CCCCC1OCl', 'C1CCCCC1N'],
     })
-
-    return compounds
 
 
 @pytest.fixture

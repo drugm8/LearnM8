@@ -15,6 +15,8 @@ except (ImportError, AttributeError):
     CDPKIT_AVAILABLE = False
 
 try:
+    from vina import Vina  # noqa: F401
+    from meeko import MoleculePreparation  # noqa: F401
     from examples.oracles import VinaOracle
     VINA_AVAILABLE = True
 except (ImportError, AttributeError):
@@ -51,13 +53,13 @@ class TestSimilarityOracle:
 
     def test_measure_basic(self, sample_compounds):
         oracle = SimilarityOracle(
-            reference_smiles='CCO',
+            reference_smiles='C1CCCCC1N',
             fingerprint_type='morgan'
         )
 
         result = oracle.measure(sample_compounds, ['similarity'])
 
-        assert result.height == 3
+        assert result.height == 5
         assert 'ID' in result.columns
         assert 'similarity' in result.columns
 
@@ -67,13 +69,13 @@ class TestSimilarityOracle:
 
     def test_measure_multiple_properties(self, sample_compounds):
         oracle = SimilarityOracle(
-            reference_smiles='CCO',
+            reference_smiles='C1CCCCC1N',
             fingerprint_type='morgan'
         )
 
         result = oracle.measure(sample_compounds, ['sim1', 'sim2'])
 
-        assert result.height == 3
+        assert result.height == 5
         assert 'sim1' in result.columns
         assert 'sim2' in result.columns
 
@@ -116,20 +118,20 @@ class TestSimilarityOracle:
     def test_different_fingerprints(self, sample_compounds):
         for fp_type in ['morgan', 'maccs', 'topological']:
             oracle = SimilarityOracle(
-                reference_smiles='CCO',
+                reference_smiles='C1CCCCC1N',
                 fingerprint_type=fp_type
             )
             result = oracle.measure(sample_compounds, ['similarity'])
-            assert result.height == 3
+            assert result.height == 5
 
     def test_different_metrics(self, sample_compounds):
         for metric in ['tanimoto', 'dice']:
             oracle = SimilarityOracle(
-                reference_smiles='CCO',
+                reference_smiles='C1CCCCC1N',
                 metric=metric
             )
             result = oracle.measure(sample_compounds, ['similarity'])
-            assert result.height == 3
+            assert result.height == 5
 
 
 class TestPharmacophore2DOracle:
@@ -160,7 +162,7 @@ class TestPharmacophore2DOracle:
 
         result = oracle.measure(sample_compounds, ['pharmacophore_similarity'])
 
-        assert result.height == 3
+        assert result.height == 5
         assert 'ID' in result.columns
         assert 'pharmacophore_similarity' in result.columns
 

@@ -105,46 +105,51 @@ class MockOracle(Oracle):
         return result
 
 
-@pytest.fixture(scope='session')
-def mock_learner():
-    """Create a MockLearner instance without uncertainty support.
-
-    Session-scoped because mock objects are stateless between tests.
-    """
-    return MockLearner(supports_uncertainty=False)
-
-
-@pytest.fixture(scope='session')
-def mock_learner_with_uncertainty():
-    """Create a MockLearner instance with uncertainty support.
-
-    Session-scoped for performance optimization.
-    """
-    return MockLearner(supports_uncertainty=True)
+@pytest.fixture
+def make_mock_learner():
+    """Factory for fresh MockLearner instances. Each call returns clean state."""
+    def _make(supports_uncertainty=False, fail_training=False, fail_prediction=False):
+        return MockLearner(
+            supports_uncertainty=supports_uncertainty,
+            fail_training=fail_training,
+            fail_prediction=fail_prediction,
+        )
+    return _make
 
 
-@pytest.fixture(scope='session')
-def mock_oracle():
-    """Create a MockOracle instance with default noise level.
-
-    Session-scoped because mock objects are stateless.
-    """
-    return MockOracle(noise_level=0.1)
-
-
-@pytest.fixture(scope='session')
-def mock_oracle_low_noise():
-    """Create a MockOracle instance with low noise level.
-
-    Session-scoped for performance optimization.
-    """
-    return MockOracle(noise_level=0.01)
+@pytest.fixture
+def make_mock_oracle():
+    """Factory for fresh MockOracle instances. Each call returns call_count=0."""
+    def _make(noise=0.1):
+        return MockOracle(noise_level=noise)
+    return _make
 
 
-@pytest.fixture(scope='session')
-def mock_oracle_high_noise():
-    """Create a MockOracle instance with high noise level.
+@pytest.fixture
+def mock_learner(make_mock_learner):
+    """Backward-compatible wrapper. Prefer make_mock_learner() for new tests."""
+    return make_mock_learner()
 
-    Session-scoped for performance optimization.
-    """
-    return MockOracle(noise_level=0.5)
+
+@pytest.fixture
+def mock_learner_with_uncertainty(make_mock_learner):
+    """Backward-compatible wrapper. Prefer make_mock_learner(supports_uncertainty=True)."""
+    return make_mock_learner(supports_uncertainty=True)
+
+
+@pytest.fixture
+def mock_oracle(make_mock_oracle):
+    """Backward-compatible wrapper. Prefer make_mock_oracle()."""
+    return make_mock_oracle()
+
+
+@pytest.fixture
+def mock_oracle_low_noise(make_mock_oracle):
+    """Backward-compatible wrapper. Prefer make_mock_oracle(noise=0.01)."""
+    return make_mock_oracle(noise=0.01)
+
+
+@pytest.fixture
+def mock_oracle_high_noise(make_mock_oracle):
+    """Backward-compatible wrapper. Prefer make_mock_oracle(noise=0.5)."""
+    return make_mock_oracle(noise=0.5)

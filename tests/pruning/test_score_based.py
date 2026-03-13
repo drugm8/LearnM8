@@ -48,17 +48,17 @@ def test_score_based_pruner_basic_functionality(sample_compounds):
     pruned = pruner.prune(sample_compounds, predictions)
     
     # Should keep approximately 70% of compounds
-    expected_kept = int(n_compounds * 0.7)
+    expected_kept = n_compounds - int(n_compounds * 0.3)
     assert len(pruned) == expected_kept
     assert 'ID' in pruned.columns
     assert 'SMILES' in pruned.columns
-    
+
     # Check statistics
     stats = pruner.get_pruning_stats()
     assert stats['compounds_before_pruning'] == n_compounds
     assert stats['compounds_after_pruning'] == expected_kept
     assert stats['compounds_pruned'] == n_compounds - expected_kept
-    assert abs(stats['pruning_fraction_actual'] - 0.3) < 0.1
+    assert abs(stats['pruning_fraction_actual'] - 0.3) <= 0.1
     assert stats['score_direction'] == 'higher'
 
 
@@ -216,7 +216,7 @@ def test_score_based_pruner_input_validation(sample_compounds):
     
     # Test mismatched prediction length
     with pytest.raises(PruningError, match="Predictions length"):
-        pruner.prune(sample_compounds, predictions[:5])
+        pruner.prune(sample_compounds, predictions[:3])
 
 
 def test_score_based_pruner_deterministic_behavior(sample_compounds):

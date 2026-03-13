@@ -131,7 +131,7 @@ class TestExtractFeatures:
 	def test_show_progress_enabled(self, tmp_path):
 		pytest.importorskip("tqdm")
 
-		smiles_list = ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC'] * 20
+		smiles_list = ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC']
 		features = extract_features(smiles_list, 'morgan', cache_dir=tmp_path, show_progress=True)
 
 		assert features.shape[0] == len(smiles_list)

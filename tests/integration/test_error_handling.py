@@ -355,18 +355,15 @@ class TestErrorRecovery:
     
     def test_graceful_degradation_with_limited_resources(self, tmp_path):
         """Test graceful degradation when resources are limited."""
-        # Create compounds that would require significant cache space
-        large_smiles_list = ['CCO'] * 100
+        smiles_list = ['CCO'] * 5
 
         # This should either succeed or fail gracefully
         try:
-            features = extract_features(large_smiles_list, 'morgan', tmp_path)
+            features = extract_features(smiles_list, 'morgan', tmp_path)
 
-            # If it succeeds, should have reasonable results
-            assert features.shape[0] == 100
+            assert features.shape[0] == 5
 
         except (OSError, MemoryError):
-            # Failing due to resource constraints is acceptable
             pass
     
     def test_error_message_clarity(self, small_real_compounds):

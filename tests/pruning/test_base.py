@@ -88,7 +88,7 @@ def test_pruner_interface_validation(sample_compounds):
 
     # Test mismatched prediction length
     with pytest.raises(PruningError, match="Predictions length"):
-        pruner.prune(sample_compounds, predictions[:5])
+        pruner.prune(sample_compounds, predictions[:3])
 
     # Test NaN predictions
     bad_predictions = predictions.copy()
@@ -109,7 +109,7 @@ def test_uncertainty_validation(sample_compounds):
 
     # Test mismatched uncertainty length
     with pytest.raises(PruningError, match="Uncertainties length"):
-        uncertainty_pruner.prune(sample_compounds, predictions, uncertainties[:5])
+        uncertainty_pruner.prune(sample_compounds, predictions, uncertainties[:3])
 
     # Test negative uncertainties
     bad_uncertainties = uncertainties.copy()
