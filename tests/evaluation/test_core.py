@@ -3,6 +3,9 @@
 Focused tests for core evaluation functions using real molecular data.
 """
 
+import logging
+from unittest.mock import patch
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -338,3 +341,185 @@ class TestEvaluationEdgeCases:
         assert isinstance(result, dict)
         assert result['cumulative_labeled'] == 1
         assert result['batch_size'] == 1
+
+
+@pytest.mark.unit
+class TestSpecificExceptionHandling:
+    """Test that evaluation uses specific exception types, not bare except Exception."""
+
+    def _make_base_args(self):
+        labeled = pl.DataFrame({
+            'ID': [f'mol_{i}' for i in range(20)],
+            'SMILES': ['CCO'] * 20,
+            'Activity': np.random.default_rng(42).random(20).tolist(),
+        })
+        selected = labeled.head(5)
+        predictions = np.random.default_rng(42).random(20)
+        ground_truth = labeled['Activity'].to_numpy()
+        return labeled, selected, predictions, ground_truth
+
+    def test_ground_truth_avg_score_catches_value_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+
+        call_count = [0]
+        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+
+        def fail_on_second_call(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] >= 2:
+                raise ValueError('test value error')
+            return original_fn(*args, **kwargs)
+
+        with patch(
+            'learnm8.evaluation.core.calculate_average_score',
+            side_effect=fail_on_second_call,
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', ground_truth_data=gt_data,
+                )
+            assert result['ground_truth_avg_score'] is None
+            assert 'ground_truth_avg_score' in caplog.text
+
+    def test_ground_truth_avg_score_catches_type_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+
+        call_count = [0]
+        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+
+        def fail_on_second_call(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] >= 2:
+                raise TypeError('bad type')
+            return original_fn(*args, **kwargs)
+
+        with patch(
+            'learnm8.evaluation.core.calculate_average_score',
+            side_effect=fail_on_second_call,
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', ground_truth_data=gt_data,
+                )
+            assert result['ground_truth_avg_score'] is None
+
+    def test_uncertainty_catches_value_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        bad_uncertainties = np.array(['not', 'a', 'number', 'list', 'x'])
+
+        with caplog.at_level(logging.WARNING):
+            result = evaluate_cycle(
+                cycle=1, predictions=predictions, ground_truth=ground_truth,
+                labeled_data=labeled, selected_compounds=selected,
+                target_col='Activity', uncertainties=bad_uncertainties,
+            )
+        assert result['uncertainty_mean'] is None
+        assert result['uncertainty_std'] is None
+
+    def test_molecular_similarity_catches_runtime_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+
+        with patch(
+            'learnm8.evaluation.core.calculate_molecular_similarity_metrics',
+            side_effect=RuntimeError('RDKit internal error'),
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity',
+                )
+            assert result['intra_batch_diversity'] is None
+            assert 'molecular similarity' in caplog.text.lower()
+
+    def test_discovery_metrics_catches_zero_division(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+        pool_preds = np.random.default_rng(42).random(20)
+        pool_ids = np.array([f'mol_{i}' for i in range(20)])
+        cum_ids = {f'mol_{i}' for i in range(5)}
+
+        with patch(
+            'learnm8.evaluation.core.calculate_multiple_top_k_discovery_rates',
+            side_effect=ZeroDivisionError('division by zero'),
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', oracle_type='benchmark',
+                    ground_truth_data=gt_data, pool_predictions=pool_preds,
+                    pool_ids=pool_ids, cumulative_selected_ids=cum_ids,
+                )
+            assert result.get('top_10_discovery') is None
+            assert 'discovery' in caplog.text.lower()
+
+    def test_unlabeled_ranking_catches_value_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+        pool_preds = np.random.default_rng(42).random(20)
+        pool_ids = np.array([f'mol_{i}' for i in range(20)])
+        cum_ids = {f'mol_{i}' for i in range(5)}
+
+        with patch(
+            'learnm8.evaluation.core.calculate_multiple_unlabeled_top_k_overlaps',
+            side_effect=ValueError('bad value'),
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', oracle_type='benchmark',
+                    ground_truth_data=gt_data, pool_predictions=pool_preds,
+                    pool_ids=pool_ids, cumulative_selected_ids=cum_ids,
+                )
+            assert result.get('unlabeled_spearman_correlation') is None
+            assert 'unlabeled' in caplog.text.lower() or 'ranking' in caplog.text.lower()
+
+    def test_ground_truth_ef_catches_type_error(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+
+        with patch(
+            'learnm8.evaluation.core.calculate_ground_truth_enrichment_factors',
+            side_effect=TypeError('bad ef input'),
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', ground_truth_data=gt_data,
+                )
+            assert result.get('ground_truth_ef_5_0') is None
+
+    def test_warning_messages_include_metric_context(self, caplog):
+        labeled, selected, predictions, ground_truth = self._make_base_args()
+        gt_data = labeled.clone()
+
+        call_count = [0]
+        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+
+        def fail_on_second_call(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] >= 2:
+                raise ValueError('test')
+            return original_fn(*args, **kwargs)
+
+        with patch(
+            'learnm8.evaluation.core.calculate_average_score',
+            side_effect=fail_on_second_call,
+        ):
+            with caplog.at_level(logging.WARNING):
+                evaluate_cycle(
+                    cycle=1, predictions=predictions, ground_truth=ground_truth,
+                    labeled_data=labeled, selected_compounds=selected,
+                    target_col='Activity', ground_truth_data=gt_data,
+                )
+            assert 'ground_truth_avg_score' in caplog.text
+            assert 'Check input data quality' in caplog.text

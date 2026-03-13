@@ -47,7 +47,7 @@ def calculate_spearman_correlation(y_true: np.ndarray, y_pred: np.ndarray) -> fl
         if np.isnan(correlation):
             return 0.0
         return correlation
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 

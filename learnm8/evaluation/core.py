@@ -115,8 +115,11 @@ def evaluate_cycle(
 		try:
 			gt_scores = ground_truth_data.get_column(target_col).to_numpy()
 			metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
-		except Exception as e:
-			logger.warning(f"Error calculating ground truth average score: {e}")
+		except (ValueError, TypeError, ZeroDivisionError) as e:
+			logger.warning(
+				f"Could not calculate ground_truth_avg_score: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics['ground_truth_avg_score'] = None
 	else:
 		metrics['ground_truth_avg_score'] = None
@@ -126,8 +129,11 @@ def evaluate_cycle(
 		try:
 			metrics['uncertainty_mean'] = float(np.mean(uncertainties))
 			metrics['uncertainty_std'] = float(np.std(uncertainties))
-		except Exception as e:
-			logger.warning(f"Error calculating uncertainty metrics: {e}")
+		except (ValueError, TypeError) as e:
+			logger.warning(
+				f"Could not calculate uncertainty metrics: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics['uncertainty_mean'] = None
 			metrics['uncertainty_std'] = None
 	else:
@@ -142,8 +148,11 @@ def evaluate_cycle(
 				previously_selected_df=previously_selected
 			)
 			metrics.update(molecular_metrics)
-		except Exception as e:
-			logger.warning(f"Error calculating molecular similarity metrics: {e}")
+		except (ValueError, TypeError, RuntimeError) as e:
+			logger.warning(
+				f"Could not calculate molecular similarity metrics: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics.update({
 				'intra_batch_diversity': None,
 				'inter_cycle_similarity': None,
@@ -213,8 +222,11 @@ def evaluate_cycle(
 			)
 			metrics['batch_avg_score_ratio'] = batch_avg_score_ratio
 
-		except Exception as e:
-			logger.warning(f"Error calculating discovery metrics: {e}")
+		except (ValueError, TypeError, ZeroDivisionError, KeyError) as e:
+			logger.warning(
+				f"Could not calculate discovery metrics: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics.update({
 				'top_10_discovery': None,
 				'top_100_discovery': None,
@@ -277,8 +289,11 @@ def evaluate_cycle(
 						'unlabeled_spearman_correlation': None
 					})
 
-		except Exception as e:
-			logger.warning(f"Error calculating unlabeled ranking metrics: {e}")
+		except (ValueError, TypeError, ZeroDivisionError, KeyError) as e:
+			logger.warning(
+				f"Could not calculate unlabeled ranking metrics: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics.update({
 				'unlabeled_top_100_overlap': None,
 				'unlabeled_top_1000_overlap': None,
@@ -294,8 +309,11 @@ def evaluate_cycle(
 				ground_truth_data, target_col, score_direction
 			)
 			metrics.update(gt_ef_metrics)
-		except Exception as e:
-			logger.warning(f"Error calculating ground truth enrichment factors: {e}")
+		except (ValueError, TypeError, ZeroDivisionError) as e:
+			logger.warning(
+				f"Could not calculate ground_truth_enrichment_factors: {e}. "
+				f"Setting to None. Check input data quality."
+			)
 			metrics.update({
 				'ground_truth_ef_5_0': None, 'ground_truth_ef_1_0': None,
 				'ground_truth_ef_0_5': None, 'ground_truth_ef_0_1': None
@@ -486,12 +504,11 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 			f.write(csv_content)
 		
 		logger.info(f"Exported {len(all_cycle_metrics)} cycles of enhanced metrics to {output_path}")
-	except Exception as e:
+	except (ValueError, TypeError, KeyError, OSError) as e:
 		logger.error(f"Error exporting enhanced metrics to CSV: {e}")
-		# Fallback to basic export
 		try:
 			metrics_df = pl.DataFrame(all_cycle_metrics)
 			metrics_df.write_csv(output_path)
 			logger.info(f"Exported {len(all_cycle_metrics)} cycles of basic metrics to {output_path}")
-		except Exception as fallback_e:
+		except (ValueError, TypeError, OSError) as fallback_e:
 			logger.error(f"Fallback CSV export also failed: {fallback_e}")
