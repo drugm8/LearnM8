@@ -171,7 +171,7 @@ class MCDropoutLearner(TorchLearner):
 
             return mean_predictions, uncertainties
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise LearnerError(
                 f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "

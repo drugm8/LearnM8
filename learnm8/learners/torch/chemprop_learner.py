@@ -315,7 +315,7 @@ class ChempropLearner(Learner):
 					else:
 						logger.warning(f"Error loading checkpoint: {e}. Training fresh model.")
 						self.model = None
-				except Exception as e:
+				except (ValueError, TypeError, OSError) as e:
 					logger.warning(f"Unexpected error loading checkpoint: {e}. Training fresh model.")
 					self.model = None
 
@@ -372,7 +372,7 @@ class ChempropLearner(Learner):
 				self.trainer.save_checkpoint(str(next_checkpoint_path))
 				logger.debug(f"Checkpoint saved: {next_checkpoint_path}")
 				self.current_checkpoint_path = next_checkpoint_path
-			except Exception as e:
+			except (OSError, RuntimeError) as e:
 				logger.error(f"Failed to save checkpoint to {next_checkpoint_path}: {e}")
 				# Don't raise - training succeeded, just checkpoint save failed
 
@@ -464,7 +464,7 @@ class ChempropLearner(Learner):
 			if context:
 				logger.debug(f"GPU memory cleanup: {context}")
 
-		except Exception as e:
+		except (RuntimeError, OSError, ImportError) as e:
 			logger.warning(f"GPU memory cleanup failed ({context}): {e}")
 
 	def _create_dataset(self,

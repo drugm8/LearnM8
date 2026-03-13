@@ -44,6 +44,7 @@ from learnm8.evaluation import evaluate_cycle
 from learnm8.utils.logging_formatters import format_cycle_metrics_table
 from learnm8.exceptions import (
     LearnerError, AcquisitionError, OracleError, PruningError, ConfigurationError,
+    FeatureExtractionError,
 )
 
 logger = logging.getLogger(__name__)
@@ -342,7 +343,9 @@ def execute_cycle(
                 logger.info(f"Training {learner.get_name()} on {len(labeled_df)} compounds ({featurizer})")
                 learner.train(training_features, training_targets)
                 logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
-        except Exception as e:
+        except (LearnerError, FeatureExtractionError):
+            raise
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"Training failed in cycle {cycle}: {e}")
             err = LearnerError(
                 f"Training failed in cycle {cycle}: {e}. "
@@ -422,7 +425,9 @@ def execute_cycle(
             all_valid_ids.extend(chunk_df['ID'].to_list())
             if all_uncertainties is not None and chunk_uncertainties is not None:
                 all_uncertainties.append(chunk_uncertainties)
-        except Exception as e:
+        except (LearnerError, FeatureExtractionError):
+            raise
+        except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f"Batch {batch_idx} prediction failed: {e}")
             err = LearnerError(
                 f"Prediction failed in cycle {cycle}, batch {batch_idx}/{n_batches}: {e}. "
@@ -591,7 +596,9 @@ def execute_cycle(
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
-    except Exception as e:
+    except OracleError:
+        raise
+    except (ValueError, RuntimeError, TypeError, OSError) as e:
         logger.error(f"Oracle measurement failed in cycle {cycle}: {e}")
         err = OracleError(
             f"Oracle measurement failed in cycle {cycle}: {e}. "
@@ -696,7 +703,7 @@ def execute_cycle(
 
                     metrics.update(eval_metrics)
                     logger.debug(f"Enhanced metrics with evaluation (Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%)")
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, ArithmeticError, KeyError, pl.exceptions.ColumnNotFoundError) as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
 
     evaluation_time = time.time() - evaluation_start_time
@@ -727,7 +734,7 @@ def execute_cycle(
 
     except ImportError:
         logger.debug("Rich not installed, skipping metrics table display")
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError) as e:
         logger.debug(f"Failed to display metrics table: {e}")
 
     # Step 16: Return Results
@@ -922,7 +929,9 @@ def _apply_pruning(
 
         return pruned_pool, pruning_stats
 
-    except Exception as e:
+    except PruningError:
+        raise
+    except (ValueError, RuntimeError, TypeError) as e:
         logger.error(f"Pruning failed with strategy '{strategy}': {e}")
         err = PruningError(
             f"Pruning failed with strategy '{strategy}': {e}. "
@@ -983,7 +992,7 @@ def _select_compounds(
     # Create acquisition instance
     try:
         acq_func = acq_class(score_direction=score_direction, **acquisition_params)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise ValueError(
             f"Failed to create acquisition function '{strategy}': {e}. "
             f"Check that the acquisition parameters are valid for this strategy."
@@ -1001,7 +1010,9 @@ def _select_compounds(
     # Select compounds
     try:
         selected_df = acq_func.select(pool, batch_size)
-    except Exception as e:
+    except AcquisitionError:
+        raise
+    except (ValueError, RuntimeError, TypeError) as e:
         raise AcquisitionError(
             f"Acquisition strategy '{strategy}' failed during selection: {e}. "
             f"Pool had {len(pool)} candidates. Check strategy parameters and "

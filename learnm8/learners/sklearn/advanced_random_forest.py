@@ -129,6 +129,6 @@ class AdvancedRandomForestLearner(SklearnLearner):
                 'total_nodes': np.sum(tree_nodes),
                 'oob_score': self.get_oob_score()
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, AttributeError) as e:
             logger.warning(f"Failed to get tree stats: {e}")
             return None

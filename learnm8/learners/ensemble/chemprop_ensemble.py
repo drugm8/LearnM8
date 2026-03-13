@@ -298,7 +298,7 @@ class ChempropEnsemble(EnsembleLearner):
 				logger = logging.getLogger(__name__)
 				logger.debug(f"GPU memory cleanup: {context}")
 
-		except Exception as e:
+		except (RuntimeError, OSError, ImportError) as e:
 			import logging
 			logger = logging.getLogger(__name__)
 			logger.warning(f"GPU memory cleanup failed ({context}): {e}")

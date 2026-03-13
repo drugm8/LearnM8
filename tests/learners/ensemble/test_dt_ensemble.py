@@ -158,7 +158,7 @@ class TestDTEnsemble:
 
         class MockBadLearner(Learner):
             def train(self, features, targets):
-                raise Exception("Training failed")
+                raise RuntimeError("Training failed")
             def predict(self, features):
                 return np.random.randn(len(features)), None
             def get_name(self):

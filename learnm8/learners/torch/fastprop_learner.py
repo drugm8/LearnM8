@@ -235,7 +235,7 @@ class FastpropLearner(Learner):
 
 			self._cleanup_gpu_memory("after training")
 
-		except Exception as e:
+		except (ValueError, RuntimeError, TypeError) as e:
 			logger.error(f"Failed to train {self.get_name()}: {e}")
 			raise LearnerError(f"Training failed: {e}") from e
 
@@ -298,7 +298,7 @@ class FastpropLearner(Learner):
 
 			return predictions, None
 
-		except Exception as e:
+		except (ValueError, RuntimeError, TypeError) as e:
 			logger.error(f"Failed to predict with {self.get_name()}: {e}")
 			raise LearnerError(f"Prediction failed: {e}") from e
 
@@ -352,5 +352,5 @@ class FastpropLearner(Learner):
 			if context:
 				logger.debug(f"GPU memory cleanup: {context}")
 
-		except Exception as e:
+		except (RuntimeError, OSError, ImportError) as e:
 			logger.warning(f"GPU memory cleanup failed ({context}): {e}")

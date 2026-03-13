@@ -122,7 +122,9 @@ class PythonOracle(Oracle):
         # Call oracle function
         try:
             result = self.oracle_function(compound_ids)
-        except Exception as e:
+        except OracleError:
+            raise
+        except (ValueError, RuntimeError, TypeError, OSError, KeyError) as e:
             raise OracleError(f"Oracle function failed: {e}") from e
 
         # Validate result - support both pandas and polars return values

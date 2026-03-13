@@ -94,7 +94,7 @@ class GaussianProcessLearner(SklearnLearner):
             logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
             return predictions, std
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise LearnerError(
                 f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
