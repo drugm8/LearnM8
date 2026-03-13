@@ -1,9 +1,12 @@
 """Data loading utilities for LearnM8 experiments."""
 
+import logging
 import polars as pl
 from pathlib import Path
 from typing import Tuple
 from learnm8.utils.file_loaders import load_compound_file
+
+logger = logging.getLogger(__name__)
 
 
 def validate_csv_columns(df: pl.DataFrame, required_columns: list, file_description: str) -> None:
@@ -42,20 +45,20 @@ def load_benchmark_data(data_path: str, target_col: str) -> Tuple[pl.DataFrame, 
     # Check for optional Activity column
     has_activity = 'Activity' in df.columns
     if has_activity:
-        print(f"Found Activity column - enrichment calculations will be performed")
+        logger.info("Found Activity column - enrichment calculations will be performed")
         # Validate Activity column is binary
         unique_values = df.get_column('Activity').drop_nulls().unique().to_list()
         if not set(unique_values).issubset({0, 1}):
-            print(f"Warning: Activity column should contain only 0 and 1, found: {unique_values}")
+            logger.warning("Activity column should contain only 0 and 1, found: %s", unique_values)
     else:
-        print(f"No Activity column found - enrichment calculations will be skipped")
+        logger.info("No Activity column found - enrichment calculations will be skipped")
 
     # For benchmark mode, compound pool and ground truth are the same
     compound_pool = df.select(['ID', 'SMILES'])
     ground_truth = df.clone()
 
-    print(f"Loaded {len(df)} compounds for benchmarking")
-    print(f"Target column: {target_col}")
+    logger.info("Loaded %d compounds for benchmarking", len(df))
+    logger.info("Target column: %s", target_col)
 
     return compound_pool, ground_truth
 
@@ -89,10 +92,10 @@ def load_run_data(compounds_path: str, oracle_path: str) -> pl.DataFrame:
 
     # Validate oracle file is Python
     if oracle_path.suffix != '.py':
-        print(f"Warning: Oracle file should have .py extension, got: {oracle_path.suffix}")
+        logger.warning("Oracle file should have .py extension, got: %s", oracle_path.suffix)
 
-    print(f"Loaded {len(compound_pool)} compounds for active learning")
-    print(f"Oracle file: {oracle_path}")
+    logger.info("Loaded %d compounds for active learning", len(compound_pool))
+    logger.info("Oracle file: %s", oracle_path)
 
     return compound_pool
 

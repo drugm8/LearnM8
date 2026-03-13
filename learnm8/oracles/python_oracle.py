@@ -2,10 +2,13 @@
 
 import importlib.util
 import inspect
+import logging
 import polars as pl
 from pathlib import Path
 from typing import List, Callable
 from learnm8.core.interfaces import Oracle
+
+logger = logging.getLogger(__name__)
 
 
 class PythonOracle(Oracle):
@@ -56,15 +59,15 @@ class PythonOracle(Oracle):
                 raise ValueError(f"No functions found in {self.oracle_path}")
             elif len(functions) == 1:
                 oracle_function = functions[0]
-                print(f"Using oracle function: {oracle_function.__name__}")
+                logger.info("Using oracle function: %s", oracle_function.__name__)
             else:
                 # Look for common oracle function names
                 common_names = ['oracle', 'oracle_function', 'measure', 'evaluate']
                 candidates = [f for f in functions if f.__name__ in common_names]
-                
+
                 if len(candidates) == 1:
                     oracle_function = candidates[0]
-                    print(f"Using oracle function: {oracle_function.__name__}")
+                    logger.info("Using oracle function: %s", oracle_function.__name__)
                 else:
                     function_names = [f.__name__ for f in functions]
                     raise ValueError(
@@ -120,6 +123,6 @@ class PythonOracle(Oracle):
         missing_ids = request_ids - result_ids
 
         if missing_ids:
-            print(f"Warning: Oracle did not return results for {len(missing_ids)} compounds")
+            logger.warning("Oracle did not return results for %d compounds", len(missing_ids))
 
         return result
