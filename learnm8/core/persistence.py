@@ -20,6 +20,7 @@ import polars as pl
 import numpy as np
 
 from .validation import ValidationResult
+from learnm8.exceptions import PersistenceError
 
 logger = logging.getLogger(__name__)
 
@@ -221,7 +222,7 @@ def save_results(
 
     except IOError as e:
         logger.error(f"Failed to save compounds_final.csv: {e}")
-        raise RuntimeError(f"Failed to save compounds_final.csv: {e}")
+        raise PersistenceError(f"Failed to save compounds_final.csv: {e}") from e
 
     try:
         metrics_df = pl.DataFrame(cycle_metrics)
@@ -266,7 +267,7 @@ def save_results(
 
     except IOError as e:
         logger.error(f"Failed to save cycle_metrics.csv: {e}")
-        raise RuntimeError(f"Failed to save cycle_metrics.csv: {e}")
+        raise PersistenceError(f"Failed to save cycle_metrics.csv: {e}") from e
 
     try:
         selection_history = []
@@ -336,7 +337,7 @@ def save_results(
 
     except IOError as e:
         logger.error(f"Failed to save selection_history.csv: {e}")
-        raise RuntimeError(f"Failed to save selection_history.csv: {e}")
+        raise PersistenceError(f"Failed to save selection_history.csv: {e}") from e
 
     if validation_result.invalid_compounds.height > 0:
         try:
@@ -380,7 +381,7 @@ def save_results(
 
     except IOError as e:
         logger.error(f"Failed to save config.json: {e}")
-        raise RuntimeError(f"Failed to save config.json: {e}")
+        raise PersistenceError(f"Failed to save config.json: {e}") from e
 
     logger.info(f"All results saved to {output_dir}")
     return saved_files

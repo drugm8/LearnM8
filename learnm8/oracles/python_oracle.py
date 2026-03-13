@@ -7,6 +7,7 @@ import polars as pl
 from pathlib import Path
 from typing import List, Callable
 from learnm8.core.interfaces import Oracle
+from learnm8.exceptions import OracleError
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class PythonOracle(Oracle):
         try:
             result = self.oracle_function(compound_ids)
         except Exception as e:
-            raise RuntimeError(f"Oracle function failed: {e}")
+            raise OracleError(f"Oracle function failed: {e}") from e
 
         # Validate result - support both pandas and polars return values
         if isinstance(result, pl.DataFrame):

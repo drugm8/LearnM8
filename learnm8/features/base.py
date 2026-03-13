@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from skfp.preprocessing import MolFromSmilesTransformer, ConformerGenerator
 from learnm8.core.interfaces import Featurizer
+from learnm8.exceptions import FeatureExtractionError
 
 logger = logging.getLogger(__name__)
 
@@ -124,13 +125,13 @@ class SkfpFeaturizer(Featurizer):
 
         except Exception as e:
             logger.error(f"Feature extraction failed: {e}")
-            raise RuntimeError(
+            raise FeatureExtractionError(
                 f"Feature extraction failed for {self.get_name()}. "
                 f"Check SMILES validity and conformer generation settings."
-            ) from e
+            ) from None
 
         if features is None or len(features) == 0:
-            raise RuntimeError(
+            raise FeatureExtractionError(
                 "No valid features generated. All SMILES may be invalid."
             )
 

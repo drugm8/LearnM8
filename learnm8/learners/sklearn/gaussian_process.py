@@ -10,6 +10,7 @@ import numpy as np
 
 # Base class import
 from ..base import SklearnLearner, _preprocess_features
+from learnm8.exceptions import LearnerError
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
@@ -76,7 +77,7 @@ class GaussianProcessLearner(SklearnLearner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise RuntimeError("Model must be trained before prediction")
+            raise LearnerError("Model must be trained before prediction")
 
         try:
             features, _ = _preprocess_features(
@@ -92,7 +93,7 @@ class GaussianProcessLearner(SklearnLearner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise RuntimeError(f"Prediction failed: {e}") from e
+            raise LearnerError(f"Prediction failed: {e}") from e
     
     def supports_uncertainty(self) -> bool:
         """Return True since GP naturally provides uncertainty estimates."""

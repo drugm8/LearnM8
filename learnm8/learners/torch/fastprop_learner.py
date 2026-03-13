@@ -11,6 +11,7 @@ from typing import Tuple, Optional
 import numpy as np
 
 from learnm8.core.interfaces import Learner
+from learnm8.exceptions import LearnerError
 
 import torch
 from torch.utils.data import TensorDataset
@@ -236,7 +237,7 @@ class FastpropLearner(Learner):
 
 		except Exception as e:
 			logger.error(f"Failed to train {self.get_name()}: {e}")
-			raise RuntimeError(f"Training failed: {e}") from e
+			raise LearnerError(f"Training failed: {e}") from e
 
 	def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 		"""Predict using trained Fastprop model.
@@ -252,7 +253,7 @@ class FastpropLearner(Learner):
 			RuntimeError: If model is not trained or prediction fails
 		"""
 		if not self.is_trained:
-			raise RuntimeError("Model must be trained before prediction")
+			raise LearnerError("Model must be trained before prediction")
 
 		logger.debug(f"Predicting with {self.get_name()} on {len(features)} samples")
 
@@ -299,7 +300,7 @@ class FastpropLearner(Learner):
 
 		except Exception as e:
 			logger.error(f"Failed to predict with {self.get_name()}: {e}")
-			raise RuntimeError(f"Prediction failed: {e}") from e
+			raise LearnerError(f"Prediction failed: {e}") from e
 
 	def get_name(self) -> str:
 		"""Return descriptive name for this learner."""

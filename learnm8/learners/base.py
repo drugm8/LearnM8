@@ -14,6 +14,7 @@ import numpy as np
 
 # Core imports
 from learnm8.core.interfaces import Learner
+from learnm8.exceptions import LearnerError
 
 import torch
 import torch.nn as nn
@@ -131,7 +132,7 @@ class SklearnLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
-            raise RuntimeError(f"Training failed: {e}") from e
+            raise LearnerError(f"Training failed: {e}") from e
     
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
@@ -147,7 +148,7 @@ class SklearnLearner(Learner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise RuntimeError("Model must be trained before prediction")
+            raise LearnerError("Model must be trained before prediction")
 
         logger.debug(f"Predicting with {self.get_name()} on {len(features)} samples")
 
@@ -170,7 +171,7 @@ class SklearnLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise RuntimeError(f"Prediction failed: {e}") from e
+            raise LearnerError(f"Prediction failed: {e}") from e
     
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
@@ -416,7 +417,7 @@ class TorchLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
-            raise RuntimeError(f"Training failed: {e}") from e
+            raise LearnerError(f"Training failed: {e}") from e
     
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
@@ -432,7 +433,7 @@ class TorchLearner(Learner):
             RuntimeError: If model is not trained or prediction fails
         """
         if not self.is_trained:
-            raise RuntimeError("Model must be trained before prediction")
+            raise LearnerError("Model must be trained before prediction")
 
         start_time = time.time()
 
@@ -463,7 +464,7 @@ class TorchLearner(Learner):
 
         except Exception as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
-            raise RuntimeError(f"Prediction failed: {e}") from e
+            raise LearnerError(f"Prediction failed: {e}") from e
     
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
@@ -489,7 +490,7 @@ class TorchLearner(Learner):
             path: Path to save model
         """
         if self.model is None:
-            raise RuntimeError("No model to save")
+            raise LearnerError("No model to save")
         
         state = {
             'model_state_dict': self.model.state_dict(),

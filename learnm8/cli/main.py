@@ -31,6 +31,7 @@ import polars as pl
 import yaml
 
 from learnm8.api import run_active_learning
+from learnm8.exceptions import ConfigurationError
 from learnm8.core.validation import validate_compound_pool
 from learnm8.core.config import parse_cycle_spec, CycleConfig
 from learnm8.acquisition import list_acquisition_functions
@@ -122,7 +123,7 @@ def load_config_file(config_path: Path) -> dict:
                 f"Unsupported config format: {suffix}. Use .yaml, .yml, or .json"
             )
     except Exception as e:
-        raise RuntimeError(f"Failed to parse config file: {e}") from e
+        raise ConfigurationError(f"Failed to parse config file: {e}") from e
 
 
 def get_predefined_schedule(name: str) -> list:

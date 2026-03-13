@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 from .ensemble import EnsembleLearner
 from ..torch.chemprop_learner import ChempropLearner
+from learnm8.exceptions import LearnerError
 
 
 class ChempropEnsemble(EnsembleLearner):
@@ -208,7 +209,7 @@ class ChempropEnsemble(EnsembleLearner):
 			raise ValueError("ChempropEnsemble requires SMILES strings")
 
 		if not self.is_trained:
-			raise RuntimeError("Ensemble must be trained before prediction")
+			raise LearnerError("Ensemble must be trained before prediction")
 
 		# Get predictions from each learner
 		predictions_list = []
@@ -240,7 +241,7 @@ class ChempropEnsemble(EnsembleLearner):
 			raise ValueError("ChempropEnsemble requires SMILES strings")
 
 		if not self.is_trained:
-			raise RuntimeError("Ensemble must be trained before prediction")
+			raise LearnerError("Ensemble must be trained before prediction")
 
 		individual_predictions = {}
 		for i, learner in enumerate(self.learners):

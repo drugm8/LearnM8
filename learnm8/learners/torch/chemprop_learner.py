@@ -9,6 +9,7 @@ from lightning import pytorch as pl
 
 from learnm8.core.interfaces import Learner
 from learnm8.core.resources import parse_device_for_lightning
+from learnm8.exceptions import LearnerError
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +399,7 @@ class ChempropLearner(Learner):
 			raise ValueError("ChempropLearner requires SMILES strings")
 
 		if not self.is_trained:
-			raise RuntimeError("Model must be trained before prediction")
+			raise LearnerError("Model must be trained before prediction")
 
 		if features is not None:
 			if self.training_feature_dim is None:
