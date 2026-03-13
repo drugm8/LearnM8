@@ -224,9 +224,10 @@ def calculate_multiple_enrichment_factors(scores: np.ndarray, labels: np.ndarray
             # Create key name (e.g., 5.0 -> ef_5, 0.5 -> ef_0_5)
             key = f"ef_{str(p).replace('.', '_')}"
             results[key] = ef_value
-        except Exception as e:
-            # Handle edge cases gracefully
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            logger = get_logger()
             key = f"ef_{str(p).replace('.', '_')}"
+            log_warning(logger, f"Could not calculate {key}: {e}. Setting to 0.0.")
             results[key] = 0.0
 
     return results
@@ -284,9 +285,10 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
             # Create key name with ground_truth prefix - use consistent naming with other EF functions
             key = f"ground_truth_ef_{str(p).replace('.', '_')}"
             results[key] = ef_value
-        except Exception as e:
-            # Handle edge cases gracefully
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            logger = get_logger()
             key = f"ground_truth_ef_{str(p).replace('.', '_')}"
+            log_warning(logger, f"Could not calculate {key}: {e}. Setting to None.")
             results[key] = None
 
     return results
