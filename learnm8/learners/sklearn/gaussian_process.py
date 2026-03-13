@@ -9,7 +9,7 @@ from typing import Tuple, Optional, List
 import numpy as np
 
 # Base class import
-from ..base import SklearnLearner
+from ..base import SklearnLearner, _preprocess_features
 
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
@@ -79,6 +79,13 @@ class GaussianProcessLearner(SklearnLearner):
             raise RuntimeError("Model must be trained before prediction")
 
         try:
+            features, _ = _preprocess_features(
+                features,
+                valid_feature_mask=self._valid_feature_mask,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=False
+            )
+
             predictions, std = self.model.predict(features, return_std=True)
             logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
             return predictions, std
