@@ -1,0 +1,23 @@
+[run]
+source = learnm8
+branch = True
+omit =
+    learnm8/__init__.py
+    learnm8/cli/__main__.py
+    learnm8/learners/sklearn/legacy/*
+    learnm8/acquisition/bitbirch.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__
+    raise NotImplementedError
+    pass
+    except ImportError
+show_missing = True
+precision = 1
+fail_under = 90
+
+[html]
+directory = htmlcov

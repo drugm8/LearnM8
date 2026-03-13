@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "learnm8"
+version = "0.10.0"
+description = "Active Learning for Molecular Screening - Modern Architecture with Polars"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "polars>=1.0.0",
+    "pyarrow>=15.0.0",
+    "pandas>=1.5.0",
+    "numpy>=1.20.0",
+    "scikit-learn>=1.0.0",
+    "rdkit>=2022.03.0",
+    "joblib>=1.0.0",
+    "rich>=10.0.0",
+    "h5py>=3.0.0",
+    "hdf5plugin>=3.0.0",
+    "pyyaml>=5.0.0",
+    "datamol>=0.12.0",
+    "matplotlib>=3.5.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.scripts]
+learnm8 = "learnm8.cli.main:main"
+
+[tool.setuptools]
+packages = {find = {}}
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["learnm8"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--strict-markers --disable-warnings -ra --tb=short"
+markers = [
+    "unit: Unit tests for individual components",
+    "integration: Integration tests for complete workflows",
+    "slow: Slow running tests (performance, large datasets)",
+    "property: Property-based tests using Hypothesis",
+    "scientific: Scientific validation tests",
+    "benchmark: Performance benchmark tests",
+    "molecular: Tests requiring molecular chemistry libraries (RDKit)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::FutureWarning",
+]
