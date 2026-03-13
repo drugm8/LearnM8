@@ -7,6 +7,7 @@ from learnm8.features.skfp_3d.usr import USRFeaturizer
 
 @pytest.mark.molecular
 @pytest.mark.integration
+@pytest.mark.slow
 class TestUSRFeaturizer:
     """Test USR (Ultrafast Shape Recognition) 3D featurizer."""
 

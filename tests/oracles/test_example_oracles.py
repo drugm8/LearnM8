@@ -6,6 +6,8 @@ import tempfile
 
 from examples.oracles import SimilarityOracle, Pharmacophore2DOracle
 
+pytestmark = [pytest.mark.unit, pytest.mark.molecular]
+
 try:
     from examples.oracles import CDPKitPharmacophoreOracle
     CDPKIT_AVAILABLE = True

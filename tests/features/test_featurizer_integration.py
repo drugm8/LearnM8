@@ -85,6 +85,7 @@ class TestExtractFeaturesAPI:
 
         assert np.array_equal(features_sequential, features_parallel)
 
+    @pytest.mark.slow
     def test_extract_features_with_3d_featurizer(self, small_real_compounds, tmp_path):
         """extract_features() works with 3D featurizers."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
@@ -96,6 +97,8 @@ class TestExtractFeaturesAPI:
 
 
 @pytest.mark.integration
+@pytest.mark.molecular
+@pytest.mark.slow
 class TestRunActiveLearningWithFeaturizers:
     """Test run_active_learning() with different featurizers."""
 
