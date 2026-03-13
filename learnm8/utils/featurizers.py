@@ -7,12 +7,14 @@ import os
 import polars as pl
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 import pickle
 import logging
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors, AllChem
 from joblib import Parallel, delayed
+
+logger = logging.getLogger(__name__)
 
 
 def smiles_to_morgan_fingerprint(smiles: str) -> np.ndarray:
@@ -221,11 +223,9 @@ def _compute_and_store_representations(
     compounds: pl.DataFrame,
     featurizer: str,
     results_dir: Path,
-    logger: Optional[logging.Logger] = None
 ) -> None:
     """Compute and store representations to file."""
-    if logger:
-        logger.info(f"Computing {featurizer} representations for {len(compounds)} compounds")
+    logger.info("Computing %s representations for %d compounds", featurizer, len(compounds))
 
     representations = {}
 
@@ -249,8 +249,7 @@ def _compute_and_store_representations(
     with open(representation_file, 'wb') as f:
         pickle.dump(representations, f)
 
-    if logger:
-        logger.info(f"Stored {featurizer} representations to {representation_file}")
+    logger.info("Stored %s representations to %s", featurizer, representation_file)
 
 
 def _load_representations(results_dir: Path, featurizer: str) -> Dict:
@@ -296,14 +295,12 @@ def precompute_representations(
     compounds: pl.DataFrame,
     featurizer: str,
     results_dir: Path,
-    logger: Optional[logging.Logger] = None
 ) -> None:
     """Precompute and store representations for all compounds."""
     representation_file = _get_representation_file(results_dir, featurizer)
 
     if representation_file.exists():
-        if logger:
-            logger.info(f"Representations already exist at {representation_file}")
+        logger.info("Representations already exist at %s", representation_file)
         return
 
-    _compute_and_store_representations(compounds, featurizer, results_dir, logger)
+    _compute_and_store_representations(compounds, featurizer, results_dir)
