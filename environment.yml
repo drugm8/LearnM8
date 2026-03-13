@@ -190,6 +190,8 @@ dependencies:
   - zipp
   - zlib
   - zstd
+  - ruff
+  - mypy
   - watchdog
   - pytorch-cuda=12.4
   - torchaudio
