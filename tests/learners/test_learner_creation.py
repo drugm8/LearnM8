@@ -63,7 +63,7 @@ class TestLearnerCreation:
             _create_learner('nonexistent_learner', random_state=42)
 
 
-@pytest.mark.unit
+@pytest.mark.slow
 class TestAPIWithEnsembles:
     """Test run_active_learning with ensemble learners."""
 

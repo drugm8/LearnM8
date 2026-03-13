@@ -17,43 +17,32 @@ pytest_plugins = [
     "tests.fixtures.master_dataframe",
     "tests.fixtures.performance",
     "tests.fixtures.utilities",
+    "tests.fixtures.features",
+    "tests.fixtures.trained_models",
 ]
 
 
-import warnings
+import pytest
 
-REQUIRED_MARKERS = {"unit", "integration", "slow", "molecular"}
+SPEED_MARKERS = {"unit", "integration", "slow"}
 
 
-def pytest_configure(config):
-    """Configure pytest markers and settings."""
-    config.addinivalue_line(
-        "markers", "unit: unit tests"
-    )
-    config.addinivalue_line(
-        "markers", "integration: integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "molecular: tests requiring RDKit"
-    )
-    config.addinivalue_line(
-        "markers", "slow: slow running tests"
-    )
+def pytest_xdist_auto_num_workers(config):
+    return 4
 
 
 def pytest_collection_modifyitems(config, items):
-    """Warn about tests missing required markers."""
+    """Enforce that every test has a speed marker (unit/integration/slow)."""
     unmarked = []
     for item in items:
         marker_names = {m.name for m in item.iter_markers()}
-        if not marker_names & REQUIRED_MARKERS:
+        if not marker_names & SPEED_MARKERS:
             unmarked.append(item.nodeid)
     if unmarked:
-        warnings.warn(
-            f"{len(unmarked)} test(s) missing required markers "
-            f"(unit/integration/slow/molecular):\n"
-            + "\n".join(f"  - {nid}" for nid in unmarked[:10])
-            + (f"\n  ... and {len(unmarked) - 10} more" if len(unmarked) > 10 else ""),
-            UserWarning,
-            stacklevel=1,
+        msg = (
+            f"{len(unmarked)} test(s) missing required speed markers "
+            f"(unit/integration/slow):\n"
+            + "\n".join(f"  - {nid}" for nid in unmarked[:20])
+            + (f"\n  ... and {len(unmarked) - 20} more" if len(unmarked) > 20 else "")
         )
+        pytest.exit(msg, returncode=4)

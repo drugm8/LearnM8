@@ -22,12 +22,12 @@ class TestAllFeaturizers:
 
     @pytest.mark.parametrize("featurizer_name", FEATURIZERS_2D)
     def test_featurizer_produces_output(self, featurizer_name, small_real_compounds):
-        smiles = small_real_compounds.get_column("SMILES").to_list()[:3]
+        smiles = small_real_compounds.get_column("SMILES").to_list()[:1]
         cls = FEATURIZER_REGISTRY[featurizer_name]
         featurizer = cls()
         features = featurizer.transform(smiles)
         assert features.ndim == 2
-        assert features.shape[0] == 3
+        assert features.shape[0] == 1
         assert features.shape[1] > 0
 
     @pytest.mark.slow
@@ -48,10 +48,10 @@ class TestAllFeaturizers:
     @pytest.mark.slow
     @pytest.mark.parametrize("featurizer_name", FEATURIZERS_3D)
     def test_featurizer_3d_produces_output(self, featurizer_name, small_real_compounds):
-        smiles = small_real_compounds.get_column("SMILES").to_list()[:3]
+        smiles = small_real_compounds.get_column("SMILES").to_list()[:1]
         cls = FEATURIZER_REGISTRY[featurizer_name]
         featurizer = cls()
         features = featurizer.transform(smiles)
         assert features.ndim == 2
-        assert features.shape[0] == 3
+        assert features.shape[0] == 1
         assert features.shape[1] > 0

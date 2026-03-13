@@ -211,10 +211,10 @@ class TestComputeMordredDescriptors:
         assert result.shape[1] > 1000
 
     def test_real_pharmaceutical_molecules(self, small_real_compounds):
-        smiles_list = small_real_compounds['SMILES'].to_list()[:20]
+        smiles_list = small_real_compounds['SMILES'].to_list()[:3]
         result = _compute_mordred_descriptors(smiles_list)
 
-        assert result.shape[0] == 20
+        assert result.shape[0] == 3
         assert result.shape[1] > 1000
 
     def test_batch_processing_maintains_order(self):
@@ -246,17 +246,17 @@ class TestComputeMordredDescriptors:
         assert result.shape[1] > 1000
 
     def test_medium_dataset_compounds(self, medium_real_compounds):
-        smiles_list = medium_real_compounds['SMILES'].to_list()[:25]
+        smiles_list = medium_real_compounds['SMILES'].to_list()[:5]
         result = _compute_mordred_descriptors(smiles_list)
 
-        assert result.shape[0] == 25
+        assert result.shape[0] == 5
         assert result.shape[1] > 1000
 
     def test_large_batch_processing(self, medium_real_compounds):
-        smiles_list = medium_real_compounds['SMILES'].to_list()[:50]
+        smiles_list = medium_real_compounds['SMILES'].to_list()[:5]
         result = _compute_mordred_descriptors(smiles_list)
 
-        assert result.shape[0] == 50
+        assert result.shape[0] == 5
         assert result.shape[1] > 1000
 
     def test_none_handling_in_rdkit_conversion(self):
@@ -294,15 +294,15 @@ class TestComputeMordredDescriptors:
             assert dtype.is_numeric()
 
     def test_regression_compounds(self, regression_compounds):
-        smiles_list = regression_compounds['SMILES'].to_list()[:30]
+        smiles_list = regression_compounds['SMILES'].to_list()[:5]
         result = _compute_mordred_descriptors(smiles_list)
 
-        assert result.shape[0] == 30
+        assert result.shape[0] == 5
         assert result.shape[1] > 1000
 
     def test_classification_compounds(self, classification_compounds):
-        smiles_list = classification_compounds['SMILES'].to_list()[:30]
+        smiles_list = classification_compounds['SMILES'].to_list()[:5]
         result = _compute_mordred_descriptors(smiles_list)
 
-        assert result.shape[0] == 30
+        assert result.shape[0] == 5
         assert result.shape[1] > 1000

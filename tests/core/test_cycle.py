@@ -25,7 +25,7 @@ class TestExecuteCycle:
             oracle=mock_oracle,
             target_col='Activity',
             strategy='random',
-            batch_fraction=0.1,
+            batch_fraction=0.2,
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
@@ -33,11 +33,11 @@ class TestExecuteCycle:
         )
 
         init_labeled = master_df.filter(pl.col('labeled_cycle') == 0)
-        assert len(init_labeled) == 10
+        assert len(init_labeled) == 1
         assert (init_labeled['status'] == 'labeled').all()
         assert cycle_0_metrics['cycle'] == 0
 
-        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.2)
 
         updated_df, metrics = execute_cycle(
             compounds_df=master_df,
@@ -53,13 +53,13 @@ class TestExecuteCycle:
         )
 
         cycle_1_labeled = updated_df.filter(pl.col('labeled_cycle') == 1)
-        assert len(cycle_1_labeled) == 10
+        assert len(cycle_1_labeled) == 1
 
         init_labeled = updated_df.filter(pl.col('labeled_cycle') == 0)
-        assert len(init_labeled) == 10
+        assert len(init_labeled) == 1
 
         total_labeled = (updated_df['status'] == 'labeled').sum()
-        assert total_labeled == 20
+        assert total_labeled == 2
 
         assert 'prediction_cycle_1' in updated_df.columns
         assert metrics['cycle'] == 1
@@ -88,8 +88,8 @@ class TestExecuteCycle:
             )
 
     def test_run_mode_basic_execution(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        initial_ids = sample_compounds['ID'].head(5).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.5, 0.7, 0.4, 0.6]))
+        initial_ids = sample_compounds['ID'].head(2).to_list()
+        initial_values = dict(zip(initial_ids, [0.3, 0.6]))
 
         master_df = initialize_master_dataframe(
             valid_compounds=sample_compounds,
@@ -138,8 +138,8 @@ class TestExecuteCycle:
             )
 
     def test_benchmark_mode_predicts_unlabeled_only(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        initial_ids = sample_compounds['ID'].head(5).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.5, 0.7, 0.4, 0.6]))
+        initial_ids = sample_compounds['ID'].head(2).to_list()
+        initial_values = dict(zip(initial_ids, [0.3, 0.6]))
 
         master_df = initialize_master_dataframe(
             valid_compounds=sample_compounds,
@@ -251,7 +251,7 @@ class TestExecuteCycle:
             )
 
     def test_batch_size_computation_with_fraction(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
-        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.4)
 
         updated_df, metrics = execute_cycle(
             compounds_df=sample_master_df,
@@ -262,11 +262,11 @@ class TestExecuteCycle:
             target_col='Activity',
             featurizer='morgan',
             cache_dir=tmp_path,
-            original_pool_size=100,
+            original_pool_size=5,
             mode='run'
         )
 
-        expected_batch_size = int(100 * 0.1)
+        expected_batch_size = int(5 * 0.4)
         assert metrics['selected_count'] == expected_batch_size
 
     def test_training_failure_raises_error(self, sample_master_df, mock_oracle, tmp_path):
@@ -492,7 +492,7 @@ class TestSelectCompounds:
         pool = pool.with_columns(
             pl.Series('prediction', np.random.rand(len(pool)))
         )
-        batch_size = 10
+        batch_size = 2
 
         selected_df = _select_compounds(
             pool,
@@ -509,7 +509,7 @@ class TestSelectCompounds:
         pool = pool.with_columns(
             pl.Series('prediction', np.random.rand(len(pool)))
         )
-        batch_size = 10
+        batch_size = 2
 
         selected_df = _select_compounds(
             pool,

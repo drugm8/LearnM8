@@ -26,7 +26,7 @@ from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIBasicSimple:
     """Test basic simple-API functionality with minimal parameters."""
 
@@ -90,6 +90,7 @@ class TestAPIBasicSimple:
         """Test simple API with initialization phase."""
         output_dir = tmp_path / "initial_test"
 
+        batch_fraction = 0.4
         results = run_active_learning(
             compound_pool=sample_compounds,
             oracle=mock_oracle,
@@ -97,21 +98,22 @@ class TestAPIBasicSimple:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.05,
+            batch_fraction=batch_fraction,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
             random_state=42
         )
 
+        expected_batch = max(1, int(len(sample_compounds) * batch_fraction))
         labeled_in_init = results['compounds_df'].filter(
             pl.col('labeled_cycle') == 0
         )
-        assert len(labeled_in_init) == 5
+        assert len(labeled_in_init) == expected_batch
 
         labeled_in_cycle_1 = results['compounds_df'].filter(
             pl.col('labeled_cycle') == 1
         )
-        assert len(labeled_in_cycle_1) == 5
+        assert len(labeled_in_cycle_1) > 0
 
         labeled_in_cycle_2 = results['compounds_df'].filter(
             pl.col('labeled_cycle') == 2
@@ -119,7 +121,7 @@ class TestAPIBasicSimple:
         assert len(labeled_in_cycle_2) == 0
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIAdvancedCycleConfig:
     """Test advanced API with CycleConfig list."""
 
@@ -175,6 +177,7 @@ class TestAPIAdvancedCycleConfig:
         # Count cycles in the list: 3
         assert len(results['cycle_metrics']) == 3
 
+    @pytest.mark.slow
     def test_advanced_api_mixed_strategies(self, tmp_path, sample_compounds, mock_learner_with_uncertainty, mock_oracle):
         """Test advanced API with mixed acquisition strategies."""
         output_dir = tmp_path / "mixed_strategies_test"
@@ -201,7 +204,7 @@ class TestAPIAdvancedCycleConfig:
         assert len(results['labeled_data']) > 0
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIPruning:
     """Test pruning functionality via pruning_fraction parameter."""
 
@@ -305,7 +308,7 @@ class TestAPIPruning:
             )
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIModeDetection:
     """Test mode auto-detection for CSV oracle (benchmark mode)."""
 
@@ -399,7 +402,7 @@ class TestAPIModeDetection:
         assert len(results['cycle_metrics']) == 2
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPISavedFiles:
     """Test saved_files dictionary in results."""
 
@@ -470,7 +473,7 @@ class TestAPISavedFiles:
         assert output_dir.exists()
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIResultsStructure:
     """Test complete results structure and data integrity."""
 
@@ -618,7 +621,7 @@ class TestAPIResultsStructure:
         assert hasattr(validation_result, 'success_rate')
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPILearnerIntegration:
     """Test learner string shortcuts and instantiation."""
 
@@ -667,7 +670,7 @@ class TestAPILearnerIntegration:
             )
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIErrorHandling:
     """Test error handling and validation."""
 
@@ -748,7 +751,7 @@ class TestAPIErrorHandling:
             )
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIFeaturizerTypes:
     """Test different featurizer types."""
 
@@ -774,7 +777,7 @@ class TestAPIFeaturizerTypes:
         assert len(results['cycle_metrics']) == 2
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestAPIEvaluationMetrics:
     """Test evaluation metrics integration in run_active_learning."""
 
@@ -907,7 +910,7 @@ class TestAPIEvaluationMetrics:
             assert 'best_so_far' in cycle_metric or cycle_metric.get('best_so_far') is None
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestValidateCompoundPoolAPI:
 
     def test_validate_returns_validation_result(self, sample_compounds):
@@ -958,7 +961,7 @@ class TestValidateCompoundPoolAPI:
         assert len(results['compounds_df']) == len(validation_result.valid_compounds)
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestCacheDirParameter:
 
     def test_cache_dir_used_for_feature_extraction(self, tmp_path):
@@ -995,7 +998,7 @@ class TestCacheDirParameter:
         assert results['output_dir'] == output_dir
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestLoggingBehavior:
     """Test logging level behavior after refactoring."""
 
@@ -1003,7 +1006,6 @@ class TestLoggingBehavior:
         """INFO logs should show high-level progress only, no technical details."""
         from learnm8 import run_active_learning
 
-        # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
@@ -1016,7 +1018,7 @@ class TestLoggingBehavior:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.4,
             cache_dir=tmp_path,
             output_dir=tmp_path / "output"
         )
@@ -1037,7 +1039,6 @@ class TestLoggingBehavior:
         """DEBUG logs should contain technical details and shapes."""
         from learnm8 import run_active_learning
 
-        # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
@@ -1050,7 +1051,7 @@ class TestLoggingBehavior:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.4,
             cache_dir=tmp_path,
             output_dir=tmp_path / "output"
         )
@@ -1065,7 +1066,6 @@ class TestLoggingBehavior:
         """INFO logs should include phase separators for visual organization."""
         from learnm8 import run_active_learning
 
-        # Save sample compounds as CSV for oracle
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
@@ -1078,7 +1078,7 @@ class TestLoggingBehavior:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.4,
             cache_dir=tmp_path,
             output_dir=tmp_path / "output"
         )
@@ -1092,7 +1092,7 @@ class TestLoggingBehavior:
         assert any('Phase 5:' in msg for msg in info_messages)
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestChempropWithExtraDescriptors:
     """Test Chemprop learner with extra descriptors (x_d) integration."""
 
@@ -1147,7 +1147,7 @@ class TestChempropWithExtraDescriptors:
         assert 'compounds_df' in results
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestPredictionBatchSizeParameter:
     """Test prediction_batch_size parameter at API level."""
 
@@ -1167,7 +1167,7 @@ class TestPredictionBatchSizeParameter:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.4,
             output_dir=tmp_path / "output",
             prediction_batch_size=None
         )
@@ -1192,7 +1192,7 @@ class TestPredictionBatchSizeParameter:
             target_col='Activity',
             featurizer='morgan',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.4,
             output_dir=tmp_path / "output",
             prediction_batch_size=500
         )

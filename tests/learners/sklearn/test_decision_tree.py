@@ -5,7 +5,6 @@ import numpy as np
 import polars as pl
 
 from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
-from learnm8.features.extraction import extract_features
 
 
 @pytest.mark.integration
@@ -33,7 +32,7 @@ class TestDecisionTreeLearner:
         assert learner.random_state == 123
         assert not learner.is_trained
 
-    def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
+    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -41,7 +40,7 @@ class TestDecisionTreeLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         targets = compounds['Activity'].to_numpy()
 
         learner.train(features, targets)
@@ -79,7 +78,7 @@ class TestDecisionTreeLearner:
         name = learner.get_name()
         assert "DecisionTree" in name
 
-    def test_feature_importance(self, learner, small_real_compounds, tmp_path):
+    def test_feature_importance(self, learner, small_real_compounds, small_real_morgan_features):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -89,12 +88,12 @@ class TestDecisionTreeLearner:
 
         assert learner.get_feature_importance() is None
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
 
         importance = learner.get_feature_importance()
         assert importance is not None
-        assert importance.shape[0] == features.shape[1]
+        assert importance.shape[0] == np.sum(learner._valid_feature_mask)
         assert np.all(importance >= 0)
         assert np.isclose(importance.sum(), 1.0)
 
@@ -110,7 +109,7 @@ class TestDecisionTreeLearner:
         with pytest.raises((ValueError, RuntimeError)):
             learner.train(features_1d, targets)
 
-    def test_deterministic_predictions(self, small_real_compounds, tmp_path):
+    def test_deterministic_predictions(self, small_real_compounds, small_real_morgan_features):
         """Test predictions are deterministic with same random_state."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -118,7 +117,7 @@ class TestDecisionTreeLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         targets = compounds['Activity'].to_numpy()
 
         learner1 = DecisionTreeLearner(random_state=42)
@@ -131,7 +130,7 @@ class TestDecisionTreeLearner:
 
         np.testing.assert_array_equal(pred1, pred2)
 
-    def test_max_depth_parameter(self, small_real_compounds, tmp_path):
+    def test_max_depth_parameter(self, small_real_compounds, small_real_morgan_features):
         """Test max_depth parameter affects model complexity."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -139,7 +138,7 @@ class TestDecisionTreeLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         targets = compounds['Activity'].to_numpy()
 
         learner_shallow = DecisionTreeLearner(max_depth=2, random_state=42)

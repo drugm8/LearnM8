@@ -58,16 +58,16 @@ def create_initialized_master_df(
 
 @pytest.fixture
 def sample_master_df(sample_compounds) -> pl.DataFrame:
-    """Create master DataFrame with 3 labeled compounds (indices 0-2).
+    """Create master DataFrame with 2 labeled compounds (indices 0-1).
 
-    Uses sample_compounds fixture as base.
+    Uses sample_compounds fixture as base (5 compounds).
     Depends on: sample_compounds from molecules.py
     """
     compounds = sample_compounds.clone()
 
-    initial_compounds = compounds.head(3)
+    initial_compounds = compounds.head(2)
     initial_ids = initial_compounds.get_column('ID').to_list()
-    initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
+    initial_values = dict(zip(initial_ids, [0.3, 0.6]))
 
     return create_initialized_master_df(
         valid_compounds=compounds,
@@ -90,8 +90,7 @@ def master_df_with_predictions(sample_master_df) -> pl.DataFrame:
 
     master_df = sample_master_df.clone()
 
-    # Add predictions for unlabeled compounds
-    unlabeled = master_df.filter(pl.col('status') == 'unlabeled').head(8)
+    unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
     unlabeled_ids = unlabeled.get_column('ID').to_list()
 
     np.random.seed(42)
@@ -120,11 +119,12 @@ def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
 
     master_df = sample_master_df.clone()
 
-    # Cycle 0
-    unlabeled = master_df.filter(pl.col('status') == 'unlabeled').head(8)
+    np.random.seed(42)
+
+    # Cycle 0: predict all unlabeled, label 1
+    unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
     unlabeled_ids = unlabeled.get_column('ID').to_list()
 
-    np.random.seed(42)
     predictions_0 = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
     uncertainties_0 = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
 
@@ -136,9 +136,8 @@ def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
         uncertainties=uncertainties_0
     )
 
-    # Label 2 compounds in cycle 0
-    selected_ids_0 = unlabeled_ids[:2]
-    target_values_0 = dict(zip(selected_ids_0, [0.45, 0.55]))
+    selected_ids_0 = unlabeled_ids[:1]
+    target_values_0 = dict(zip(selected_ids_0, [0.45]))
     master_df = update_status(
         df=master_df,
         compound_ids=selected_ids_0,
@@ -148,46 +147,31 @@ def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
         target_values=target_values_0
     )
 
-    # Cycle 1
-    unlabeled = master_df.filter(pl.col('status') == 'unlabeled').head(6)
+    # Cycle 1: predict remaining unlabeled, label 1
+    unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
     unlabeled_ids = unlabeled.get_column('ID').to_list()
 
-    predictions_1 = np.random.uniform(0.3, 0.9, len(unlabeled_ids))
-    uncertainties_1 = np.random.uniform(0.1, 0.25, len(unlabeled_ids))
+    if len(unlabeled_ids) > 0:
+        predictions_1 = np.random.uniform(0.3, 0.9, len(unlabeled_ids))
+        uncertainties_1 = np.random.uniform(0.1, 0.25, len(unlabeled_ids))
 
-    master_df = add_predictions(
-        df=master_df,
-        cycle=1,
-        compound_ids=unlabeled_ids,
-        predictions=predictions_1,
-        uncertainties=uncertainties_1
-    )
+        master_df = add_predictions(
+            df=master_df,
+            cycle=1,
+            compound_ids=unlabeled_ids,
+            predictions=predictions_1,
+            uncertainties=uncertainties_1
+        )
 
-    # Label 2 compounds in cycle 1
-    selected_ids_1 = unlabeled_ids[:2]
-    target_values_1 = dict(zip(selected_ids_1, [0.65, 0.75]))
-    master_df = update_status(
-        df=master_df,
-        compound_ids=selected_ids_1,
-        new_status='labeled',
-        cycle=1,
-        target_col='Activity',
-        target_values=target_values_1
-    )
-
-    # Cycle 2
-    unlabeled = master_df.filter(pl.col('status') == 'unlabeled').head(4)
-    unlabeled_ids = unlabeled.get_column('ID').to_list()
-
-    predictions_2 = np.random.uniform(0.4, 0.85, len(unlabeled_ids))
-    uncertainties_2 = np.random.uniform(0.1, 0.2, len(unlabeled_ids))
-
-    master_df = add_predictions(
-        df=master_df,
-        cycle=2,
-        compound_ids=unlabeled_ids,
-        predictions=predictions_2,
-        uncertainties=uncertainties_2
-    )
+        selected_ids_1 = unlabeled_ids[:1]
+        target_values_1 = dict(zip(selected_ids_1, [0.65]))
+        master_df = update_status(
+            df=master_df,
+            compound_ids=selected_ids_1,
+            new_status='labeled',
+            cycle=1,
+            target_col='Activity',
+            target_values=target_values_1
+        )
 
     return master_df

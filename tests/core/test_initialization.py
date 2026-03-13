@@ -112,7 +112,7 @@ class TestSelectInitialBatch:
             random_state=42
         )
 
-        expected_batch = int(np.ceil(100 * 0.1))
+        expected_batch = int(np.ceil(len(sample_compounds) * 0.1))
         labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
         assert len(labeled) == expected_batch
 
@@ -123,7 +123,7 @@ class TestSelectInitialBatch:
         assert (~labeled['Activity'].is_null()).all()
 
         unlabeled = updated_df.filter(pl.col('status') == STATUS_UNLABELED)
-        assert len(unlabeled) == 90
+        assert len(unlabeled) == len(sample_compounds) - expected_batch
 
         # Verify metrics structure
         assert metrics['cycle'] == 0
@@ -137,9 +137,9 @@ class TestSelectInitialBatch:
 
         test_cases = [
             (0.01, 1),
-            (0.05, 5),
-            (0.10, 10),
-            (0.23, 23),
+            (0.4, 2),
+            (0.6, 3),
+            (0.8, 4),
         ]
 
         for fraction, expected in test_cases:
@@ -214,7 +214,8 @@ class TestSelectInitialBatch:
             )
 
         labeled = updated_df.filter(pl.col('status') == STATUS_LABELED)
-        assert len(labeled) == 10
+        expected_batch = int(np.ceil(len(sample_compounds) * 0.1))
+        assert len(labeled) == expected_batch
 
     def test_empty_pool_raises_error(self, mock_oracle, tmp_path):
         """Test that empty compound pool raises error."""

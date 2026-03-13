@@ -45,18 +45,18 @@ class TestGetPredictionColumns:
     def test_get_prediction_columns_multiple_cycles(self, master_df_multi_cycle):
         pred_cols, unc_cols = get_prediction_columns(master_df_multi_cycle)
 
-        assert pred_cols == ['prediction_cycle_0', 'prediction_cycle_1', 'prediction_cycle_2']
-        assert unc_cols == ['uncertainty_cycle_0', 'uncertainty_cycle_1', 'uncertainty_cycle_2']
+        assert pred_cols == ['prediction_cycle_0', 'prediction_cycle_1']
+        assert unc_cols == ['uncertainty_cycle_0', 'uncertainty_cycle_1']
 
     def test_get_prediction_columns_with_uncertainties(self, sample_master_df):
         from learnm8.core.dataframe_ops import add_predictions
 
         master_df = sample_master_df.clone()
-        unlabeled = master_df.filter(pl.col('status') == 'unlabeled').head(5)
+        unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
         unlabeled_ids = unlabeled['ID'].to_list()
 
-        predictions = np.array([0.5, 0.6, 0.7, 0.8, 0.9])
-        uncertainties = np.array([0.1, 0.15, 0.2, 0.25, 0.3])
+        predictions = np.random.uniform(0.5, 0.9, len(unlabeled_ids))
+        uncertainties = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
 
         master_df = add_predictions(
             df=master_df,

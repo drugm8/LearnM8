@@ -18,7 +18,7 @@ class TestXGBoostLearner:
     def learner(self):
         """Create XGBoostLearner instance for testing."""
         return XGBoostLearner(n_estimators=10, random_state=42)
-    
+
     def test_initialization(self, learner):
         """Test learner initialization."""
         assert learner.n_estimators == 10
@@ -27,14 +27,14 @@ class TestXGBoostLearner:
         assert learner.random_state == 42
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
-    
-    def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
+
+    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
 
@@ -43,12 +43,11 @@ class TestXGBoostLearner:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
-            learner.predict(features)
-    
+            learner.predict(small_real_morgan_features)
+
     def test_get_name(self, learner):
         """Test name generation."""
         name = learner.get_name()
@@ -56,8 +55,8 @@ class TestXGBoostLearner:
         assert "n_estimators=10" in name
         assert "lr=0.1" in name
         assert "depth=6" in name
-    
-    def test_feature_importance(self, learner, small_real_compounds, tmp_path):
+
+    def test_feature_importance(self, learner, small_real_compounds, small_real_morgan_features):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -65,14 +64,14 @@ class TestXGBoostLearner:
 
         assert learner.get_feature_importance() is None
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
         importance = learner.get_feature_importance()
         assert importance is not None
         assert len(importance) > 0
         assert np.all(importance >= 0)
 
-    def test_booster_stats(self, learner, small_real_compounds, tmp_path):
+    def test_booster_stats(self, learner, small_real_compounds, small_real_morgan_features):
         """Test booster statistics retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -80,14 +79,14 @@ class TestXGBoostLearner:
 
         assert learner.get_booster_stats() is None
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
         stats = learner.get_booster_stats()
         if stats is not None:
             assert isinstance(stats, dict)
             assert 'num_boosted_rounds' in stats or 'num_features' in stats
 
-    def test_different_hyperparameters(self, tmp_path, small_real_compounds):
+    def test_different_hyperparameters(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different hyperparameters."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -101,7 +100,7 @@ class TestXGBoostLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
@@ -110,20 +109,20 @@ class TestXGBoostLearner:
         assert learner.max_depth == 3
         assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_single_compound(self, learner, tmp_path):
-        """Test with single compound."""
-        single_compound = pl.DataFrame({
-            'ID': ['COMP_001'],
-            'SMILES': ['CCO'],
-            'Activity': [0.5]
+    def test_edge_case_small_dataset(self, learner, tmp_path):
+        """Test with small diverse dataset."""
+        small_compounds = pl.DataFrame({
+            'ID': [f'COMP_{i:03d}' for i in range(5)],
+            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+            'Activity': [0.5, 0.3, 0.8, 0.2, 0.6]
         })
 
-        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
-        learner.train(features, single_compound['Activity'].to_numpy())
+        features = extract_features(small_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        learner.train(features, small_compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
-        assert len(predictions) == 1
-        assert np.isfinite(predictions[0])
+        assert len(predictions) == 5
+        assert np.all(np.isfinite(predictions))
 
     def test_large_dataset_handling(self, learner, tmp_path):
         """Test XGBoost efficiency with larger datasets."""
@@ -155,7 +154,7 @@ class TestXGBoostLearner:
 
         assert np.all(np.isfinite(predictions))
 
-    def test_regularization_parameters(self, tmp_path, small_real_compounds):
+    def test_regularization_parameters(self, small_real_compounds, small_real_morgan_features):
         """Test learner with regularization parameters."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -168,19 +167,19 @@ class TestXGBoostLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
-    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
+    def test_uncertainty_consistency(self, learner, small_real_compounds, small_real_morgan_features):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = learner.predict(features)

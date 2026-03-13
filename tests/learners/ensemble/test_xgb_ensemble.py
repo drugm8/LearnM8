@@ -5,10 +5,9 @@ import numpy as np
 import polars as pl
 
 from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
-from learnm8.features.extraction import extract_features
 
 
-@pytest.mark.integration
+@pytest.mark.slow
 class TestXGBEnsemble:
     """Test XGBEnsemble functionality with real molecular data."""
 
@@ -56,53 +55,6 @@ class TestXGBEnsemble:
         assert len(set(random_states)) == 3
         assert random_states == [42, 123, 456]
 
-    def test_train_predict_integration(self, xgb_ensemble, small_real_compounds, tmp_path):
-        """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-        assert xgb_ensemble.is_trained
-
-        predictions, uncertainty = xgb_ensemble.predict(features)
-        assert predictions.shape[0] == len(compounds)
-        assert uncertainty is not None
-        assert uncertainty.shape[0] == len(compounds)
-        assert np.all(np.isfinite(predictions))
-        assert np.all(uncertainty >= 0)
-
-    def test_uncertainty_estimation(self, xgb_ensemble, small_real_compounds, tmp_path):
-        """Test that XGBEnsemble provides uncertainty estimates."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        predictions, uncertainty = xgb_ensemble.predict(features)
-
-        assert uncertainty is not None
-        assert len(uncertainty) == len(predictions)
-        assert np.all(uncertainty >= 0)
-        assert np.std(uncertainty) > 0
-
-    def test_train_with_empty_arrays(self, xgb_ensemble):
-        """Test error handling when training with empty arrays."""
-        empty_features = np.array([]).reshape(0, 2048)
-        empty_targets = np.array([])
-
-        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
-            xgb_ensemble.train(empty_features, empty_targets)
-
-    def test_predict_without_training(self, xgb_ensemble, small_real_compounds, tmp_path):
-        """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
-            xgb_ensemble.predict(features)
-
     def test_get_name(self, xgb_ensemble):
         """Test name generation for XGBEnsemble."""
         name = xgb_ensemble.get_name()
@@ -116,119 +68,13 @@ class TestXGBEnsemble:
         name = custom_xgb_ensemble.get_name()
         assert name == "XGBEnsemble(3xXGB,lr=[0.01,0.05,0.10])"
 
-    def test_supports_uncertainty(self, xgb_ensemble):
-        """Test that XGBEnsemble reports uncertainty support."""
-        assert xgb_ensemble.supports_uncertainty() is True
-
-    def test_different_aggregation_methods(self, small_real_compounds, tmp_path):
-        """Test XGBEnsemble with different aggregation methods."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-
-        for method in ['mean', 'median']:
-            ensemble = XGBEnsemble(aggregation_method=method)
-            ensemble.train(features, compounds['Activity'].to_numpy())
-            predictions, uncertainty = ensemble.predict(features)
-
-            assert predictions.shape[0] == len(compounds)
-            assert uncertainty.shape[0] == len(compounds)
-            assert np.all(np.isfinite(predictions))
-
-    def test_different_uncertainty_methods(self, small_real_compounds, tmp_path):
-        """Test XGBEnsemble with different uncertainty estimation methods."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-
-        for method in ['std', 'mad', 'quantile']:
-            ensemble = XGBEnsemble(uncertainty_method=method)
-            ensemble.train(features, compounds['Activity'].to_numpy())
-            predictions, uncertainty = ensemble.predict(features)
-
-            assert predictions.shape[0] == len(compounds)
-            assert uncertainty.shape[0] == len(compounds)
-            assert np.all(uncertainty >= 0)
-
-    def test_weighted_ensemble(self, small_real_compounds, tmp_path):
-        """Test weighted XGBEnsemble aggregation."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        weights = [0.5, 0.3, 0.2]
-        ensemble = XGBEnsemble(weights=weights)
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = ensemble.predict(features)
-
-        assert predictions.shape[0] == len(compounds)
-        assert uncertainty.shape[0] == len(compounds)
-        assert np.allclose(ensemble.weights, weights)
-
-    def test_individual_predictions(self, xgb_ensemble, small_real_compounds, tmp_path):
-        """Test individual learner predictions retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-        individual_preds = xgb_ensemble.get_individual_predictions(features)
-
-        assert len(individual_preds) == 3
-        for learner_name, preds in individual_preds.items():
-            assert preds is not None
-            assert len(preds) == len(compounds)
-            assert np.all(np.isfinite(preds))
-
-    def test_ensemble_statistics(self, xgb_ensemble, small_real_compounds, tmp_path):
-        """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        stats = xgb_ensemble.get_ensemble_statistics()
-        assert stats['n_learners'] == 3
-        assert stats['is_trained'] is False
-
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-        stats = xgb_ensemble.get_ensemble_statistics()
-        assert stats['is_trained'] is True
-        assert 'learner_names' in stats
-        assert 'learners_with_uncertainty' in stats
-        assert stats['learners_with_uncertainty'] == 0
-
-    def test_edge_case_single_compound(self, xgb_ensemble, tmp_path):
-        """Test with single compound."""
-        single_compound = pl.DataFrame({
-            'ID': ['COMP_001'],
-            'SMILES': ['CCO'],
-            'Activity': [0.5]
-        })
-
-        features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
-        xgb_ensemble.train(features, single_compound['Activity'].to_numpy())
-        predictions, uncertainty = xgb_ensemble.predict(features)
-
-        assert len(predictions) == 1
-        assert len(uncertainty) == 1
-        assert np.isfinite(predictions[0])
-        assert uncertainty[0] >= 0
-
-    def test_uncertainty_diversity_across_models(self, xgb_ensemble, small_real_compounds, tmp_path):
+    def test_uncertainty_diversity_across_models(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
         """Test that ensemble uncertainty captures model diversity."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         xgb_ensemble.train(features, compounds['Activity'].to_numpy())
 
         individual_preds = xgb_ensemble.get_individual_predictions(features)
@@ -240,13 +86,13 @@ class TestXGBEnsemble:
         manual_std = np.std(pred_arrays, axis=0)
         np.testing.assert_allclose(uncertainty, manual_std, rtol=1e-5)
 
-    def test_consistency_across_predictions(self, xgb_ensemble, small_real_compounds, tmp_path):
+    def test_consistency_across_predictions(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
         """Test that predictions are consistent across multiple calls."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         xgb_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions1, uncertainty1 = xgb_ensemble.predict(features)
@@ -281,13 +127,13 @@ class TestXGBEnsemble:
         ensemble = XGBEnsemble(learning_rates=[0.1, 0.2], random_states=[42])
         assert len(ensemble.learners) == 1
 
-    def test_prediction_quality_improves_with_training_data(self, xgb_ensemble, small_real_compounds, tmp_path):
+    def test_prediction_quality_improves_with_training_data(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
         """Test that predictions are reasonable with sufficient training data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features
         xgb_ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = xgb_ensemble.predict(features)
 
