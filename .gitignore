@@ -114,3 +114,9 @@ validation/uncertainty_acquisition/generate_ucb_notebook.py
 validation/VALIDATION_ALTERNATIVES.md
 validation/reports/*
 tests/test_representations/.representations/
+
+# Worktrees
+.worktrees/
+
+# ADR template
+docs/decisions/TEMPLATE.md
