@@ -80,5 +80,5 @@ def validate_cycle_spec(cycle_spec: str) -> tuple[bool, str]:
                 return False, f"Invalid batch fraction {fraction}, must be between 0 and 1"
         
         return True, ""
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         return False, f"Invalid cycle specification: {str(e)}"

@@ -166,11 +166,11 @@ def cache_features(default_cache_dir: Path) -> Callable:
                     try:
                         logger.warning(f"Attempting to delete corrupted cache file: {cache_file}")
                         cache_file.unlink()
-                    except Exception as unlink_error:
+                    except OSError as unlink_error:
                         logger.warning(f"Failed to delete corrupted cache file: {unlink_error}")
 
                 return func(smiles_list, featurizer, *args, **kwargs)
-            except Exception as e:
+            except (ValueError, RuntimeError, TypeError, KeyError) as e:
                 logger.warning(f"Unexpected cache operation error: {e}. Falling back to direct computation.")
                 return func(smiles_list, featurizer, *args, **kwargs)
 

@@ -117,7 +117,7 @@ class EnsembleLearner(Learner):
             try:
                 logger.debug(f"Training ensemble member {i+1}/{len(self.learners)}: {learner.get_name()}")
                 learner.train(features, targets)
-            except Exception as e:
+            except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError, LearnerError) as e:
                 logger.error(f"Failed to train learner {learner.get_name()}: {e}")
                 failed_learners.append((i, learner.get_name(), str(e)))
 
@@ -173,7 +173,7 @@ class EnsembleLearner(Learner):
                 try:
                     pred, _ = learner.predict(features)
                     predictions_list.append(pred)
-                except Exception as e:
+                except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError, LearnerError) as e:
                     logger.warning(f"Learner {learner.get_name()} failed to predict: {e}")
                     failed_predictions.append(i)
 
@@ -199,7 +199,9 @@ class EnsembleLearner(Learner):
 
             return ensemble_predictions, uncertainties
 
-        except Exception as e:
+        except LearnerError:
+            raise
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise LearnerError(
                 f"Ensemble prediction failed for {self.get_name()}: {e}. "
@@ -324,7 +326,7 @@ class EnsembleLearner(Learner):
             try:
                 pred, _ = learner.predict(features)
                 individual_predictions[f"{learner.get_name()}_{i}"] = pred
-            except Exception as e:
+            except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError, LearnerError) as e:
                 logger.warning(f"Failed to get predictions from {learner.get_name()}_{i}: {e}")
                 individual_predictions[f"{learner.get_name()}_{i}"] = None
 

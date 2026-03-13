@@ -96,7 +96,7 @@ def create_pruning_strategy(strategy_name: str,
 
     try:
         return strategy_class(**parameters)
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise ValueError(
             f"Failed to create pruning strategy '{strategy_name}' with parameters {parameters}: {e}. "
             f"Valid parameters: pruning_fraction (0.0-0.9), score_direction ('higher'/'lower')."

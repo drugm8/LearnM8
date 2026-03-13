@@ -61,7 +61,7 @@ def _validate_smiles(smiles: str) -> Tuple[bool, str, str]:
 
         return True, std_smiles, ""
 
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, AttributeError, OSError) as e:
         return False, '', str(e)
 
 

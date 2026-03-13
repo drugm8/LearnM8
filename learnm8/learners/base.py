@@ -144,14 +144,14 @@ class SklearnLearner(Learner):
 
         except LearnerError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
             raise LearnerError(
                 f"Training failed for {self.get_name()} with {features.shape[0]} samples: {e}. "
                 f"Check that the training data is valid, the featurizer is compatible "
                 f"with the learner, and there are enough labeled compounds."
             ) from e
-    
+
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
 
@@ -193,7 +193,7 @@ class SklearnLearner(Learner):
 
         except LearnerError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise LearnerError(
                 f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
@@ -454,7 +454,7 @@ class TorchLearner(Learner):
 
         except LearnerError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f"Failed to train {self.get_name()}: {e}")
             raise LearnerError(
                 f"Training failed for {self.get_name()} on device '{self.device}' "
@@ -462,7 +462,7 @@ class TorchLearner(Learner):
                 f"Check that the training data is valid, the featurizer is compatible "
                 f"with the learner, and there are enough labeled compounds."
             ) from e
-    
+
     def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix.
 
@@ -512,7 +512,7 @@ class TorchLearner(Learner):
 
         except LearnerError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f"Failed to predict with {self.get_name()}: {e}")
             raise LearnerError(
                 f"Prediction failed for {self.get_name()} on {len(features)} samples "

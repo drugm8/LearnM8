@@ -122,7 +122,7 @@ def load_config_file(config_path: Path) -> dict:
             raise ValueError(
                 f"Unsupported config format: {suffix}. Use .yaml, .yml, or .json"
             )
-    except Exception as e:
+    except (ValueError, TypeError, OSError, KeyError) as e:
         raise ConfigurationError(f"Failed to parse config file: {e}") from e
 
 
@@ -646,7 +646,7 @@ def cmd_list(args: argparse.Namespace):
                         'descriptors': 'Mordred molecular descriptors'
                     }.get(name, '')
                     table.add_row(name, "2D", str(dim), desc)
-                except Exception:
+                except (ValueError, RuntimeError, TypeError, AttributeError):
                     table.add_row(name, "2D", "N/A", "")
 
         # Add 3D featurizers
@@ -662,7 +662,7 @@ def cmd_list(args: argparse.Namespace):
                         'e3fp': 'Extended 3D fingerprints'
                     }.get(name, '')
                     table.add_row(name, "3D", str(dim), desc)
-                except Exception:
+                except (ValueError, RuntimeError, TypeError, AttributeError):
                     table.add_row(name, "3D", "N/A", "")
 
         console.print(table)

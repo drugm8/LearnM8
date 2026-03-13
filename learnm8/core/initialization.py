@@ -206,7 +206,7 @@ def calculate_initialization_metrics(
             metrics.update(eval_metrics)
             logger.debug(f"Cycle 0 enhanced metrics: Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%")
 
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, ArithmeticError) as e:
             logger.warning(f"Failed to calculate enhanced evaluation metrics for cycle 0: {e}")
 
     return metrics
@@ -344,7 +344,7 @@ def select_initial_batch(
         measurements = oracle.measure(selected_compounds, [target_col])
     except OracleError:
         raise
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError, OSError) as e:
         logger.error(f"Oracle measurement failed during initialization: {e}")
         raise OracleError(
             f"Oracle measurement failed during initialization (cycle 0) "

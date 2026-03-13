@@ -131,7 +131,7 @@ class SkfpFeaturizer(Featurizer):
 
         except FeatureExtractionError:
             raise
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f"Feature extraction failed: {e}")
             raise FeatureExtractionError(
                 f"Feature extraction failed for {self.get_name()} on "

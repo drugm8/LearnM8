@@ -45,7 +45,7 @@ class CSVOracle(Oracle):
                             self.ground_truth = self.ground_truth.with_columns(
                                 numeric_col.alias(column)
                             )
-                    except Exception:
+                    except (ValueError, TypeError):
                         # Keep as string if conversion fails
                         pass
 

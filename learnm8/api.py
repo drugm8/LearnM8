@@ -243,7 +243,7 @@ def _create_learner(
             logger.debug(f"Creating {learner_class.__name__} without random state parameter")
             return learner_class(**kwargs)
 
-    except Exception as e:
+    except (ValueError, TypeError, ImportError, RuntimeError) as e:
         raise ConfigurationError(
             f"Failed to instantiate learner '{learner_str}' ({learner_class.__name__}): {e}. "
             f"Check that all required dependencies are installed and parameters are valid."
@@ -903,7 +903,7 @@ def run_active_learning(
                     f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
                 )
                 raise
-            except Exception as e:
+            except (ValueError, RuntimeError, TypeError, OSError) as e:
                 logger.error(f"Cycle {cycle_num} failed: {e}")
                 err = LearnM8Error(
                     f"Cycle {cycle_num} of {total_cycles} failed: {e}. "

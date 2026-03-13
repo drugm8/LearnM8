@@ -278,7 +278,7 @@ class TestComputeMordredDescriptors:
 
         smiles_list = ['CCO', 'CCC']
 
-        with patch.object(Chem, 'MolFromSmiles', side_effect=[Exception('Test error'), Chem.MolFromSmiles('CCC')]):
+        with patch.object(Chem, 'MolFromSmiles', side_effect=[ValueError('Test error'), Chem.MolFromSmiles('CCC')]):
             result = _compute_mordred_descriptors(smiles_list)
 
             assert result.shape[0] == 2

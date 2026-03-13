@@ -165,7 +165,7 @@ def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
             if mol is not None:
                 mols.append(mol)
                 valid_indices.append(i)
-        except Exception:
+        except (ValueError, RuntimeError, TypeError):
             # Skip invalid molecules
             continue
 

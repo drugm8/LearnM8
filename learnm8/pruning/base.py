@@ -201,7 +201,9 @@ class DesignSpacePruner(ABC):
 
             return pruned_compounds
 
-        except Exception as e:
+        except PruningError:
+            raise
+        except (ValueError, RuntimeError, TypeError) as e:
             raise PruningError(f"Failed to prune compounds: {e}") from e
 
 

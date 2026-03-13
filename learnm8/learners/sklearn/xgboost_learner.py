@@ -111,6 +111,6 @@ class XGBoostLearner(SklearnLearner):
                 'num_features': booster.num_features(),
                 'objective': self.model.objective
             }
-        except Exception as e:
+        except (ValueError, RuntimeError, TypeError, AttributeError) as e:
             logger.warning(f"Failed to get booster stats: {e}")
             return None
