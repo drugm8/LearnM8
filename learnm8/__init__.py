@@ -18,6 +18,14 @@ __version__ = "1.0.0"
 
 from .api import run_active_learning
 
+# Exceptions and warnings
+from .exceptions import (
+    LearnM8Error, ConfigurationError, ValidationError,
+    FeatureExtractionError, LearnerError, AcquisitionError,
+    OracleError, PersistenceError, PruningError,
+    LearnM8Warning, ConvergenceWarning, DataConversionWarning,
+)
+
 # Core interfaces (maintained for component creation)
 from .core.interfaces import Learner, Oracle
 
@@ -56,6 +64,12 @@ from .oracles.python_oracle import PythonOracle
 
 
 __all__ = [
+    # Exceptions and warnings
+    'LearnM8Error', 'ConfigurationError', 'ValidationError',
+    'FeatureExtractionError', 'LearnerError', 'AcquisitionError',
+    'OracleError', 'PersistenceError', 'PruningError',
+    'LearnM8Warning', 'ConvergenceWarning', 'DataConversionWarning',
+
     # Main functional API
     'run_active_learning',
 
