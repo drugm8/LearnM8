@@ -1,10 +1,37 @@
 """Tests for FastpropEnsemble implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
+from learnm8.exceptions import ConfigurationError
 from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
+
+
+@pytest.mark.unit
+class TestFastpropEnsembleUnit:
+    """Fast unit tests for FastpropEnsemble constructor and validation."""
+
+    def test_fnn_layers_zero_raises(self):
+        with pytest.raises(ConfigurationError, match='fnn_layers >= 1'):
+            FastpropEnsemble(fnn_layers=0, hidden_size=64, max_epochs=3, device='cpu')
+
+    def test_val_fraction_forwarded(self):
+        ensemble = FastpropEnsemble(val_fraction=0.2, fnn_layers=1, hidden_size=64, device='cpu')
+        for learner in ensemble.learners:
+            assert learner.val_fraction == 0.2
+
+    def test_default_hidden_size(self):
+        ensemble = FastpropEnsemble()
+        assert ensemble.hidden_size == 300
+        for learner in ensemble.learners:
+            assert learner.hidden_size == 300
+
+    def test_default_val_fraction(self):
+        ensemble = FastpropEnsemble()
+        assert ensemble.val_fraction == 0.1
+        for learner in ensemble.learners:
+            assert learner.val_fraction == 0.1
 
 
 @pytest.mark.slow
@@ -95,7 +122,7 @@ class TestFastpropEnsemble:
         features = small_real_morgan_features
         fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
 
-        predictions, uncertainty = fastprop_ensemble.predict(features)
+        _predictions, uncertainty = fastprop_ensemble.predict(features)
 
         assert uncertainty is not None
         assert len(uncertainty) == len(compounds)
@@ -275,7 +302,7 @@ class TestFastpropEnsemble:
         individual_preds = fastprop_ensemble.get_individual_predictions(features)
 
         assert len(individual_preds) == 3
-        for learner_name, preds in individual_preds.items():
+        for _learner_name, preds in individual_preds.items():
             assert preds is not None
             assert len(preds) == len(compounds)
             assert np.all(np.isfinite(preds))
@@ -315,7 +342,7 @@ class TestFastpropEnsemble:
 
         features = small_real_morgan_features
         fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = fastprop_ensemble.predict(features)
+        _predictions, uncertainty = fastprop_ensemble.predict(features)
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
@@ -356,9 +383,9 @@ class TestFastpropEnsemble:
         features = small_real_morgan_features
 
         architectures = [
-            {'fnn_layers': 0, 'hidden_size': 64},
             {'fnn_layers': 1, 'hidden_size': 64},
-            {'fnn_layers': 2, 'hidden_size': 128}
+            {'fnn_layers': 2, 'hidden_size': 128},
+            {'fnn_layers': 3, 'hidden_size': 256},
         ]
 
         for arch in architectures:
