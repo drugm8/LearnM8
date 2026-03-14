@@ -1,6 +1,5 @@
 """Decision Tree ensemble learner for LearnM8 framework."""
 
-from typing import List, Optional
 from .ensemble import EnsembleLearner
 from ..sklearn.decision_tree import DecisionTreeLearner
 
@@ -9,8 +8,8 @@ class DTEnsemble(EnsembleLearner):
     """Ensemble of 3 Decision Tree learners with different max depths."""
     
     def __init__(self,
-                 max_depths: Optional[List[int]] = None,
-                 random_states: Optional[List[int]] = None,
+                 max_depths: list[int] | None = None,
+                 random_states: list[int] | None = None,
                  **kwargs):
         """Initialize DT ensemble.
 

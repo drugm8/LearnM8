@@ -1,4 +1,3 @@
-from typing import Tuple, Optional, List
 from pathlib import Path
 import numpy as np
 import logging
@@ -95,7 +94,7 @@ class ChempropLearner(Learner):
 				 dropout: float = 0.0,
 				 max_epochs: int = 50,
 				 batch_size: int = 32,
-				 predict_batch_size: Optional[int] = None,
+				 predict_batch_size: int | None = None,
 				 precision: str = 'auto',
 				 pin_memory: bool = True,
 				 learning_rate: float = 1e-4,
@@ -107,7 +106,7 @@ class ChempropLearner(Learner):
 				 early_stopping_min_delta: float = 0.0,
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,
-				 checkpoint_dir: Optional[Path] = None,
+				 checkpoint_dir: Path | None = None,
 				 enable_aggressive_gc: bool = True):
 		self.message_hidden_dim = message_hidden_dim
 		self.depth = depth
@@ -148,7 +147,7 @@ class ChempropLearner(Learner):
 		# Fine-tuning configuration
 		self.enable_fine_tuning = enable_fine_tuning
 		self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
-		self.current_checkpoint_path: Optional[Path] = None
+		self.current_checkpoint_path: Path | None = None
 		self.cycle_counter = 0
 
 		# Memory management configuration
@@ -194,9 +193,9 @@ class ChempropLearner(Learner):
 		return True
 
 	def train(self,
-			  features: Optional[np.ndarray],
+			  features: np.ndarray | None,
 			  targets: np.ndarray,
-			  smiles: Optional[List[str]] = None) -> None:
+			  smiles: list[str] | None = None) -> None:
 		"""Train single Chemprop model with optional early stopping.
 
 		Args:
@@ -390,9 +389,9 @@ class ChempropLearner(Learner):
 		self._cleanup_gpu_memory("after training")
 
 	def predict(self,
-				features: Optional[np.ndarray],
-				smiles: Optional[List[str]] = None
-				) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+				features: np.ndarray | None,
+				smiles: list[str] | None = None
+				) -> tuple[np.ndarray, np.ndarray | None]:
 		"""Predict on SMILES strings (no uncertainty for single model).
 
 		Args:
@@ -477,7 +476,7 @@ class ChempropLearner(Learner):
 			logger.warning(f"GPU memory cleanup failed ({context}): {e}")
 
 	def _create_dataset(self,
-					   smiles: List[str],
+					   smiles: list[str],
 					   targets: np.ndarray
 					   ) -> data.MoleculeDataset:
 		"""Create Chemprop dataset from SMILES and targets."""
@@ -489,7 +488,7 @@ class ChempropLearner(Learner):
 		return data.MoleculeDataset(datapoints)
 
 	def _create_dataset_with_descriptors(self,
-										 smiles: List[str],
+										 smiles: list[str],
 										 targets: np.ndarray,
 										 descriptors: np.ndarray
 										 ) -> data.MoleculeDataset:
@@ -583,8 +582,8 @@ class ChempropLearner(Learner):
 		return mpnn
 
 	def _predict_model(self,
-					   smiles: List[str],
-					   descriptors: Optional[np.ndarray] = None
+					   smiles: list[str],
+					   descriptors: np.ndarray | None = None
 					   ) -> np.ndarray:
 		"""Get predictions from single model.
 

@@ -9,12 +9,12 @@ See: docs/polars_patterns.md for common patterns.
 """
 
 import polars as pl
-from typing import Dict, Any
+from typing import Any
 
 
 def map_values_via_join(
     df: pl.DataFrame,
-    mapping: Dict[str, Any],
+    mapping: dict[str, Any],
     key_column: str,
     target_column: str
 ) -> pl.DataFrame:

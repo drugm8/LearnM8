@@ -5,8 +5,7 @@ for all major components in the LearnM8 system.
 """
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, List, Dict, Any
-from pathlib import Path
+from typing import Any
 import polars as pl
 import numpy as np
 import hashlib
@@ -22,7 +21,7 @@ class Oracle(ABC):
     """
     
     @abstractmethod
-    def measure(self, compounds: pl.DataFrame, properties: List[str]) -> pl.DataFrame:
+    def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
         Measure properties for given compounds.
 
@@ -62,7 +61,7 @@ class Learner(ABC):
     def train(self,
               features: np.ndarray,
               targets: np.ndarray,
-              smiles: Optional[List[str]] = None) -> None:
+              smiles: list[str] | None = None) -> None:
         """
         Train the model on feature matrix or SMILES.
 
@@ -80,8 +79,8 @@ class Learner(ABC):
     @abstractmethod
     def predict(self,
                 features: np.ndarray,
-                smiles: Optional[List[str]] = None
-                ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+                smiles: list[str] | None = None
+                ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Predict on feature matrix or SMILES.
 
@@ -203,7 +202,7 @@ class Featurizer(ABC):
     """
 
     @abstractmethod
-    def transform(self, smiles_list: List[str]) -> np.ndarray:
+    def transform(self, smiles_list: list[str]) -> np.ndarray:
         """Transform SMILES strings to feature matrix.
 
         Args:
@@ -307,7 +306,7 @@ class Featurizer(ABC):
         """
         return self.get_name()
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get the configuration dictionary for this featurizer.
 
         Returns:
@@ -343,7 +342,7 @@ class Featurizer(ABC):
         config_str = json.dumps(config, sort_keys=True)
         return hashlib.md5(config_str.encode()).hexdigest()
 
-    def validate_smiles(self, smiles_list: List[str]) -> List[bool]:
+    def validate_smiles(self, smiles_list: list[str]) -> list[bool]:
         """Validate SMILES strings before featurization.
 
         Args:

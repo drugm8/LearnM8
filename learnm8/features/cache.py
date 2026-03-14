@@ -12,10 +12,9 @@ import hashlib
 import logging
 from functools import wraps
 from pathlib import Path
-from typing import Callable, List, Union
+from collections.abc import Callable
 
 import h5py
-import hdf5plugin
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -87,7 +86,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
     """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(smiles_list: List[str], featurizer, *args, **kwargs) -> np.ndarray:
+        def wrapper(smiles_list: list[str], featurizer, *args, **kwargs) -> np.ndarray:
             if len(smiles_list) == 0:
                 return func(smiles_list, featurizer, *args, **kwargs)
 

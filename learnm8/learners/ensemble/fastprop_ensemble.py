@@ -1,6 +1,5 @@
 """Fastprop ensemble learner for deep learning on molecular features."""
 
-from typing import List, Optional
 import numpy as np
 from .ensemble import EnsembleLearner
 from ..torch.fastprop_learner import FastpropLearner
@@ -16,12 +15,12 @@ class FastpropEnsemble(EnsembleLearner):
                  max_epochs: int = 50,
                  learning_rate: float = 0.0001,
                  batch_size: int = 32,
-                 predict_batch_size: Optional[int] = None,
+                 predict_batch_size: int | None = None,
                  precision: str = 'auto',
                  pin_memory: bool = False,
                  clamp_input: bool = True,
                  early_stopping_patience: int = 5,
-                 random_states: Optional[List[int]] = None,
+                 random_states: list[int] | None = None,
                  device: str = 'auto',
                  enable_aggressive_gc: bool = True,
                  **kwargs):

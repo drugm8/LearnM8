@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Optional, Union
 
 import polars as pl
 import datamol as dm
@@ -14,10 +13,10 @@ SUPPORTED_SMI_FORMATS = {'.smi', '.smiles'}
 
 
 def load_compound_file(
-    file_path: Union[str, Path],
-    smiles_column: Optional[str] = None,
-    id_column: Optional[str] = None,
-    name_column: Optional[str] = None,
+    file_path: str | Path,
+    smiles_column: str | None = None,
+    id_column: str | None = None,
+    name_column: str | None = None,
     n_jobs: int = -1,
     progress: bool = True
 ) -> pl.DataFrame:
@@ -114,9 +113,9 @@ def _detect_file_format(file_path: Path) -> str:
 
 def _load_csv_with_polars(
     file_path: Path,
-    smiles_column: Optional[str],
-    id_column: Optional[str],
-    name_column: Optional[str]
+    smiles_column: str | None,
+    id_column: str | None,
+    name_column: str | None
 ) -> pl.DataFrame:
     """
     Load CSV/TSV files using Polars for optimal performance.
@@ -158,7 +157,7 @@ def _load_csv_with_polars(
 
 def _load_sdf_with_datamol(
     file_path: Path,
-    id_column: Optional[str],
+    id_column: str | None,
     n_jobs: int,
     progress: bool
 ) -> pl.DataFrame:

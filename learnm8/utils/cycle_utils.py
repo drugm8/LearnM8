@@ -1,9 +1,8 @@
 """Utilities for handling active learning cycle specifications."""
 
-from typing import List, Tuple
 
 
-def parse_cycle_spec(cycle_spec: str) -> List[Tuple[str, float]]:
+def parse_cycle_spec(cycle_spec: str) -> list[tuple[str, float]]:
     """Parse cycle specification string into cycles list.
     
     Args:

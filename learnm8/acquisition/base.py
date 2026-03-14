@@ -6,7 +6,6 @@ following the new architecture design with clean interfaces and dependency injec
 
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional, TYPE_CHECKING
 import polars as pl
 import numpy as np
 

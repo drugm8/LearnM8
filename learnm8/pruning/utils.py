@@ -5,13 +5,13 @@ pruning strategy.
 """
 
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 def validate_pruning_parameters(strategy_name: str,
-                               parameters: Dict[str, Any]) -> Tuple[bool, List[str]]:
+                               parameters: dict[str, Any]) -> tuple[bool, list[str]]:
     """Validate parameters for the score-based pruning strategy.
 
     Args:
@@ -58,7 +58,7 @@ def validate_pruning_parameters(strategy_name: str,
 
 
 def create_pruning_strategy(strategy_name: str,
-                           parameters: Dict[str, Any]):
+                           parameters: dict[str, Any]):
     """Factory function to create the score-based pruning strategy.
 
     Args:

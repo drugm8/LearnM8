@@ -1,6 +1,5 @@
 """XGBoost ensemble learner for LearnM8 framework."""
 
-from typing import List, Optional
 from .ensemble import EnsembleLearner
 from ..sklearn.xgboost_learner import XGBoostLearner
 
@@ -9,8 +8,8 @@ class XGBEnsemble(EnsembleLearner):
     """Ensemble of 3 XGBoost learners with different learning rates."""
     
     def __init__(self,
-                 learning_rates: Optional[List[float]] = None,
-                 random_states: Optional[List[int]] = None,
+                 learning_rates: list[float] | None = None,
+                 random_states: list[int] | None = None,
                  **kwargs):
         """Initialize XGB ensemble.
 

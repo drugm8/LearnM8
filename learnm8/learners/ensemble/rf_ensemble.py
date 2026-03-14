@@ -1,6 +1,5 @@
 """Random Forest ensemble learner for LearnM8 framework."""
 
-from typing import List, Optional
 from .ensemble import EnsembleLearner
 from ..sklearn.random_forest import RandomForestLearner
 
@@ -10,7 +9,7 @@ class RFEnsemble(EnsembleLearner):
     
     def __init__(self,
                  n_estimators: int = 100,
-                 random_states: Optional[List[int]] = None,
+                 random_states: list[int] | None = None,
                  **kwargs):
         """Initialize RF ensemble.
 

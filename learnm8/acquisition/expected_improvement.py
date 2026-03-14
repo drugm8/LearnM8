@@ -5,7 +5,6 @@ the expected improvement over the current best observed value.
 """
 
 import logging
-from typing import Optional
 import numpy as np
 import polars as pl
 from scipy.stats import norm
@@ -24,7 +23,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
 
     def __init__(self,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
-                 current_best: Optional[float] = None,
+                 current_best: float | None = None,
                  **kwargs):
         """Initialize Expected Improvement acquisition function.
 

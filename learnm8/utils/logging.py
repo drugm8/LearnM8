@@ -3,7 +3,7 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Literal
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -22,7 +22,7 @@ def is_running_in_jupyter() -> bool:
 
 
 def configure_learnm8_logging(
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     level: str = "INFO",
     console_type: Literal['auto', 'rich', 'simple', 'none'] = 'auto',
     show_time: bool = False,
@@ -140,7 +140,7 @@ def setup_logging(
     level: str = "INFO",
     show_time: bool = True,
     show_path: bool = False,
-    console: Optional[Console] = None
+    console: Console | None = None
 ) -> logging.Logger:
     """
     Backward compatibility wrapper for configure_learnm8_logging().
@@ -156,7 +156,7 @@ def setup_logging(
 
 def setup_logging_for_environment(
     logger: logging.Logger,
-    output_dir: Optional[Path] = None,
+    output_dir: Path | None = None,
     level: str = "INFO",
     show_time: bool = True
 ):

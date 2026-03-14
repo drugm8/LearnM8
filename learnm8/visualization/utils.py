@@ -1,9 +1,8 @@
 import numpy as np
 import polars as pl
-from typing import Optional, Tuple
 
 
-def downsample_for_viz(data: np.ndarray, max_points: int = 5000, random_state: int = 42) -> Tuple[np.ndarray, np.ndarray]:
+def downsample_for_viz(data: np.ndarray, max_points: int = 5000, random_state: int = 42) -> tuple[np.ndarray, np.ndarray]:
     """Downsample data for visualization to improve performance.
 
     Args:

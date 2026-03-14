@@ -7,7 +7,6 @@ native molecular diversity selection optimized for large-scale molecular librari
 import logging
 import numpy as np
 import polars as pl
-from typing import List
 
 import bitbirch.bitbirch as bb
 
@@ -31,7 +30,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 
 	def __init__(self,
 				 features: np.ndarray,
-				 compound_ids: List[str],
+				 compound_ids: list[str],
 				 featurizer: str = 'morgan',
 				 threshold: float = 0.5,
 				 branching_factor: int = 50,
@@ -150,7 +149,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		logger.info(f"Prepared {len(fingerprints)} fingerprints for BitBIRCH (shape: {fingerprints.shape}, binary: {np.all(np.isin(fingerprints, [0, 1]))})")
 		return fingerprints
 	
-	def _bitbirch_clustering(self, fingerprints: np.ndarray) -> List[List[int]]:
+	def _bitbirch_clustering(self, fingerprints: np.ndarray) -> list[list[int]]:
 		"""Perform basic BitBIRCH clustering.
 
 		Args:
@@ -178,7 +177,7 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 		
 		return mol_ids
 	
-	def _convert_clusters_to_labels(self, cluster_mol_ids: List[List[int]], n_compounds: int) -> np.ndarray:
+	def _convert_clusters_to_labels(self, cluster_mol_ids: list[list[int]], n_compounds: int) -> np.ndarray:
 		"""Convert cluster assignments to label array for visualization.
 		
 		Args:
@@ -199,8 +198,8 @@ class BitBIRCHAcquisition(AcquisitionFunction):
 	
 	def _select_from_bitbirch_clusters(self,
 									  compounds: pl.DataFrame,
-									  cluster_mol_ids: List[List[int]],
-									  n_select: int) -> List[int]:
+									  cluster_mol_ids: list[list[int]],
+									  n_select: int) -> list[int]:
 		"""Select compounds evenly from BitBIRCH clusters.
 		
 		Args:

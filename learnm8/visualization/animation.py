@@ -3,15 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 import logging
 
-from .utils import downsample_for_viz, detect_benchmark_mode, format_metric_value
+from .utils import detect_benchmark_mode
 
 logger = logging.getLogger(__name__)
 
 
-def load_csv_data(output_dir: str) -> Dict[str, pl.DataFrame]:
+def load_csv_data(output_dir: str) -> dict[str, pl.DataFrame]:
     """Load visualization data from CSV files.
 
     Args:
@@ -79,7 +78,7 @@ def _get_strategy_color_map(strategies):
 
 def create_dashboard_animation_from_csv(
     output_dir: str,
-    output_file: Optional[str] = None,
+    output_file: str | None = None,
     format: str = 'mp4',
     fps: int = 2,
     dpi: int = 100,

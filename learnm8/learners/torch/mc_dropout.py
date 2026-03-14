@@ -5,16 +5,15 @@ in molecular property prediction tasks.
 """
 
 import logging
-from typing import Tuple, List
+
 import numpy as np
-
-# Base class import
-from ..base import TorchLearner, _preprocess_features
-from learnm8.exceptions import LearnerError
-
 import torch
 import torch.nn as nn
 
+from learnm8.exceptions import LearnerError
+
+# Base class import
+from ..base import TorchLearner, _preprocess_features
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +25,13 @@ class MCDropoutLearner(TorchLearner):
     Dropout, where multiple forward passes with dropout enabled provide
     an ensemble of predictions for uncertainty estimation.
     """
-    
+
     def __init__(self,
-                 hidden_sizes: Tuple[int, ...] = (256, 128),
+                 hidden_sizes: tuple[int, ...] = (256, 128),
                  dropout_rate: float = 0.2,
                  n_dropout_samples: int = 100,
                  activation: str = 'relu',
-                 batch_norm: bool = True,
+                 batch_norm: bool = False,
                  **kwargs):
         """Initialize Monte Carlo Dropout learner.
 
@@ -45,13 +44,13 @@ class MCDropoutLearner(TorchLearner):
             **kwargs: Additional arguments passed to TorchLearner
         """
         super().__init__(**kwargs)
-        
+
         self.hidden_sizes = hidden_sizes
         self.dropout_rate = dropout_rate
         self.n_dropout_samples = n_dropout_samples
         self.activation = activation
         self.batch_norm = batch_norm
-        
+
         # Activation function mapping
         self.activation_fn = {
             'relu': nn.ReLU,
@@ -59,7 +58,7 @@ class MCDropoutLearner(TorchLearner):
             'gelu': nn.GELU,
             'leaky_relu': nn.LeakyReLU
         }.get(activation, nn.ReLU)
-    
+
     def _create_model(self, input_size: int) -> nn.Module:
         """Create MLP with dropout layers for uncertainty estimation.
         
@@ -71,34 +70,34 @@ class MCDropoutLearner(TorchLearner):
         """
         layers = []
         prev_size = input_size
-        
+
         # Hidden layers with dropout for uncertainty
         for hidden_size in self.hidden_sizes:
             # Linear layer
             layers.append(nn.Linear(prev_size, hidden_size))
-            
+
             # Batch normalization
             if self.batch_norm:
                 layers.append(nn.BatchNorm1d(hidden_size))
-            
+
             # Activation
             layers.append(self.activation_fn())
-            
+
             # Dropout (always applied for MC Dropout)
             layers.append(nn.Dropout(self.dropout_rate))
-            
+
             prev_size = hidden_size
-        
+
         # Output layer
         layers.append(nn.Linear(prev_size, 1))
-        
+
         model = nn.Sequential(*layers)
-        
+
         # Initialize weights
         self._initialize_weights(model)
-        
+
         return model
-    
+
     def _initialize_weights(self, model: nn.Module) -> None:
         """Initialize model weights using Xavier/He initialization.
         
@@ -111,15 +110,15 @@ class MCDropoutLearner(TorchLearner):
                     nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
                 else:
                     nn.init.xavier_normal_(module.weight)
-                
+
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
-            
+
             elif isinstance(module, nn.BatchNorm1d):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)
-    
-    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Predict on feature matrix with uncertainty via Monte Carlo Dropout.
 
         Args:
@@ -150,6 +149,9 @@ class MCDropoutLearner(TorchLearner):
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 
             self.model.train()
+            for m in self.model.modules():
+                if isinstance(m, nn.BatchNorm1d):
+                    m.eval()
 
             predictions_list = []
             with torch.no_grad():
@@ -177,11 +179,11 @@ class MCDropoutLearner(TorchLearner):
                 f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
                 f"Check that the input features have the same shape as training features."
             ) from e
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True since MC Dropout provides uncertainty estimates."""
         return True
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         hidden_str = '-'.join(map(str, self.hidden_sizes))

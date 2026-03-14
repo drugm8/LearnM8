@@ -3,7 +3,6 @@
 import logging
 import polars as pl
 from pathlib import Path
-from typing import Tuple
 from learnm8.utils.file_loaders import load_compound_file
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,7 @@ def validate_csv_columns(df: pl.DataFrame, required_columns: list, file_descript
         )
 
 
-def load_benchmark_data(data_path: str, target_col: str) -> Tuple[pl.DataFrame, pl.DataFrame]:
+def load_benchmark_data(data_path: str, target_col: str) -> tuple[pl.DataFrame, pl.DataFrame]:
     """
     Load data for benchmark mode from single file (CSV/SDF/SMI).
 

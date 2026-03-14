@@ -7,9 +7,8 @@ through model diversity.
 
 import logging
 import time
-from typing import List, Tuple, Optional, Dict, Any, Union
+from typing import Any
 import numpy as np
-from scipy import stats
 
 from ...core.interfaces import Learner
 from learnm8.exceptions import LearnerError
@@ -27,10 +26,10 @@ class EnsembleLearner(Learner):
     """
     
     def __init__(self, 
-                 learners: List[Learner], 
+                 learners: list[Learner], 
                  aggregation_method: str = 'mean',
                  uncertainty_method: str = 'std',
-                 weights: Optional[List[float]] = None,
+                 weights: list[float] | None = None,
                  enable_parallel_training: bool = False):
         """Initialize ensemble learner with composition pattern.
         
@@ -144,7 +143,7 @@ class EnsembleLearner(Learner):
         train_time = time.time() - start_time
         logger.debug(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
     
-    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Predict on feature matrix with ensemble uncertainty.
 
         Args:
@@ -277,7 +276,7 @@ class EnsembleLearner(Learner):
         
         return f"Ensemble({names_str},{self.aggregation_method})"
     
-    def get_ensemble_statistics(self) -> Dict[str, Any]:
+    def get_ensemble_statistics(self) -> dict[str, Any]:
         """Get statistics about the ensemble composition and performance.
         
         Returns:
@@ -302,7 +301,7 @@ class EnsembleLearner(Learner):
         
         return stats
     
-    def get_individual_predictions(self, features: np.ndarray) -> Dict[str, np.ndarray]:
+    def get_individual_predictions(self, features: np.ndarray) -> dict[str, np.ndarray]:
         """Get predictions from individual ensemble members.
 
         Args:
@@ -332,7 +331,7 @@ class EnsembleLearner(Learner):
 
         return individual_predictions
     
-    def add_learner(self, learner: Learner, weight: Optional[float] = None) -> None:
+    def add_learner(self, learner: Learner, weight: float | None = None) -> None:
         """Add a new learner to the ensemble.
         
         Args:

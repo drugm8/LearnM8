@@ -44,22 +44,23 @@ Examples:
         ]
     )
 """
+from __future__ import annotations
 
 import logging
 import inspect
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Union, Optional, List, Dict, Any, Literal
+from typing import Any, Literal
 import polars as pl
 
-from learnm8.core.validation import validate_compound_pool, ValidationResult
+from learnm8.core.validation import validate_compound_pool
 from learnm8.core.initialization import initialize_master_dataframe_empty, select_initial_batch
 from learnm8.core.config import parse_cycle_schedule, CycleConfig
 from learnm8.core.cycle import execute_cycle
 from learnm8.core.persistence import save_results
 from learnm8.core.interfaces import Oracle, Learner
-from learnm8.core.resources import validate_n_jobs, validate_device, parse_device_for_lightning
+from learnm8.core.resources import validate_n_jobs, validate_device
 from learnm8.oracles import CSVOracle
 from learnm8.utils.file_loaders import load_compound_file
 from learnm8.utils.logging import configure_learnm8_logging
@@ -75,7 +76,6 @@ from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
-    format_duration,
     format_experiment_summary
 )
 
@@ -142,7 +142,7 @@ def _create_learner(
     learner_str: str,
     random_state: int,
     enable_chemprop_fine_tuning: bool = False,
-    checkpoint_dir: Optional[Path] = None,
+    checkpoint_dir: Path | None = None,
     n_jobs: int = -1,
     device: str = 'auto',
 ) -> Learner:
@@ -251,10 +251,10 @@ def _create_learner(
 
 
 def _calculate_aggregate_metrics(
-    all_metrics: List[Dict[str, Any]],
+    all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
     mode: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Calculate aggregate metrics across all cycles.
 
     Args:
@@ -326,13 +326,13 @@ def _calculate_aggregate_metrics(
 
 
 def run_active_learning(
-    compound_pool: Union[str, Path, pl.DataFrame],
-    oracle: Union[str, Path, Oracle],
-    learner: Union[str, Learner],
+    compound_pool: str | Path | pl.DataFrame,
+    oracle: str | Path | Oracle,
+    learner: str | Learner,
     target_col: str,
-    featurizer: Union[str, 'Featurizer', None] = None,
+    featurizer: str | 'Featurizer' | None = None,
     # Advanced API
-    cycles: Optional[List[CycleConfig]] = None,
+    cycles: list[CycleConfig] | None = None,
     # Simple API
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
@@ -340,25 +340,25 @@ def run_active_learning(
     initial_strategy: str = 'random',
     # Common parameters
     score_direction: str = 'higher',
-    mode: Optional[Literal['run', 'benchmark']] = None,
-    output_dir: Optional[Union[str, Path]] = None,
-    cache_dir: Optional[Union[str, Path]] = None,
+    mode: Literal['run', 'benchmark'] | None = None,
+    output_dir: str | Path | None = None,
+    cache_dir: str | Path | None = None,
     random_state: int = 42,
     # Chemprop fine-tuning
     enable_chemprop_fine_tuning: bool = False,
     # Pruning
-    pruning_fraction: Optional[float] = None,
-    pruning_strategy: Optional[str] = None,
-    pruning_params: Optional[Dict] = None,
+    pruning_fraction: float | None = None,
+    pruning_strategy: str | None = None,
+    pruning_params: dict | None = None,
     # Acquisition
-    acquisition_params: Optional[Dict] = None,
+    acquisition_params: dict | None = None,
     # Memory management
-    prediction_batch_size: Optional[int] = None,
+    prediction_batch_size: int | None = None,
     # Resource control
     n_jobs: int = -1,
     device: str = 'auto',
     **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Execute active learning experiment.
 
     This is the main entry point for the LearnM8 API. It orchestrates the complete

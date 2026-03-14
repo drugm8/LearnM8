@@ -20,7 +20,7 @@ Performance characteristics:
 import polars as pl
 import pandas as pd
 import numpy as np
-from typing import List, Optional, Dict, Any, Union
+from typing import Any
 import logging
 from .data_structures import VALID_STATUSES
 from learnm8.utils.polars_utils import map_values_via_join
@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 def _add_predictions_inplace(
     df: pl.DataFrame,
     cycle: int,
-    compound_ids: List[str],
+    compound_ids: list[str],
     predictions: np.ndarray,
-    uncertainties: Optional[np.ndarray] = None
+    uncertainties: np.ndarray | None = None
 ) -> pl.DataFrame:
     """Add predictions and uncertainties for a cycle in-place (modifies df).
 
@@ -93,9 +93,9 @@ def _add_predictions_inplace(
 def add_predictions(
     df: pl.DataFrame,
     cycle: int,
-    compound_ids: List[str],
+    compound_ids: list[str],
     predictions: np.ndarray,
-    uncertainties: Optional[np.ndarray] = None
+    uncertainties: np.ndarray | None = None
 ) -> pl.DataFrame:
     """Add predictions and uncertainties for a cycle using vectorized operations.
 
@@ -143,11 +143,11 @@ def add_predictions(
 
 def _update_status_inplace(
     df: pl.DataFrame,
-    compound_ids: List[str],
+    compound_ids: list[str],
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: Optional[Union[pl.Series, Dict]] = None
+    target_values: pl.Series | dict | None = None
 ) -> pl.DataFrame:
     """Update compound status in-place (modifies df).
 
@@ -232,11 +232,11 @@ def _update_status_inplace(
 
 def update_status(
     df: pl.DataFrame,
-    compound_ids: List[str],
+    compound_ids: list[str],
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: Optional[Union[pl.Series, pd.Series, Dict]] = None
+    target_values: pl.Series | pd.Series | dict | None = None
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
@@ -291,7 +291,7 @@ def update_status(
 def get_compounds_by_status(
     df: pl.DataFrame,
     status: str,
-    columns: Optional[List[str]] = None
+    columns: list[str] | None = None
 ) -> pl.DataFrame:
     """Get compounds by status using vectorized filtering.
 
@@ -337,7 +337,7 @@ def get_compounds_by_status(
 
 def batch_update(
     df: pl.DataFrame,
-    updates: Dict[str, Any]
+    updates: dict[str, Any]
 ) -> pl.DataFrame:
     """Apply multiple updates to DataFrame in a single operation.
 

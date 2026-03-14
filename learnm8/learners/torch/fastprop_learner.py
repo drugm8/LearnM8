@@ -7,7 +7,6 @@ featurizer-agnostic architecture, accepting any pre-computed feature matrix.
 
 import logging
 import warnings
-from typing import Tuple, Optional
 import numpy as np
 
 from learnm8.core.interfaces import Learner
@@ -56,7 +55,7 @@ class FastpropLearner(Learner):
 				 max_epochs: int = 50,
 				 learning_rate: float = 0.0001,
 				 batch_size: int = 32,
-				 predict_batch_size: Optional[int] = None,
+				 predict_batch_size: int | None = None,
 				 precision: str = 'auto',
 				 pin_memory: bool = False,
 				 clamp_input: bool = True,
@@ -242,7 +241,7 @@ class FastpropLearner(Learner):
 				f"Check that features are valid and training data is sufficient."
 			) from None
 
-	def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+	def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
 		"""Predict using trained Fastprop model.
 
 		Args:

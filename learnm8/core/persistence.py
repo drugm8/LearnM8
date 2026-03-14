@@ -15,9 +15,8 @@ No query classes - files are directly usable with pandas, Excel, etc.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 import polars as pl
-import numpy as np
 
 from .validation import ValidationResult
 from learnm8.exceptions import PersistenceError
@@ -25,7 +24,7 @@ from learnm8.exceptions import PersistenceError
 logger = logging.getLogger(__name__)
 
 
-def _add_csv_metadata(file_path: Path, metadata: Dict[str, Any]) -> None:
+def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
     """
     Add metadata as comment lines at the top of an existing CSV file.
 
@@ -60,7 +59,7 @@ def _add_csv_metadata(file_path: Path, metadata: Dict[str, Any]) -> None:
         logger.warning(f"Failed to add metadata to {file_path}: {e}")
 
 
-def _organize_columns(df: pl.DataFrame, column_groups: List[List[str]]) -> pl.DataFrame:
+def _organize_columns(df: pl.DataFrame, column_groups: list[list[str]]) -> pl.DataFrame:
     """
     Reorder DataFrame columns into logical groups for readability.
 
@@ -95,11 +94,11 @@ def _organize_columns(df: pl.DataFrame, column_groups: List[List[str]]) -> pl.Da
 
 def save_results(
     compounds_df: pl.DataFrame,
-    cycle_metrics: List[Dict[str, Any]],
+    cycle_metrics: list[dict[str, Any]],
     validation_result: ValidationResult,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     output_dir: Path
-) -> Dict[str, Path]:
+) -> dict[str, Path]:
     """
     Save all experiment results to organized CSV files with metadata.
 
