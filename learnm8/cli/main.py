@@ -19,22 +19,27 @@ Features:
 """
 
 import argparse
-import sys
 import json
+import sys
 from pathlib import Path
-from rich.console import Console
-from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.traceback import install
+
 import polars as pl
-
 import yaml
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
+from rich.traceback import install
 
-from learnm8.api import run_active_learning
-from learnm8.exceptions import ConfigurationError
-from learnm8.core.validation import validate_compound_pool
-from learnm8.core.config import parse_cycle_spec, CycleConfig
 from learnm8.acquisition import list_acquisition_functions
+from learnm8.api import run_active_learning
+from learnm8.core.config import CycleConfig, parse_cycle_spec
+from learnm8.core.validation import validate_compound_pool
+from learnm8.exceptions import (
+    ConfigurationError,
+    FeatureExtractionError,
+    LearnM8Error,
+    ValidationError,
+)
 from learnm8.utils.file_loaders import load_compound_file
 from learnm8.utils.logging import configure_learnm8_logging
 
@@ -122,7 +127,7 @@ def load_config_file(config_path: Path) -> dict:
             raise ValueError(
                 f"Unsupported config format: {suffix}. Use .yaml, .yml, or .json"
             )
-    except (ValueError, TypeError, OSError, KeyError) as e:
+    except (ValueError, TypeError, OSError, KeyError, yaml.YAMLError) as e:
         raise ConfigurationError(f"Failed to parse config file: {e}") from e
 
 
@@ -586,7 +591,25 @@ def cmd_run(args: argparse.Namespace):
 
         console.print(f"\n[green]📁 All results saved to:[/green] {results['output_dir']}")
 
-    except Exception as e:
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        sys.exit(2)
+    except ValidationError as e:
+        console.print(f"[red]Validation error:[/red] {e}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    except FeatureExtractionError as e:
+        console.print(f"[red]Feature extraction error:[/red] {e}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    except LearnM8Error as e:
+        label = type(e).__name__
+        if 'Learner' in label:
+            console.print(f"[red]Training/prediction error:[/red] {e}")
+        else:
+            console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+    except Exception:
         console.print_exception()
         sys.exit(1)
 
@@ -613,8 +636,9 @@ def cmd_list(args: argparse.Namespace):
             console.print(f"  • {strategy}")
 
     elif args.component == 'featurizers':
-        from learnm8.features import list_available_featurizers, FEATURIZER_REGISTRY
         from rich.table import Table
+
+        from learnm8.features import FEATURIZER_REGISTRY, list_available_featurizers
 
         available = list_available_featurizers()
 
@@ -715,7 +739,7 @@ def cmd_validate(args: argparse.Namespace):
 
         if len(result.invalid_compounds) > 0:
             console.print("\n[yellow]Sample errors:[/yellow]")
-            for i, (cid, error) in enumerate(list(result.validation_errors.items())[:5]):
+            for _i, (cid, error) in enumerate(list(result.validation_errors.items())[:5]):
                 console.print(f"  {cid}: {error}")
             if len(result.validation_errors) > 5:
                 console.print(f"  ... and {len(result.validation_errors) - 5} more")
@@ -747,7 +771,25 @@ def cmd_validate(args: argparse.Namespace):
 
             console.print(f"\n[green]Report saved to:[/green] {report_path}")
 
-    except Exception as e:
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration error:[/red] {e}")
+        sys.exit(2)
+    except ValidationError as e:
+        console.print(f"[red]Validation error:[/red] {e}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    except FeatureExtractionError as e:
+        console.print(f"[red]Feature extraction error:[/red] {e}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    except LearnM8Error as e:
+        label = type(e).__name__
+        if 'Learner' in label:
+            console.print(f"[red]Training/prediction error:[/red] {e}")
+        else:
+            console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+    except Exception:
         console.print_exception()
         sys.exit(1)
 
