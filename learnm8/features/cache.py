@@ -15,6 +15,7 @@ from functools import wraps
 from pathlib import Path
 
 import h5py
+import hdf5plugin  # noqa: F401 — registers Blosc filter (32001) with h5py
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
                             for idx, smiles in enumerate(uncached_smiles):
                                 cache_key = _generate_cache_key(smiles, featurizer)
                                 try:
-                                    ds = features_group.create_dataset(
+                                    features_group.create_dataset(
                                         cache_key,
                                         data=new_features[idx],
                                         chunks=True,
