@@ -5,7 +5,6 @@ for molecular property prediction tasks.
 """
 
 import logging
-from typing import Optional
 import numpy as np
 
 # Base class import
@@ -81,7 +80,7 @@ class XGBoostLearner(SklearnLearner):
         """Return a descriptive name for this learner."""
         return f"XGBoost(n_estimators={self.n_estimators},lr={self.learning_rate},depth={self.max_depth})"
     
-    def get_feature_importance(self) -> Optional[np.ndarray]:
+    def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
         Returns:
@@ -92,7 +91,7 @@ class XGBoostLearner(SklearnLearner):
         
         return self.model.feature_importances_
     
-    def get_booster_stats(self) -> Optional[dict]:
+    def get_booster_stats(self) -> dict | None:
         """Get statistics from the trained XGBoost booster.
         
         Returns:

@@ -7,7 +7,6 @@ import polars as pl
 import datamol as dm
 import logging
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class ValidationResult:
     """
     valid_compounds: pl.DataFrame
     invalid_compounds: pl.DataFrame
-    validation_errors: Dict[str, str]
+    validation_errors: dict[str, str]
 
     @property
     def success_rate(self) -> float:
@@ -35,7 +34,7 @@ class ValidationResult:
         return len(self.valid_compounds) / total
 
 
-def _validate_smiles(smiles: str) -> Tuple[bool, str, str]:
+def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
     """
     Validate and standardize a SMILES string using datamol.
 

@@ -1,6 +1,5 @@
 """Chemprop ensemble learner for message-passing neural networks."""
 
-from typing import List, Optional
 from pathlib import Path
 import numpy as np
 from .ensemble import EnsembleLearner
@@ -46,11 +45,11 @@ class ChempropEnsemble(EnsembleLearner):
 				 dropout: float = 0.0,
 				 max_epochs: int = 50,
 				 batch_size: int = 32,
-				 predict_batch_size: Optional[int] = None,
+				 predict_batch_size: int | None = None,
 				 precision: str = 'auto',
 				 pin_memory: bool = True,
 				 learning_rate: float = 1e-4,
-				 random_states: Optional[List[int]] = None,
+				 random_states: list[int] | None = None,
 				 accelerator: str = 'auto',
 				 device: str = 'auto',
 				 early_stopping: bool = True,
@@ -58,7 +57,7 @@ class ChempropEnsemble(EnsembleLearner):
 				 early_stopping_min_delta: float = 0.0,
 				 val_fraction: float = 0.1,
 				 enable_fine_tuning: bool = False,
-				 checkpoint_dir: Optional[Path] = None,
+				 checkpoint_dir: Path | None = None,
 				 enable_aggressive_gc: bool = True,
 				 **kwargs):
 		"""Initialize Chemprop ensemble.

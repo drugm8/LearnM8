@@ -7,11 +7,10 @@ import os
 import polars as pl
 import numpy as np
 from pathlib import Path
-from typing import Dict, List
 import pickle
 import logging
 from rdkit import Chem, DataStructs
-from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors, AllChem
+from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors
 from joblib import Parallel, delayed
 
 logger = logging.getLogger(__name__)
@@ -140,7 +139,7 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer: str = "morgan", n
     return np.array(fingerprints)
 
 
-def _compute_mordred_descriptors(smiles_list: List[str]) -> pl.DataFrame:
+def _compute_mordred_descriptors(smiles_list: list[str]) -> pl.DataFrame:
     """Compute Mordred descriptors for a list of SMILES.
 
     Note:
@@ -252,7 +251,7 @@ def _compute_and_store_representations(
     logger.info("Stored %s representations to %s", featurizer, representation_file)
 
 
-def _load_representations(results_dir: Path, featurizer: str) -> Dict:
+def _load_representations(results_dir: Path, featurizer: str) -> dict:
     """Load representations from file."""
     representation_file = _get_representation_file(results_dir, featurizer)
     
@@ -263,7 +262,7 @@ def _load_representations(results_dir: Path, featurizer: str) -> Dict:
         return pickle.load(f)
 
 
-def get_fingerprints(compound_ids: List[str], results_dir: Path, featurizer: str = "morgan") -> np.ndarray:
+def get_fingerprints(compound_ids: list[str], results_dir: Path, featurizer: str = "morgan") -> np.ndarray:
     """Get fingerprints for specified compound IDs."""
     representations = _load_representations(results_dir, featurizer)
     
@@ -277,7 +276,7 @@ def get_fingerprints(compound_ids: List[str], results_dir: Path, featurizer: str
     return np.array(fingerprints)
 
 
-def get_descriptors(compound_ids: List[str], results_dir: Path) -> np.ndarray:
+def get_descriptors(compound_ids: list[str], results_dir: Path) -> np.ndarray:
     """Get Mordred descriptors for specified compound IDs."""
     representations = _load_representations(results_dir, "descriptors")
     

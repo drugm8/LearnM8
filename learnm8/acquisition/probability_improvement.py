@@ -5,7 +5,6 @@ the probability that a compound will improve over the current best observed valu
 """
 
 import logging
-from typing import Optional
 import numpy as np
 import polars as pl
 from scipy.stats import norm
@@ -24,7 +23,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
     def __init__(self,
                  xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
-                 current_best: Optional[float] = None,
+                 current_best: float | None = None,
                  **kwargs):
         """Initialize Probability of Improvement acquisition function.
 

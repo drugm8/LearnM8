@@ -5,7 +5,6 @@ for molecular property prediction tasks.
 """
 
 import logging
-from typing import Optional
 import numpy as np
 
 # Base class import
@@ -27,7 +26,7 @@ class RandomForestLearner(SklearnLearner):
     
     def __init__(self,
                  n_estimators: int = 100,
-                 max_depth: Optional[int] = None,
+                 max_depth: int | None = None,
                  min_samples_split: int = 2,
                  min_samples_leaf: int = 1,
                  max_features: str = 'sqrt',
@@ -71,7 +70,7 @@ class RandomForestLearner(SklearnLearner):
         depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
         return f"RandomForest(n_estimators={self.n_estimators},{depth_str})"
     
-    def get_feature_importance(self) -> Optional[np.ndarray]:
+    def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
         Returns:
@@ -82,7 +81,7 @@ class RandomForestLearner(SklearnLearner):
         
         return self.model.feature_importances_
     
-    def get_oob_score(self) -> Optional[float]:
+    def get_oob_score(self) -> float | None:
         """Get out-of-bag R² score from the trained model.
         
         Returns:

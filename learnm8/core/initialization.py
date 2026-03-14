@@ -11,7 +11,7 @@ import numpy as np
 import logging
 import math
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Any, List, Set
+from typing import Any
 from .data_structures import STATUS_UNLABELED, VALID_STATUSES
 from .interfaces import Oracle
 from learnm8.exceptions import AcquisitionError, OracleError
@@ -81,14 +81,14 @@ def initialize_master_dataframe_empty(
 
 def calculate_initialization_metrics(
     compounds_df: pl.DataFrame,
-    selected_ids: List[str],
+    selected_ids: list[str],
     target_col: str,
     strategy: str,
     score_direction: str,
     mode: str,
-    original_pool: Optional[pl.DataFrame] = None,
-    cumulative_selected_ids: Optional[Set[str]] = None
-) -> Dict[str, Any]:
+    original_pool: pl.DataFrame | None = None,
+    cumulative_selected_ids: set[str] | None = None
+) -> dict[str, Any]:
     """Calculate metrics for initialization phase (cycle 0).
 
     Generates metrics similar to execute_cycle() but simplified for initialization:
@@ -222,11 +222,11 @@ def select_initial_batch(
     cache_dir: Path,
     original_pool_size: int,
     random_state: int = 42,
-    acquisition_params: Optional[Dict] = None,
+    acquisition_params: dict | None = None,
     score_direction: str = 'higher',
     mode: str = 'run',
-    original_pool: Optional[pl.DataFrame] = None
-) -> Tuple[pl.DataFrame, Dict[str, Any]]:
+    original_pool: pl.DataFrame | None = None
+) -> tuple[pl.DataFrame, dict[str, Any]]:
     """Select and measure initial batch before active learning cycles.
 
     This is the initialization phase (cycle 0) - no model training/prediction needed.

@@ -9,7 +9,6 @@ exploration and gradually cools down to become more greedy/exploitative.
 import logging
 import numpy as np
 import polars as pl
-from typing import Optional, TYPE_CHECKING
 
 from .base import AcquisitionFunction
 
@@ -81,7 +80,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         # Keep track of maximization vs minimization
         self.maximize = score_direction == 'higher'
     
-    def _calculate_energy(self, prediction: float, uncertainty: Optional[float] = None) -> float:
+    def _calculate_energy(self, prediction: float, uncertainty: float | None = None) -> float:
         """Calculate energy for simulated annealing.
         
         Args:

@@ -1,6 +1,5 @@
 """Linear Regression ensemble learner for LearnM8 framework."""
 
-from typing import List, Optional
 from .ensemble import EnsembleLearner
 from ..sklearn.linear_regression import LinearRegressionLearner
 
@@ -9,8 +8,8 @@ class LREnsemble(EnsembleLearner):
     """Ensemble of 3 Linear Regression learners with different regularization strengths."""
     
     def __init__(self,
-                 regularization_strengths: Optional[List[float]] = None,
-                 random_states: Optional[List[int]] = None,
+                 regularization_strengths: list[float] | None = None,
+                 random_states: list[int] | None = None,
                  **kwargs):
         """Initialize LR ensemble.
 

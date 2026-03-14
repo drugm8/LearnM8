@@ -3,7 +3,6 @@
 from skfp.fingerprints import RDFFingerprint
 
 from learnm8.features.base import SkfpFeaturizer
-from typing import Optional
 
 
 class RDFFeaturizer(SkfpFeaturizer):
@@ -17,7 +16,7 @@ class RDFFeaturizer(SkfpFeaturizer):
         self,
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
-        optimize_force_field: Optional[str] = None,
+        optimize_force_field: str | None = None,
         n_jobs: int = -1
     ):
         """Initialize RDF descriptor calculator.

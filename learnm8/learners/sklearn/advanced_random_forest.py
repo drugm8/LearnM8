@@ -6,7 +6,6 @@ designed for enhanced performance on molecular property prediction tasks.
 
 import logging
 import os
-from typing import Optional
 import numpy as np
 
 from ..base import SklearnLearner
@@ -27,7 +26,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
     
     def __init__(self,
                  n_estimators: int = 300,
-                 max_depth: Optional[int] = 15,
+                 max_depth: int | None = 15,
                  min_samples_split: int = 5,
                  min_samples_leaf: int = 2,
                  max_features: str = 'sqrt',
@@ -86,7 +85,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
         depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
         return f"AdvancedRandomForest(n_estimators={self.n_estimators},{depth_str},pruning={self.ccp_alpha})"
     
-    def get_feature_importance(self) -> Optional[np.ndarray]:
+    def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
         Returns:
@@ -97,7 +96,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
         
         return self.model.feature_importances_
     
-    def get_oob_score(self) -> Optional[float]:
+    def get_oob_score(self) -> float | None:
         """Get out-of-bag R² score from the trained model.
         
         Returns:
@@ -108,7 +107,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
         
         return getattr(self.model, 'oob_score_', None)
     
-    def get_tree_stats(self) -> Optional[dict]:
+    def get_tree_stats(self) -> dict | None:
         """Get statistics about the trained forest.
         
         Returns:

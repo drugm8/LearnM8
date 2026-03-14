@@ -5,7 +5,6 @@ for molecular property prediction tasks.
 """
 
 import logging
-from typing import Optional
 import numpy as np
 
 from ..base import SklearnLearner
@@ -25,7 +24,7 @@ class LinearRegressionLearner(SklearnLearner):
     """
     
     def __init__(self,
-                 alpha: Optional[float] = None,
+                 alpha: float | None = None,
                  fit_intercept: bool = True,
                  n_jobs: int = -1,
                  random_state: int = 42,
@@ -68,7 +67,7 @@ class LinearRegressionLearner(SklearnLearner):
         else:
             return f"LinearRegression({intercept_str})"
     
-    def get_coefficients(self) -> Optional[np.ndarray]:
+    def get_coefficients(self) -> np.ndarray | None:
         """Get model coefficients from the trained model.
         
         Returns:
@@ -79,7 +78,7 @@ class LinearRegressionLearner(SklearnLearner):
         
         return self.model.coef_
     
-    def get_intercept(self) -> Optional[float]:
+    def get_intercept(self) -> float | None:
         """Get model intercept from the trained model.
         
         Returns:

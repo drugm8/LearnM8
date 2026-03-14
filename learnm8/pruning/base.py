@@ -6,7 +6,7 @@ that reduce the unlabeled compound pool by removing unlikely candidates.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any
 import polars as pl
 import numpy as np
 
@@ -25,7 +25,7 @@ class DesignSpacePruner(ABC):
     def prune(self,
               compounds: pl.DataFrame,
               predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
+              uncertainties: np.ndarray | None = None) -> pl.DataFrame:
         """
         Prune the compound pool based on predictions.
         
@@ -43,7 +43,7 @@ class DesignSpacePruner(ABC):
         pass
     
     @abstractmethod
-    def get_pruning_stats(self) -> Dict[str, Any]:
+    def get_pruning_stats(self) -> dict[str, Any]:
         """
         Get statistics about the most recent pruning operation.
         
@@ -74,7 +74,7 @@ class DesignSpacePruner(ABC):
     def validate_inputs(self,
                        compounds: pl.DataFrame,
                        predictions: np.ndarray,
-                       uncertainties: Optional[np.ndarray] = None) -> None:
+                       uncertainties: np.ndarray | None = None) -> None:
         """
         Validate inputs for pruning operation.
         
@@ -220,14 +220,14 @@ class StatefulPruner(DesignSpacePruner):
     def __init__(self):
         """Initialize stateful pruner."""
         self.cycle_count = 0
-        self.pruning_history: List[Dict[str, Any]] = []
+        self.pruning_history: list[dict[str, Any]] = []
         self.cumulative_stats = {
             'total_compounds_seen': 0,
             'total_compounds_pruned': 0,
             'total_pruning_operations': 0
         }
     
-    def update_cycle_state(self, cycle_stats: Dict[str, Any]) -> None:
+    def update_cycle_state(self, cycle_stats: dict[str, Any]) -> None:
         """Update pruner state after a cycle.
         
         Args:
@@ -245,7 +245,7 @@ class StatefulPruner(DesignSpacePruner):
         
         self.cumulative_stats['total_pruning_operations'] += 1
     
-    def get_cycle_history(self) -> List[Dict[str, Any]]:
+    def get_cycle_history(self) -> list[dict[str, Any]]:
         """Get history of pruning operations across cycles.
         
         Returns:
@@ -253,7 +253,7 @@ class StatefulPruner(DesignSpacePruner):
         """
         return self.pruning_history.copy()
     
-    def get_cumulative_stats(self) -> Dict[str, Any]:
+    def get_cumulative_stats(self) -> dict[str, Any]:
         """Get cumulative pruning statistics across all cycles.
         
         Returns:
@@ -285,7 +285,7 @@ class StatefulPruner(DesignSpacePruner):
 # Utility functions for pruning strategies
 def calculate_confidence_intervals(predictions: np.ndarray, 
                                  uncertainties: np.ndarray, 
-                                 confidence_level: float = 0.95) -> Tuple[np.ndarray, np.ndarray]:
+                                 confidence_level: float = 0.95) -> tuple[np.ndarray, np.ndarray]:
     """Calculate confidence intervals for predictions.
     
     Args:
@@ -310,7 +310,7 @@ def calculate_confidence_intervals(predictions: np.ndarray,
 
 
 def calculate_prediction_percentiles(predictions: np.ndarray, 
-                                   percentiles: List[float] = [10, 25, 50, 75, 90]) -> Dict[str, float]:
+                                   percentiles: list[float] = [10, 25, 50, 75, 90]) -> dict[str, float]:
     """Calculate percentiles of prediction distribution.
     
     Args:
@@ -328,7 +328,7 @@ def calculate_prediction_percentiles(predictions: np.ndarray,
 
 
 def adaptive_threshold_calculation(predictions: np.ndarray,
-                                 uncertainties: Optional[np.ndarray] = None,
+                                 uncertainties: np.ndarray | None = None,
                                  target_retention_rate: float = 0.5,
                                  method: str = 'percentile') -> float:
     """Calculate adaptive threshold for pruning.

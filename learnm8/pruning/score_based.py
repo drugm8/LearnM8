@@ -6,7 +6,7 @@ on the most promising regions of chemical space.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 import polars as pl
 import numpy as np
 
@@ -53,12 +53,12 @@ class ScoreBasedPruner(DesignSpacePruner):
         
         self.pruning_fraction = pruning_fraction
         self.score_direction = score_direction
-        self._last_stats: Dict[str, Any] = {}
+        self._last_stats: dict[str, Any] = {}
     
     def prune(self,
               compounds: pl.DataFrame,
               predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
+              uncertainties: np.ndarray | None = None) -> pl.DataFrame:
         """Prune compounds based on predicted scores.
         
         Args:
@@ -133,7 +133,7 @@ class ScoreBasedPruner(DesignSpacePruner):
         
         return pruned_compounds
     
-    def get_pruning_stats(self) -> Dict[str, Any]:
+    def get_pruning_stats(self) -> dict[str, Any]:
         """Get statistics from the most recent pruning operation.
         
         Returns:

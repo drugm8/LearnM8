@@ -32,7 +32,7 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional, Literal
+from typing import Any, Literal
 import polars as pl
 import numpy as np
 
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def _calculate_optimal_batch_size(
     n_compounds: int,
-    featurizer: Optional[str],
+    featurizer: str | None,
     available_memory_gb: float = 4.0
 ) -> int:
     """Calculate optimal batch size to stay under memory threshold.
@@ -116,11 +116,11 @@ def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
 def _predict_chunk(
     chunk_df: pl.DataFrame,
     learner: Learner,
-    featurizer: Optional[str],
+    featurizer: str | None,
     cache_dir: Path,
     show_progress: bool = False,
     n_jobs: int = -1
-) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """
     Generate predictions for a chunk of compounds.
 
@@ -175,17 +175,17 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer: Optional[str],
+    featurizer: str | None,
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str = 'higher',
     mode: Literal['run', 'benchmark'] = 'run',
-    original_pool: Optional[pl.DataFrame] = None,
-    cumulative_selected_ids: Optional[set] = None,
-    prediction_batch_size: Optional[int] = None,
-    previous_metrics: Optional[Dict[str, Any]] = None,
+    original_pool: pl.DataFrame | None = None,
+    cumulative_selected_ids: set | None = None,
+    prediction_batch_size: int | None = None,
+    previous_metrics: dict[str, Any] | None = None,
     n_jobs: int = -1
-) -> Tuple[pl.DataFrame, Dict[str, Any]]:
+) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
 
@@ -752,12 +752,12 @@ def _calculate_cycle_metrics(
     cycle: int,
     strategy: str,
     predictions: np.ndarray,
-    uncertainties: Optional[np.ndarray],
-    selected_ids: List[str],
-    pruned_ids: List[str],
+    uncertainties: np.ndarray | None,
+    selected_ids: list[str],
+    pruned_ids: list[str],
     target_col: str,
     score_direction: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Calculate comprehensive metrics for the cycle.
 
@@ -870,11 +870,11 @@ def _calculate_cycle_metrics(
 def _apply_pruning(
     pool: pl.DataFrame,
     predictions: np.ndarray,
-    uncertainties: Optional[np.ndarray],
+    uncertainties: np.ndarray | None,
     strategy: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     score_direction: str
-) -> Tuple[pl.DataFrame, Dict[str, Any]]:
+) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Apply pruning strategy to reduce selection pool.
 
@@ -947,7 +947,7 @@ def _select_compounds(
     strategy: str,
     batch_size: int,
     score_direction: str,
-    acquisition_params: Dict[str, Any]
+    acquisition_params: dict[str, Any]
 ) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.

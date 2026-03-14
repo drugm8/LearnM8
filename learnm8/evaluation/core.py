@@ -5,18 +5,16 @@ metrics based on mode (benchmark vs run) and data availability.
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 import polars as pl
 import numpy as np
 
 
 # Import specialized metric functions from modular metrics package
 from .metrics.performance import (
-	calculate_spearman_correlation, calculate_average_score, calculate_mape
+	calculate_average_score
 )
 from .metrics.enrichment import (
-	calculate_top_k_overlap, calculate_multiple_top_k_overlaps,
-	calculate_enrichment_factor, calculate_multiple_enrichment_factors,
 	calculate_ground_truth_enrichment_factors,
 	# NEW IMPORTS
 	calculate_multiple_top_k_discovery_rates,
@@ -44,17 +42,17 @@ def evaluate_cycle(
 	selected_compounds: pl.DataFrame,
 	target_col: str,
 	oracle_type: str = 'auto',
-	ground_truth_data: Optional[pl.DataFrame] = None,
-	pool_predictions: Optional[np.ndarray] = None,
-	pool_ids: Optional[np.ndarray] = None,
-	uncertainties: Optional[np.ndarray] = None,
-	previously_selected: Optional[pl.DataFrame] = None,
+	ground_truth_data: pl.DataFrame | None = None,
+	pool_predictions: np.ndarray | None = None,
+	pool_ids: np.ndarray | None = None,
+	uncertainties: np.ndarray | None = None,
+	previously_selected: pl.DataFrame | None = None,
 	advanced_metrics: bool = False,
 	disable_molecular_similarity: bool = False,
 	score_direction: str = 'higher',
-	cumulative_selected_ids: Optional[set] = None,
-	cumulative_labeled_count: Optional[int] = None
-) -> Dict[str, Any]:
+	cumulative_selected_ids: set | None = None,
+	cumulative_labeled_count: int | None = None
+) -> dict[str, Any]:
 	"""
 	Comprehensive evaluation with adaptive metrics based on available data.
 
@@ -327,7 +325,7 @@ def evaluate_cycle(
 	return metrics
 
 
-def format_progress_output(metrics: Dict[str, Any], oracle_type: str = 'auto', previous_metrics: Optional[Dict[str, Any]] = None) -> str:
+def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', previous_metrics: dict[str, Any] | None = None) -> str:
 	"""
 	Format cycle metrics as compact plain-text output with change indicators.
 

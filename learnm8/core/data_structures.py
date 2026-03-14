@@ -1,4 +1,3 @@
-from typing import List, Optional, Tuple, TYPE_CHECKING
 import logging
 import polars as pl
 
@@ -12,7 +11,7 @@ VALID_STATUSES = [STATUS_UNLABELED, STATUS_LABELED, STATUS_PRUNED]
 
 def initialize_master_dataframe(
     compound_pool: 'pl.DataFrame',
-    initial_labeled_ids: List[str],
+    initial_labeled_ids: list[str],
     initial_target_values: 'pl.Series',
     target_column: str
 ) -> 'pl.DataFrame':
@@ -92,7 +91,7 @@ def initialize_master_dataframe(
 
 def get_prediction_columns(
     master_df: 'pl.DataFrame'
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """Extract prediction and uncertainty column names.
 
     Args:

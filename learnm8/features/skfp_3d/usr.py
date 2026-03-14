@@ -4,7 +4,6 @@ Shape-based 3D fingerprint encoding molecular geometry.
 Requires 3D conformers.
 """
 
-from typing import Optional
 
 from skfp.fingerprints import USRFingerprint
 
@@ -22,7 +21,7 @@ class USRFeaturizer(SkfpFeaturizer):
         self,
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
-        optimize_force_field: Optional[str] = None,
+        optimize_force_field: str | None = None,
         n_jobs: int = -1
     ):
         """Initialize USR fingerprinter.

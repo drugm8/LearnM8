@@ -5,7 +5,7 @@ import inspect
 import logging
 import polars as pl
 from pathlib import Path
-from typing import List, Callable
+from collections.abc import Callable
 from learnm8.core.interfaces import Oracle
 from learnm8.exceptions import OracleError
 
@@ -105,7 +105,7 @@ class PythonOracle(Oracle):
         
         return oracle_function
         
-    def measure(self, compounds: pl.DataFrame, properties: List[str]) -> pl.DataFrame:
+    def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
         Execute oracle function to measure compound properties.
 

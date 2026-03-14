@@ -21,7 +21,7 @@ Examples:
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,10 +49,10 @@ class CycleConfig:
     """
     strategy: str
     n_cycles: int = 1
-    batch_fraction: Optional[float] = None
-    pruning_strategy: Optional[str] = None
-    pruning_params: Optional[Dict] = None
-    acquisition_params: Optional[Dict] = None
+    batch_fraction: float | None = None
+    pruning_strategy: str | None = None
+    pruning_params: dict | None = None
+    acquisition_params: dict | None = None
 
     def __post_init__(self):
         """Validate that batch_fraction is provided."""
@@ -68,7 +68,7 @@ class CycleConfig:
             )
 
 
-def parse_cycle_spec(spec: str) -> List[Dict[str, Any]]:
+def parse_cycle_spec(spec: str) -> list[dict[str, Any]]:
     """Parse compact string specification into list of dicts.
 
     Format specification:
@@ -151,13 +151,13 @@ def parse_cycle_spec(spec: str) -> List[Dict[str, Any]]:
 
 
 def parse_cycle_schedule(
-    cycles: Optional[List[CycleConfig]] = None,
+    cycles: list[CycleConfig] | None = None,
     strategy: str = 'greedy',
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
     initial_strategy: str = 'random',
     **kwargs
-) -> List[CycleConfig]:
+) -> list[CycleConfig]:
     """Convert either advanced API (cycles list) or simple API (individual parameters) to unified List[CycleConfig].
 
     This is the main entry point for cycle configuration. It supports two APIs:

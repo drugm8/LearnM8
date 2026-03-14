@@ -11,7 +11,7 @@ All functions return formatted strings suitable for logging at INFO level.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 import polars as pl
 
 logger = logging.getLogger(__name__)
@@ -96,9 +96,9 @@ def format_duration(seconds: float) -> str:
 
 
 def format_cycle_metrics_table(
-	metrics: Dict[str, Any],
+	metrics: dict[str, Any],
 	oracle_type: str = 'auto',
-	previous_metrics: Optional[Dict[str, Any]] = None,
+	previous_metrics: dict[str, Any] | None = None,
 	score_direction: str = 'higher'
 ) -> str:
 	"""
@@ -221,7 +221,7 @@ def format_experiment_summary(
     compounds_df: pl.DataFrame,
     duration: float,
     total_cycles: int
-) -> List[str]:
+) -> list[str]:
     """
     Generate experiment completion summary lines.
 

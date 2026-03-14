@@ -10,7 +10,6 @@ Updated to support both string-based and Featurizer instance-based extraction.
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Union
 
 import numpy as np
 
@@ -54,7 +53,7 @@ def _get_optimal_n_jobs(n_compounds: int, n_jobs: int = -1) -> int:
 
 @cache_features(Path('.cache'))
 def _extract_features_with_featurizer(
-    smiles_list: List[str],
+    smiles_list: list[str],
     featurizer: Featurizer,
     n_jobs: int = -1,
     show_progress: bool = False
@@ -101,9 +100,9 @@ def _extract_features_with_featurizer(
 
 
 def extract_features(
-    smiles_list: List[str],
-    featurizer: Union[str, Featurizer],
-    cache_dir: Optional[Path] = None,
+    smiles_list: list[str],
+    featurizer: str | Featurizer,
+    cache_dir: Path | None = None,
     n_jobs: int = -1,
     show_progress: bool = False
 ) -> np.ndarray:

@@ -7,7 +7,7 @@ for 3D fingerprints, and parameter management.
 
 import logging
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from skfp.preprocessing import MolFromSmilesTransformer, ConformerGenerator
 from learnm8.core.interfaces import Featurizer
@@ -43,7 +43,7 @@ class SkfpFeaturizer(Featurizer):
         self,
         fingerprint_instance,
         auto_generate_conformers: bool = True,
-        conformer_params: Optional[Dict[str, Any]] = None,
+        conformer_params: dict[str, Any] | None = None,
         n_jobs: int = -1
     ):
         """Initialize scikit-fingerprints wrapper.
@@ -77,7 +77,7 @@ class SkfpFeaturizer(Featurizer):
         else:
             self.conformer_gen = None
 
-    def transform(self, smiles_list: List[str]) -> np.ndarray:
+    def transform(self, smiles_list: list[str]) -> np.ndarray:
         """Transform SMILES to features using scikit-fingerprints.
 
         Args:
@@ -203,7 +203,7 @@ class SkfpFeaturizer(Featurizer):
         """
         return getattr(self.fingerprint, 'requires_conformers', False)
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get configuration dictionary for cache key generation.
 
         Returns:
@@ -228,7 +228,7 @@ class SkfpFeaturizer(Featurizer):
 
         return config
 
-    def validate_smiles(self, smiles_list: List[str]) -> List[bool]:
+    def validate_smiles(self, smiles_list: list[str]) -> list[bool]:
         """Validate SMILES using RDKit.
 
         Args:

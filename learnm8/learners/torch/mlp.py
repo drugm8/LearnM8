@@ -5,12 +5,10 @@ for molecular property prediction tasks.
 """
 
 import logging
-from typing import Tuple
 
 # Base class import
 from ..base import TorchLearner
 
-import torch
 import torch.nn as nn
 
 
@@ -26,7 +24,7 @@ class MLPLearner(TorchLearner):
     """
     
     def __init__(self,
-                 hidden_sizes: Tuple[int, ...] = (512, 256, 128),
+                 hidden_sizes: tuple[int, ...] = (512, 256, 128),
                  activation: str = 'relu',
                  dropout_rate: float = 0.2,
                  batch_norm: bool = True,

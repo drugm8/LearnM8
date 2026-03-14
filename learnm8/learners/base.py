@@ -8,7 +8,6 @@ architecture design.
 import time
 import logging
 from abc import abstractmethod
-from typing import Tuple, Optional, Dict, Any, List
 from pathlib import Path
 import numpy as np
 
@@ -30,10 +29,10 @@ ZERO_VARIANCE_THRESHOLD = 1e-10
 
 def _preprocess_features(
     features: np.ndarray,
-    valid_feature_mask: Optional[np.ndarray] = None,
+    valid_feature_mask: np.ndarray | None = None,
     remove_zero_variance: bool = True,
     is_training: bool = True
-) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """Preprocess features by handling NaN/inf and optionally removing zero-variance columns.
 
     Args:
@@ -152,7 +151,7 @@ class SklearnLearner(Learner):
                 f"with the learner, and there are enough labeled compounds."
             ) from e
 
-    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix.
 
         Args:
@@ -341,7 +340,7 @@ class TorchLearner(Learner):
         return val_loss
     
     def _split_validation(self, X: np.ndarray, y: np.ndarray, 
-                         val_fraction: float = 0.1) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                         val_fraction: float = 0.1) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Split data into training and validation sets.
         
         Args:
@@ -463,7 +462,7 @@ class TorchLearner(Learner):
                 f"with the learner, and there are enough labeled compounds."
             ) from e
 
-    def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix.
 
         Args:
