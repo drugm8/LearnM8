@@ -28,7 +28,7 @@ class LinearRegressionLearner(SklearnLearner):
 
     def __init__(
         self,
-        alpha: float | None = None,
+        alpha: float | None = 0.1,
         fit_intercept: bool = True,
         n_jobs: int = -1,
         random_state: int = 42,
