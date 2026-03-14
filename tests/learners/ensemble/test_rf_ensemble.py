@@ -1,9 +1,12 @@
 """Tests for RFEnsemble implementation."""
 
-import pytest
+import warnings
+
 import numpy as np
 import polars as pl
+import pytest
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
@@ -15,12 +18,21 @@ class TestRFEnsemble:
     @pytest.fixture
     def rf_ensemble(self):
         """Create RFEnsemble instance for testing."""
-        return RFEnsemble(n_estimators=10)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            return RFEnsemble(n_estimators=10)
 
     @pytest.fixture
     def custom_rf_ensemble(self):
         """Create RFEnsemble with custom parameters."""
-        return RFEnsemble(n_estimators=20, random_states=[1, 2, 3])
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            return RFEnsemble(n_estimators=20, random_states=[1, 2, 3])
+
+    def test_deprecation_warning(self):
+        """Test that RFEnsemble instantiation emits DeprecationWarning."""
+        with pytest.warns(DeprecationWarning, match='RFEnsemble is deprecated'):
+            RFEnsemble(n_estimators=10)
 
     def test_initialization(self, rf_ensemble):
         """Test RFEnsemble initialization with default parameters."""
@@ -35,12 +47,16 @@ class TestRFEnsemble:
     def test_initialization_custom_random_states(self):
         """Test initialization with custom random states."""
         custom_states = [10, 20, 30, 40]
-        ensemble = RFEnsemble(n_estimators=15, random_states=custom_states)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            ensemble = RFEnsemble(n_estimators=15, random_states=custom_states)
 
         assert len(ensemble.learners) == 4
         assert ensemble.n_estimators == 15
         assert ensemble.random_states == custom_states
-        assert all(isinstance(learner, RandomForestLearner) for learner in ensemble.learners)
+        assert all(
+            isinstance(learner, RandomForestLearner) for learner in ensemble.learners
+        )
 
     def test_diverse_hyperparameters(self, rf_ensemble):
         """Test that ensemble models have different random states for diversity."""
@@ -55,22 +71,26 @@ class TestRFEnsemble:
     def test_get_name(self, rf_ensemble):
         """Test name generation."""
         name = rf_ensemble.get_name()
-        assert "RFEnsemble" in name
-        assert "3xRF" in name
-        assert "n_est=10" in name
+        assert 'RFEnsemble' in name
+        assert '3xRF' in name
+        assert 'n_est=10' in name
 
     def test_get_name_custom_ensemble(self, custom_rf_ensemble):
         """Test name generation with custom parameters."""
         name = custom_rf_ensemble.get_name()
-        assert "RFEnsemble" in name
-        assert "3xRF" in name
-        assert "n_est=20" in name
+        assert 'RFEnsemble' in name
+        assert '3xRF' in name
+        assert 'n_est=20' in name
 
-    def test_ensemble_consistency(self, rf_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_ensemble_consistency(
+        self, rf_ensemble, small_real_compounds, small_real_morgan_features
+    ):
         """Test that ensemble predictions are consistent across multiple calls."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = small_real_morgan_features
         rf_ensemble.train(features, compounds['Activity'].to_numpy())
@@ -81,15 +101,19 @@ class TestRFEnsemble:
         np.testing.assert_array_almost_equal(predictions1, predictions2)
         np.testing.assert_array_almost_equal(uncertainty1, uncertainty2)
 
-    def test_prediction_variance_across_models(self, rf_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_prediction_variance_across_models(
+        self, rf_ensemble, small_real_compounds, small_real_morgan_features
+    ):
         """Test that ensemble provides uncertainty estimates from model diversity."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = small_real_morgan_features
         rf_ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = rf_ensemble.predict(features)
+        _predictions, uncertainty = rf_ensemble.predict(features)
 
         assert uncertainty is not None
         assert len(uncertainty) == len(compounds)
@@ -100,10 +124,14 @@ class TestRFEnsemble:
         """Test RFEnsemble with larger number of models."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         random_states = list(range(10))
-        ensemble = RFEnsemble(n_estimators=5, random_states=random_states)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', DeprecationWarning)
+            ensemble = RFEnsemble(n_estimators=5, random_states=random_states)
 
         assert len(ensemble.learners) == 10
 
@@ -119,7 +147,7 @@ class TestRFEnsemble:
         features = np.random.randn(10, 2048)
         targets = np.random.randn(5)
 
-        with pytest.raises(ValueError):
+        with pytest.raises((ValueError, LearnerError)):
             rf_ensemble.train(features, targets)
 
     def test_add_remove_learners(self, rf_ensemble):
@@ -136,15 +164,19 @@ class TestRFEnsemble:
         assert len(rf_ensemble.learners) == initial_count
         assert not rf_ensemble.is_trained
 
-    def test_uncertainty_magnitude(self, rf_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_magnitude(
+        self, rf_ensemble, small_real_compounds, small_real_morgan_features
+    ):
         """Test that uncertainty values are reasonable in magnitude."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = small_real_morgan_features
         rf_ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = rf_ensemble.predict(features)
+        _predictions, uncertainty = rf_ensemble.predict(features)
 
         activity_std = compounds['Activity'].std()
         assert np.mean(uncertainty) < activity_std

@@ -4,33 +4,38 @@ Covers 14 test patterns shared across 6 ensemble implementations:
 RFEnsemble, LREnsemble, DTEnsemble, XGBEnsemble, MixedEnsemble, EnsembleLearner.
 """
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
-from learnm8.learners.ensemble.ensemble import EnsembleLearner
-from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
-from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
-from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
+from learnm8.learners.ensemble.ensemble import EnsembleLearner
+from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
-from learnm8.learners.sklearn.random_forest import RandomForestLearner
+from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
+from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
-
+from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 ENSEMBLE_CONFIGS = [
-    pytest.param(("rf_ensemble", lambda: RFEnsemble(n_estimators=10)), id="rf_ensemble"),
-    pytest.param(("lr_ensemble", lambda: LREnsemble()), id="lr_ensemble"),
-    pytest.param(("dt_ensemble", lambda: DTEnsemble()), id="dt_ensemble"),
-    pytest.param(("xgb_ensemble", lambda: XGBEnsemble()), id="xgb_ensemble", marks=pytest.mark.slow),
     pytest.param(
-        ("mixed_ensemble", lambda: MixedEnsemble(random_state=42)),
-        id="mixed_ensemble",
+        ('rf_ensemble', lambda: RFEnsemble(n_estimators=10)), id='rf_ensemble'
+    ),
+    pytest.param(('lr_ensemble', lambda: LREnsemble()), id='lr_ensemble'),
+    pytest.param(('dt_ensemble', lambda: DTEnsemble()), id='dt_ensemble'),
+    pytest.param(
+        ('xgb_ensemble', lambda: XGBEnsemble()),
+        id='xgb_ensemble',
+        marks=pytest.mark.slow,
+    ),
+    pytest.param(
+        ('mixed_ensemble', lambda: MixedEnsemble(random_state=42)),
+        id='mixed_ensemble',
         marks=pytest.mark.slow,
     ),
     pytest.param(
         (
-            "ensemble",
+            'ensemble',
             lambda: EnsembleLearner(
                 [
                     RandomForestLearner(n_estimators=5, random_state=42),
@@ -38,24 +43,24 @@ ENSEMBLE_CONFIGS = [
                 ]
             ),
         ),
-        id="base_ensemble",
+        id='base_ensemble',
     ),
 ]
 
 
 def _make_ensemble_with_kwargs(name, **kwargs):
     """Create an ensemble instance with custom kwargs (aggregation_method, uncertainty_method)."""
-    if name == "rf_ensemble":
+    if name == 'rf_ensemble':
         return RFEnsemble(n_estimators=10, **kwargs)
-    elif name == "lr_ensemble":
+    elif name == 'lr_ensemble':
         return LREnsemble(**kwargs)
-    elif name == "dt_ensemble":
+    elif name == 'dt_ensemble':
         return DTEnsemble(**kwargs)
-    elif name == "xgb_ensemble":
+    elif name == 'xgb_ensemble':
         return XGBEnsemble(**kwargs)
-    elif name == "mixed_ensemble":
+    elif name == 'mixed_ensemble':
         return MixedEnsemble(random_state=42, **kwargs)
-    elif name == "ensemble":
+    elif name == 'ensemble':
         return EnsembleLearner(
             [
                 RandomForestLearner(n_estimators=5, random_state=42),
@@ -64,16 +69,16 @@ def _make_ensemble_with_kwargs(name, **kwargs):
             **kwargs,
         )
     else:
-        raise ValueError(f"Unknown ensemble type: {name}")
+        raise ValueError(f'Unknown ensemble type: {name}')
 
 
 def _prepare_targets(compounds):
     """Ensure compounds have an Activity column and return targets array."""
-    if "Activity" not in compounds.columns:
+    if 'Activity' not in compounds.columns:
         compounds = compounds.with_columns(
-            pl.Series("Activity", np.random.beta(2, 5, len(compounds)))
+            pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
         )
-    return compounds, compounds["Activity"].to_numpy()
+    return compounds, compounds['Activity'].to_numpy()
 
 
 @pytest.mark.integration
@@ -107,7 +112,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
-        compounds, targets = _prepare_targets(small_real_compounds)
+        _compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
         ensemble.train(features, targets)
@@ -130,31 +135,29 @@ class TestEnsembleCommon:
         with pytest.raises((ValueError, RuntimeError)):
             ensemble.train(empty_features, empty_targets)
 
-    def test_predict_without_training(
-        self, ensemble_setup, small_real_morgan_features
-    ):
+    def test_predict_without_training(self, ensemble_setup, small_real_morgan_features):
         _, ensemble = ensemble_setup
-        with pytest.raises(RuntimeError, match="Ensemble must be trained"):
+        with pytest.raises(RuntimeError, match='must be trained'):
             ensemble.predict(small_real_morgan_features)
 
     def test_ensemble_statistics_untrained(self, ensemble_setup):
         _, ensemble = ensemble_setup
         stats = ensemble.get_ensemble_statistics()
-        assert stats["n_learners"] >= 2
-        assert stats["is_trained"] is False
+        assert stats['n_learners'] >= 2
+        assert stats['is_trained'] is False
 
     def test_ensemble_statistics_trained(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
-        compounds, targets = _prepare_targets(small_real_compounds)
+        _compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
         ensemble.train(features, targets)
         stats = ensemble.get_ensemble_statistics()
-        assert stats["is_trained"] is True
-        assert "learner_names" in stats
-        assert len(stats["learner_names"]) >= 2
+        assert stats['is_trained'] is True
+        assert 'learner_names' in stats
+        assert len(stats['learner_names']) >= 2
 
     def test_individual_predictions(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
@@ -167,7 +170,7 @@ class TestEnsembleCommon:
         individual_preds = ensemble.get_individual_predictions(features)
 
         assert len(individual_preds) >= 1
-        for learner_name, preds in individual_preds.items():
+        for _learner_name, preds in individual_preds.items():
             if preds is not None:
                 assert len(preds) == len(compounds)
                 assert np.all(np.isfinite(preds))
@@ -176,7 +179,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
-        ensemble = _make_ensemble_with_kwargs(name, aggregation_method="mean")
+        ensemble = _make_ensemble_with_kwargs(name, aggregation_method='mean')
         compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
@@ -191,7 +194,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
-        ensemble = _make_ensemble_with_kwargs(name, aggregation_method="median")
+        ensemble = _make_ensemble_with_kwargs(name, aggregation_method='median')
         compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
@@ -206,7 +209,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
-        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method="std")
+        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='std')
         compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
@@ -221,7 +224,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
-        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method="mad")
+        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='mad')
         compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
@@ -236,7 +239,7 @@ class TestEnsembleCommon:
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
-        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method="quantile")
+        ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='quantile')
         compounds, targets = _prepare_targets(small_real_compounds)
         features = small_real_morgan_features
 
@@ -251,18 +254,18 @@ class TestEnsembleCommon:
         _, ensemble = ensemble_setup
         small_dataset = pl.DataFrame(
             {
-                "ID": ["COMP_001", "COMP_002", "COMP_003", "COMP_004", "COMP_005"],
-                "SMILES": ["CCO", "c1ccccc1", "CC(=O)O", "CCN", "C1CCNCC1"],
-                "Activity": [0.5, 0.3, 0.8, 0.1, 0.6],
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
+                'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+                'Activity': [0.5, 0.3, 0.8, 0.1, 0.6],
             }
         )
 
         from learnm8.features.extraction import extract_features
 
         features = extract_features(
-            small_dataset["SMILES"].to_list(), "morgan", tmp_path
+            small_dataset['SMILES'].to_list(), 'morgan', tmp_path
         )
-        ensemble.train(features, small_dataset["Activity"].to_numpy())
+        ensemble.train(features, small_dataset['Activity'].to_numpy())
         predictions, uncertainty = ensemble.predict(features)
 
         assert len(predictions) == 5
