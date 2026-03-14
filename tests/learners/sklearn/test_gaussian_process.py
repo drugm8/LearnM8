@@ -1,12 +1,17 @@
 """Tests for GaussianProcessLearner implementation."""
 
-import pytest
+import logging
+
 import numpy as np
 import polars as pl
-from unittest.mock import Mock
+import pytest
+from scipy import stats
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.gaussian_process.kernels import ConstantKernel as C
 
-from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
+from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.features.extraction import extract_features
+from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 
 
 @pytest.mark.integration
@@ -21,7 +26,7 @@ class TestGaussianProcessLearner:
 
     def test_initialization(self, learner):
         """Test learner initialization."""
-        assert learner.alpha == 1e-10
+        assert learner.alpha == 1e-3
         assert learner.random_state == 42
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
@@ -53,23 +58,23 @@ class TestGaussianProcessLearner:
         train_features = small_real_morgan_features[:half]
         learner.train(train_features, compounds[:half]['Activity'].to_numpy())
 
-        train_pred, train_unc = learner.predict(train_features)
+        _train_pred, train_unc = learner.predict(train_features)
 
         if half < len(compounds):
             test_features = small_real_morgan_features[half:]
-            test_pred, test_unc = learner.predict(test_features)
+            _test_pred, test_unc = learner.predict(test_features)
             assert np.mean(train_unc) <= np.mean(test_unc) * 2
 
     def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
+        with pytest.raises(RuntimeError, match="must be trained before prediction"):
             learner.predict(small_real_morgan_features)
 
     def test_get_name(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert "GaussianProcess" in name
-        assert "α=1e-10" in name
+        assert "alpha=0.001" in name
 
     def test_learned_hyperparameters(self, learner, small_real_compounds, small_real_morgan_features):
         """Test hyperparameter learning."""
@@ -165,7 +170,7 @@ class TestGaussianProcessLearner:
         features = small_real_morgan_features
         learner.train(features, compounds['Activity'].to_numpy())
 
-        predictions, uncertainty = learner.predict(features)
+        _predictions, uncertainty = learner.predict(features)
 
         assert learner.supports_uncertainty() is True
         assert uncertainty is not None
@@ -175,14 +180,14 @@ class TestGaussianProcessLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+        with pytest.raises(RuntimeError, match="empty dataset"):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(ValueError, match="Features and targets must have same length"):
+        with pytest.raises(RuntimeError, match="mismatched lengths"):
             learner.train(features, targets)
 
     def test_train_with_1d_features(self, learner):
@@ -191,3 +196,238 @@ class TestGaussianProcessLearner:
 
         with pytest.raises((ValueError, RuntimeError)):
             learner.train(features_1d, targets)
+
+    def test_default_kernel_auto(self):
+        learner = GaussianProcessLearner()
+        assert learner._kernel_config == "auto"
+
+    def test_kernel_none_treated_as_auto(self):
+        learner = GaussianProcessLearner(kernel=None)
+        assert learner._kernel_config == "auto"
+
+    def test_get_name_reflects_kernel(self, small_real_compounds, small_real_morgan_features):
+        learner = GaussianProcessLearner(random_state=42)
+        compounds = small_real_compounds.clone()
+        if "Activity" not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias("Activity")
+            )
+        learner.train(small_real_morgan_features, compounds["Activity"].to_numpy())
+        name = learner.get_name()
+        assert "Tanimoto" in name or "RBF" in name
+
+
+@pytest.mark.unit
+class TestKernelAutoDetection:
+    """Tests for kernel auto-detection and explicit selection (T006)."""
+
+    def test_auto_kernel_binary_selects_tanimoto(self):
+        learner = GaussianProcessLearner(kernel="auto", random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == "Tanimoto"
+
+    def test_auto_kernel_continuous_selects_rbf(self):
+        learner = GaussianProcessLearner(kernel="auto", random_state=42)
+        X = np.random.randn(20, 5)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == "RBF"
+
+    def test_explicit_tanimoto_kernel(self):
+        learner = GaussianProcessLearner(kernel="tanimoto", random_state=42)
+        X = np.random.randn(20, 5).clip(0)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == "Tanimoto"
+
+    def test_explicit_rbf_kernel(self):
+        learner = GaussianProcessLearner(kernel="rbf", random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == "RBF"
+
+    def test_custom_kernel_object_passthrough(self):
+        custom_kernel = C(1.0) * RBF(1.0)
+        learner = GaussianProcessLearner(kernel=custom_kernel, random_state=42)
+        X = np.random.randn(20, 5)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert isinstance(learner._kernel_config, type(custom_kernel))
+
+    def test_retrain_different_feature_type(self):
+        learner = GaussianProcessLearner(kernel="auto", random_state=42)
+        X_binary = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X_binary, y)
+        assert learner._kernel_name == "Tanimoto"
+
+        X_cont = np.random.randn(20, 5)
+        learner.train(X_cont, y)
+        assert learner._kernel_name == "RBF"
+
+    def test_mixed_binary_continuous_detection(self):
+        learner = GaussianProcessLearner(kernel="auto", random_state=42)
+        X = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 1.0]] * 10)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == "Tanimoto"
+
+    def test_backward_compat_custom_kernel_object(self):
+        custom_kernel = C(2.0, (1e-3, 1e3)) * RBF(0.5, (1e-3, 1e3))
+        learner = GaussianProcessLearner(kernel=custom_kernel, random_state=42)
+        X = np.random.randn(20, 5)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        preds, unc = learner.predict(X)
+        assert preds.shape == (20,)
+        assert unc.shape == (20,)
+
+    def test_invalid_kernel_string_raises(self):
+        with pytest.raises(ConfigurationError, match="kernel must be"):
+            GaussianProcessLearner(kernel="matern")
+
+    def test_negative_features_tanimoto_warns(self, caplog):
+        learner = GaussianProcessLearner(kernel="tanimoto", random_state=42)
+        X = np.array([[-1.0, 0.5, 0.3], [0.2, 0.1, 0.8]] * 10)
+        y = np.random.randn(20)
+        with caplog.at_level(logging.WARNING):
+            learner.train(X, y)
+        assert "non-negative" in caplog.text.lower() or "negative" in caplog.text.lower()
+
+    def test_get_name_before_train_explicit_kernel(self):
+        learner = GaussianProcessLearner(kernel="tanimoto")
+        assert "Tanimoto" in learner.get_name()
+
+        learner_rbf = GaussianProcessLearner(kernel="rbf")
+        assert "RBF" in learner_rbf.get_name()
+
+
+@pytest.mark.unit
+class TestAlphaConfiguration:
+    """Tests for alpha configuration passthrough (T007)."""
+
+    def test_alpha_custom_value(self):
+        learner = GaussianProcessLearner(alpha=0.05, random_state=42)
+        assert learner.alpha == 0.05
+        X = np.random.randn(20, 5)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner.model.alpha == 0.05
+
+
+@pytest.mark.unit
+class TestSizeGuard:
+    """Tests for training set size guards (T008)."""
+
+    def test_size_guard_warning(self, caplog):
+        learner = GaussianProcessLearner(max_train_size=50, random_state=42)
+        n = 21  # > 50 * 0.4 = 20
+        X = np.random.randn(n, 2)
+        y = np.random.randn(n)
+        with caplog.at_level(logging.WARNING):
+            learner.train(X, y)
+        assert "large" in caplog.text.lower() or "slow" in caplog.text.lower()
+
+    def test_size_guard_no_warning(self, caplog):
+        learner = GaussianProcessLearner(max_train_size=50, random_state=42)
+        n = 20  # = 50 * 0.4, NOT > threshold
+        X = np.random.randn(n, 2)
+        y = np.random.randn(n)
+        with caplog.at_level(logging.WARNING):
+            learner.train(X, y)
+        warning_msgs = [r for r in caplog.records if r.levelno >= logging.WARNING
+                        and "large" in r.message.lower()]
+        assert len(warning_msgs) == 0
+
+    def test_size_guard_error(self):
+        learner = GaussianProcessLearner(max_train_size=50, random_state=42)
+        n = 51  # > 50
+        X = np.random.randn(n, 2)
+        y = np.random.randn(n)
+        with pytest.raises(LearnerError, match="exceeds maximum"):
+            learner.train(X, y)
+
+    def test_size_guard_no_error(self):
+        learner = GaussianProcessLearner(max_train_size=50, random_state=42)
+        n = 50  # = max, NOT > max
+        X = np.random.randn(n, 2)
+        y = np.random.randn(n)
+        learner.train(X, y)
+        assert learner.is_trained
+
+    def test_max_train_size_configurable(self):
+        learner = GaussianProcessLearner(max_train_size=100, random_state=42)
+        X_ok = np.random.randn(100, 2)
+        y_ok = np.random.randn(100)
+        learner.train(X_ok, y_ok)
+        assert learner.is_trained
+
+        X_too_big = np.random.randn(101, 2)
+        y_too_big = np.random.randn(101)
+        with pytest.raises(LearnerError, match="exceeds maximum"):
+            learner.train(X_too_big, y_too_big)
+
+
+@pytest.mark.integration
+@pytest.mark.molecular
+class TestScientificValidation:
+    """Scientific validation tests (T009)."""
+
+    def test_uncertainty_rank_correlation_positive(
+        self, small_real_compounds, small_real_morgan_features
+    ):
+        compounds = small_real_compounds.clone()
+        if "Activity" not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias("Activity")
+            )
+
+        targets = compounds["Activity"].to_numpy()
+        features = small_real_morgan_features
+
+        half = len(compounds) // 2
+        train_X, test_X = features[:half], features[half:]
+        train_y, test_y = targets[:half], targets[half:]
+
+        learner = GaussianProcessLearner(random_state=42)
+        learner.train(train_X, train_y)
+        preds, unc = learner.predict(test_X)
+
+        abs_error = np.abs(preds - test_y)
+        rho, _ = stats.spearmanr(unc, abs_error)
+        assert rho > 0, f"Expected positive rank correlation, got rho={rho:.4f}"
+
+    def test_ablation_tanimoto_vs_rbf_on_binary(
+        self, small_real_compounds, small_real_morgan_features
+    ):
+        compounds = small_real_compounds.clone()
+        if "Activity" not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias("Activity")
+            )
+
+        targets = compounds["Activity"].to_numpy()
+        features = small_real_morgan_features
+
+        half = len(compounds) // 2
+        train_X, test_X = features[:half], features[half:]
+        train_y, test_y = targets[:half], targets[half:]
+
+        gp_tan = GaussianProcessLearner(kernel="tanimoto", alpha=1e-3, random_state=42)
+        gp_tan.train(train_X, train_y)
+        preds_tan, unc_tan = gp_tan.predict(test_X)
+        abs_err_tan = np.abs(preds_tan - test_y)
+        rho_tan, _ = stats.spearmanr(unc_tan, abs_err_tan)
+
+        gp_rbf = GaussianProcessLearner(kernel="rbf", alpha=1e-3, random_state=42)
+        gp_rbf.train(train_X, train_y)
+        preds_rbf, unc_rbf = gp_rbf.predict(test_X)
+        abs_err_rbf = np.abs(preds_rbf - test_y)
+        rho_rbf, _ = stats.spearmanr(unc_rbf, abs_err_rbf)
+
+        assert rho_tan >= rho_rbf, (
+            f"Expected Tanimoto rho ({rho_tan:.4f}) >= RBF rho ({rho_rbf:.4f}) on binary features"
+        )
