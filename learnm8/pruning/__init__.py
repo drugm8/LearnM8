@@ -11,22 +11,23 @@ Simplified Architecture (v0.6.0):
 - Score direction awareness
 """
 
-from .base import DesignSpacePruner
 from learnm8.exceptions import PruningError
+
+from .base import DesignSpacePruner
 from .score_based import ScoreBasedPruner
 from .utils import (
-    validate_pruning_parameters,
     create_pruning_strategy,
+    validate_pruning_parameters,
 )
 
 __all__ = [
     # Base classes
     'DesignSpacePruner',
     'PruningError',
-    
+
     # Score-based pruning strategy
     'ScoreBasedPruner',
-    
+
     # Utility functions
     'validate_pruning_parameters',
     'create_pruning_strategy',

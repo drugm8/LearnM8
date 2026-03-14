@@ -16,10 +16,12 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+
 import polars as pl
 
-from .validation import ValidationResult
 from learnm8.exceptions import PersistenceError
+
+from .validation import ValidationResult
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
         Metadata key-value pairs. Empty string values create blank comment lines.
     """
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             lines = f.readlines()
 
         comment_lines = []
@@ -55,7 +57,7 @@ def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
             f.writelines(comment_lines)
             f.writelines(lines)
 
-    except IOError as e:
+    except OSError as e:
         logger.warning(f"Failed to add metadata to {file_path}: {e}")
 
 
@@ -219,7 +221,7 @@ def save_results(
         logger.debug(f"Saved compounds_final.csv: {len(compounds_final)} compounds")
         logger.info(f"Saved compounds_final.csv ({len(compounds_final)} compounds)")
 
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to save compounds_final.csv: {e}")
         raise PersistenceError(f"Failed to save compounds_final.csv: {e}") from e
 
@@ -264,7 +266,7 @@ def save_results(
         logger.debug(f"Saved cycle_metrics.csv: {len(metrics_df)} cycles")
         logger.info(f"Saved cycle_metrics.csv ({len(metrics_df)} cycles)")
 
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to save cycle_metrics.csv: {e}")
         raise PersistenceError(f"Failed to save cycle_metrics.csv: {e}") from e
 
@@ -334,7 +336,7 @@ def save_results(
         logger.debug(f"Saved selection_history.csv: {len(selection_df)} selections")
         logger.info(f"Saved selection_history.csv ({len(selection_df)} selections)")
 
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to save selection_history.csv: {e}")
         raise PersistenceError(f"Failed to save selection_history.csv: {e}") from e
 
@@ -366,7 +368,7 @@ def save_results(
             logger.debug(f"Saved validation_report.csv: {len(invalid_df)} invalid compounds")
             logger.info(f"Saved validation_report.csv ({len(invalid_df)} invalid compounds)")
 
-        except IOError as e:
+        except OSError as e:
             logger.warning(f"Failed to save validation_report.csv: {e}")
 
     try:
@@ -375,10 +377,10 @@ def save_results(
             json.dump(config, f, indent=2)
 
         saved_files['config'] = config_path
-        logger.debug(f"Saved config.json")
-        logger.info(f"Saved config.json")
+        logger.debug("Saved config.json")
+        logger.info("Saved config.json")
 
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to save config.json: {e}")
         raise PersistenceError(f"Failed to save config.json: {e}") from e
 

@@ -1,12 +1,12 @@
 """XGBoost ensemble learner for LearnM8 framework."""
 
-from .ensemble import EnsembleLearner
 from ..sklearn.xgboost_learner import XGBoostLearner
+from .ensemble import EnsembleLearner
 
 
 class XGBEnsemble(EnsembleLearner):
     """Ensemble of 3 XGBoost learners with different learning rates."""
-    
+
     def __init__(self,
                  learning_rates: list[float] | None = None,
                  random_states: list[int] | None = None,
@@ -30,16 +30,16 @@ class XGBEnsemble(EnsembleLearner):
                 random_state=rs
             )
             learners.append(xgb)
-        
+
         # Set default ensemble parameters
         kwargs.setdefault('aggregation_method', 'mean')
         kwargs.setdefault('uncertainty_method', 'std')
-        
+
         super().__init__(learners, **kwargs)
-        
+
         self.learning_rates = learning_rates
         self.random_states = random_states
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         lrs_str = ','.join(f"{lr:.2f}" for lr in self.learning_rates)

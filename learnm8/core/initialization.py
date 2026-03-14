@@ -5,16 +5,19 @@ followed by a separate initialization phase (cycle 0) that selects the
 initial batch before active learning cycles begin.
 """
 
-import polars as pl
-import pandas as pd
-import numpy as np
 import logging
 import math
 from pathlib import Path
 from typing import Any
+
+import numpy as np
+import pandas as pd
+import polars as pl
+
+from learnm8.exceptions import AcquisitionError, OracleError
+
 from .data_structures import STATUS_UNLABELED, VALID_STATUSES
 from .interfaces import Oracle
-from learnm8.exceptions import AcquisitionError, OracleError
 
 logger = logging.getLogger(__name__)
 
@@ -271,8 +274,9 @@ def select_initial_batch(
         ...     original_pool=original_df
         ... )
     """
-    from .dataframe_ops import update_status
     from learnm8.acquisition import get_acquisition_function
+
+    from .dataframe_ops import update_status
 
     batch_size = min(
         max(1, math.ceil(original_pool_size * batch_fraction)),
@@ -287,7 +291,7 @@ def select_initial_batch(
             f"Increase batch_fraction or use a larger compound pool."
         )
 
-    logger.debug(f"Starting initialization phase (cycle 0)")
+    logger.debug("Starting initialization phase (cycle 0)")
     logger.debug(f"Strategy: {strategy}, batch_fraction: {batch_fraction}")
     logger.debug(f"Original pool size: {original_pool_size}, calculated batch: {batch_size}")
 
@@ -364,7 +368,7 @@ def select_initial_batch(
         )
 
     logger.debug(f"Oracle measured {len(selected_ids)} compounds")
-    logger.debug(f"Updating DataFrame: status=labeled, labeled_cycle=0")
+    logger.debug("Updating DataFrame: status=labeled, labeled_cycle=0")
 
     # Extract target values from measurements
     target_values = measurements.get_column(target_col)

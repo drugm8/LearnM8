@@ -3,10 +3,11 @@ Compound validation using datamol for parallel processing and standardization.
 Provides 50x speedup over sequential validation approaches.
 """
 
-import polars as pl
-import datamol as dm
 import logging
 from dataclasses import dataclass
+
+import datamol as dm
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ def validate_compound_pool(
         dup_df = pl.DataFrame(schema=compound_pool.schema)
         dup_errors = {}
 
-    logger.debug(f"Validating compounds using datamol.sanitize_smiles()")
+    logger.debug("Validating compounds using datamol.sanitize_smiles()")
 
     smiles_list = unique_pool['SMILES'].to_list()
 

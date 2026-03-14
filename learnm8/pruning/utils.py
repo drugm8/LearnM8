@@ -32,7 +32,7 @@ def validate_pruning_parameters(strategy_name: str,
                 errors.append("pruning_fraction must be a number")
             elif not 0.0 <= fraction <= 0.9:
                 errors.append("pruning_fraction must be between 0.0 and 0.9")
-        
+
         # Validate score_direction
         if 'score_direction' in parameters:
             direction = parameters['score_direction']
@@ -40,13 +40,13 @@ def validate_pruning_parameters(strategy_name: str,
                 errors.append("score_direction must be a string")
             elif direction not in ['higher', 'lower']:
                 errors.append("score_direction must be 'higher' or 'lower'")
-        
+
         # Check for unexpected parameters
         valid_params = {'pruning_fraction', 'score_direction'}
         unexpected_params = set(parameters.keys()) - valid_params
         if unexpected_params:
             errors.append(f"Unexpected parameters: {', '.join(unexpected_params)}")
-    
+
     else:
         errors.append(
             f"Unknown pruning strategy '{strategy_name}'. "

@@ -6,55 +6,55 @@ All 43 scikit-fingerprints featurizers available, including 9 3D conformational 
 """
 
 from learnm8.core.interfaces import Featurizer
-from learnm8.features.extraction import extract_features
 
 # Base class
 from learnm8.features.base import SkfpFeaturizer
-
-# 2D featurizers - Circular and structural keys
-from learnm8.features.skfp_2d.morgan import MorganFeaturizer
-from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
-from learnm8.features.skfp_2d.avalon import AvalonFeaturizer
-from learnm8.features.skfp_2d.pubchem import PubChemFeaturizer
-from learnm8.features.skfp_2d.klekota_roth import KlekotaRothFeaturizer
-from learnm8.features.skfp_2d.laggner import LaggnerFeaturizer
+from learnm8.features.extraction import extract_features
 
 # 2D featurizers - Topological
 from learnm8.features.skfp_2d.atom_pair import AtomPairFeaturizer
-from learnm8.features.skfp_2d.topological_torsion import TopologicalTorsionFeaturizer
-from learnm8.features.skfp_2d.rdkit import RDKitFeaturizer
-from learnm8.features.skfp_2d.pattern import PatternFeaturizer
+from learnm8.features.skfp_2d.avalon import AvalonFeaturizer
+from learnm8.features.skfp_2d.bcut2d import BCUT2DFeaturizer
+from learnm8.features.skfp_2d.erg import ERGFeaturizer
+from learnm8.features.skfp_2d.estate import EStateFeaturizer
+from learnm8.features.skfp_2d.functional_groups import FunctionalGroupsFeaturizer
+from learnm8.features.skfp_2d.ghose_crippen import GhoseCrippenFeaturizer
+from learnm8.features.skfp_2d.klekota_roth import KlekotaRothFeaturizer
+from learnm8.features.skfp_2d.laggner import LaggnerFeaturizer
 from learnm8.features.skfp_2d.layered import LayeredFeaturizer
+from learnm8.features.skfp_2d.lingo import LingoFeaturizer
+from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
 
 # 2D featurizers - Hashed
 from learnm8.features.skfp_2d.map4 import MAP4Featurizer
 from learnm8.features.skfp_2d.mhfp import MHFPFeaturizer
-from learnm8.features.skfp_2d.secfp import SECFPFeaturizer
-from learnm8.features.skfp_2d.lingo import LingoFeaturizer
-from learnm8.features.skfp_2d.erg import ERGFeaturizer
 
 # 2D featurizers - Descriptors
 from learnm8.features.skfp_2d.mordred import MordredFeaturizer
-from learnm8.features.skfp_2d.rdkit_2d_descriptors import RDKit2DDescriptorsFeaturizer
-from learnm8.features.skfp_2d.estate import EStateFeaturizer
-from learnm8.features.skfp_2d.ghose_crippen import GhoseCrippenFeaturizer
-from learnm8.features.skfp_2d.mqns import MQNsFeaturizer
-from learnm8.features.skfp_2d.vsa import VSAFeaturizer
-from learnm8.features.skfp_2d.bcut2d import BCUT2DFeaturizer
-from learnm8.features.skfp_2d.physiochemical import PhysiochemicalPropertiesFeaturizer
-from learnm8.features.skfp_2d.pharmacophore import PharmacophoreFeaturizer
-from learnm8.features.skfp_2d.functional_groups import FunctionalGroupsFeaturizer
 
-# 3D featurizers
-from learnm8.features.skfp_3d.whim import WHIMFeaturizer
-from learnm8.features.skfp_3d.usr import USRFeaturizer
-from learnm8.features.skfp_3d.usrcat import USRCATFeaturizer
+# 2D featurizers - Circular and structural keys
+from learnm8.features.skfp_2d.morgan import MorganFeaturizer
+from learnm8.features.skfp_2d.mqns import MQNsFeaturizer
+from learnm8.features.skfp_2d.pattern import PatternFeaturizer
+from learnm8.features.skfp_2d.pharmacophore import PharmacophoreFeaturizer
+from learnm8.features.skfp_2d.physiochemical import PhysiochemicalPropertiesFeaturizer
+from learnm8.features.skfp_2d.pubchem import PubChemFeaturizer
+from learnm8.features.skfp_2d.rdkit import RDKitFeaturizer
+from learnm8.features.skfp_2d.rdkit_2d_descriptors import RDKit2DDescriptorsFeaturizer
+from learnm8.features.skfp_2d.secfp import SECFPFeaturizer
+from learnm8.features.skfp_2d.topological_torsion import TopologicalTorsionFeaturizer
+from learnm8.features.skfp_2d.vsa import VSAFeaturizer
+from learnm8.features.skfp_3d.autocorr import AutocorrFeaturizer
 from learnm8.features.skfp_3d.e3fp import E3FPFeaturizer
+from learnm8.features.skfp_3d.electroshape import ElectroShapeFeaturizer
 from learnm8.features.skfp_3d.getaway import GETAWAYFeaturizer
 from learnm8.features.skfp_3d.morse import MORSEFeaturizer
 from learnm8.features.skfp_3d.rdf import RDFFeaturizer
-from learnm8.features.skfp_3d.autocorr import AutocorrFeaturizer
-from learnm8.features.skfp_3d.electroshape import ElectroShapeFeaturizer
+from learnm8.features.skfp_3d.usr import USRFeaturizer
+from learnm8.features.skfp_3d.usrcat import USRCATFeaturizer
+
+# 3D featurizers
+from learnm8.features.skfp_3d.whim import WHIMFeaturizer
 
 
 # Wrapper classes for registry entries with custom defaults
@@ -129,7 +129,7 @@ FEATURIZERS_3D = [
 ]
 
 FEATURIZERS_2D = [
-    name for name in FEATURIZER_REGISTRY.keys()
+    name for name in FEATURIZER_REGISTRY
     if name not in FEATURIZERS_3D
 ]
 

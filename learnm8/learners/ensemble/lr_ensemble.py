@@ -1,12 +1,12 @@
 """Linear Regression ensemble learner for LearnM8 framework."""
 
-from .ensemble import EnsembleLearner
 from ..sklearn.linear_regression import LinearRegressionLearner
+from .ensemble import EnsembleLearner
 
 
 class LREnsemble(EnsembleLearner):
     """Ensemble of 3 Linear Regression learners with different regularization strengths."""
-    
+
     def __init__(self,
                  regularization_strengths: list[float] | None = None,
                  random_states: list[int] | None = None,
@@ -30,16 +30,16 @@ class LREnsemble(EnsembleLearner):
                 random_state=rs
             )
             learners.append(lr)
-        
+
         # Set default ensemble parameters
         kwargs.setdefault('aggregation_method', 'mean')
         kwargs.setdefault('uncertainty_method', 'std')
-        
+
         super().__init__(learners, **kwargs)
-        
+
         self.regularization_strengths = regularization_strengths
         self.random_states = random_states
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         alphas_str = ','.join(f"{a:.1f}" for a in self.regularization_strengths)

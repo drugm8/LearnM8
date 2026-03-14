@@ -6,11 +6,10 @@ for molecular property prediction tasks.
 
 import logging
 
-# Base class import
-from ..base import TorchLearner
-
 import torch.nn as nn
 
+# Base class import
+from ..base import TorchLearner
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class MLPLearner(TorchLearner):
     configurable hidden layers, activation functions, and regularization
     for molecular property prediction.
     """
-    
+
     def __init__(self,
                  hidden_sizes: tuple[int, ...] = (512, 256, 128),
                  activation: str = 'relu',
@@ -39,12 +38,12 @@ class MLPLearner(TorchLearner):
             **kwargs: Additional arguments passed to TorchLearner
         """
         super().__init__(**kwargs)
-        
+
         self.hidden_sizes = hidden_sizes
         self.activation = activation
         self.dropout_rate = dropout_rate
         self.batch_norm = batch_norm
-        
+
         # Activation function mapping
         self.activation_fn = {
             'relu': nn.ReLU,
@@ -52,7 +51,7 @@ class MLPLearner(TorchLearner):
             'gelu': nn.GELU,
             'leaky_relu': nn.LeakyReLU
         }.get(activation, nn.ReLU)
-    
+
     def _create_model(self, input_size: int) -> nn.Module:
         """Create MLP model architecture.
         
@@ -64,35 +63,35 @@ class MLPLearner(TorchLearner):
         """
         layers = []
         prev_size = input_size
-        
+
         # Hidden layers
         for hidden_size in self.hidden_sizes:
             # Linear layer
             layers.append(nn.Linear(prev_size, hidden_size))
-            
+
             # Batch normalization
             if self.batch_norm:
                 layers.append(nn.BatchNorm1d(hidden_size))
-            
+
             # Activation
             layers.append(self.activation_fn())
-            
+
             # Dropout
             if self.dropout_rate > 0:
                 layers.append(nn.Dropout(self.dropout_rate))
-            
+
             prev_size = hidden_size
-        
+
         # Output layer
         layers.append(nn.Linear(prev_size, 1))
-        
+
         model = nn.Sequential(*layers)
-        
+
         # Initialize weights
         self._initialize_weights(model)
-        
+
         return model
-    
+
     def _initialize_weights(self, model: nn.Module) -> None:
         """Initialize model weights using Xavier/He initialization.
         
@@ -105,14 +104,14 @@ class MLPLearner(TorchLearner):
                     nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
                 else:
                     nn.init.xavier_normal_(module.weight)
-                
+
                 if module.bias is not None:
                     nn.init.constant_(module.bias, 0)
-            
+
             elif isinstance(module, nn.BatchNorm1d):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         hidden_str = '-'.join(map(str, self.hidden_sizes))

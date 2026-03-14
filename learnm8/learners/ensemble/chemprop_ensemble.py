@@ -1,10 +1,13 @@
 """Chemprop ensemble learner for message-passing neural networks."""
 
 from pathlib import Path
+
 import numpy as np
-from .ensemble import EnsembleLearner
-from ..torch.chemprop_learner import ChempropLearner
+
 from learnm8.exceptions import LearnerError
+
+from ..torch.chemprop_learner import ChempropLearner
+from .ensemble import EnsembleLearner
 
 
 class ChempropEnsemble(EnsembleLearner):
@@ -286,6 +289,7 @@ class ChempropEnsemble(EnsembleLearner):
 
 		try:
 			import gc
+
 			import torch
 
 			if torch.cuda.is_available():

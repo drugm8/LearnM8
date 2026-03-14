@@ -5,6 +5,7 @@ the expected improvement over the current best observed value.
 """
 
 import logging
+
 import numpy as np
 import polars as pl
 from scipy.stats import norm

@@ -17,13 +17,16 @@ Performance characteristics:
 - batch_update: Single clone for multiple operations
 """
 
-import polars as pl
-import pandas as pd
-import numpy as np
-from typing import Any
 import logging
-from .data_structures import VALID_STATUSES
+from typing import Any
+
+import numpy as np
+import pandas as pd
+import polars as pl
+
 from learnm8.utils.polars_utils import map_values_via_join
+
+from .data_structures import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
 

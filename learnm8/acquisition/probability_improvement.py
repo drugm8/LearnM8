@@ -5,6 +5,7 @@ the probability that a compound will improve over the current best observed valu
 """
 
 import logging
+
 import numpy as np
 import polars as pl
 from scipy.stats import norm

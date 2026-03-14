@@ -5,6 +5,7 @@ from the posterior predictive distribution.
 """
 
 import logging
+
 import numpy as np
 import polars as pl
 

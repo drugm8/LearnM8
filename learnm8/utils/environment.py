@@ -1,7 +1,7 @@
 """Environment detection utilities for LearnM8."""
 
-import os
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +20,12 @@ def detect_jupyter_environment() -> bool:
         'JPY_PARENT_PID',       # JupyterLab process ID
         'JUPYTER_RUNTIME_DIR',  # Jupyter runtime directory
     ]
-    
+
     # Check environment variables first (most reliable)
     for indicator in jupyter_indicators:
         if indicator in os.environ:
             return True
-    
+
     # Secondary check: IPython in notebook context
     try:
         import IPython
@@ -39,7 +39,7 @@ def detect_jupyter_environment() -> bool:
                 return True
     except ImportError:
         pass
-    
+
     # Tertiary check: notebook-specific modules (less reliable)
     try:
         import ipykernel.kernelapp
@@ -48,7 +48,7 @@ def detect_jupyter_environment() -> bool:
             return True
     except (ImportError, AttributeError):
         pass
-    
+
     return False
 
 
@@ -60,12 +60,12 @@ def get_console_config() -> dict:
         dict: Configuration parameters for Rich Console
     """
     in_jupyter = detect_jupyter_environment()
-    
+
     config = {
         'width': 100,
         'legacy_windows': False,
     }
-    
+
     if in_jupyter:
         # Jupyter-optimized configuration
         config.update({
@@ -80,7 +80,7 @@ def get_console_config() -> dict:
             'force_jupyter': False,
         })
         logger.debug("Using terminal-optimized Rich console configuration")
-    
+
     return config
 
 

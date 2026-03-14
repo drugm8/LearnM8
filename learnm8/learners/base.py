@@ -5,21 +5,20 @@ implementing dependency injection and clean interfaces as specified in the new
 architecture design.
 """
 
-import time
 import logging
+import time
 from abc import abstractmethod
 from pathlib import Path
+
 import numpy as np
-
-# Core imports
-from learnm8.core.interfaces import Learner
-from learnm8.exceptions import LearnerError
-
 import torch
 import torch.nn as nn
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 
+# Core imports
+from learnm8.core.interfaces import Learner
+from learnm8.exceptions import LearnerError
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +93,7 @@ class SklearnLearner(Learner):
 
         if hasattr(self.model, 'random_state'):
             self.model.random_state = random_state
-    
+
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Train sklearn model on feature matrix.
 
@@ -203,7 +202,7 @@ class SklearnLearner(Learner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"Sklearn{self.model.__class__.__name__}"
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
         # Base sklearn models don't provide uncertainty
@@ -264,7 +263,7 @@ class TorchLearner(Learner):
             torch.cuda.manual_seed_all(random_state)
 
         logger.debug(f"Initialized TorchLearner on device: {self.device}")
-    
+
     @abstractmethod
     def _create_model(self, input_size: int) -> nn.Module:
         """Create the PyTorch model architecture.
@@ -276,7 +275,7 @@ class TorchLearner(Learner):
             PyTorch model instance
         """
         pass
-    
+
     def _train_epoch(self, X: np.ndarray, y: np.ndarray) -> float:
         """Train for one epoch.
         
@@ -290,33 +289,33 @@ class TorchLearner(Learner):
         self.model.train()
         total_loss = 0.0
         n_batches = 0
-        
+
         # Convert to tensors
         X_tensor = torch.FloatTensor(X).to(self.device)
         y_tensor = torch.FloatTensor(y).to(self.device)
-        
+
         # Create dataset and dataloader
         dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
-        
+
         criterion = nn.MSELoss()
-        
+
         for batch_X, batch_y in dataloader:
             self.optimizer.zero_grad()
-            
+
             # Forward pass
             outputs = self.model(batch_X).squeeze()
             loss = criterion(outputs, batch_y)
-            
+
             # Backward pass
             loss.backward()
             self.optimizer.step()
-            
+
             total_loss += loss.item()
             n_batches += 1
-        
+
         return total_loss / n_batches if n_batches > 0 else 0.0
-    
+
     def _validate(self, X_val: np.ndarray, y_val: np.ndarray) -> float:
         """Validate model on validation data.
         
@@ -328,18 +327,18 @@ class TorchLearner(Learner):
             Validation loss
         """
         self.model.eval()
-        
+
         with torch.no_grad():
             X_tensor = torch.FloatTensor(X_val).to(self.device)
             y_tensor = torch.FloatTensor(y_val).to(self.device)
-            
+
             outputs = self.model(X_tensor).squeeze()
             criterion = nn.MSELoss()
             val_loss = criterion(outputs, y_tensor).item()
-        
+
         return val_loss
-    
-    def _split_validation(self, X: np.ndarray, y: np.ndarray, 
+
+    def _split_validation(self, X: np.ndarray, y: np.ndarray,
                          val_fraction: float = 0.1) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Split data into training and validation sets.
         
@@ -352,26 +351,26 @@ class TorchLearner(Learner):
             Tuple of (X_train, X_val, y_train, y_val)
         """
         n_samples = len(X)
-        
+
         # Handle edge case of very small datasets
         if n_samples <= 2:
             # For very small datasets, use all data for both training and validation
             logger.warning(f"Dataset too small ({n_samples} samples) for proper train/val split. Using all data for both.")
             return X, X, y, y
-        
+
         n_val = max(1, int(n_samples * val_fraction))
-        
+
         # Ensure we have at least one training sample
         if n_val >= n_samples:
             n_val = n_samples - 1
-        
+
         # Random indices for validation
         np.random.seed(self.random_state)
         val_indices = np.random.choice(n_samples, n_val, replace=False)
         train_indices = np.setdiff1d(np.arange(n_samples), val_indices)
-        
+
         return X[train_indices], X[val_indices], y[train_indices], y[val_indices]
-    
+
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Train PyTorch model on feature matrix.
 
@@ -519,16 +518,16 @@ class TorchLearner(Learner):
                 f"Check that the input features have the same shape as training features "
                 f"and that the featurizer is compatible with the model."
             ) from e
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"Torch{self.__class__.__name__}"
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
         # Base PyTorch models don't provide uncertainty by default
         return False
-    
+
     def get_training_history(self) -> list:
         """Get training history for analysis.
         
@@ -536,7 +535,7 @@ class TorchLearner(Learner):
             List of dictionaries containing training metrics per epoch
         """
         return self.training_history.copy()
-    
+
     def save_model(self, path: Path) -> None:
         """Save model state to file.
         
@@ -548,7 +547,7 @@ class TorchLearner(Learner):
                 f"No model to save for {self.get_name()}. "
                 f"The model has not been created yet. Call train() first to create and train the model."
             )
-        
+
         state = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict() if self.optimizer else None,
@@ -563,10 +562,10 @@ class TorchLearner(Learner):
                 'random_state': self.random_state
             }
         }
-        
+
         torch.save(state, path)
         logger.debug(f"Saved {self.get_name()} model to {path}")
-    
+
     def load_model(self, path: Path) -> None:
         """Load model state from file.
         
@@ -578,20 +577,20 @@ class TorchLearner(Learner):
                 f"Model file not found: {path}. "
                 f"Verify the path is correct and that the model was previously saved with save_model()."
             )
-        
+
         state = torch.load(path, map_location=self.device)
-        
+
         # Restore configuration
         config = state.get('config', {})
         for key, value in config.items():
             setattr(self, key, value)
-        
+
         # Create model if needed (requires input size from first use)
         # Note: Model creation is deferred until first training or explicit creation
-        
+
         # Restore training state
         self.scaler = state.get('scaler')
         self.training_history = state.get('training_history', [])
         self.is_trained = state.get('is_trained', False)
-        
+
         logger.debug(f"Loaded {self.get_name()} model from {path}")

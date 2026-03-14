@@ -20,9 +20,9 @@ Examples:
     configs = parse_cycle_spec('random:0.02 greedy:0.01*5')
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Any
-import logging
 
 logger = logging.getLogger(__name__)
 

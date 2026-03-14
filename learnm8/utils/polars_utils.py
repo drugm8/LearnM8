@@ -8,8 +8,9 @@ native Polars API directly.
 See: docs/polars_patterns.md for common patterns.
 """
 
-import polars as pl
 from typing import Any
+
+import polars as pl
 
 
 def map_values_via_join(

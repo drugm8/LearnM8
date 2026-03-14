@@ -5,13 +5,12 @@ for molecular property prediction tasks.
 """
 
 import logging
+
 import numpy as np
+import xgboost as xgb
 
 # Base class import
 from ..base import SklearnLearner
-
-import xgboost as xgb
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class XGBoostLearner(SklearnLearner):
     property prediction with efficient CPU parallelization and robust
     handling of different data distributions.
     """
-    
+
     def __init__(self,
                  n_estimators: int = 100,
                  learning_rate: float = 0.1,
@@ -75,11 +74,11 @@ class XGBoostLearner(SklearnLearner):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.max_depth = max_depth
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"XGBoost(n_estimators={self.n_estimators},lr={self.learning_rate},depth={self.max_depth})"
-    
+
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
@@ -88,9 +87,9 @@ class XGBoostLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return self.model.feature_importances_
-    
+
     def get_booster_stats(self) -> dict | None:
         """Get statistics from the trained XGBoost booster.
         
@@ -99,11 +98,11 @@ class XGBoostLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         booster = getattr(self.model, 'get_booster', lambda: None)()
         if booster is None:
             return None
-        
+
         try:
             return {
                 'num_boosted_rounds': booster.num_boosted_rounds(),

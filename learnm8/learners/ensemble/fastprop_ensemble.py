@@ -1,9 +1,11 @@
 """Fastprop ensemble learner for deep learning on molecular features."""
 
 import numpy as np
-from .ensemble import EnsembleLearner
-from ..torch.fastprop_learner import FastpropLearner
+
 from learnm8.exceptions import LearnerError
+
+from ..torch.fastprop_learner import FastpropLearner
+from .ensemble import EnsembleLearner
 
 
 class FastpropEnsemble(EnsembleLearner):
@@ -185,6 +187,7 @@ class FastpropEnsemble(EnsembleLearner):
 
         try:
             import gc
+
             import torch
 
             if torch.cuda.is_available():

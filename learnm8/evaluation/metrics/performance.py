@@ -1,8 +1,8 @@
 """ML model performance metrics for active learning evaluation."""
 
 import numpy as np
-from sklearn.metrics import mean_absolute_percentage_error
 from scipy.stats import spearmanr
+from sklearn.metrics import mean_absolute_percentage_error
 
 
 def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:

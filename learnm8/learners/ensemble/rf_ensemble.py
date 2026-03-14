@@ -1,12 +1,12 @@
 """Random Forest ensemble learner for LearnM8 framework."""
 
-from .ensemble import EnsembleLearner
 from ..sklearn.random_forest import RandomForestLearner
+from .ensemble import EnsembleLearner
 
 
 class RFEnsemble(EnsembleLearner):
     """Ensemble of 3 Random Forest learners with different random states."""
-    
+
     def __init__(self,
                  n_estimators: int = 100,
                  random_states: list[int] | None = None,
@@ -28,16 +28,16 @@ class RFEnsemble(EnsembleLearner):
                 random_state=rs
             )
             learners.append(rf)
-        
+
         # Set default ensemble parameters
         kwargs.setdefault('aggregation_method', 'mean')
         kwargs.setdefault('uncertainty_method', 'std')
-        
+
         super().__init__(learners, **kwargs)
-        
+
         self.n_estimators = n_estimators
         self.random_states = random_states
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"RFEnsemble(3xRF,n_est={self.n_estimators})"

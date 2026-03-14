@@ -7,17 +7,17 @@ featurizer-agnostic architecture, accepting any pre-computed feature matrix.
 
 import logging
 import warnings
+
 import numpy as np
+import torch
+from fastprop.data import fastpropDataLoader, fastpropDataset, standard_scale
+from fastprop.model import fastprop
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping
+from torch.utils.data import TensorDataset
 
 from learnm8.core.interfaces import Learner
 from learnm8.exceptions import LearnerError
-
-import torch
-from torch.utils.data import TensorDataset
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import EarlyStopping
-from fastprop.model import fastprop
-from fastprop.data import fastpropDataLoader, fastpropDataset, standard_scale
 
 logger = logging.getLogger(__name__)
 
@@ -348,6 +348,7 @@ class FastpropLearner(Learner):
 
 		try:
 			import gc
+
 			import torch
 
 			if torch.cuda.is_available():

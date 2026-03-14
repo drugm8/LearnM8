@@ -1,12 +1,12 @@
 """Decision Tree ensemble learner for LearnM8 framework."""
 
-from .ensemble import EnsembleLearner
 from ..sklearn.decision_tree import DecisionTreeLearner
+from .ensemble import EnsembleLearner
 
 
 class DTEnsemble(EnsembleLearner):
     """Ensemble of 3 Decision Tree learners with different max depths."""
-    
+
     def __init__(self,
                  max_depths: list[int] | None = None,
                  random_states: list[int] | None = None,
@@ -30,16 +30,16 @@ class DTEnsemble(EnsembleLearner):
                 random_state=rs
             )
             learners.append(dt)
-        
+
         # Set default ensemble parameters
         kwargs.setdefault('aggregation_method', 'mean')
         kwargs.setdefault('uncertainty_method', 'std')
-        
+
         super().__init__(learners, **kwargs)
-        
+
         self.max_depths = max_depths
         self.random_states = random_states
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         depths_str = ','.join(str(d) for d in self.max_depths)

@@ -1,8 +1,8 @@
-from pathlib import Path
-import numpy as np
 import logging
 import warnings
+from pathlib import Path
 
+import numpy as np
 from chemprop import data, models, nn
 from lightning import pytorch as pl
 
@@ -463,6 +463,7 @@ class ChempropLearner(Learner):
 
 		try:
 			import gc
+
 			import torch
 
 			if torch.cuda.is_available():

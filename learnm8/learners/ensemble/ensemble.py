@@ -8,11 +8,12 @@ through model diversity.
 import logging
 import time
 from typing import Any
+
 import numpy as np
 
-from ...core.interfaces import Learner
 from learnm8.exceptions import LearnerError
 
+from ...core.interfaces import Learner
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,9 @@ class EnsembleLearner(Learner):
     multiple base learners. It provides uncertainty estimation through
     model diversity and supports various aggregation strategies.
     """
-    
-    def __init__(self, 
-                 learners: list[Learner], 
+
+    def __init__(self,
+                 learners: list[Learner],
                  aggregation_method: str = 'mean',
                  uncertainty_method: str = 'std',
                  weights: list[float] | None = None,
@@ -45,14 +46,14 @@ class EnsembleLearner(Learner):
                 "EnsembleLearner requires at least one base learner. "
                 "Provide a list of Learner instances, e.g., learners=[rf_learner, gp_learner]."
             )
-        
+
         self.learners = learners
         self.aggregation_method = aggregation_method
         self.uncertainty_method = uncertainty_method
         self.weights = weights
         self.enable_parallel_training = enable_parallel_training
         self.is_trained = False
-        
+
         # Validate weights if provided
         if weights is not None:
             if len(weights) != len(learners):
@@ -66,12 +67,12 @@ class EnsembleLearner(Learner):
                     f"Normalize your weights so they sum to exactly 1.0."
                 )
             self.weights = np.array(weights)
-        
+
         # Check learner consistency
         self._validate_learners()
-        
+
         logger.debug(f"Initialized EnsembleLearner with {len(learners)} base learners")
-    
+
     def _validate_learners(self) -> None:
         """Validate that all learners are compatible."""
         if not all(isinstance(learner, Learner) for learner in self.learners):
@@ -80,7 +81,7 @@ class EnsembleLearner(Learner):
                 f"All ensemble members must be Learner instances. "
                 f"Found invalid types: {invalid_types}."
             )
-    
+
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Train all ensemble learners on feature matrix.
 
@@ -142,7 +143,7 @@ class EnsembleLearner(Learner):
         self.is_trained = True
         train_time = time.time() - start_time
         logger.debug(f"Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s")
-    
+
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Predict on feature matrix with ensemble uncertainty.
 
@@ -206,7 +207,7 @@ class EnsembleLearner(Learner):
                 f"Ensemble prediction failed for {self.get_name()}: {e}. "
                 f"Check that the input features have the same shape as training features."
             ) from e
-    
+
     def _aggregate_predictions(self, predictions_array: np.ndarray) -> np.ndarray:
         """Aggregate predictions from ensemble members.
         
@@ -225,14 +226,14 @@ class EnsembleLearner(Learner):
             else:
                 # Simple average
                 return np.mean(predictions_array, axis=0)
-        
+
         elif self.aggregation_method == 'median':
             return np.median(predictions_array, axis=0)
-        
+
         else:
             logger.warning(f"Unknown aggregation method '{self.aggregation_method}', using mean")
             return np.mean(predictions_array, axis=0)
-    
+
     def _calculate_uncertainty(self, predictions_array: np.ndarray) -> np.ndarray:
         """Calculate uncertainty from ensemble variance.
         
@@ -245,37 +246,37 @@ class EnsembleLearner(Learner):
         if self.uncertainty_method == 'std':
             # Standard deviation across models
             return np.std(predictions_array, axis=0)
-        
+
         elif self.uncertainty_method == 'mad':
             # Median absolute deviation (more robust to outliers)
             median_pred = np.median(predictions_array, axis=0)
             return np.median(np.abs(predictions_array - median_pred), axis=0)
-        
+
         elif self.uncertainty_method == 'quantile':
             # Interquartile range as uncertainty measure
             q75, q25 = np.percentile(predictions_array, [75, 25], axis=0)
             return (q75 - q25) / 2.0  # Half of IQR
-        
+
         else:
             logger.warning(f"Unknown uncertainty method '{self.uncertainty_method}', using std")
             return np.std(predictions_array, axis=0)
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True since ensemble provides uncertainty through model diversity."""
         return True
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         learner_names = [learner.get_name() for learner in self.learners]
-        
+
         # Truncate name if too long
         if len(learner_names) <= 3:
             names_str = '+'.join(learner_names)
         else:
             names_str = '+'.join(learner_names[:3]) + f'+{len(learner_names)-3}more'
-        
+
         return f"Ensemble({names_str},{self.aggregation_method})"
-    
+
     def get_ensemble_statistics(self) -> dict[str, Any]:
         """Get statistics about the ensemble composition and performance.
         
@@ -290,17 +291,17 @@ class EnsembleLearner(Learner):
             'learner_names': [learner.get_name() for learner in self.learners],
             'is_trained': self.is_trained
         }
-        
+
         if self.weights is not None:
             stats['weights'] = self.weights.tolist()
-        
+
         # Check uncertainty support of individual learners
         uncertainty_support = [learner.supports_uncertainty() for learner in self.learners]
         stats['learners_with_uncertainty'] = sum(uncertainty_support)
         stats['fraction_with_uncertainty'] = np.mean(uncertainty_support)
-        
+
         return stats
-    
+
     def get_individual_predictions(self, features: np.ndarray) -> dict[str, np.ndarray]:
         """Get predictions from individual ensemble members.
 
@@ -330,7 +331,7 @@ class EnsembleLearner(Learner):
                 individual_predictions[f"{learner.get_name()}_{i}"] = None
 
         return individual_predictions
-    
+
     def add_learner(self, learner: Learner, weight: float | None = None) -> None:
         """Add a new learner to the ensemble.
         
@@ -343,9 +344,9 @@ class EnsembleLearner(Learner):
         """
         if not isinstance(learner, Learner):
             raise ValueError("learner must be a Learner instance")
-        
+
         self.learners.append(learner)
-        
+
         # Handle weights
         if weight is not None:
             if self.weights is None:
@@ -359,13 +360,13 @@ class EnsembleLearner(Learner):
                 scale_factor = (1.0 - weight)
                 self.weights = self.weights * scale_factor
                 self.weights = np.append(self.weights, weight)
-        
+
         # Invalidate training state
         self.is_trained = False
-        
+
         logger.debug(f"Added learner {learner.get_name()} to ensemble. "
                    f"Total learners: {len(self.learners)}")
-    
+
     def remove_learner(self, index: int) -> None:
         """Remove a learner from the ensemble.
         
@@ -377,9 +378,9 @@ class EnsembleLearner(Learner):
         """
         if not 0 <= index < len(self.learners):
             raise ValueError(f"Invalid learner index: {index}")
-        
+
         removed_learner = self.learners.pop(index)
-        
+
         # Adjust weights if necessary
         if self.weights is not None:
             removed_weight = self.weights[index]
@@ -387,9 +388,9 @@ class EnsembleLearner(Learner):
             if len(self.weights) > 0:
                 # Redistribute removed weight proportionally
                 self.weights = self.weights / self.weights.sum()
-        
+
         # Invalidate training state
         self.is_trained = False
-        
+
         logger.debug(f"Removed learner {removed_learner.get_name()} from ensemble. "
                    f"Remaining learners: {len(self.learners)}")

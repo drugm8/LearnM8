@@ -4,12 +4,13 @@ This module defines the abstract base classes that establish the contracts
 for all major components in the LearnM8 system.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any
-import polars as pl
-import numpy as np
 import hashlib
 import json
+from abc import ABC, abstractmethod
+from typing import Any
+
+import numpy as np
+import polars as pl
 
 
 class Oracle(ABC):
@@ -19,7 +20,7 @@ class Oracle(ABC):
     measured properties. This could be experimental measurements, 
     computational simulations, or lookup from databases.
     """
-    
+
     @abstractmethod
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
@@ -96,7 +97,7 @@ class Learner(ABC):
             RuntimeError: If model is not trained or prediction fails
         """
         pass
-    
+
     @abstractmethod
     def get_name(self) -> str:
         """Return a descriptive name for this learner.
@@ -105,7 +106,7 @@ class Learner(ABC):
             String identifier for the learner type and configuration
         """
         pass
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates.
 
@@ -139,7 +140,7 @@ class AcquisitionFunction(ABC):
     in each active learning cycle based on model predictions and optionally
     uncertainty estimates.
     """
-    
+
     @abstractmethod
     def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
         """
@@ -158,7 +159,7 @@ class AcquisitionFunction(ABC):
             RuntimeError: If selection fails
         """
         pass
-    
+
     def requires_uncertainty(self) -> bool:
         """Return True if this acquisition function requires uncertainty estimates.
         
@@ -166,7 +167,7 @@ class AcquisitionFunction(ABC):
             Boolean indicating if uncertainty column is required
         """
         return False
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function.
 

@@ -5,6 +5,7 @@ that are expected to provide the most information.
 """
 
 import logging
+
 import polars as pl
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
@@ -51,7 +52,7 @@ class EntropyAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
-        logger.debug(f"EntropyAcquisition: calculating predictive entropy")
+        logger.debug("EntropyAcquisition: calculating predictive entropy")
 
         if self.entropy_type == 'uncertainty':
             # Use uncertainty directly as information measure

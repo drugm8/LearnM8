@@ -46,37 +46,49 @@ Examples:
 """
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
+
 import polars as pl
 
-from learnm8.core.validation import validate_compound_pool
-from learnm8.core.initialization import initialize_master_dataframe_empty, select_initial_batch
-from learnm8.core.config import parse_cycle_schedule, CycleConfig
+from learnm8.core.config import CycleConfig, parse_cycle_schedule
 from learnm8.core.cycle import execute_cycle
+from learnm8.core.initialization import (
+    initialize_master_dataframe_empty,
+    select_initial_batch,
+)
+from learnm8.core.interfaces import Learner, Oracle
 from learnm8.core.persistence import save_results
-from learnm8.core.interfaces import Oracle, Learner
-from learnm8.core.resources import validate_n_jobs, validate_device
+from learnm8.core.resources import validate_device, validate_n_jobs
+from learnm8.core.validation import validate_compound_pool
+from learnm8.exceptions import ConfigurationError, LearnM8Error
+from learnm8.learners import (
+    DTEnsemble,
+    EnsembleLearner,
+    FastpropEnsemble,
+    FastpropLearner,
+    GaussianProcessLearner,
+    LREnsemble,
+    MCDropoutLearner,
+    MixedEnsemble,
+    MLPLearner,
+    RandomForestLearner,
+    RFEnsemble,
+    XGBEnsemble,
+    XGBoostLearner,
+)
+from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+from learnm8.learners.torch.chemprop_learner import ChempropLearner
 from learnm8.oracles import CSVOracle
 from learnm8.utils.file_loaders import load_compound_file
 from learnm8.utils.logging import configure_learnm8_logging
-from learnm8.learners import (
-    RandomForestLearner, GaussianProcessLearner, XGBoostLearner,
-    MLPLearner, MCDropoutLearner, FastpropLearner, EnsembleLearner,
-    RFEnsemble, LREnsemble, XGBEnsemble, DTEnsemble, MixedEnsemble,
-    FastpropEnsemble
-)
-
-from learnm8.learners.torch.chemprop_learner import ChempropLearner
-from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
-from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
-    format_experiment_summary
+    format_experiment_summary,
 )
 
 logger = logging.getLogger(__name__)
@@ -330,7 +342,7 @@ def run_active_learning(
     oracle: str | Path | Oracle,
     learner: str | Learner,
     target_col: str,
-    featurizer: str | 'Featurizer' | None = None,
+    featurizer: str | Featurizer | None = None,
     # Advanced API
     cycles: list[CycleConfig] | None = None,
     # Simple API
@@ -571,7 +583,7 @@ def run_active_learning(
                 oracle = CSVOracle(str(original_compound_pool_path))
                 mode = 'benchmark'
                 mode_detected = True
-                logger.debug(f"Auto-detected CSV oracle from compound pool, mode=benchmark")
+                logger.debug("Auto-detected CSV oracle from compound pool, mode=benchmark")
             else:
                 raise ValueError(
                     "Oracle is required when compound_pool is a DataFrame. "
@@ -650,7 +662,7 @@ def run_active_learning(
             logger.debug(f"Instantiated learner from string: {learner_str}")
         elif isinstance(learner, Learner):
             logger.info(f"Using learner: {learner.__class__.__name__}")
-            logger.debug(f"Using provided learner instance")
+            logger.debug("Using provided learner instance")
             if enable_chemprop_fine_tuning:
                 logger.warning(
                     "enable_chemprop_fine_tuning=True ignored because learner is "

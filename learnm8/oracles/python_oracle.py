@@ -3,9 +3,11 @@
 import importlib.util
 import inspect
 import logging
-import polars as pl
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
+
+import polars as pl
+
 from learnm8.core.interfaces import Oracle
 from learnm8.exceptions import OracleError
 
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class PythonOracle(Oracle):
     """Oracle that executes user-defined Python functions."""
-    
+
     def __init__(self, module_path: str = None, oracle_path: str = None, function_name: str = None, **kwargs):
         """
         Initialize the Python oracle.
@@ -42,17 +44,17 @@ class PythonOracle(Oracle):
                 f"Oracle Python file not found: {self.oracle_path}. "
                 f"Verify the file path is correct and the file exists."
             )
-        
+
         # Load the oracle function
         self.oracle_function = self._load_oracle_function(function_name)
-        
+
     def _load_oracle_function(self, function_name: str = None) -> Callable:
         """Load oracle function from Python file."""
         # Load module from file
         spec = importlib.util.spec_from_file_location("oracle_module", self.oracle_path)
         oracle_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(oracle_module)
-        
+
         # Find oracle function
         if function_name:
             if not hasattr(oracle_module, function_name):
@@ -93,7 +95,7 @@ class PythonOracle(Oracle):
                         f"Specify which function to use with function_name parameter. "
                         f"Common names that are auto-detected: oracle, oracle_function, measure, evaluate."
                     )
-        
+
         # Validate function signature
         sig = inspect.signature(oracle_function)
         if len(sig.parameters) != 1:
@@ -102,9 +104,9 @@ class PythonOracle(Oracle):
                 f"(compound_ids: List[str]), but has signature: {sig}. "
                 f"The function should accept a list of compound ID strings and return a DataFrame."
             )
-        
+
         return oracle_function
-        
+
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
         Execute oracle function to measure compound properties.

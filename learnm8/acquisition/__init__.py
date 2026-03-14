@@ -5,18 +5,18 @@ in active learning cycles, including basic greedy/random selection,
 sophisticated uncertainty-based methods, and advanced diversity-based approaches.
 """
 
-from .base import AcquisitionFunction
 from learnm8.exceptions import AcquisitionError
+
+from .base import AcquisitionFunction
+from .entropy import EntropyAcquisition
+from .expected_improvement import ExpectedImprovementAcquisition
 from .greedy import GreedyAcquisition
+from .probability_improvement import ProbabilityImprovementAcquisition
 from .random import RandomAcquisition
+from .simulated_annealing import SimulatedAnnealingAcquisition
+from .thompson_sampling import ThompsonSamplingAcquisition
 from .top_k import TopKAcquisition
 from .ucb import UCBAcquisition
-from .expected_improvement import ExpectedImprovementAcquisition
-from .probability_improvement import ProbabilityImprovementAcquisition
-from .thompson_sampling import ThompsonSamplingAcquisition
-from .entropy import EntropyAcquisition
-from .simulated_annealing import SimulatedAnnealingAcquisition
-
 
 __all__ = [
     # Base classes

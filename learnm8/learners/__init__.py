@@ -11,35 +11,29 @@ New Architecture (v1.0.0):
 # Base classes
 from .base import SklearnLearner, TorchLearner
 
+# Ensemble learners
+from .ensemble import (
+    DTEnsemble,
+    EnsembleLearner,
+    FastpropEnsemble,
+    LREnsemble,
+    MixedEnsemble,
+    RFEnsemble,
+    XGBEnsemble,
+)
+
 # Scikit-learn learners
 from .sklearn import (
-    RandomForestLearner,
-    GaussianProcessLearner,
-    XGBoostLearner,
+    AdvancedRandomForestLearner,
     DecisionTreeLearner,
+    GaussianProcessLearner,
     LinearRegressionLearner,
-    AdvancedRandomForestLearner
+    RandomForestLearner,
+    XGBoostLearner,
 )
 
 # PyTorch learners
-from .torch import (
-    MLPLearner,
-    MCDropoutLearner,
-    FastpropLearner,
-    ChempropLearner
-)
-
-# Ensemble learners
-from .ensemble import (
-    EnsembleLearner,
-    RFEnsemble,
-    LREnsemble,
-    XGBEnsemble,
-    DTEnsemble,
-    MixedEnsemble,
-    FastpropEnsemble
-)
-
+from .torch import ChempropLearner, FastpropLearner, MCDropoutLearner, MLPLearner
 
 __all__ = [
     # Base classes

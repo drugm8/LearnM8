@@ -6,30 +6,27 @@ metrics based on mode (benchmark vs run) and data availability.
 
 import logging
 from typing import Any
-import polars as pl
+
 import numpy as np
+import polars as pl
 
-
-# Import specialized metric functions from modular metrics package
-from .metrics.performance import (
-	calculate_average_score
-)
 from .metrics.enrichment import (
+	calculate_average_score_ratio,
+	calculate_batch_average_score_ratio,
+	calculate_batch_enrichment_factor,
+	calculate_batch_hit_rate,
+	calculate_cumulative_enrichment_factor,
 	calculate_ground_truth_enrichment_factors,
 	# NEW IMPORTS
 	calculate_multiple_top_k_discovery_rates,
-	calculate_cumulative_enrichment_factor,
-	calculate_batch_hit_rate,
-	calculate_batch_enrichment_factor,
-	calculate_average_score_ratio,
-	calculate_batch_average_score_ratio,
-	calculate_multiple_unlabeled_top_k_overlaps,
 	calculate_multiple_unlabeled_enrichment_factors,
+	calculate_multiple_unlabeled_top_k_overlaps,
 	calculate_unlabeled_ranking_correlation,
 )
-from .metrics.similarity import (
-	calculate_molecular_similarity_metrics
-)
+
+# Import specialized metric functions from modular metrics package
+from .metrics.performance import calculate_average_score
+from .metrics.similarity import calculate_molecular_similarity_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +94,7 @@ def evaluate_cycle(
 		metrics['cumulative_labeled'] = cumulative_labeled_count
 	else:
 		metrics['cumulative_labeled'] = len(labeled_data)
-	
+
 	# Selection quality (scores of selected compounds this cycle)
 	if target_col in selected_compounds.columns and len(selected_compounds) > 0:
 		scores = selected_compounds.get_column(target_col).to_numpy()
@@ -121,7 +118,7 @@ def evaluate_cycle(
 			metrics['ground_truth_avg_score'] = None
 	else:
 		metrics['ground_truth_avg_score'] = None
-	
+
 	# Uncertainty metrics (when available)
 	if uncertainties is not None and len(uncertainties) > 0:
 		try:
@@ -137,7 +134,7 @@ def evaluate_cycle(
 	else:
 		metrics['uncertainty_mean'] = None
 		metrics['uncertainty_std'] = None
-	
+
 	# Molecular similarity metrics (when SMILES available and not disabled)
 	if not disable_molecular_similarity and 'SMILES' in selected_compounds.columns:
 		try:
@@ -238,7 +235,7 @@ def evaluate_cycle(
 				'cumulative_avg_score_ratio': None,
 				'batch_avg_score_ratio': None
 			})
-	
+
 	# Ranking Metrics (Category B) - UNLABELED ONLY
 	if is_benchmark_mode:
 		try:
@@ -299,7 +296,7 @@ def evaluate_cycle(
 				'unlabeled_ef_5_0': None,
 				'unlabeled_spearman_correlation': None
 			})
-	
+
 	# Ground truth enrichment factors (when ground truth data available)
 	if ground_truth_data is not None:
 		try:
@@ -316,12 +313,12 @@ def evaluate_cycle(
 				'ground_truth_ef_5_0': None, 'ground_truth_ef_1_0': None,
 				'ground_truth_ef_0_5': None, 'ground_truth_ef_0_1': None
 			})
-	
+
 	# Round numeric values for cleaner output
 	for key, value in metrics.items():
 		if isinstance(value, float) and not np.isnan(value):
 			metrics[key] = round(value, 4)
-	
+
 	return metrics
 
 
@@ -462,7 +459,7 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 
 	try:
 		metrics_df = pl.DataFrame(all_cycle_metrics)
-		
+
 		# Add metadata as comments at the top
 		with open(output_path, 'w') as f:
 			f.write("# LearnM8 Active Learning Cycle Metrics\n")
@@ -470,18 +467,18 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 			f.write(f"# Target Column: {target_col}\n")
 			f.write(f"# Score Direction: {score_direction} is better\n")
 			f.write(f"# Total Cycles: {len(all_cycle_metrics)}\n")
-			
+
 			# Add uncertainty availability info
 			has_uncertainty = any(m.get('uncertainty_mean') is not None for m in all_cycle_metrics)
 			f.write(f"# Uncertainty Available: {has_uncertainty}\n")
-			
+
 			# Add mode-specific info
 			if oracle_type == 'benchmark':
 				has_topk = any('top_k_overlap_100' in m for m in all_cycle_metrics)
 				has_ef = any('enrichment_factor_5_percent' in m for m in all_cycle_metrics)
 				f.write(f"# Benchmark Metrics Available: Top-K={has_topk}, EF={has_ef}\n")
 			f.write("#\n")
-		
+
 		# Organize columns by category for better readability
 		core_cols = ['cycle', 'strategy', 'batch_fraction', 'selected_count', 'remaining_pool', 'cumulative_labeled', 'batch_size']
 		selection_cols = [col for col in metrics_df.columns if col in ['avg_score_selected', 'ground_truth_avg_score', 'uncertainty_mean', 'uncertainty_std']]
@@ -500,7 +497,7 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 		csv_content = metrics_df.write_csv(include_header=True)
 		with open(output_path, 'a') as f:
 			f.write(csv_content)
-		
+
 		logger.info(f"Exported {len(all_cycle_metrics)} cycles of enhanced metrics to {output_path}")
 	except (ValueError, TypeError, KeyError, OSError) as e:
 		logger.error(f"Error exporting enhanced metrics to CSV: {e}")

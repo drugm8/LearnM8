@@ -4,6 +4,7 @@ This module provides the Top-K acquisition strategy which selects based on rank 
 """
 
 import logging
+
 import polars as pl
 
 from .base import AcquisitionFunction
