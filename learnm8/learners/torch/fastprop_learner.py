@@ -237,7 +237,10 @@ class FastpropLearner(Learner):
 
 		except (ValueError, RuntimeError, TypeError) as e:
 			logger.error(f"Failed to train {self.get_name()}: {e}")
-			raise LearnerError(f"Training failed: {e}") from e
+			raise LearnerError(
+				f"Training failed for {self.get_name()}: {e}. "
+				f"Check that features are valid and training data is sufficient."
+			) from None
 
 	def predict(self, features: np.ndarray) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 		"""Predict using trained Fastprop model.
@@ -300,7 +303,10 @@ class FastpropLearner(Learner):
 
 		except (ValueError, RuntimeError, TypeError) as e:
 			logger.error(f"Failed to predict with {self.get_name()}: {e}")
-			raise LearnerError(f"Prediction failed: {e}") from e
+			raise LearnerError(
+				f"Prediction failed for {self.get_name()}: {e}. "
+				f"Check that features match the training feature dimensions."
+			) from None
 
 	def get_name(self) -> str:
 		"""Return descriptive name for this learner."""

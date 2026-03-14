@@ -977,14 +977,14 @@ def _select_compounds(
     # Get acquisition class
     try:
         acq_class = get_acquisition_function(strategy)
-    except KeyError as e:
+    except KeyError:
         available = list_acquisition_functions()
         raise ValueError(
             f"Unknown acquisition strategy '{strategy}'. "
             f"Available strategies: {', '.join(available)}. "
             f"Basic strategies (any learner): greedy, random, topk. "
             f"Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy."
-        )
+        ) from None
 
     # Note: current_best must be set from labeled data at cycle level, not predictions
     # This is handled in execute_cycle before calling _select_compounds
@@ -996,7 +996,7 @@ def _select_compounds(
         raise ValueError(
             f"Failed to create acquisition function '{strategy}': {e}. "
             f"Check that the acquisition parameters are valid for this strategy."
-        )
+        ) from e
 
     # Validate requirements
     if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:

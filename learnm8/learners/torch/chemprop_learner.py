@@ -359,7 +359,16 @@ class ChempropLearner(Learner):
 			f"Starting Chemprop training: {n_samples} samples, "
 			f"{self.max_epochs} max epochs, precision={self.precision}"
 		)
-		self.trainer.fit(self.model, train_loader, val_loader)
+		try:
+			self.trainer.fit(self.model, train_loader, val_loader)
+		except LearnerError:
+			raise
+		except (ValueError, RuntimeError, TypeError) as e:
+			logger.error(f"Failed to train {self.get_name()}: {e}")
+			raise LearnerError(
+				f"Training failed for {self.get_name()}: {e}. "
+				f"Check that SMILES are valid and training data is sufficient."
+			) from None
 		logger.debug("Chemprop training completed successfully")
 		self.is_trained = True
 

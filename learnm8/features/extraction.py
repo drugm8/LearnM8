@@ -15,6 +15,8 @@ from typing import List, Optional, Union
 import numpy as np
 
 from learnm8.core.interfaces import Featurizer
+from learnm8.exceptions import FeatureExtractionError
+
 from .cache import cache_features
 
 logger = logging.getLogger(__name__)
@@ -81,7 +83,16 @@ def _extract_features_with_featurizer(
             f"Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds"
         )
 
-    features_array = featurizer.transform(smiles_list)
+    try:
+        features_array = featurizer.transform(smiles_list)
+    except FeatureExtractionError:
+        raise
+    except (ValueError, RuntimeError, TypeError) as e:
+        raise FeatureExtractionError(
+            f"Feature extraction failed for {featurizer.get_name()} on "
+            f"{len(smiles_list)} compounds: {e}. "
+            f"Check SMILES validity with 'learnm8 validate your_file.csv'."
+        ) from None
 
     logger.debug(
         f"Feature matrix shape: {features_array.shape}, dtype: {features_array.dtype}"
