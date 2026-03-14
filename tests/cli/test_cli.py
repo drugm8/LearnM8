@@ -4,13 +4,26 @@ Tests all subcommands (run, list, validate) and major CLI options.
 Uses subprocess.run to invoke CLI in isolation.
 """
 
+import argparse
+import json
 import subprocess
 import sys
-import json
-from pathlib import Path
+from unittest.mock import patch
+
 import pandas as pd
 import polars as pl
 import pytest
+
+from learnm8.exceptions import (
+    AcquisitionError,
+    ConfigurationError,
+    FeatureExtractionError,
+    LearnerError,
+    OracleError,
+    PersistenceError,
+    PruningError,
+    ValidationError,
+)
 
 
 @pytest.fixture
@@ -75,7 +88,7 @@ def config_json(tmp_path):
 
 def run_cli(*args, timeout=60):
     """Helper function to run CLI command with optional timeout."""
-    cmd = [sys.executable, '-m', 'learnm8.cli.main'] + list(args)
+    cmd = [sys.executable, '-m', 'learnm8.cli.main', *args]
     result = subprocess.run(
         cmd,
         capture_output=True,
@@ -703,3 +716,247 @@ random_state: 42
         config_used = json.loads((output_dir / 'config.json').read_text())
         assert config_used['learner'] == 'gp'
         assert config_used['n_cycles'] == 2
+
+
+@pytest.fixture
+def run_args(minimal_compounds, tmp_path):
+    """Create minimal argparse.Namespace for cmd_run."""
+    return argparse.Namespace(
+        compound_pool=minimal_compounds,
+        oracle=None,
+        target_col='Activity',
+        featurizer='morgan',
+        learner='rf',
+        score_direction='higher',
+        cycles=None,
+        schedule=None,
+        config=None,
+        n_cycles=2,
+        batch_fraction=0.4,
+        strategy='greedy',
+        initial_strategy='random',
+        pruning_fraction=None,
+        pruning_strategy=None,
+        acquisition_params=None,
+        output=tmp_path / 'output',
+        cache_dir=None,
+        quiet=True,
+        n_jobs=1,
+        device='cpu',
+        random_state=42,
+        mode=None,
+        prediction_batch_size=None,
+    )
+
+
+@pytest.fixture
+def validate_args(minimal_compounds, tmp_path):
+    """Create minimal argparse.Namespace for cmd_validate."""
+    return argparse.Namespace(
+        compound_pool=minimal_compounds,
+        n_jobs=1,
+        output=None,
+    )
+
+
+@pytest.mark.unit
+class TestCmdRunErrorBoundary:
+    """Test that cmd_run catches LearnM8Error subtypes and formats them."""
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_configuration_error_formatted_and_exit_2(self, mock_run, run_args, capsys):
+        mock_run.side_effect = ConfigurationError(
+            "Unknown learner 'bad'. Available: rf, gp, xgb"
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 2
+        captured = capsys.readouterr()
+        assert 'Configuration error' in captured.out or 'Configuration error' in captured.err
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_validation_error_formatted_and_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = ValidationError(
+            "50 compounds have invalid SMILES",
+            invalid_indices=[0, 1, 2],
+        )
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert 'Validation error' in captured.out or 'Validation error' in captured.err
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_validation_error_suggests_validate_command(self, mock_run, run_args, capsys):
+        mock_run.side_effect = ValidationError("Bad SMILES")
+        with pytest.raises(SystemExit):
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'learnm8 validate' in output
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_learner_error_formatted_and_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = LearnerError("Training failed: insufficient data")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Training/prediction error' in output
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_feature_extraction_error_formatted_and_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = FeatureExtractionError("Morgan featurizer failed")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Feature extraction error' in output
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_feature_extraction_error_suggests_validate(self, mock_run, run_args, capsys):
+        mock_run.side_effect = FeatureExtractionError("Failed")
+        with pytest.raises(SystemExit):
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'learnm8 validate' in output
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_generic_learnm8_error_formatted_and_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = OracleError("Oracle measurement failed")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Error' in output
+        assert 'Oracle measurement failed' in output
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_unexpected_exception_shows_traceback_and_exit_1(self, mock_run, run_args):
+        mock_run.side_effect = AttributeError("unexpected bug")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_persistence_error_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = PersistenceError("Cannot write output file")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_acquisition_error_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = AcquisitionError("Selection failed")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_pruning_error_exit_1(self, mock_run, run_args, capsys):
+        mock_run.side_effect = PruningError("Pruning fraction too high")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_no_raw_traceback_for_learnm8_errors(self, mock_run, run_args, capsys):
+        mock_run.side_effect = ConfigurationError("Bad config")
+        with pytest.raises(SystemExit):
+            from learnm8.cli.main import cmd_run
+            cmd_run(run_args)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Traceback' not in output
+
+
+@pytest.mark.unit
+class TestCmdValidateErrorBoundary:
+    """Test that cmd_validate catches LearnM8Error subtypes."""
+
+    @patch('learnm8.cli.main.validate_compound_pool')
+    @patch('learnm8.cli.main.load_compound_file')
+    def test_validation_error_formatted_and_exit_1(
+        self, mock_load, mock_validate, validate_args, capsys
+    ):
+        mock_load.return_value = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+        mock_validate.side_effect = ValidationError("All compounds invalid")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_validate
+            cmd_validate(validate_args)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Validation error' in output
+
+    @patch('learnm8.cli.main.validate_compound_pool')
+    @patch('learnm8.cli.main.load_compound_file')
+    def test_feature_extraction_error_exit_1(
+        self, mock_load, mock_validate, validate_args, capsys
+    ):
+        mock_load.return_value = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+        mock_validate.side_effect = FeatureExtractionError("Failed")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_validate
+            cmd_validate(validate_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.validate_compound_pool')
+    @patch('learnm8.cli.main.load_compound_file')
+    def test_unexpected_exception_shows_traceback(
+        self, mock_load, mock_validate, validate_args
+    ):
+        mock_load.return_value = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+        mock_validate.side_effect = RuntimeError("unexpected")
+        with pytest.raises(SystemExit) as exc_info:
+            from learnm8.cli.main import cmd_validate
+            cmd_validate(validate_args)
+        assert exc_info.value.code == 1
+
+    @patch('learnm8.cli.main.validate_compound_pool')
+    @patch('learnm8.cli.main.load_compound_file')
+    def test_no_raw_traceback_for_learnm8_errors(
+        self, mock_load, mock_validate, validate_args, capsys
+    ):
+        mock_load.return_value = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+        mock_validate.side_effect = ValidationError("Bad compounds")
+        with pytest.raises(SystemExit):
+            from learnm8.cli.main import cmd_validate
+            cmd_validate(validate_args)
+        captured = capsys.readouterr()
+        output = captured.out + captured.err
+        assert 'Traceback' not in output
+
+
+@pytest.mark.unit
+class TestConfigParseErrorBoundary:
+    """Test that config file parse errors use ConfigurationError."""
+
+    def test_malformed_yaml_raises_configuration_error(self, tmp_path):
+        config_path = tmp_path / 'bad.yaml'
+        config_path.write_text('invalid: yaml: content: [')
+        from learnm8.cli.main import load_config_file
+        with pytest.raises(ConfigurationError, match='Failed to parse config file'):
+            load_config_file(config_path)
+
+    def test_malformed_json_raises_configuration_error(self, tmp_path):
+        config_path = tmp_path / 'bad.json'
+        config_path.write_text('{invalid json}')
+        from learnm8.cli.main import load_config_file
+        with pytest.raises(ConfigurationError, match='Failed to parse config file'):
+            load_config_file(config_path)
