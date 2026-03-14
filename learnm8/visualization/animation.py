@@ -1,9 +1,10 @@
-import polars as pl
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from pathlib import Path
 import logging
+from pathlib import Path
+
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+import polars as pl
 
 from .utils import detect_benchmark_mode
 
@@ -456,8 +457,8 @@ def _save_animation(anim: animation.Animation, output_path: str, format: str, fp
                 writer = animation.PillowWriter(fps=fps)
                 anim.save(gif_path, writer=writer, dpi=dpi)
                 logger.info(f"Saved animation as GIF instead: {gif_path}")
-                print(f"\n⚠️  FFmpeg not found. Saved as GIF: {gif_path}")
-                print("To save as MP4 in the future, install FFmpeg: conda install ffmpeg\n")
+                logger.warning("FFmpeg not found. Saved as GIF: %s", gif_path)
+                logger.info("To save as MP4 in the future, install FFmpeg: conda install ffmpeg")
 
         elif format == 'gif':
             writer = animation.PillowWriter(fps=fps)
@@ -469,7 +470,7 @@ def _save_animation(anim: animation.Animation, output_path: str, format: str, fp
             logger.info(f"Saved animation as HTML: {output_path}")
         else:
             raise ValueError(f"Unsupported format: {format}. Use 'mp4', 'gif', or 'html'")
-    except (ValueError, RuntimeError, OSError, IOError) as e:
+    except (ValueError, RuntimeError, OSError) as e:
         if 'FFmpeg' not in str(e):
             logger.error(f"Failed to save animation: {e}")
             raise

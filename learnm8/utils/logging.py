@@ -118,7 +118,7 @@ def get_logger(name: str = "learnm8") -> logging.Logger:
 
 def log_error_to_stderr(message: str) -> None:
     """Log error messages to stderr without Rich formatting."""
-    print(f"Error: {message}", file=sys.stderr)
+    logging.getLogger('learnm8').error(message)
 
 
 def log_warning(logger: logging.Logger, message: str) -> None:
