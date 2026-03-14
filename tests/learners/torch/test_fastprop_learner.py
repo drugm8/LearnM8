@@ -1,11 +1,87 @@
 """Tests for FastpropLearner implementation."""
 
-import pytest
+from unittest.mock import MagicMock, patch
+
 import numpy as np
 import polars as pl
+import pytest
+import torch
+from pytorch_lightning.callbacks import EarlyStopping
 
-from learnm8.learners.torch.fastprop_learner import FastpropLearner
+from learnm8.exceptions import ConfigurationError
 from learnm8.features.extraction import extract_features
+from learnm8.learners.torch.fastprop_learner import FastpropLearner
+
+
+@pytest.mark.unit
+class TestFastpropLearnerUnit:
+    """Fast unit tests for FastpropLearner constructor and validation."""
+
+    def test_default_hidden_size(self):
+        assert FastpropLearner().hidden_size == 300
+
+    def test_default_val_fraction(self):
+        assert FastpropLearner().val_fraction == 0.1
+
+    def test_explicit_hidden_size_override(self):
+        assert FastpropLearner(hidden_size=512).hidden_size == 512
+
+    def test_explicit_val_fraction_override(self):
+        assert FastpropLearner(val_fraction=0.2).val_fraction == 0.2
+
+    def test_fnn_layers_zero_raises(self):
+        with pytest.raises(ConfigurationError, match='fnn_layers >= 1'):
+            FastpropLearner(fnn_layers=0)
+
+    def test_fnn_layers_negative_raises(self):
+        with pytest.raises(ConfigurationError, match='fnn_layers >= 1'):
+            FastpropLearner(fnn_layers=-1)
+
+    def test_fnn_layers_one_accepted(self):
+        learner = FastpropLearner(fnn_layers=1)
+        assert learner.fnn_layers == 1
+
+    def test_val_fraction_zero_accepted(self):
+        learner = FastpropLearner(val_fraction=0.0)
+        assert learner.val_fraction == 0.0
+
+    def test_val_fraction_negative_raises(self):
+        with pytest.raises(ConfigurationError, match='val_fraction'):
+            FastpropLearner(val_fraction=-0.1)
+
+    def test_val_fraction_one_raises(self):
+        with pytest.raises(ConfigurationError, match='val_fraction'):
+            FastpropLearner(val_fraction=1.0)
+
+    def test_val_fraction_above_one_raises(self):
+        with pytest.raises(ConfigurationError, match='val_fraction'):
+            FastpropLearner(val_fraction=1.5)
+
+    def test_invalid_precision_raises_configuration_error(self):
+        with pytest.raises(ConfigurationError):
+            FastpropLearner(precision='invalid')
+
+    def test_predict_does_not_call_standard_scale(self):
+        learner = FastpropLearner(fnn_layers=1, hidden_size=64)
+        learner.is_trained = True
+        learner.model = MagicMock()
+        learner.feature_means = torch.zeros(10)
+        learner.feature_vars = torch.ones(10)
+        learner.target_means = torch.zeros(1)
+        learner.target_vars = torch.ones(1)
+
+        dummy_output = torch.tensor([[0.5]] * 5)
+        mock_trainer = MagicMock()
+        mock_trainer.predict.return_value = [dummy_output]
+
+        with (
+            patch('learnm8.learners.torch.fastprop_learner.Trainer', return_value=mock_trainer),
+            patch('learnm8.learners.torch.fastprop_learner.standard_scale') as scale_spy,
+        ):
+            predictions, _ = learner.predict(np.random.randn(5, 10).astype(np.float32))
+            scale_spy.assert_not_called()
+
+        assert predictions.shape[0] == 5
 
 
 @pytest.mark.slow
@@ -368,7 +444,7 @@ class TestFastpropLearner:
         )
 
         learner.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = learner.predict(features)
+        _predictions, uncertainty = learner.predict(features)
 
         assert learner.supports_uncertainty() is False
         assert uncertainty is None
@@ -466,7 +542,6 @@ class TestFastpropLearner:
             enable_aggressive_gc=False
         )
 
-        real_cleanup = learner._cleanup_gpu_memory
         monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
 
         compounds = small_real_compounds.clone()
@@ -521,3 +596,92 @@ class TestFastpropLearner:
         pred_gc_off, _ = learner_gc_off.predict(features)
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
+
+    def test_train_creates_validation_split(self, small_real_compounds, tmp_path):
+        """Verify EarlyStopping monitors validation_mse_scaled_loss with sufficient samples."""
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+        features = extract_features(
+            compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
+        learner = FastpropLearner(
+            fnn_layers=1, hidden_size=64, max_epochs=5,
+            val_fraction=0.1, random_state=42
+        )
+        learner.train(features, compounds['Activity'].to_numpy())
+        es_callbacks = [
+            cb for cb in learner.trainer.callbacks
+            if isinstance(cb, EarlyStopping)
+        ]
+        assert len(es_callbacks) == 1
+        assert es_callbacks[0].monitor == 'validation_mse_scaled_loss'
+
+    def test_train_skips_validation_on_small_dataset(self, tmp_path, caplog):
+        """Verify early stopping disabled when n_samples < min_samples_for_split."""
+        small_dataset = pl.DataFrame({
+            'ID': [f'COMP_{i:03d}' for i in range(10)],
+            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1',
+                        'CCCO', 'c1ccncc1', 'CC(=O)N', 'CCNC', 'C1CCOCC1'],
+            'Activity': np.random.beta(2, 5, 10).tolist()
+        })
+        features = extract_features(
+            small_dataset['SMILES'].to_list(), 'morgan', tmp_path
+        )
+        learner = FastpropLearner(
+            fnn_layers=1, hidden_size=64, max_epochs=3,
+            val_fraction=0.1, random_state=42
+        )
+        import logging
+        with caplog.at_level(logging.WARNING):
+            learner.train(features, small_dataset['Activity'].to_numpy())
+        es_callbacks = [
+            cb for cb in learner.trainer.callbacks
+            if isinstance(cb, EarlyStopping)
+        ]
+        assert len(es_callbacks) == 0
+        assert 'min_samples_for_split' in caplog.text
+
+    def test_val_fraction_zero_disables_validation(self, small_real_compounds, tmp_path):
+        """Verify val_fraction=0.0 trains without validation regardless of sample count."""
+        compounds = small_real_compounds.clone()
+        if 'Activity' not in compounds.columns:
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
+        features = extract_features(
+            compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
+        learner = FastpropLearner(
+            fnn_layers=1, hidden_size=64, max_epochs=3,
+            val_fraction=0.0, random_state=42
+        )
+        learner.train(features, compounds['Activity'].to_numpy())
+        es_callbacks = [
+            cb for cb in learner.trainer.callbacks
+            if isinstance(cb, EarlyStopping)
+        ]
+        assert len(es_callbacks) == 0
+
+    def test_scaling_stats_from_training_only(self, tmp_path):
+        """Verify feature_means/vars computed from training subset, not full data."""
+        np.random.seed(42)
+        n_features = 50
+        n_samples = 100
+        features_a = np.random.randn(80, n_features) * 1.0
+        features_b = np.random.randn(20, n_features) * 10.0 + 50.0
+        features = np.vstack([features_a, features_b]).astype(np.float32)
+        targets = np.random.randn(n_samples).astype(np.float32)
+
+        learner = FastpropLearner(
+            fnn_layers=1, hidden_size=32, max_epochs=2,
+            val_fraction=0.2, random_state=42
+        )
+        learner.train(features, targets)
+
+        full_means = np.mean(features, axis=0)
+        stored_means = learner.feature_means.numpy()
+        assert not np.allclose(stored_means, full_means, atol=0.5), \
+            'Stored means should differ from full-data means (computed from training subset only)'
