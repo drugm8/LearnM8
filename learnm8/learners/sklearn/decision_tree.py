@@ -5,29 +5,34 @@ for molecular property prediction tasks.
 """
 
 import logging
+import time
 
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
 
-from ..base import SklearnLearner
+from learnm8.exceptions import LearnerError
+
+from ..base import SklearnLearner, _preprocess_features
 
 logger = logging.getLogger(__name__)
 
 
 class DecisionTreeLearner(SklearnLearner):
     """Decision Tree with hyperparameters optimized for molecular data.
-    
+
     This learner uses Decision Tree regression with hyperparameters designed
     to balance model complexity and generalization for molecular datasets.
     """
 
-    def __init__(self,
-                 max_depth: int | None = 10,
-                 min_samples_split: int = 10,
-                 min_samples_leaf: int = 5,
-                 max_features: str | None = None,
-                 random_state: int = 42,
-                 **kwargs):
+    def __init__(
+        self,
+        max_depth: int | None = 10,
+        min_samples_split: int = 10,
+        min_samples_leaf: int = 5,
+        max_features: str | None = None,
+        random_state: int = 42,
+        **kwargs,
+    ):
         """Initialize Decision Tree learner.
 
         Args:
@@ -43,7 +48,7 @@ class DecisionTreeLearner(SklearnLearner):
             min_samples_split=min_samples_split,
             min_samples_leaf=min_samples_leaf,
             max_features=max_features,
-            random_state=random_state
+            random_state=random_state,
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
@@ -54,12 +59,84 @@ class DecisionTreeLearner(SklearnLearner):
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
-        return f"DecisionTree({depth_str},min_split={self.min_samples_split})"
+        depth_str = f'depth={self.max_depth}' if self.max_depth else 'unlimited_depth'
+        return f'DecisionTree({depth_str},min_split={self.min_samples_split})'
+
+    def supports_uncertainty(self) -> bool:
+        """Return True if uncertainty is available (requires squared_error criterion)."""
+        if not self.is_trained:
+            return True
+        return self.model.criterion == 'squared_error'
+
+    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+        """Predict with leaf impurity uncertainty.
+
+        When ``criterion='squared_error'``, uncertainty is computed as
+        ``sqrt(tree_.impurity[leaf_ids])`` — the training-set variance at each
+        leaf node.
+
+        Note: uncertainty estimates are **ordinal** (useful for ranking compounds
+        by relative confidence) but **not calibrated** prediction intervals.
+        Leaf impurity measures training data heterogeneity within each leaf.
+
+        Args:
+            features: Feature matrix (n_samples, n_features)
+
+        Returns:
+            Tuple of (predictions, uncertainties). Uncertainties is None
+            if criterion is not 'squared_error'.
+        """
+        if not self.is_trained:
+            raise LearnerError(
+                f'{self.get_name()} must be trained before prediction. '
+                f'Call train() with labeled data first.'
+            )
+
+        start_time = time.time()
+
+        try:
+            preprocessed, _ = _preprocess_features(
+                features,
+                valid_feature_mask=self._valid_feature_mask,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=False,
+            )
+
+            predictions = self.model.predict(preprocessed)
+
+            if self.model.criterion == 'squared_error':
+                leaf_ids = self.model.apply(preprocessed)
+                impurity = self.model.tree_.impurity[leaf_ids]
+                uncertainty = np.sqrt(np.maximum(impurity, 0.0))
+
+                zero_frac = np.mean(uncertainty == 0.0)
+                if zero_frac > 0.5:
+                    logger.debug(
+                        f'>{zero_frac:.0%} of predictions have zero uncertainty '
+                        f'(leaf impurity=0). Consider increasing min_samples_leaf '
+                        f'or reducing max_depth.'
+                    )
+            else:
+                uncertainty = None
+
+            pred_time = time.time() - start_time
+            logger.debug(
+                f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+            )
+
+            return predictions, uncertainty
+
+        except LearnerError:
+            raise
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
+            logger.error(f'Failed to predict with {self.get_name()}: {e}')
+            raise LearnerError(
+                f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}.'
+            ) from e
 
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
-        
+
         Returns:
             Array of feature importance scores, or None if model not trained
         """
