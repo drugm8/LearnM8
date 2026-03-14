@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class MCDropoutLearner(TorchLearner):
     """MLP with Monte Carlo Dropout for uncertainty estimation.
-    
+
     This learner provides uncertainty quantification through Monte Carlo
     Dropout, where multiple forward passes with dropout enabled provide
     an ensemble of predictions for uncertainty estimation.
@@ -61,10 +61,10 @@ class MCDropoutLearner(TorchLearner):
 
     def _create_model(self, input_size: int) -> nn.Module:
         """Create MLP with dropout layers for uncertainty estimation.
-        
+
         Args:
             input_size: Number of input features
-            
+
         Returns:
             PyTorch MLP model with dropout
         """
@@ -100,7 +100,7 @@ class MCDropoutLearner(TorchLearner):
 
     def _initialize_weights(self, model: nn.Module) -> None:
         """Initialize model weights using Xavier/He initialization.
-        
+
         Args:
             model: PyTorch model to initialize
         """
