@@ -42,7 +42,7 @@ def summarize_cycle_spec(cycle_spec: str) -> str:
         'ucb': 'u', 'ei': 'e', 'pi': 'p', 'thompson': 't',
         'entropy': 'h', 'bitbirch': 'b', 'simulated_annealing': 's'
     }
-    
+
     parts = []
     for part in cycle_spec.split():
         if '*' in part:
@@ -54,7 +54,7 @@ def summarize_cycle_spec(cycle_spec: str) -> str:
             strategy = part.split(':')[0]
             abbrev = strategy_abbrev.get(strategy, strategy[0])
             parts.append(f"{abbrev}1")
-    
+
     return '_'.join(parts)
 
 
@@ -71,13 +71,13 @@ def validate_cycle_spec(cycle_spec: str) -> tuple[bool, str]:
         cycles = parse_cycle_spec(cycle_spec)
         if not cycles:
             return False, "Empty cycle specification"
-        
+
         for strategy, fraction in cycles:
             if not strategy:
                 return False, "Empty strategy name"
             if not 0 < fraction <= 1:
                 return False, f"Invalid batch fraction {fraction}, must be between 0 and 1"
-        
+
         return True, ""
     except (ValueError, TypeError) as e:
-        return False, f"Invalid cycle specification: {str(e)}"
+        return False, f"Invalid cycle specification: {e!s}"

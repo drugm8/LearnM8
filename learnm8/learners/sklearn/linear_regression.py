@@ -5,12 +5,11 @@ for molecular property prediction tasks.
 """
 
 import logging
+
 import numpy as np
-
-from ..base import SklearnLearner
-
 from sklearn.linear_model import LinearRegression, Ridge
 
+from ..base import SklearnLearner
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class LinearRegressionLearner(SklearnLearner):
     with L2 regularization. If alpha parameter is provided, uses Ridge regression;
     otherwise uses standard Linear Regression with parallel processing capabilities.
     """
-    
+
     def __init__(self,
                  alpha: float | None = None,
                  fit_intercept: bool = True,
@@ -54,11 +53,11 @@ class LinearRegressionLearner(SklearnLearner):
             self.is_ridge = True
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
         self.alpha = alpha
         self.fit_intercept = fit_intercept
         self.n_jobs = n_jobs if alpha is None else None
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         intercept_str = "with_intercept" if self.fit_intercept else "no_intercept"
@@ -66,7 +65,7 @@ class LinearRegressionLearner(SklearnLearner):
             return f"Ridge(α={self.alpha:.3f},{intercept_str})"
         else:
             return f"LinearRegression({intercept_str})"
-    
+
     def get_coefficients(self) -> np.ndarray | None:
         """Get model coefficients from the trained model.
         
@@ -75,9 +74,9 @@ class LinearRegressionLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return self.model.coef_
-    
+
     def get_intercept(self) -> float | None:
         """Get model intercept from the trained model.
         
@@ -86,5 +85,5 @@ class LinearRegressionLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return getattr(self.model, 'intercept_', None)

@@ -5,6 +5,7 @@ and exploration using uncertainty estimates.
 """
 
 import logging
+
 import polars as pl
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs

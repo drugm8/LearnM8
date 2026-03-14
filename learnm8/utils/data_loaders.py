@@ -1,8 +1,10 @@
 """Data loading utilities for LearnM8 experiments."""
 
 import logging
-import polars as pl
 from pathlib import Path
+
+import polars as pl
+
 from learnm8.utils.file_loaders import load_compound_file
 
 logger = logging.getLogger(__name__)

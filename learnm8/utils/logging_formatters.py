@@ -12,6 +12,7 @@ All functions return formatted strings suitable for logging at INFO level.
 
 import logging
 from typing import Any
+
 import polars as pl
 
 logger = logging.getLogger(__name__)

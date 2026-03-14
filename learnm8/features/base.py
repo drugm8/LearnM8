@@ -6,10 +6,11 @@ for 3D fingerprints, and parameter management.
 """
 
 import logging
-import numpy as np
 from typing import Any
 
-from skfp.preprocessing import MolFromSmilesTransformer, ConformerGenerator
+import numpy as np
+from skfp.preprocessing import ConformerGenerator, MolFromSmilesTransformer
+
 from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import FeatureExtractionError
 

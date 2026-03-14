@@ -10,9 +10,9 @@ when featurizer parameters change.
 
 import hashlib
 import logging
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
-from collections.abc import Callable
 
 import h5py
 import numpy as np
@@ -116,7 +116,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
                             else:
                                 uncached_smiles.append(smiles)
                                 uncached_indices.append(idx)
-                        except (OSError, IOError, KeyError, RuntimeError) as e:
+                        except (OSError, KeyError, RuntimeError) as e:
                             logger.warning(f"Cache read failed for key {cache_key[:8]}: {e}")
                             uncached_smiles.append(smiles)
                             uncached_indices.append(idx)
@@ -145,11 +145,11 @@ def cache_features(default_cache_dir: Path) -> Callable:
                                     logger.debug(f"Cached features for key {cache_key[:8]}...")
                                 except (TypeError, ValueError) as e:
                                     logger.warning(f"Existing dataset for {cache_key[:8]} has incompatible shape/dtype; skipping cache write: {e}")
-                                except (OSError, IOError, RuntimeError) as e:
+                                except (OSError, RuntimeError) as e:
                                     logger.warning(f"Failed to cache features for key {cache_key[:8]}: {e}")
 
                             logger.debug(f"Cached {len(uncached_smiles)} new feature vectors to HDF5")
-                    except (OSError, IOError, RuntimeError) as e:
+                    except (OSError, RuntimeError) as e:
                         logger.warning(f"Cache write failed: {e}; continuing without caching")
 
                     for i, original_idx in enumerate(uncached_indices):
@@ -158,7 +158,7 @@ def cache_features(default_cache_dir: Path) -> Callable:
                 result = np.array([cached_features[i] for i in range(len(smiles_list))])
                 return result
 
-            except (OSError, IOError) as e:
+            except OSError as e:
                 logger.warning(f"Cache file open failed: {e}. Falling back to direct computation.")
 
                 if cache_file.exists():

@@ -6,12 +6,11 @@ designed for enhanced performance on molecular property prediction tasks.
 
 import logging
 import os
+
 import numpy as np
-
-from ..base import SklearnLearner
-
 from sklearn.ensemble import RandomForestRegressor
 
+from ..base import SklearnLearner
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
     hyperparameters, regularization, and advanced features for superior
     performance on molecular datasets.
     """
-    
+
     def __init__(self,
                  n_estimators: int = 300,
                  max_depth: int | None = 15,
@@ -74,17 +73,17 @@ class AdvancedRandomForestLearner(SklearnLearner):
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.max_samples = max_samples
         self.ccp_alpha = ccp_alpha
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
         return f"AdvancedRandomForest(n_estimators={self.n_estimators},{depth_str},pruning={self.ccp_alpha})"
-    
+
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
@@ -93,9 +92,9 @@ class AdvancedRandomForestLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return self.model.feature_importances_
-    
+
     def get_oob_score(self) -> float | None:
         """Get out-of-bag R² score from the trained model.
         
@@ -104,9 +103,9 @@ class AdvancedRandomForestLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return getattr(self.model, 'oob_score_', None)
-    
+
     def get_tree_stats(self) -> dict | None:
         """Get statistics about the trained forest.
         
@@ -115,11 +114,11 @@ class AdvancedRandomForestLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         try:
             tree_depths = [tree.tree_.max_depth for tree in self.model.estimators_]
             tree_nodes = [tree.tree_.node_count for tree in self.model.estimators_]
-            
+
             return {
                 'n_trees': len(self.model.estimators_),
                 'avg_depth': np.mean(tree_depths),

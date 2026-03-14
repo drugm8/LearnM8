@@ -2,9 +2,8 @@
 
 import numpy as np
 import polars as pl
-from rdkit import Chem
+from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator
-from rdkit import DataStructs
 
 
 def _generate_fingerprints(smiles_list: list) -> list:

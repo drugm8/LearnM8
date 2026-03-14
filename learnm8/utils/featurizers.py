@@ -3,15 +3,16 @@ Molecular featurization utilities for fingerprints and descriptors.
 Provides both direct computation and file-based caching of molecular representations.
 """
 
-import os
-import polars as pl
-import numpy as np
-from pathlib import Path
-import pickle
 import logging
+import os
+import pickle
+from pathlib import Path
+
+import numpy as np
+import polars as pl
+from joblib import Parallel, delayed
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, rdMolDescriptors
-from joblib import Parallel, delayed
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer: str = "morgan", n
     """
     if n_jobs == -1:
         n_jobs = min(os.cpu_count() or 1, 32)
-    
+
     if featurizer == "morgan":
         fingerprint_func = smiles_to_morgan_fingerprint
     elif featurizer == "maccs":
@@ -130,12 +131,12 @@ def smiles_to_fingerprints(smiles_list: list[str], featurizer: str = "morgan", n
         fingerprint_func = smiles_to_ecfp6_fingerprint
     else:
         raise ValueError(f"Unknown featurizer type: {featurizer}")
-    
+
     fingerprints = Parallel(n_jobs=n_jobs)(
-        delayed(fingerprint_func)(smiles) 
+        delayed(fingerprint_func)(smiles)
         for smiles in smiles_list
     )
-    
+
     return np.array(fingerprints)
 
 
@@ -148,8 +149,8 @@ def _compute_mordred_descriptors(smiles_list: list[str]) -> pl.DataFrame:
         for consistency with the rest of the LearnM8 codebase. This conversion
         overhead is acceptable as descriptor computation is cached.
     """
-    from mordred import Calculator, descriptors
     import pandas as pd  # Required by Mordred library
+    from mordred import Calculator, descriptors
 
     # Create calculator
     calc = Calculator(descriptors, ignore_3D=True)
@@ -254,10 +255,10 @@ def _compute_and_store_representations(
 def _load_representations(results_dir: Path, featurizer: str) -> dict:
     """Load representations from file."""
     representation_file = _get_representation_file(results_dir, featurizer)
-    
+
     if not representation_file.exists():
         return {}
-    
+
     with open(representation_file, 'rb') as f:
         return pickle.load(f)
 
@@ -265,28 +266,28 @@ def _load_representations(results_dir: Path, featurizer: str) -> dict:
 def get_fingerprints(compound_ids: list[str], results_dir: Path, featurizer: str = "morgan") -> np.ndarray:
     """Get fingerprints for specified compound IDs."""
     representations = _load_representations(results_dir, featurizer)
-    
+
     fingerprints = []
     for compound_id in compound_ids:
         if compound_id in representations:
             fingerprints.append(representations[compound_id])
         else:
             raise KeyError(f"Fingerprint not found for compound {compound_id}")
-    
+
     return np.array(fingerprints)
 
 
 def get_descriptors(compound_ids: list[str], results_dir: Path) -> np.ndarray:
     """Get Mordred descriptors for specified compound IDs."""
     representations = _load_representations(results_dir, "descriptors")
-    
+
     descriptors = []
     for compound_id in compound_ids:
         if compound_id in representations:
             descriptors.append(representations[compound_id])
         else:
             raise KeyError(f"Descriptors not found for compound {compound_id}")
-    
+
     return np.array(descriptors)
 
 

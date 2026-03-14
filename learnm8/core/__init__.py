@@ -10,16 +10,20 @@ Modular architecture with clear separation of concerns:
 """
 
 # Core interfaces (maintained for component creation)
-from .interfaces import Oracle, Learner
-
-# Modular core functions
-from .validation import validate_compound_pool, ValidationResult
-from .initialization import initialize_master_dataframe_empty
 from .config import CycleConfig, parse_cycle_schedule, parse_cycle_spec
 from .cycle import execute_cycle
+from .dataframe_ops import (
+    add_predictions,
+    batch_update,
+    get_compounds_by_status,
+    update_status,
+)
+from .initialization import initialize_master_dataframe_empty
+from .interfaces import Learner, Oracle
 from .persistence import save_results
-from .dataframe_ops import add_predictions, update_status, get_compounds_by_status, batch_update
 
+# Modular core functions
+from .validation import ValidationResult, validate_compound_pool
 
 __all__ = [
     # Core interfaces

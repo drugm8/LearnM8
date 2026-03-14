@@ -7,8 +7,9 @@ that reduce the unlabeled compound pool by removing unlikely candidates.
 import logging
 from abc import ABC, abstractmethod
 from typing import Any
-import polars as pl
+
 import numpy as np
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class DesignSpacePruner(ABC):
     and remove compounds that are unlikely to be valuable for active learning,
     thereby reducing computational costs and focusing on promising regions.
     """
-    
+
     @abstractmethod
     def prune(self,
               compounds: pl.DataFrame,
@@ -41,7 +42,7 @@ class DesignSpacePruner(ABC):
             PruningError: If pruning fails or inputs are invalid
         """
         pass
-    
+
     @abstractmethod
     def get_pruning_stats(self) -> dict[str, Any]:
         """
@@ -51,7 +52,7 @@ class DesignSpacePruner(ABC):
             Dictionary containing pruning statistics
         """
         pass
-    
+
     @abstractmethod
     def get_name(self) -> str:
         """
@@ -61,7 +62,7 @@ class DesignSpacePruner(ABC):
             String identifier for the pruning strategy
         """
         pass
-    
+
     def requires_uncertainty(self) -> bool:
         """
         Return True if this pruning strategy requires uncertainty estimates.
@@ -70,7 +71,7 @@ class DesignSpacePruner(ABC):
             Boolean indicating if uncertainty is required
         """
         return False
-    
+
     def validate_inputs(self,
                        compounds: pl.DataFrame,
                        predictions: np.ndarray,
@@ -89,9 +90,9 @@ class DesignSpacePruner(ABC):
         # Check DataFrame structure
         if len(compounds) == 0:
             raise PruningError(
-                f"Cannot prune an empty compound pool. "
-                f"All compounds may have been labeled or already pruned. "
-                f"Reduce pruning_fraction or n_cycles to retain more compounds."
+                "Cannot prune an empty compound pool. "
+                "All compounds may have been labeled or already pruned. "
+                "Reduce pruning_fraction or n_cycles to retain more compounds."
             )
 
         required_cols = ['ID', 'SMILES']
@@ -144,7 +145,7 @@ class DesignSpacePruner(ABC):
                 f"{self.get_name()} requires uncertainty estimates, but none were provided. "
                 f"Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants)."
             )
-    
+
     def _calculate_pruning_fraction(self, original_count: int, pruned_count: int) -> float:
         """Calculate the fraction of compounds pruned.
         
@@ -157,10 +158,10 @@ class DesignSpacePruner(ABC):
         """
         if original_count == 0:
             return 0.0
-        
+
         removed_count = original_count - pruned_count
         return removed_count / original_count
-    
+
     def _safe_prune_by_indices(self,
                               compounds: pl.DataFrame,
                               keep_indices: np.ndarray) -> pl.DataFrame:
@@ -207,7 +208,9 @@ class DesignSpacePruner(ABC):
             raise PruningError(f"Failed to prune compounds: {e}") from e
 
 
-from learnm8.exceptions import PruningError  # noqa: E402 — re-exported for backward compat
+from learnm8.exceptions import (
+    PruningError,
+)
 
 
 class StatefulPruner(DesignSpacePruner):
@@ -216,7 +219,7 @@ class StatefulPruner(DesignSpacePruner):
     This class provides common functionality for pruning strategies that
     adapt their behavior based on previous cycles or accumulated statistics.
     """
-    
+
     def __init__(self):
         """Initialize stateful pruner."""
         self.cycle_count = 0
@@ -226,7 +229,7 @@ class StatefulPruner(DesignSpacePruner):
             'total_compounds_pruned': 0,
             'total_pruning_operations': 0
         }
-    
+
     def update_cycle_state(self, cycle_stats: dict[str, Any]) -> None:
         """Update pruner state after a cycle.
         
@@ -235,16 +238,16 @@ class StatefulPruner(DesignSpacePruner):
         """
         self.cycle_count += 1
         self.pruning_history.append(cycle_stats)
-        
+
         # Update cumulative statistics
         if 'compounds_before_pruning' in cycle_stats:
             self.cumulative_stats['total_compounds_seen'] += cycle_stats['compounds_before_pruning']
-        
+
         if 'compounds_pruned' in cycle_stats:
             self.cumulative_stats['total_compounds_pruned'] += cycle_stats['compounds_pruned']
-        
+
         self.cumulative_stats['total_pruning_operations'] += 1
-    
+
     def get_cycle_history(self) -> list[dict[str, Any]]:
         """Get history of pruning operations across cycles.
         
@@ -252,7 +255,7 @@ class StatefulPruner(DesignSpacePruner):
             List of cycle statistics dictionaries
         """
         return self.pruning_history.copy()
-    
+
     def get_cumulative_stats(self) -> dict[str, Any]:
         """Get cumulative pruning statistics across all cycles.
         
@@ -260,17 +263,17 @@ class StatefulPruner(DesignSpacePruner):
             Dictionary of cumulative statistics
         """
         stats = self.cumulative_stats.copy()
-        
+
         # Calculate derived statistics
         if stats['total_compounds_seen'] > 0:
             stats['overall_pruning_rate'] = stats['total_compounds_pruned'] / stats['total_compounds_seen']
         else:
             stats['overall_pruning_rate'] = 0.0
-        
+
         stats['current_cycle'] = self.cycle_count
-        
+
         return stats
-    
+
     def reset_state(self) -> None:
         """Reset pruner state (useful for new experiments)."""
         self.cycle_count = 0
@@ -283,8 +286,8 @@ class StatefulPruner(DesignSpacePruner):
 
 
 # Utility functions for pruning strategies
-def calculate_confidence_intervals(predictions: np.ndarray, 
-                                 uncertainties: np.ndarray, 
+def calculate_confidence_intervals(predictions: np.ndarray,
+                                 uncertainties: np.ndarray,
                                  confidence_level: float = 0.95) -> tuple[np.ndarray, np.ndarray]:
     """Calculate confidence intervals for predictions.
     
@@ -300,16 +303,16 @@ def calculate_confidence_intervals(predictions: np.ndarray,
     from scipy.stats import norm
     alpha = 1 - confidence_level
     z_score = norm.ppf(1 - alpha/2)
-    
+
     # Calculate confidence intervals
     margin = z_score * uncertainties
     lower_bounds = predictions - margin
     upper_bounds = predictions + margin
-    
+
     return lower_bounds, upper_bounds
 
 
-def calculate_prediction_percentiles(predictions: np.ndarray, 
+def calculate_prediction_percentiles(predictions: np.ndarray,
                                    percentiles: list[float] = [10, 25, 50, 75, 90]) -> dict[str, float]:
     """Calculate percentiles of prediction distribution.
     
@@ -323,7 +326,7 @@ def calculate_prediction_percentiles(predictions: np.ndarray,
     result = {}
     for p in percentiles:
         result[f'p{p}'] = np.percentile(predictions, p)
-    
+
     return result
 
 
@@ -346,23 +349,23 @@ def adaptive_threshold_calculation(predictions: np.ndarray,
         # Use prediction percentile as threshold
         percentile = (1 - target_retention_rate) * 100
         return np.percentile(predictions, percentile)
-    
+
     elif method == 'uncertainty_weighted' and uncertainties is not None:
         # Weight predictions by inverse uncertainty for threshold calculation
         weights = 1 / (uncertainties + 1e-8)  # Add small epsilon to avoid division by zero
         weighted_predictions = predictions * weights
-        
+
         # Calculate weighted percentile
         sorted_indices = np.argsort(weighted_predictions)
         cumulative_weights = np.cumsum(weights[sorted_indices])
         normalized_weights = cumulative_weights / cumulative_weights[-1]
-        
+
         # Find threshold corresponding to retention rate
         threshold_idx = np.searchsorted(normalized_weights, 1 - target_retention_rate)
         threshold_idx = min(threshold_idx, len(predictions) - 1)
-        
+
         return float(predictions[sorted_indices[threshold_idx]])
-    
+
     else:
         # Fallback to simple percentile
         percentile = (1 - target_retention_rate) * 100

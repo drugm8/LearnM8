@@ -5,15 +5,16 @@ quantification for molecular property prediction tasks.
 """
 
 import logging
+
 import numpy as np
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.gaussian_process.kernels import ConstantKernel as C
+
+from learnm8.exceptions import LearnerError
 
 # Base class import
 from ..base import SklearnLearner, _preprocess_features
-from learnm8.exceptions import LearnerError
-
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class GaussianProcessLearner(SklearnLearner):
     Gaussian Process regression, making it ideal for active learning
     scenarios where uncertainty estimates are crucial.
     """
-    
+
     def __init__(self,
                  kernel=None,
                  alpha: float = 1e-10,
@@ -61,7 +62,7 @@ class GaussianProcessLearner(SklearnLearner):
         # Store configuration for name generation
         self.alpha = alpha
         self.kernel_name = str(kernel).split('(')[0] if kernel else "RBF"
-    
+
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Predict on feature matrix with uncertainty.
 
@@ -100,15 +101,15 @@ class GaussianProcessLearner(SklearnLearner):
                 f"Check that the input features have the same shape as training features "
                 f"and that the featurizer is compatible with the model."
             ) from e
-    
+
     def supports_uncertainty(self) -> bool:
         """Return True since GP naturally provides uncertainty estimates."""
         return True
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f"GaussianProcess({self.kernel_name},α={self.alpha})"
-    
+
     def get_learned_hyperparameters(self) -> dict | None:
         """Get learned kernel hyperparameters from the trained model.
         
@@ -117,11 +118,11 @@ class GaussianProcessLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         kernel = getattr(self.model, 'kernel_', None)
         if kernel is None:
             return None
-        
+
         return {
             'kernel': str(kernel),
             'theta': kernel.theta,

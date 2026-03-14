@@ -33,19 +33,23 @@ import math
 import time
 from pathlib import Path
 from typing import Any, Literal
-import polars as pl
-import numpy as np
 
+import numpy as np
+import polars as pl
 from tqdm import tqdm
 
-from learnm8.features.extraction import extract_features
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
-from learnm8.utils.logging_formatters import format_cycle_metrics_table
 from learnm8.exceptions import (
-    LearnerError, AcquisitionError, OracleError, PruningError, ConfigurationError,
+    AcquisitionError,
+    ConfigurationError,
     FeatureExtractionError,
+    LearnerError,
+    OracleError,
+    PruningError,
 )
+from learnm8.features.extraction import extract_features
+from learnm8.utils.logging_formatters import format_cycle_metrics_table
 
 logger = logging.getLogger(__name__)
 
@@ -239,9 +243,9 @@ def execute_cycle(
         )
     """
     from learnm8.core.dataframe_ops import (
-        get_compounds_by_status,
         add_predictions,
-        update_status
+        get_compounds_by_status,
+        update_status,
     )
 
     # Step 1: Setup and Validation
@@ -555,8 +559,8 @@ def execute_cycle(
             )
         else:
             logger.warning(
-                f"No labeled data available for current_best calculation. "
-                f"EI/PI strategies may fail if selected."
+                "No labeled data available for current_best calculation. "
+                "EI/PI strategies may fail if selected."
             )
 
     # Step 11: Select Compounds Using Acquisition Strategy

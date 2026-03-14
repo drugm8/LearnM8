@@ -5,13 +5,12 @@ for molecular property prediction tasks.
 """
 
 import logging
+
 import numpy as np
+from sklearn.ensemble import RandomForestRegressor
 
 # Base class import
 from ..base import SklearnLearner
-
-from sklearn.ensemble import RandomForestRegressor
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class RandomForestLearner(SklearnLearner):
     for molecular property prediction tasks. It provides robust performance
     across different molecular datasets.
     """
-    
+
     def __init__(self,
                  n_estimators: int = 100,
                  max_depth: int | None = None,
@@ -64,12 +63,12 @@ class RandomForestLearner(SklearnLearner):
         # Store hyperparameters for name generation
         self.n_estimators = n_estimators
         self.max_depth = max_depth
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
         return f"RandomForest(n_estimators={self.n_estimators},{depth_str})"
-    
+
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
@@ -78,9 +77,9 @@ class RandomForestLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return self.model.feature_importances_
-    
+
     def get_oob_score(self) -> float | None:
         """Get out-of-bag R² score from the trained model.
         
@@ -89,5 +88,5 @@ class RandomForestLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return getattr(self.model, 'oob_score_', None)

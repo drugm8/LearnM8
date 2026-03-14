@@ -6,9 +6,9 @@ following the new architecture design with clean interfaces and dependency injec
 
 import logging
 from abc import ABC, abstractmethod
-import polars as pl
-import numpy as np
 
+import numpy as np
+import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,9 @@ class AcquisitionFunction(ABC):
         return selected_compounds
 
 
-from learnm8.exceptions import AcquisitionError  # noqa: E402 — re-exported for backward compat
+from learnm8.exceptions import (
+    AcquisitionError,
+)
 
 
 # Utility functions for acquisition calculations

@@ -6,31 +6,27 @@ all essential model performance metrics and molecular similarity analysis.
 """
 
 # Import main evaluation functions from core module
-from .core import (
-    evaluate_cycle,
-    format_progress_output,
-    export_metrics_csv
-)
+from .core import evaluate_cycle, export_metrics_csv, format_progress_output
 
 # Import specialized metric functions from modular metrics package
 from .metrics import (
-    calculate_spearman_correlation,
     calculate_average_score,
-    calculate_top_k_overlap,
-    calculate_multiple_top_k_overlaps,
     calculate_enrichment_factor,
-    calculate_multiple_enrichment_factors,
+    calculate_mape,
     calculate_molecular_similarity_metrics,
-    calculate_mape
+    calculate_multiple_enrichment_factors,
+    calculate_multiple_top_k_overlaps,
+    calculate_spearman_correlation,
+    calculate_top_k_overlap,
 )
 
 # Public API exports for backward compatibility
 __all__ = [
     # Main evaluation functions
     'evaluate_cycle',
-    'format_progress_output', 
+    'format_progress_output',
     'export_metrics_csv',
-    
+
     # Specialized metric functions (sklearn basics not exported)
     'calculate_spearman_correlation',
     'calculate_average_score',

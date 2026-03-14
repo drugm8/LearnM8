@@ -1,16 +1,18 @@
 """XGBoost learner implementation."""
 
 import os
-from xgboost import XGBRegressor
-from ...base import SklearnLearner
 from pathlib import Path
+
+from xgboost import XGBRegressor
+
+from ...base import SklearnLearner
 
 
 class XGBoostLearner(SklearnLearner):
     """XGBoost based active learner with CPU parallelization."""
-    
+
     def __init__(self, n_estimators: int = 100, learning_rate: float = 0.1, max_depth: int = 3,
-                 n_jobs: int = -1, random_state: int = 42, results_dir: Path = None, 
+                 n_jobs: int = -1, random_state: int = 42, results_dir: Path = None,
                  featurizer: str = 'morgan'):
         """
         Initialize XGBoost learner.
@@ -27,7 +29,7 @@ class XGBoostLearner(SklearnLearner):
         # Limit CPU cores to prevent oversubscription
         if n_jobs == -1:
             n_jobs = min(os.cpu_count() or 1, 32)
-        
+
         model = XGBRegressor(
             n_estimators=n_estimators,
             learning_rate=learning_rate,
@@ -37,9 +39,9 @@ class XGBoostLearner(SklearnLearner):
             random_state=random_state,
             objective='reg:squarederror'
         )
-        
+
         super().__init__(model, results_dir, featurizer)
-    
+
     def get_name(self) -> str:
         """Return the model name."""
         return "XGBoost"

@@ -4,6 +4,7 @@ This module provides the random acquisition strategy for baseline comparisons.
 """
 
 import logging
+
 import numpy as np
 import polars as pl
 

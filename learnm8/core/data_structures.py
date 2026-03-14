@@ -1,4 +1,5 @@
 import logging
+
 import polars as pl
 
 logger = logging.getLogger(__name__)

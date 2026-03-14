@@ -5,12 +5,11 @@ for molecular property prediction tasks.
 """
 
 import logging
+
 import numpy as np
-
-from ..base import SklearnLearner
-
 from sklearn.tree import DecisionTreeRegressor
 
+from ..base import SklearnLearner
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class DecisionTreeLearner(SklearnLearner):
     This learner uses Decision Tree regression with hyperparameters designed
     to balance model complexity and generalization for molecular datasets.
     """
-    
+
     def __init__(self,
                  max_depth: int | None = 10,
                  min_samples_split: int = 10,
@@ -48,16 +47,16 @@ class DecisionTreeLearner(SklearnLearner):
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
-        
+
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         depth_str = f"depth={self.max_depth}" if self.max_depth else "unlimited_depth"
         return f"DecisionTree({depth_str},min_split={self.min_samples_split})"
-    
+
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
         
@@ -66,5 +65,5 @@ class DecisionTreeLearner(SklearnLearner):
         """
         if not self.is_trained:
             return None
-        
+
         return self.model.feature_importances_

@@ -7,6 +7,7 @@ exploration and gradually cools down to become more greedy/exploitative.
 """
 
 import logging
+
 import numpy as np
 import polars as pl
 
@@ -29,7 +30,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
     The energy function is based on prediction values, where higher predictions
     correspond to lower energy (for maximization problems).
     """
-    
+
     def __init__(self,
                  initial_temp: float = 1.0,
                  final_temp: float = 0.01,
@@ -66,20 +67,20 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
             raise ValueError(f"cooling_schedule must be 'exponential' or 'linear', got '{cooling_schedule}'")
         if score_direction not in ['higher', 'lower']:
             raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
-        
+
         self.initial_temp = initial_temp
         self.final_temp = final_temp
         self.max_iterations = max_iterations
         self.cooling_schedule = cooling_schedule
         self.score_direction = score_direction
         self.random_state = random_state
-        
+
         # Setup random number generator
         self._rng = np.random.RandomState(random_state)
-        
+
         # Keep track of maximization vs minimization
         self.maximize = score_direction == 'higher'
-    
+
     def _calculate_energy(self, prediction: float, uncertainty: float | None = None) -> float:
         """Calculate energy for simulated annealing.
         
@@ -96,7 +97,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         else:
             # For minimization: lower predictions = lower energy
             return prediction
-    
+
     def _get_temperature(self, iteration: int) -> float:
         """Calculate current temperature based on cooling schedule.
         
@@ -108,7 +109,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         """
         # Calculate progress (0 to 1)
         progress = iteration / self.max_iterations
-        
+
         if self.cooling_schedule == 'exponential':
             # Exponential cooling: T(t) = T_initial * (T_final/T_initial)^progress
             ratio = self.final_temp / self.initial_temp
@@ -119,7 +120,7 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         else:
             # Should not reach here due to validation in __init__
             raise ValueError(f"Unknown cooling schedule: {self.cooling_schedule}")
-    
+
     def _metropolis_accept(self, current_energy: float, candidate_energy: float, temperature: float) -> bool:
         """Determine whether to accept a candidate based on Metropolis criterion.
         
@@ -134,16 +135,16 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
         # Always accept if candidate is better (lower energy)
         if candidate_energy <= current_energy:
             return True
-        
+
         # Accept worse candidates with probability exp(-ΔE/T)
         if temperature <= 0:
             return False
-        
+
         delta_energy = candidate_energy - current_energy
         acceptance_prob = np.exp(-delta_energy / temperature)
-        
+
         return bool(self._rng.random() < acceptance_prob)
-    
+
     def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
         """Select compounds using simulated annealing.
 
@@ -257,11 +258,11 @@ class SimulatedAnnealingAcquisition(AcquisitionFunction):
                     f"(temp: {self.initial_temp:.3f} → {self.final_temp:.3f})")
 
         return selected
-    
+
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
         return f"SimulatedAnnealing({self.cooling_schedule}_{self.score_direction})"
-    
+
     def requires_uncertainty(self) -> bool:
         """Return True if this acquisition function requires uncertainty estimates."""
         return False  # Basic version doesn't use uncertainty

@@ -1,13 +1,13 @@
 """PyTorch-based learners."""
 
-from .mlp import MLPLearner
-from .mc_dropout import MCDropoutLearner
-from .fastprop_learner import FastpropLearner
 from .chemprop_learner import ChempropLearner
+from .fastprop_learner import FastpropLearner
+from .mc_dropout import MCDropoutLearner
+from .mlp import MLPLearner
 
 __all__ = [
-    'MLPLearner',
-    'MCDropoutLearner',
+    'ChempropLearner',
     'FastpropLearner',
-    'ChempropLearner'
+    'MCDropoutLearner',
+    'MLPLearner'
 ]

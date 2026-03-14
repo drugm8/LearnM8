@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
-import polars as pl
 import datamol as dm
+import polars as pl
 from rdkit import Chem
 
 logger = logging.getLogger(__name__)

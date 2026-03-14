@@ -5,6 +5,7 @@ with the highest model predictions.
 """
 
 import logging
+
 import polars as pl
 
 from .base import AcquisitionFunction
