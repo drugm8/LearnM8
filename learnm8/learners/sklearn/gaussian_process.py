@@ -8,78 +8,141 @@ import logging
 
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF
+from sklearn.gaussian_process.kernels import RBF, Kernel
 from sklearn.gaussian_process.kernels import ConstantKernel as C
 
-from learnm8.exceptions import LearnerError
+from learnm8.exceptions import ConfigurationError, LearnerError
 
-# Base class import
 from ..base import SklearnLearner, _preprocess_features
+from .kernels import TanimotoKernel
 
 logger = logging.getLogger(__name__)
+
+_VALID_KERNEL_STRINGS = ('auto', 'tanimoto', 'rbf')
 
 
 class GaussianProcessLearner(SklearnLearner):
     """Gaussian Process learner with native uncertainty support.
-    
-    This learner provides principled uncertainty quantification through
-    Gaussian Process regression, making it ideal for active learning
-    scenarios where uncertainty estimates are crucial.
+
+    Supports kernel='auto' (auto-detects binary vs continuous features),
+    kernel='tanimoto', kernel='rbf', or a custom sklearn Kernel instance.
     """
 
-    def __init__(self,
-                 kernel=None,
-                 alpha: float = 1e-10,
-                 n_restarts_optimizer: int = 5,
-                 normalize_y: bool = True,
-                 random_state: int = 42,
-                 **kwargs):
-        """Initialize Gaussian Process learner.
-
-        Args:
-            kernel: GP kernel (None for RBF with learned hyperparameters)
-            alpha: Noise regularization parameter
-            n_restarts_optimizer: Number of optimizer restarts for hyperparameter optimization
-            normalize_y: Whether to normalize target values
-            random_state: Random seed for reproducibility
-            **kwargs: Additional arguments passed to SklearnLearner
-        """
+    def __init__(
+        self,
+        kernel: str | Kernel | None = 'auto',
+        alpha: float = 1e-3,
+        n_restarts_optimizer: int = 5,
+        normalize_y: bool = True,
+        random_state: int = 42,
+        max_train_size: int = 5000,
+        **kwargs,
+    ):
         if kernel is None:
-            kernel = C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
+            kernel = 'auto'
 
+        if isinstance(kernel, str):
+            if kernel not in _VALID_KERNEL_STRINGS:
+                raise ConfigurationError(
+                    f"kernel must be 'auto', 'tanimoto', 'rbf', None, "
+                    f"or a sklearn Kernel instance, got '{kernel}'"
+                )
+            self._kernel_config = kernel
+        elif isinstance(kernel, Kernel):
+            self._kernel_config = kernel
+        else:
+            raise ConfigurationError(
+                f"kernel must be 'auto', 'tanimoto', 'rbf', None, "
+                f'or a sklearn Kernel instance, got {type(kernel).__name__}'
+            )
+
+        if isinstance(self._kernel_config, str) and self._kernel_config == 'tanimoto':
+            self._kernel_name = 'Tanimoto'
+        elif isinstance(self._kernel_config, str) and self._kernel_config == 'rbf':
+            self._kernel_name = 'RBF'
+        elif isinstance(self._kernel_config, Kernel):
+            self._kernel_name = str(self._kernel_config).split('(')[0]
+        else:
+            self._kernel_name = 'auto'
+
+        self.alpha = alpha
+        self.max_train_size = max_train_size
+        self._n_restarts_optimizer = n_restarts_optimizer
+        self._normalize_y = normalize_y
+
+        placeholder_kernel = C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
         model = GaussianProcessRegressor(
-            kernel=kernel,
+            kernel=placeholder_kernel,
             alpha=alpha,
             n_restarts_optimizer=n_restarts_optimizer,
             normalize_y=normalize_y,
-            random_state=random_state
+            random_state=random_state,
         )
 
         super().__init__(model, random_state=random_state, **kwargs)
 
-        logger.debug(f"Initialized GaussianProcessLearner with kernel={kernel}, random_state={random_state}")
+        logger.debug(
+            f'Initialized GaussianProcessLearner with kernel={self._kernel_config}, '
+            f'alpha={alpha}, random_state={random_state}'
+        )
 
-        # Store configuration for name generation
-        self.alpha = alpha
-        self.kernel_name = str(kernel).split('(')[0] if kernel else "RBF"
+    def _resolve_kernel(self, features: np.ndarray) -> Kernel:
+        if isinstance(self._kernel_config, Kernel):
+            return self._kernel_config
+
+        if self._kernel_config == 'auto':
+            is_binary = np.all((features == 0) | (features == 1))
+            if is_binary:
+                self._kernel_name = 'Tanimoto'
+                return TanimotoKernel()
+            else:
+                self._kernel_name = 'RBF'
+                return C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
+
+        if self._kernel_config == 'tanimoto':
+            if np.any(features < 0):
+                logger.warning(
+                    'Tanimoto kernel is designed for non-negative features. '
+                    'Negative values detected — PSD guarantee may not hold.'
+                )
+            return TanimotoKernel()
+
+        return C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
+
+    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+        n_samples = features.shape[0] if features.ndim == 2 else len(features)
+
+        if n_samples > self.max_train_size:
+            raise LearnerError(
+                f'Training set size ({n_samples}) exceeds maximum ({self.max_train_size}). '
+                f'GP training is O(n^3) and impractical at this scale. '
+                f"Consider using 'rf', 'ensemble', or 'xgb' learners instead, "
+                f'or increase max_train_size if you have sufficient compute.'
+            )
+
+        warn_threshold = int(self.max_train_size * 0.4)
+        if n_samples > warn_threshold:
+            logger.warning(
+                f'Training set size ({n_samples}) is large for GP (O(n^3) scaling). '
+                f"Training may be slow. Consider 'rf', 'ensemble', or 'xgb' for large datasets."
+            )
+
+        resolved_kernel = self._resolve_kernel(features)
+        self.model = GaussianProcessRegressor(
+            kernel=resolved_kernel,
+            alpha=self.alpha,
+            n_restarts_optimizer=self._n_restarts_optimizer,
+            normalize_y=self._normalize_y,
+            random_state=self.random_state,
+        )
+
+        super().train(features, targets)
 
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """Predict on feature matrix with uncertainty.
-
-        Args:
-            features: Feature matrix (n_samples, n_features)
-
-        Returns:
-            Tuple of (predictions, uncertainties).
-            GP naturally provides uncertainty estimates.
-
-        Raises:
-            RuntimeError: If model is not trained or prediction fails
-        """
         if not self.is_trained:
             raise LearnerError(
-                f"{self.get_name()} must be trained before prediction. "
-                f"Call train() with labeled data first."
+                f'{self.get_name()} must be trained before prediction. '
+                f'Call train() with labeled data first.'
             )
 
         try:
@@ -87,35 +150,28 @@ class GaussianProcessLearner(SklearnLearner):
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=False
+                is_training=False,
             )
 
             predictions, std = self.model.predict(features, return_std=True)
-            logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()}")
+            logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')
             return predictions, std
 
         except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
-            logger.error(f"Failed to predict with {self.get_name()}: {e}")
+            logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
-                f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
-                f"Check that the input features have the same shape as training features "
-                f"and that the featurizer is compatible with the model."
+                f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}. '
+                f'Check that the input features have the same shape as training features '
+                f'and that the featurizer is compatible with the model.'
             ) from e
 
     def supports_uncertainty(self) -> bool:
-        """Return True since GP naturally provides uncertainty estimates."""
         return True
 
     def get_name(self) -> str:
-        """Return a descriptive name for this learner."""
-        return f"GaussianProcess({self.kernel_name},α={self.alpha})"
+        return f'GaussianProcess({self._kernel_name},alpha={self.alpha})'
 
     def get_learned_hyperparameters(self) -> dict | None:
-        """Get learned kernel hyperparameters from the trained model.
-        
-        Returns:
-            Dictionary of learned hyperparameters, or None if model not trained
-        """
         if not self.is_trained:
             return None
 
@@ -126,5 +182,7 @@ class GaussianProcessLearner(SklearnLearner):
         return {
             'kernel': str(kernel),
             'theta': kernel.theta,
-            'log_marginal_likelihood': getattr(self.model, 'log_marginal_likelihood_value_', None)
+            'log_marginal_likelihood': getattr(
+                self.model, 'log_marginal_likelihood_value_', None
+            ),
         }
