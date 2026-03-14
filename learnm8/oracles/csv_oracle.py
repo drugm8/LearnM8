@@ -1,8 +1,10 @@
 """CSV-based oracle for looking up pre-computed compound properties."""
 
 import logging
-import polars as pl
 from pathlib import Path
+
+import polars as pl
+
 from learnm8.core.interfaces import Oracle
 
 logger = logging.getLogger(__name__)
@@ -84,7 +86,7 @@ class CSVOracle(Oracle):
             if 'ID' in self.ground_truth.columns:
                 self.ground_truth = self.ground_truth.drop('ID')
             self.ground_truth = self.ground_truth.rename({id_column: 'ID'})
-    
+
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
         Look up property values for given compounds.
@@ -145,6 +147,6 @@ class CSVOracle(Oracle):
         # Check if any compounds were not found
         if result.height < compounds.height:
             missing_count = compounds.height - result.height
-            print(f"Warning: {missing_count} compounds not found in ground truth")
+            logger.warning("%d compounds not found in ground truth", missing_count)
 
         return result

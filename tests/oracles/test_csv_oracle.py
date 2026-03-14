@@ -96,15 +96,15 @@ class TestCSVOracleMeasure:
         result = oracle_with_data.measure(compounds, ['Activity'])
         assert result['ID'].to_list() == ['COMP_005', 'COMP_001', 'COMP_003']
 
-    def test_measure_missing_compounds(self, oracle_with_data, capsys):
+    def test_measure_missing_compounds(self, oracle_with_data, caplog):
         compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_999'],
             'SMILES': ['CCO', 'CCNCC']
         })
-        result = oracle_with_data.measure(compounds, ['Activity'])
+        with caplog.at_level('WARNING', logger='learnm8.oracles.csv_oracle'):
+            result = oracle_with_data.measure(compounds, ['Activity'])
         assert result.height == 1
-        out = capsys.readouterr().out
-        assert 'not found' in out
+        assert 'not found' in caplog.text
 
     def test_measure_wrong_property_name(self, oracle_with_data):
         compounds = pl.DataFrame({
