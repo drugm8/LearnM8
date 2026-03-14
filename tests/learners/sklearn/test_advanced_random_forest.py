@@ -1,11 +1,12 @@
 """Tests for AdvancedRandomForestLearner implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
-from learnm8.learners.sklearn.advanced_random_forest import AdvancedRandomForestLearner
+from learnm8.exceptions import LearnerError
 from learnm8.features.extraction import extract_features
+from learnm8.learners.sklearn.advanced_random_forest import AdvancedRandomForestLearner
 
 
 @pytest.mark.integration
@@ -28,7 +29,9 @@ class TestAdvancedRandomForestLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
 
-    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_train_predict_integration(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -47,7 +50,9 @@ class TestAdvancedRandomForestLearner:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_oob_score_enabled(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_oob_score_enabled(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test out-of-bag scoring functionality."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -65,7 +70,9 @@ class TestAdvancedRandomForestLearner:
         assert isinstance(oob_score, float)
         assert -1.0 <= oob_score <= 1.0
 
-    def test_feature_importance(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_feature_importance(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -89,7 +96,9 @@ class TestAdvancedRandomForestLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+        with pytest.raises(
+            (ValueError, LearnerError), match=r'Cannot train .* on an empty dataset'
+        ):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
@@ -97,40 +106,44 @@ class TestAdvancedRandomForestLearner:
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(ValueError, match="Features and targets must have same length"):
+        with pytest.raises((ValueError, LearnerError), match='mismatched lengths'):
             learner.train(features, targets)
 
     def test_predict_without_training(self, learner):
         """Test error when predicting without training."""
         features = np.random.randn(5, 10)
-        with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
+        with pytest.raises(RuntimeError, match='must be trained before prediction'):
             learner.predict(features)
 
     def test_get_name(self, learner):
         """Test name generation format."""
         name = learner.get_name()
-        assert "AdvancedRandomForest" in name
-        assert "n_estimators=10" in name
-        assert "depth=15" in name
-        assert "pruning=0.001" in name
+        assert 'AdvancedRandomForest' in name
+        assert 'n_estimators=10' in name
+        assert 'depth=15' in name
+        assert 'pruning=0.001' in name
 
     def test_supports_uncertainty(self, learner):
         """Test that AdvancedRandomForestLearner does not support uncertainty."""
         assert learner.supports_uncertainty() is False
 
-        compounds = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002'],
-            'SMILES': ['CCO', 'CCC'],
-            'Activity': [0.3, 0.7]
-        })
+        compounds = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002'],
+                'SMILES': ['CCO', 'CCC'],
+                'Activity': [0.3, 0.7],
+            }
+        )
 
         features = np.random.randn(2, 10)
         learner.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = learner.predict(features)
+        _predictions, uncertainty = learner.predict(features)
 
         assert uncertainty is None
 
-    def test_get_tree_stats(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_tree_stats(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test tree statistics retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -157,7 +170,9 @@ class TestAdvancedRandomForestLearner:
         assert stats['avg_depth'] > 0
         assert stats['total_nodes'] > 0
 
-    def test_advanced_hyperparameters(self, small_real_compounds, small_real_morgan_features):
+    def test_advanced_hyperparameters(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test learner with advanced hyperparameters configuration."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -174,7 +189,7 @@ class TestAdvancedRandomForestLearner:
             max_samples=0.7,
             min_impurity_decrease=0.001,
             ccp_alpha=0.01,
-            random_state=42
+            random_state=42,
         )
 
         features = small_real_morgan_features
@@ -189,20 +204,26 @@ class TestAdvancedRandomForestLearner:
 
     def test_edge_case_small_dataset(self, learner, tmp_path):
         """Test with small diverse dataset."""
-        small_compounds = pl.DataFrame({
-            'ID': [f'COMP_{i:03d}' for i in range(5)],
-            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
-            'Activity': [0.5, 0.3, 0.8, 0.2, 0.6]
-        })
+        small_compounds = pl.DataFrame(
+            {
+                'ID': [f'COMP_{i:03d}' for i in range(5)],
+                'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+                'Activity': [0.5, 0.3, 0.8, 0.2, 0.6],
+            }
+        )
 
-        features = extract_features(small_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = extract_features(
+            small_compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
         learner.train(features, small_compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert len(predictions) == 5
         assert np.all(np.isfinite(predictions))
 
-    def test_regularization_effect(self, small_real_compounds, small_real_morgan_features):
+    def test_regularization_effect(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test that regularization parameters affect model behavior."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -211,17 +232,14 @@ class TestAdvancedRandomForestLearner:
             )
 
         learner_no_pruning = AdvancedRandomForestLearner(
-            n_estimators=10,
-            ccp_alpha=0.0,
-            min_impurity_decrease=0.0,
-            random_state=42
+            n_estimators=10, ccp_alpha=0.0, min_impurity_decrease=0.0, random_state=42
         )
 
         learner_with_pruning = AdvancedRandomForestLearner(
             n_estimators=10,
             ccp_alpha=0.01,
             min_impurity_decrease=0.001,
-            random_state=42
+            random_state=42,
         )
 
         features = small_real_morgan_features
@@ -247,7 +265,7 @@ class TestAdvancedRandomForestLearner:
             bootstrap=True,
             oob_score=True,
             max_samples=0.8,
-            random_state=42
+            random_state=42,
         )
 
         features = small_real_morgan_features

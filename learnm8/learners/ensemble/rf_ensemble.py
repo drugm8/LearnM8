@@ -1,5 +1,7 @@
 """Random Forest ensemble learner for LearnM8 framework."""
 
+import warnings
+
 from ..sklearn.random_forest import RandomForestLearner
 from .ensemble import EnsembleLearner
 
@@ -7,10 +9,9 @@ from .ensemble import EnsembleLearner
 class RFEnsemble(EnsembleLearner):
     """Ensemble of 3 Random Forest learners with different random states."""
 
-    def __init__(self,
-                 n_estimators: int = 100,
-                 random_states: list[int] | None = None,
-                 **kwargs):
+    def __init__(
+        self, n_estimators: int = 100, random_states: list[int] | None = None, **kwargs
+    ):
         """Initialize RF ensemble.
 
         Args:
@@ -21,12 +22,18 @@ class RFEnsemble(EnsembleLearner):
         if random_states is None:
             random_states = [42, 123, 456]
 
+        total_trees = n_estimators * len(random_states)
+        warnings.warn(
+            f'RFEnsemble is deprecated. Use RandomForestLearner(n_estimators={total_trees}) '
+            f'instead, where N = n_estimators * len(random_states). '
+            f'Will be removed in v0.12.0.',
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         learners = []
         for rs in random_states:
-            rf = RandomForestLearner(
-                n_estimators=n_estimators,
-                random_state=rs
-            )
+            rf = RandomForestLearner(n_estimators=n_estimators, random_state=rs)
             learners.append(rf)
 
         # Set default ensemble parameters
@@ -40,4 +47,4 @@ class RFEnsemble(EnsembleLearner):
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        return f"RFEnsemble(3xRF,n_est={self.n_estimators})"
+        return f'RFEnsemble(3xRF,n_est={self.n_estimators})'
