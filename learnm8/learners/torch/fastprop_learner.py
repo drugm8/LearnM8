@@ -6,6 +6,7 @@ featurizer-agnostic architecture, accepting any pre-computed feature matrix.
 """
 
 import logging
+import time
 import warnings
 
 import numpy as np
@@ -163,10 +164,19 @@ class FastpropLearner(Learner):
             f'targets shape: {targets.shape}'
         )
 
-        warnings.filterwarnings(
-            'ignore', category=UserWarning, module='pytorch_lightning'
-        )
+        warnings.filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
+        warnings.filterwarnings('ignore', category=UserWarning, module='lightning')
 
+        _pl_loggers = [
+            logging.getLogger('pytorch_lightning'),
+            logging.getLogger('lightning'),
+            logging.getLogger('lightning.pytorch'),
+        ]
+        _orig_levels = [lg.level for lg in _pl_loggers]
+        for lg in _pl_loggers:
+            lg.setLevel(logging.WARNING)
+
+        start_time = time.time()
         try:
             from sklearn.model_selection import train_test_split
 
@@ -272,10 +282,10 @@ class FastpropLearner(Learner):
                 f'val_split={"yes" if use_val else "no"})'
             )
             self.trainer.fit(self.model, train_dataloader, val_dataloader)
-            logger.debug(f'{self.get_name()} training completed successfully')
 
             self.is_trained = True
-            logger.debug(f'Trained {self.get_name()} on {len(features)} samples')
+            train_time = time.time() - start_time
+            logger.debug(f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s')
 
             self._cleanup_gpu_memory('after training')
 
@@ -285,6 +295,9 @@ class FastpropLearner(Learner):
                 f'Training failed for {self.get_name()}: {e}. '
                 f'Check that features are valid and training data is sufficient.'
             ) from None
+        finally:
+            for lg, lvl in zip(_pl_loggers, _orig_levels, strict=True):
+                lg.setLevel(lvl)
 
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict using trained Fastprop model.
@@ -303,6 +316,15 @@ class FastpropLearner(Learner):
             raise LearnerError('Model must be trained before prediction')
 
         logger.debug(f'Predicting with {self.get_name()} on {len(features)} samples')
+
+        _pl_loggers = [
+            logging.getLogger('pytorch_lightning'),
+            logging.getLogger('lightning'),
+            logging.getLogger('lightning.pytorch'),
+        ]
+        _orig_levels = [lg.level for lg in _pl_loggers]
+        for lg in _pl_loggers:
+            lg.setLevel(logging.WARNING)
 
         try:
             X = torch.tensor(features, dtype=torch.float32)
@@ -349,6 +371,9 @@ class FastpropLearner(Learner):
                 f'Prediction failed for {self.get_name()}: {e}. '
                 f'Check that features match the training feature dimensions.'
             ) from None
+        finally:
+            for lg, lvl in zip(_pl_loggers, _orig_levels, strict=True):
+                lg.setLevel(lvl)
 
     def get_name(self) -> str:
         """Return descriptive name for this learner."""
