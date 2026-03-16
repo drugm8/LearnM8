@@ -1,290 +1,20 @@
-"""
-Uncertainty-based acquisition function tests.
-
-Tests acquisition functions that leverage prediction uncertainty for selection.
-"""
-
-import pytest
 import numpy as np
 import polars as pl
+import pytest
+
 from learnm8.acquisition import (
-    UCBAcquisition, ExpectedImprovementAcquisition,
-    ProbabilityImprovementAcquisition, ThompsonSamplingAcquisition
+    ExpectedImprovementAcquisition,
+    ProbabilityImprovementAcquisition,
+    ThompsonSamplingAcquisition,
+    UCBAcquisition,
 )
-
-
-@pytest.mark.unit
-class TestUCBAcquisition:
-    """Test Upper Confidence Bound acquisition."""
-    
-    def test_ucb_basic_functionality(self, compounds_with_uncertainty):
-        """Test UCB acquisition with uncertainty estimates."""
-        compounds = compounds_with_uncertainty.clone()
-        
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-        
-        acq = UCBAcquisition(beta=1.0)
-        selected = acq.select(compounds, n_select=5)
-        
-        assert len(selected) == 5
-        assert 'acquisition_score' in selected.columns
-        
-        # UCB scores should incorporate both prediction and uncertainty
-        # Higher prediction + higher uncertainty = higher UCB score
-        ucb_scores = selected.get_column('acquisition_score').to_numpy()
-        assert np.all(np.isfinite(ucb_scores))
-    
-    def test_ucb_beta_parameter(self, compounds_with_uncertainty):
-        """Test UCB with different beta values."""
-        compounds = compounds_with_uncertainty.clone()
-        
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-        
-        # Test different exploration parameters
-        acq_conservative = UCBAcquisition(beta=0.1)  # Low exploration
-        acq_aggressive = UCBAcquisition(beta=2.0)    # High exploration
-        
-        selected_conservative = acq_conservative.select(compounds, n_select=5)
-        selected_aggressive = acq_aggressive.select(compounds, n_select=5)
-        
-        assert len(selected_conservative) == 5
-        assert len(selected_aggressive) == 5
-        
-        # Check that both strategies work (selections may be similar with small datasets)
-        conservative_ids = set(selected_conservative.get_column('ID').to_list())
-        aggressive_ids = set(selected_aggressive.get_column('ID').to_list())
-
-        # Both strategies should make valid selections
-        assert len(conservative_ids) == 5
-        assert len(aggressive_ids) == 5
-
-        # Conservative should favor high predictions, aggressive should include high uncertainty
-        conservative_scores = selected_conservative.get_column('acquisition_score').mean()
-        aggressive_scores = selected_aggressive.get_column('acquisition_score').mean()
-
-        # Both should produce valid UCB scores
-        assert np.isfinite(conservative_scores)
-        assert np.isfinite(aggressive_scores)
-    
-    def test_ucb_uncertainty_weighting(self, small_real_compounds):
-        """Test UCB properly weights uncertainty."""
-        compounds = small_real_compounds.head(10).clone()
-        # Create scenario with varying uncertainty - use default 'higher' score direction
-        compounds = compounds.with_columns([
-            pl.Series('prediction', np.random.uniform(0.3, 0.7, len(compounds))),
-            pl.Series('uncertainty', [0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5, 0.1, 0.5])
-        ])
-
-        acq = UCBAcquisition(beta=1.0)  # Default is 'higher'
-        selected = acq.select(compounds, n_select=3)
-
-        # For maximization UCB, should prefer compounds with higher uncertainty (exploration)
-        selected_uncertainties = selected.get_column('uncertainty').to_numpy()
-        assert np.mean(selected_uncertainties) > np.mean(compounds.get_column('uncertainty').to_numpy())
-
-    def test_ucb_score_direction_lower(self, small_real_compounds):
-        """Test UCB with score_direction='lower' for minimization problems."""
-        compounds = small_real_compounds.head(10).clone()
-        # Create test scenario for LCB (minimization)
-        compounds = compounds.with_columns([
-            pl.Series('prediction', np.array([2.0, 1.0, 3.0, 1.5, 2.5, 0.5, 3.5, 1.2, 2.2, 0.8])),
-            pl.Series('uncertainty', np.array([0.1, 0.3, 0.2, 0.4, 0.1, 0.2, 0.3, 0.5, 0.1, 0.4]))
-        ])
-
-        # Test LCB behavior (score_direction='lower')
-        acq = UCBAcquisition(beta=1.0, score_direction='lower')
-        selected = acq.select(compounds, n_select=3)
-
-        assert len(selected) == 3
-
-        # Calculate expected LCB scores manually
-        predictions = compounds.get_column('prediction').to_numpy()
-        uncertainties = compounds.get_column('uncertainty').to_numpy()
-        manual_lcb = predictions - 1.0 * uncertainties
-        expected_top3_indices = np.argsort(manual_lcb)[:3]  # Lowest 3 LCB scores
-
-        # Get selected compound IDs
-        selected_ids = set(selected.get_column('ID').to_list())
-        expected_ids = set(compounds.get_column('ID').to_list()[i] for i in expected_top3_indices)
-
-        # Verify we selected the compounds with lowest LCB scores
-        assert selected_ids == expected_ids
-
-
-@pytest.mark.unit
-class TestExpectedImprovementAcquisition:
-    """Test Expected Improvement acquisition."""
-    
-    def test_ei_basic_functionality(self, compounds_with_uncertainty):
-        """Test EI acquisition functionality."""
-        compounds = compounds_with_uncertainty.clone()
-
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-
-        # Calculate current_best from predictions (simulating labeled data)
-        current_best = compounds.get_column('prediction').max()
-
-        # Use default xi parameter for exploration
-        acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
-        selected = acq.select(compounds, n_select=5)
-
-        assert len(selected) == 5
-        assert 'acquisition_score' in selected.columns
-        assert np.all(selected.get_column('acquisition_score').to_numpy() >= 0)  # EI is always non-negative
-    
-    def test_ei_xi_parameter(self, compounds_with_uncertainty):
-        """Test EI with different xi exploration parameters."""
-        compounds = compounds_with_uncertainty.clone()
-
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-
-        # Calculate current_best from predictions (simulating labeled data)
-        current_best = compounds.get_column('prediction').max()
-
-        # Test with different xi values (exploration parameters)
-        acq_low = ExpectedImprovementAcquisition(xi=0.001, current_best=current_best)  # Low exploration
-        acq_high = ExpectedImprovementAcquisition(xi=0.1, current_best=current_best)   # High exploration
-
-        selected_low = acq_low.select(compounds, n_select=5)
-        selected_high = acq_high.select(compounds, n_select=5)
-
-        assert len(selected_low) == 5
-        assert len(selected_high) == 5
-
-        # Both should select compounds, differences may be subtle
-        assert isinstance(selected_low.get_column('acquisition_score')[0], (int, float))
-        assert isinstance(selected_high.get_column('acquisition_score')[0], (int, float))
-    
-    def test_ei_with_realistic_molecular_scenario(self, small_real_compounds):
-        """Test EI in realistic molecular discovery scenario."""
-        compounds = small_real_compounds.clone()
-        # Simulate model predictions with uncertainty
-        np.random.seed(42)
-        compounds = compounds.with_columns([
-            (pl.col('Activity') + pl.Series('noise', np.random.normal(0, 1, len(compounds)))).alias('prediction'),
-            pl.Series('uncertainty', np.random.uniform(0.1, 0.5, len(compounds)))
-        ])
-
-        # Calculate current_best from predictions (simulating labeled data)
-        current_best = compounds.get_column('prediction').max()
-
-        # Use standard EI with default parameters
-        acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
-        selected = acq.select(compounds, n_select=8)
-
-        assert len(selected) == 8
-        # EI should select compounds with potential for improvement
-        ei_scores = selected.get_column('acquisition_score').to_numpy()
-        assert np.all(ei_scores >= 0)
-
-
-@pytest.mark.unit
-class TestProbabilityImprovementAcquisition:
-    """Test Probability of Improvement acquisition."""
-    
-    def test_pi_basic_functionality(self, compounds_with_uncertainty):
-        """Test PI acquisition functionality."""
-        compounds = compounds_with_uncertainty.clone()
-
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-
-        # Calculate current_best from predictions (simulating labeled data)
-        current_best = compounds.get_column('prediction').max()
-
-        acq = ProbabilityImprovementAcquisition(xi=0.01, current_best=current_best)
-        selected = acq.select(compounds, n_select=5)
-
-        assert len(selected) == 5
-        assert 'acquisition_score' in selected.columns
-
-        # PI scores should be probabilities (0 to 1)
-        pi_scores = selected.get_column('acquisition_score').to_numpy()
-        assert np.all(pi_scores >= 0)
-        assert np.all(pi_scores <= 1)
-    
-    def test_pi_probability_interpretation(self, compounds_with_uncertainty):
-        """Test PI probability interpretation."""
-        compounds = compounds_with_uncertainty.clone()
-
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-
-        # Calculate current_best from predictions (simulating labeled data)
-        current_best = compounds.get_column('prediction').max()
-
-        # Set current_best very high to get low PI values
-        acq = ProbabilityImprovementAcquisition(xi=0.1, current_best=current_best)  # Higher exploration parameter
-        selected = acq.select(compounds, n_select=5)
-
-        # Should still select 5 compounds even if PI is low
-        assert len(selected) == 5
-
-        # PI scores should be valid probabilities
-        pi_scores = selected.get_column('acquisition_score').to_numpy()
-        assert np.all(pi_scores >= 0)
-        assert np.all(pi_scores <= 1)
-
-
-@pytest.mark.unit
-class TestThompsonSampling:
-    """Test Thompson Sampling acquisition."""
-    
-    def test_thompson_sampling_basic(self, compounds_with_uncertainty):
-        """Test Thompson Sampling basic functionality."""
-        compounds = compounds_with_uncertainty.clone()
-        
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-        
-        acq = ThompsonSamplingAcquisition(random_state=42)
-        selected = acq.select(compounds, n_select=5)
-        
-        assert len(selected) == 5
-        assert 'acquisition_score' in selected.columns
-    
-    def test_thompson_sampling_reproducibility(self, compounds_with_uncertainty):
-        """Test Thompson Sampling reproducibility."""
-        compounds = compounds_with_uncertainty.clone()
-        
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-        
-        acq1 = ThompsonSamplingAcquisition(random_state=42)
-        acq2 = ThompsonSamplingAcquisition(random_state=42)
-        
-        selected1 = acq1.select(compounds, n_select=8)
-        selected2 = acq2.select(compounds, n_select=8)
-
-        # Should select identical compounds with same seed
-        assert selected1.get_column('ID').to_list() == selected2.get_column('ID').to_list()
-    
-    def test_thompson_sampling_stochasticity(self, compounds_with_uncertainty):
-        """Test Thompson Sampling produces different selections."""
-        compounds = compounds_with_uncertainty.clone()
-        
-        if len(compounds) == 0:
-            pytest.skip("No compounds with uncertainty available")
-        
-        acq1 = ThompsonSamplingAcquisition(random_state=42)
-        acq2 = ThompsonSamplingAcquisition(random_state=123)
-        
-        selected1 = acq1.select(compounds, n_select=10)
-        selected2 = acq2.select(compounds, n_select=10)
-
-        # Should select different compounds with different seeds
-        assert selected1.get_column('ID').to_list() != selected2.get_column('ID').to_list()
 
 
 @pytest.mark.unit
 class TestUncertaintyBasedIntegration:
     """Integration tests for uncertainty-based acquisition."""
-    
-    def test_uncertainty_acquisition_comparison(self, compounds_with_uncertainty):
+
+    def test_uncertainty_acquisition_methods_all_return_valid_batch_sizes(self, compounds_with_uncertainty):
         """Compare different uncertainty-based acquisition methods."""
         compounds = compounds_with_uncertainty.clone()
 
@@ -294,7 +24,7 @@ class TestUncertaintyBasedIntegration:
         # Calculate current_best from predictions (simulating labeled data)
         current_best = compounds.get_column('prediction').max()
 
-        # Test multiple uncertainty-based methods
+        # Shared integration coverage stays here; dedicated unit coverage lives in per-module files.
         ucb_acq = UCBAcquisition(beta=1.0)
         ei_acq = ExpectedImprovementAcquisition(xi=0.01, current_best=current_best)
         pi_acq = ProbabilityImprovementAcquisition(xi=0.01, current_best=current_best)
@@ -322,14 +52,14 @@ class TestUncertaintyBasedIntegration:
 
         # Not all methods should select identical compounds
         assert not all(s == all_selections[0] for s in all_selections[1:])
-    
+
     def test_uncertainty_methods_with_molecular_workflow(self, medium_real_compounds):
         """Test uncertainty methods in realistic molecular workflow."""
         compounds = medium_real_compounds.clone()
-        
+
         if len(compounds) < 20:
             pytest.skip("Insufficient compounds for workflow test")
-        
+
         # Simulate realistic uncertainty estimates
         np.random.seed(42)
         compounds = compounds.with_columns([
@@ -350,7 +80,7 @@ class TestUncertaintyBasedIntegration:
         selected_uncertainty = selected.get_column('uncertainty').to_numpy()
         assert np.all(selected_uncertainty > 0)
         assert np.all(np.isfinite(selected_uncertainty))
-    
+
     def test_uncertainty_acquisition_error_handling(self, small_real_compounds):
         """Test error handling in uncertainty-based acquisition."""
         compounds = small_real_compounds.clone()
@@ -420,7 +150,7 @@ class TestEIPIRegressionTests:
 
         # KEY TEST: Scores should NOT be identical (this was the bug!)
         # Before fix: scores were identical because both used inflated Z-scores
-        # After fix: EI = improvement*Φ(Z) + σ*φ(Z), PI = Φ(Z) - fundamentally different
+        # After fix: EI = improvement*Phi(Z) + sigma*phi(Z), PI = Phi(Z) - fundamentally different
         assert not np.allclose(ei_scores, pi_scores, rtol=0.001), \
             "EI and PI produced identical scores - sqrt bug may still exist!"
 
@@ -434,7 +164,7 @@ class TestEIPIRegressionTests:
         assert not np.isclose(ratio, 1.0, rtol=0.1), \
             f"EI and PI have same scale (ratio={ratio:.4f}) - check implementation!"
 
-        # Verify EI has the additional σ*φ(Z) term that PI lacks
+        # Verify EI has the additional sigma*phi(Z) term that PI lacks
         # This means for same compounds, EI and PI rankings can differ
         ei_ranks = np.argsort(np.argsort(-ei_scores))  # Higher score = lower rank number
         pi_ranks = np.argsort(np.argsort(-pi_scores))
@@ -448,17 +178,15 @@ class TestEIPIRegressionTests:
         assert rank_correlation <= 0.99999, \
             f"EI and PI have perfect rank correlation ({rank_correlation:.6f})"
 
-    def test_ei_pi_mathematical_correctness(self):
+    def test_ei_pi_mathematical_correctness(self, small_real_compounds):
         """Test that EI and PI compute mathematically correct scores."""
         from scipy.stats import norm
 
-        # Create simple test case with known values
-        test_data = pl.DataFrame({
-            'ID': ['A', 'B', 'C', 'D'],
-            'SMILES': ['C', 'CC', 'CCC', 'CCCC'],
-            'prediction': np.array([10.0, 12.0, 8.0, 15.0]),
-            'uncertainty': np.array([1.0, 2.0, 0.5, 3.0])
-        })
+        test_data = small_real_compounds.head(4).select(['ID', 'SMILES']).with_columns([
+            pl.Series('prediction', np.array([10.0, 12.0, 8.0, 15.0])),
+            pl.Series('uncertainty', np.array([1.0, 2.0, 0.5, 3.0])),
+        ])
+        target_id = test_data.get_column('ID')[1]
 
         current_best = 11.0
         xi = 0.01
@@ -469,7 +197,7 @@ class TestEIPIRegressionTests:
         improvement = mu - current_best - xi  # 12.0 - 11.0 - 0.01 = 0.99
         z = improvement / sigma  # 0.99 / 2.0 = 0.495
 
-        # Expected EI = improvement * Φ(z) + σ * φ(z)
+        # Expected EI = improvement * Phi(z) + sigma * phi(z)
         expected_ei_b = improvement * norm.cdf(z) + sigma * norm.pdf(z)
 
         # Expected PI = Φ(z)
@@ -483,8 +211,8 @@ class TestEIPIRegressionTests:
         pi_result = pi_acq.select(test_data, n_select=4)
 
         # Find compound B's scores
-        ei_score_b = ei_result.filter(pl.col('ID') == 'B').get_column('acquisition_score')[0]
-        pi_score_b = pi_result.filter(pl.col('ID') == 'B').get_column('acquisition_score')[0]
+        ei_score_b = ei_result.filter(pl.col('ID') == target_id).get_column('acquisition_score')[0]
+        pi_score_b = pi_result.filter(pl.col('ID') == target_id).get_column('acquisition_score')[0]
 
         # Verify scores match manual calculations (within numerical tolerance)
         assert np.isclose(ei_score_b, expected_ei_b, rtol=1e-5), \
@@ -495,19 +223,16 @@ class TestEIPIRegressionTests:
         # Verify EI and PI are different
         assert not np.isclose(ei_score_b, pi_score_b), "EI and PI scores should be different!"
 
-    def test_uncertainty_format_is_std_not_variance(self):
+    def test_uncertainty_format_is_std_not_variance(self, small_real_compounds):
         """Test that uncertainties represent standard deviation, not variance.
 
         This test documents the uncertainty format convention and ensures
         acquisition functions use uncertainties correctly.
         """
-        # Create test data with known uncertainties
-        test_data = pl.DataFrame({
-            'ID': ['A', 'B'],
-            'SMILES': ['C', 'CC'],
-            'prediction': np.array([10.0, 10.0]),
-            'uncertainty': np.array([2.0, 4.0])  # std devs, not variances
-        })
+        test_data = small_real_compounds.head(2).select(['ID', 'SMILES']).with_columns([
+            pl.Series('prediction', np.array([10.0, 10.0])),
+            pl.Series('uncertainty', np.array([2.0, 4.0])),
+        ])
 
         current_best = 8.0
 
@@ -531,60 +256,3 @@ class TestEIPIRegressionTests:
         # With larger uncertainty, compound B should have higher EI score
         assert ei_scores[1] > ei_scores[0], "Larger uncertainty should increase EI score"
 
-
-@pytest.mark.unit
-class TestThompsonSamplingCorrectness:
-    """Tests to verify Thompson Sampling uses correct distribution."""
-
-    def test_thompson_sampling_distribution(self):
-        """Test that Thompson Sampling uses correct standard deviation (not sqrt of std)."""
-        # Create test data with varying means and fixed std
-        # Thompson samples from N(μ, σ²) for each compound, then selects max
-        n_compounds = 5
-        predictions = np.array([10.0, 12.0, 8.0, 11.0, 9.0])
-        true_std = 3.0  # Large std to see effect
-
-        test_data = pl.DataFrame({
-            'ID': [f'comp_{i}' for i in range(n_compounds)],
-            'SMILES': ['C'] * n_compounds,
-            'prediction': predictions,
-            'uncertainty': np.full(n_compounds, true_std)
-        })
-
-        # With the bug (using sqrt(std)), effective std would be sqrt(3.0) = 1.73
-        # Without bug (using std directly), effective std is 3.0
-
-        # Generate samples and check variance of acquisition scores
-        n_trials = 200
-        acquisition_scores = []
-
-        for trial in range(n_trials):
-            thompson = ThompsonSamplingAcquisition(random_state=trial, score_direction='higher')
-            # Select all to get all acquisition scores (which are the sampled values)
-            result = thompson.select(test_data, n_select=n_compounds)
-            # Get scores for a specific compound (e.g., comp_0 with mean=10.0)
-            comp0_score = result.filter(pl.col('ID') == 'comp_0').get_column('acquisition_score')[0]
-            acquisition_scores.append(comp0_score)
-
-        acquisition_scores = np.array(acquisition_scores)
-
-        # The acquisition scores for comp_0 should be sampled from N(10.0, 3.0²)
-        sample_mean = np.mean(acquisition_scores)
-        sample_std = np.std(acquisition_scores)
-
-        # Verify mean is close to true mean (10.0)
-        assert np.abs(sample_mean - predictions[0]) < 0.5, \
-            f"Sample mean {sample_mean:.2f} too far from expected {predictions[0]}"
-
-        # CRITICAL TEST: Verify std is close to true_std (3.0), NOT sqrt(true_std) (1.73)
-        # Allow some statistical variation but require it's closer to 3.0 than to 1.73
-        dist_to_correct = np.abs(sample_std - true_std)
-        dist_to_bug = np.abs(sample_std - np.sqrt(true_std))
-
-        assert dist_to_correct < dist_to_bug, \
-            f"Sample std {sample_std:.2f} is closer to sqrt({true_std})={np.sqrt(true_std):.2f} " \
-            f"than to {true_std:.2f} - sqrt bug may still exist!"
-
-        # Also verify std is reasonably close to true_std
-        assert np.abs(sample_std - true_std) < 0.8, \
-            f"Sample std {sample_std:.2f} should be close to {true_std:.2f}"

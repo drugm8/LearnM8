@@ -19,7 +19,7 @@ class TestAdvancedRandomForestLearner:
         """Create AdvancedRandomForestLearner instance for testing."""
         return AdvancedRandomForestLearner(n_estimators=10, random_state=42)
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_advanced_forest_defaults_and_uncertainty_support(self, learner):
         """Test learner initialization with advanced hyperparameters."""
         assert learner.n_estimators == 10
         assert learner.random_state == 42
@@ -29,7 +29,7 @@ class TestAdvancedRandomForestLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
 
-    def test_train_predict_integration(
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test training and prediction with real molecular data."""
@@ -71,7 +71,7 @@ class TestAdvancedRandomForestLearner:
         assert isinstance(oob_score, float)
         assert -1.0 <= oob_score <= 1.0
 
-    def test_feature_importance(
+    def test_feature_importance_returns_normalized_values_after_training(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test feature importance retrieval."""
@@ -116,7 +116,7 @@ class TestAdvancedRandomForestLearner:
         with pytest.raises(RuntimeError, match='must be trained before prediction'):
             learner.predict(features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_estimator_depth_and_pruning_configuration(self, learner):
         """Test name generation format."""
         name = learner.get_name()
         assert 'AdvancedRandomForest' in name
@@ -124,7 +124,7 @@ class TestAdvancedRandomForestLearner:
         assert 'depth=15' in name
         assert 'pruning=0.001' in name
 
-    def test_supports_uncertainty(self, learner):
+    def test_supports_uncertainty_returns_true_and_predicts_uncertainty(self, learner):
         """Test that AdvancedRandomForestLearner supports uncertainty."""
         assert learner.supports_uncertainty() is True
 
@@ -198,7 +198,7 @@ class TestAdvancedRandomForestLearner:
         assert learner.ccp_alpha == 0.01
         assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_small_dataset(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame(
             {

@@ -120,7 +120,7 @@ class TestGetStrategyColorMap:
         assert color_map['greedy'] == 'red'
         assert color_map['ucb'] == 'orange'
 
-    def test_custom_strategies(self):
+    def test_unknown_strategies_are_assigned_colors_in_map(self):
         strategies = ['custom_strategy_1', 'custom_strategy_2']
         color_map = _get_strategy_color_map(strategies)
 

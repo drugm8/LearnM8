@@ -17,7 +17,7 @@ class TestDTEnsemble:
         """Create DTEnsemble instance for testing."""
         return DTEnsemble()
 
-    def test_initialization(self, dt_ensemble):
+    def test_initialization_sets_default_depths_random_states_and_untrained_state(self, dt_ensemble):
         """Test DTEnsemble initialization with default parameters."""
         assert len(dt_ensemble.learners) == 3
         assert dt_ensemble.max_depths == [5, 10, 15]
@@ -61,7 +61,7 @@ class TestDTEnsemble:
             assert learner.max_depth == dt_ensemble.max_depths[i]
             assert learner.random_state == dt_ensemble.random_states[i]
 
-    def test_get_name(self, dt_ensemble):
+    def test_get_name_includes_model_count_and_depth_list(self, dt_ensemble):
         """Test name generation for DTEnsemble."""
         name = dt_ensemble.get_name()
         assert "DTEnsemble" in name

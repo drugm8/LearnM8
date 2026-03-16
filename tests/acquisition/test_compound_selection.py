@@ -5,10 +5,10 @@ Tests acquisition functions with real molecular data,
 focusing on different strategies, error handling, and data validation.
 """
 
-import pytest
-import polars as pl
+
 import numpy as np
-from unittest.mock import Mock, patch
+import polars as pl
+import pytest
 
 from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
 
@@ -93,7 +93,7 @@ class TestSelectCompoundsByStrategy:
         bottom_2_predictions = np.sort(predictions)[:2]
         assert all(pred in bottom_2_predictions for pred in selected_predictions)
 
-    def test_random_selection(self, small_real_compounds, tmp_path):
+    def test_random_strategy_selects_subset_of_original_compounds(self, small_real_compounds, tmp_path):
         """Test random selection strategy."""
         compounds = small_real_compounds.clone()
 
@@ -123,7 +123,7 @@ class TestSelectCompoundsByStrategy:
         # Should be a subset of original compounds
         assert selected['ID'].is_in(compounds['ID']).all()
 
-    def test_uncertainty_based_selection(self, small_real_compounds, tmp_path):
+    def test_ucb_strategy_selects_valid_compounds_when_uncertainty_is_present(self, small_real_compounds, tmp_path):
         """Test uncertainty-based selection strategies."""
         compounds = small_real_compounds.clone()
 
@@ -161,7 +161,7 @@ class TestSelectCompoundsByStrategy:
             except Exception as e:
                 pytest.skip(f"Strategy {strategy} not available or failed: {e}")
 
-    def test_batch_size_constraints(self, small_real_compounds, tmp_path):
+    def test_selection_caps_batch_size_to_pool_and_rejects_zero(self, small_real_compounds, tmp_path):
         """Test batch size constraint handling."""
         compounds = small_real_compounds.clone()
 
@@ -194,7 +194,7 @@ class TestSelectCompoundsByStrategy:
         with pytest.raises(ValueError, match="n_select must be positive"):
             acq.select(pool, n_select=0)
 
-    def test_missing_predictions_handling(self, small_real_compounds, tmp_path):
+    def test_greedy_raises_when_prediction_column_is_missing(self, small_real_compounds, tmp_path):
         """Test handling when predictions are missing."""
         compounds = small_real_compounds.clone()
 
@@ -214,7 +214,7 @@ class TestSelectCompoundsByStrategy:
         with pytest.raises(ValueError, match="prediction"):
             acq.select(pool, n_select=2)
 
-    def test_missing_uncertainties_handling(self, small_real_compounds, tmp_path):
+    def test_ucb_raises_when_uncertainty_column_is_missing(self, small_real_compounds, tmp_path):
         """Test handling when uncertainties are None for uncertainty-based strategies."""
         compounds = small_real_compounds.clone()
 
@@ -239,7 +239,7 @@ class TestSelectCompoundsByStrategy:
         with pytest.raises(ValueError, match="uncertainty"):
             acq.select(pool, n_select=3)
 
-    def test_dataframe_predictions(self, small_real_compounds, tmp_path):
+    def test_greedy_selects_from_dataframe_with_prediction_column(self, small_real_compounds, tmp_path):
         """Test handling of DataFrame predictions."""
         compounds = small_real_compounds.clone()
 
@@ -265,7 +265,7 @@ class TestSelectCompoundsByStrategy:
         assert len(selected) == 2
         assert 'ID' in selected.columns
 
-    def test_invalid_strategy_error(self, small_real_compounds, tmp_path):
+    def test_invalid_strategy_name_raises_key_error(self, small_real_compounds, tmp_path):
         """Test error handling for invalid strategy names."""
         compounds = small_real_compounds.clone()
 
@@ -287,7 +287,7 @@ class TestSelectCompoundsByStrategy:
         with pytest.raises(KeyError):
             get_acquisition_function('invalid_strategy')
 
-    def test_acquisition_params_passing(self, small_real_compounds, tmp_path):
+    def test_acquisition_parameters_allow_successful_selection(self, small_real_compounds, tmp_path):
         """Test passing of acquisition parameters."""
         compounds = small_real_compounds.clone()
 
@@ -312,7 +312,7 @@ class TestSelectCompoundsByStrategy:
 
         assert len(selected) == 2
 
-    def test_list_available_strategies(self):
+    def test_list_acquisition_functions_includes_basic_strategies(self):
         """Test listing available acquisition strategies."""
         strategies = list_acquisition_functions()
 

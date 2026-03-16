@@ -23,7 +23,7 @@ class TestMLPLearner:
             random_state=42
         )
     
-    def test_initialization(self, learner):
+    def test_initialization_sets_network_defaults_and_untrained_state(self, learner):
         """Test learner initialization."""
         assert learner.hidden_sizes == (64, 32)
         assert learner.activation == 'relu'
@@ -33,7 +33,7 @@ class TestMLPLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
     
-    def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -57,7 +57,7 @@ class TestMLPLearner:
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
     
-    def test_get_name(self, learner):
+    def test_get_name_includes_architecture_activation_and_dropout(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert "MLP" in name
@@ -65,7 +65,7 @@ class TestMLPLearner:
         assert "relu" in name
         assert "dropout=0.2" in name
     
-    def test_different_architectures(self, tmp_path, small_real_compounds):
+    def test_custom_hidden_layer_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
         """Test learner with different architectures."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -89,7 +89,7 @@ class TestMLPLearner:
         assert learner.activation == 'gelu'
         assert predictions.shape[0] == len(compounds)
 
-    def test_activation_functions(self, tmp_path, small_real_compounds):
+    def test_supported_activation_functions_train_and_predict_finite_values(self, tmp_path, small_real_compounds):
         """Test different activation functions."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -112,7 +112,7 @@ class TestMLPLearner:
             assert predictions.shape[0] == len(compounds)
             assert np.all(np.isfinite(predictions))
 
-    def test_batch_normalization(self, tmp_path, small_real_compounds):
+    def test_batch_norm_toggle_trains_and_predicts(self, tmp_path, small_real_compounds):
         """Test with and without batch normalization."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -134,7 +134,7 @@ class TestMLPLearner:
 
             assert predictions.shape[0] == len(compounds)
 
-    def test_dropout_regularization(self, tmp_path, small_real_compounds):
+    def test_dropout_rate_is_preserved_across_training_runs(self, tmp_path, small_real_compounds):
         """Test different dropout rates."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -157,7 +157,7 @@ class TestMLPLearner:
             assert learner.dropout_rate == dropout_rate
             assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_single_compound(self, tmp_path):
+    def test_single_compound_without_batch_norm_trains_and_predicts(self, tmp_path):
         """Test with single compound using learner without batch norm."""
         single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
@@ -179,7 +179,7 @@ class TestMLPLearner:
         assert len(predictions) == 1
         assert np.isfinite(predictions[0])
     
-    def test_training_history(self, learner, small_real_compounds, tmp_path):
+    def test_training_history_contains_epoch_and_loss_entries_after_training(self, learner, small_real_compounds, tmp_path):
         """Test training history tracking."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -198,7 +198,7 @@ class TestMLPLearner:
         assert 'train_loss' in history[0]
         assert 'val_loss' in history[0]
 
-    def test_early_stopping(self, tmp_path, small_real_compounds):
+    def test_early_stopping_configuration_is_respected_during_training(self, tmp_path, small_real_compounds):
         """Test early stopping mechanism."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -221,7 +221,7 @@ class TestMLPLearner:
         assert learner.early_stopping_patience == 2
         assert len(history) > 0
 
-    def test_gpu_cpu_compatibility(self, tmp_path, small_real_compounds):
+    def test_cpu_device_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
         """Test device compatibility."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -243,7 +243,7 @@ class TestMLPLearner:
         assert str(learner.device) == 'cpu'
         assert predictions.shape[0] == len(compounds)
 
-    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_no_uncertainty_when_uncertainty_support_is_disabled(self, learner, small_real_compounds, tmp_path):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(

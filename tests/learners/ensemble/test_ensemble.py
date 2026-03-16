@@ -26,7 +26,7 @@ class TestEnsembleLearner:
         """Create EnsembleLearner instance for testing."""
         return EnsembleLearner(base_learners)
 
-    def test_initialization(self, ensemble, base_learners):
+    def test_initialization_sets_default_aggregation_uncertainty_and_untrained_state(self, ensemble, base_learners):
         """Test ensemble initialization."""
         assert len(ensemble.learners) == 2
         assert ensemble.aggregation_method == 'mean'
@@ -56,7 +56,7 @@ class TestEnsembleLearner:
         with pytest.raises(ValueError, match="At least one learner must be provided"):
             EnsembleLearner([])
 
-    def test_get_name(self, ensemble):
+    def test_get_name_includes_aggregation_and_component_separator(self, ensemble):
         """Test name generation."""
         name = ensemble.get_name()
         assert "Ensemble" in name
