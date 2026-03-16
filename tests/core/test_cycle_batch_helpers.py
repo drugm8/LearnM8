@@ -27,7 +27,7 @@ class TestCalculateOptimalBatchSize:
         batch_size = _calculate_optimal_batch_size(500000, 'morgan', 4.0)
         assert 1000 <= batch_size <= 50000
 
-    def test_different_featurizers(self):
+    def test_featurizer_feature_sizes_change_calculated_batch_size_ordering(self):
         """Different featurizers should affect batch size calculation."""
         batch_maccs = _calculate_optimal_batch_size(500000, 'maccs', 0.1)
         batch_morgan = _calculate_optimal_batch_size(500000, 'morgan', 0.1)

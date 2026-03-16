@@ -25,7 +25,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_dropout_sampling_defaults_and_uncertainty_support(self, learner):
         """Test learner initialization."""
         assert learner.hidden_sizes == (64, 32)
         assert learner.dropout_rate == 0.2
@@ -36,7 +36,7 @@ class TestMCDropoutLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
 
-    def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -56,7 +56,7 @@ class TestMCDropoutLearner:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_quality(self, learner, small_real_compounds, tmp_path):
+    def test_mc_dropout_uncertainty_varies_across_compounds_and_remains_finite(self, learner, small_real_compounds, tmp_path):
         """Test that MC Dropout uncertainty estimates are reasonable."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -113,7 +113,7 @@ class TestMCDropoutLearner:
         with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_architecture_dropout_and_sample_count(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert "MCDropout" in name
@@ -121,7 +121,7 @@ class TestMCDropoutLearner:
         assert "samples=20" in name
         assert "dropout=0.2" in name
 
-    def test_different_architectures(self, tmp_path, small_real_compounds):
+    def test_custom_architecture_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
         """Test learner with different architectures."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -174,7 +174,7 @@ class TestMCDropoutLearner:
             assert uncertainty.shape[0] == len(compounds)
             assert np.all(uncertainty >= 0)
 
-    def test_edge_case_single_compound(self, tmp_path):
+    def test_single_compound_training_raises_for_zero_variance_features(self, tmp_path):
         """Test that single compound fails gracefully (zero-variance features)."""
         single_compound = pl.DataFrame({
             'ID': ['COMP_001'],

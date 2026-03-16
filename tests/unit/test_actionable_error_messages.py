@@ -22,6 +22,8 @@ from learnm8.exceptions import (
     FeatureExtractionError,
 )
 
+pytestmark = [pytest.mark.unit]
+
 
 class TestTruncateList:
 
@@ -41,7 +43,7 @@ class TestTruncateList:
         assert "and 5 more" in result
         assert "0, 1, 2" in result
 
-    def test_custom_max_items(self):
+    def test_custom_max_items_limits_output_and_reports_remaining_count(self):
         items = list(range(5))
         result = _truncate_list(items, max_items=3)
         assert "and 2 more" in result

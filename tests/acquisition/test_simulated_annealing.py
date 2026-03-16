@@ -5,10 +5,9 @@ testing philosophy of using real molecular data and focusing on functionality,
 integration, error handling, and data validation.
 """
 
-import pytest
 import numpy as np
-import logging
 import polars as pl
+import pytest
 
 from learnm8.acquisition.simulated_annealing import SimulatedAnnealingAcquisition
 
@@ -16,8 +15,8 @@ from learnm8.acquisition.simulated_annealing import SimulatedAnnealingAcquisitio
 @pytest.mark.unit
 class TestSimulatedAnnealingAcquisition:
     """Test SimulatedAnnealingAcquisition with real molecular data."""
-    
-    def test_basic_functionality(self, small_real_compounds):
+
+    def test_simulated_annealing_selects_unique_compounds_with_finite_scores(self, small_real_compounds):
         """Test basic simulated annealing functionality with real pharmaceutical compounds."""
         compounds = small_real_compounds.clone()
         # Add realistic predictions based on docking scores
@@ -37,31 +36,31 @@ class TestSimulatedAnnealingAcquisition:
 
         # Verify acquisition scores are present and finite
         assert np.all(np.isfinite(selected.get_column('acquisition_score').to_numpy()))
-    
+
     def test_parameter_validation(self):
         """Test parameter validation in constructor."""
         # Test invalid temperatures
         with pytest.raises(ValueError, match="initial_temp must be positive"):
             SimulatedAnnealingAcquisition(initial_temp=0)
-        
+
         with pytest.raises(ValueError, match="final_temp must be positive"):
             SimulatedAnnealingAcquisition(final_temp=0)
-        
+
         with pytest.raises(ValueError, match="final_temp must be less than initial_temp"):
             SimulatedAnnealingAcquisition(initial_temp=0.5, final_temp=1.0)
-        
+
         # Test invalid iterations
         with pytest.raises(ValueError, match="max_iterations must be positive"):
             SimulatedAnnealingAcquisition(max_iterations=0)
-        
+
         # Test invalid cooling schedule
         with pytest.raises(ValueError, match="cooling_schedule must be"):
             SimulatedAnnealingAcquisition(cooling_schedule='invalid')
-        
+
         # Test invalid score direction
         with pytest.raises(ValueError, match="score_direction must be"):
             SimulatedAnnealingAcquisition(score_direction='invalid')
-    
+
     def test_cooling_schedules(self, small_real_compounds):
         """Test different cooling schedules with real molecular data."""
         compounds = small_real_compounds.clone()
@@ -93,7 +92,7 @@ class TestSimulatedAnnealingAcquisition:
         # but both should return valid selections
         assert np.all(np.isfinite(selected_exp.get_column('acquisition_score').to_numpy()))
         assert np.all(np.isfinite(selected_lin.get_column('acquisition_score').to_numpy()))
-    
+
     def test_score_directions(self, small_real_compounds):
         """Test both score directions (higher and lower optimization)."""
         compounds = small_real_compounds.clone()
@@ -127,7 +126,7 @@ class TestSimulatedAnnealingAcquisition:
         # but all selections should be valid
         assert np.all(np.isfinite(selected_higher.get_column('acquisition_score').to_numpy()))
         assert np.all(np.isfinite(selected_lower.get_column('acquisition_score').to_numpy()))
-    
+
     def test_reproducibility(self, small_real_compounds):
         """Test reproducible behavior with fixed random seed."""
         compounds = small_real_compounds.clone()
@@ -153,7 +152,7 @@ class TestSimulatedAnnealingAcquisition:
         # Different seeds should likely produce different selections
         # Note: There's a small chance they could be the same, but very unlikely
         assert len(selected3) == 5
-    
+
     def test_edge_cases(self, small_real_compounds):
         """Test edge cases and boundary conditions."""
         compounds = small_real_compounds.clone()
@@ -175,7 +174,22 @@ class TestSimulatedAnnealingAcquisition:
         selected_one = acq.select(compounds, n_select=1)
         assert len(selected_one) == 1
         assert selected_one.row(0, named=True)['ID'] in compounds.get_column('ID').to_numpy()
-    
+
+    def test_identical_prediction_scores_still_return_requested_unique_batch(self, small_real_compounds):
+        """Test simulated annealing handles identical scores without duplicating compounds."""
+        compounds = small_real_compounds.head(8).clone().with_columns(
+            pl.Series('prediction', np.ones(8))
+        )
+
+        selected = SimulatedAnnealingAcquisition(random_state=42, max_iterations=50).select(
+            compounds,
+            n_select=4,
+        )
+
+        assert len(selected) == 4
+        assert selected.get_column('ID').n_unique() == 4
+        assert np.allclose(selected.get_column('acquisition_score').to_numpy(), 1.0)
+
     def test_with_uncertainty_estimates(self, compounds_with_uncertainty):
         """Test integration with uncertainty estimates from real molecular predictions."""
         compounds = compounds_with_uncertainty.clone()
@@ -193,7 +207,7 @@ class TestSimulatedAnnealingAcquisition:
 
         # Should not require uncertainty
         assert not acq.requires_uncertainty()
-    
+
     def test_error_handling(self, small_real_compounds):
         """Test error handling with real molecular data."""
         compounds = small_real_compounds.clone()
@@ -225,82 +239,82 @@ class TestSimulatedAnnealingAcquisition:
         compounds_nan = compounds_nan.with_columns(pl.Series('prediction', pred_with_nan))
         with pytest.raises(ValueError, match="Predictions contain NaN values"):
             acq.select(compounds_nan, n_select=5)
-    
+
     def test_temperature_calculation(self):
         """Test temperature calculation for different cooling schedules."""
         acq_exp = SimulatedAnnealingAcquisition(
-            initial_temp=1.0, 
-            final_temp=0.1, 
+            initial_temp=1.0,
+            final_temp=0.1,
             max_iterations=100,
             cooling_schedule='exponential'
         )
-        
+
         acq_lin = SimulatedAnnealingAcquisition(
-            initial_temp=1.0, 
-            final_temp=0.1, 
+            initial_temp=1.0,
+            final_temp=0.1,
             max_iterations=100,
             cooling_schedule='linear'
         )
-        
+
         # Test temperature at start
         assert acq_exp._get_temperature(0) == 1.0
         assert acq_lin._get_temperature(0) == 1.0
-        
+
         # Test temperature at end
         assert abs(acq_exp._get_temperature(100) - 0.1) < 1e-10
         assert abs(acq_lin._get_temperature(100) - 0.1) < 1e-10
-        
+
         # Test temperature decreases monotonically
         temp_exp_mid = acq_exp._get_temperature(50)
         temp_lin_mid = acq_lin._get_temperature(50)
-        
+
         assert 0.1 < temp_exp_mid < 1.0
         assert 0.1 < temp_lin_mid < 1.0
-        
+
         # Linear cooling should be exactly halfway at 50% progress
         assert abs(temp_lin_mid - 0.55) < 1e-10  # (1.0 + 0.1) / 2 = 0.55
-    
+
     def test_energy_calculation(self):
         """Test energy calculation for different score directions."""
         acq_higher = SimulatedAnnealingAcquisition(score_direction='higher')
         acq_lower = SimulatedAnnealingAcquisition(score_direction='lower')
-        
+
         prediction = 5.0
-        
+
         # For maximization: higher predictions should have lower energy
         energy_higher = acq_higher._calculate_energy(prediction)
         assert energy_higher == -5.0
-        
+
         # For minimization: prediction value is the energy
         energy_lower = acq_lower._calculate_energy(prediction)
         assert energy_lower == 5.0
-    
+
     def test_metropolis_acceptance(self):
         """Test Metropolis acceptance criterion."""
         acq = SimulatedAnnealingAcquisition(random_state=42)
-        
+
         # Always accept better (lower energy) candidates
-        assert acq._metropolis_accept(5.0, 3.0, 1.0) == True
-        assert acq._metropolis_accept(3.0, 3.0, 1.0) == True  # Equal energy
-        
+        assert acq._metropolis_accept(5.0, 3.0, 1.0)
+        assert acq._metropolis_accept(3.0, 3.0, 1.0)  # Equal energy
+
         # Test temperature effect on worse candidates
         # At high temperature, should have higher probability of accepting worse candidates
         # At low temperature, should have lower probability
-        
+
         # We can't test exact probabilities due to randomness, but we can test logic
         current_energy = 3.0
         worse_energy = 5.0
-        
+
         # At zero temperature, never accept worse candidates
-        assert acq._metropolis_accept(current_energy, worse_energy, 0.0) == False
-        
+        assert not acq._metropolis_accept(current_energy, worse_energy, 0.0)
+
         # At very high temperature, acceptance probability approaches 1
         # exp(-2/1000) ≈ 0.998, so very likely to accept
         np.random.seed(42)
         high_temp_accept = acq._metropolis_accept(current_energy, worse_energy, 1000.0)
         # Don't assert the exact result due to randomness, just ensure no errors
         assert isinstance(high_temp_accept, bool)
-    
+
     def test_integration_with_diverse_molecular_data(self, diverse_real_compounds):
         """Test with structurally diverse compounds across multiple targets."""
         compounds = diverse_real_compounds.clone()

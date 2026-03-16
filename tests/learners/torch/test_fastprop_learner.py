@@ -101,7 +101,7 @@ class TestFastpropLearner:
             random_state=42
         )
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_fastprop_defaults_and_untrained_state(self, learner):
         """Test learner initialization with default parameters."""
         assert learner.fnn_layers == 2
         assert learner.hidden_size == 128
@@ -112,7 +112,7 @@ class TestFastpropLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
 
-    def test_train_predict_integration(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -147,14 +147,14 @@ class TestFastpropLearner:
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_layer_count_and_hidden_size(self, learner):
         """Test name generation includes architecture details."""
         name = learner.get_name()
         assert "Fastprop" in name
         assert "layers=2" in name
         assert "hidden=128" in name
 
-    def test_supports_uncertainty(self, learner):
+    def test_supports_uncertainty_returns_false_for_single_fastprop_model(self, learner):
         """Verify single model returns False for uncertainty support."""
         assert learner.supports_uncertainty() is False
 
@@ -242,7 +242,7 @@ class TestFastpropLearner:
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
-    def test_different_architectures(self, tmp_path, small_real_compounds):
+    def test_multiple_fastprop_architectures_train_and_predict(self, tmp_path, small_real_compounds):
         """Test with different fnn_layers and hidden_size."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -300,7 +300,7 @@ class TestFastpropLearner:
             assert learner.clamp_input == clamp_input
             assert predictions.shape[0] == len(compounds)
 
-    def test_early_stopping(self, tmp_path, small_real_compounds):
+    def test_early_stopping_configuration_trains_successfully(self, tmp_path, small_real_compounds):
         """Verify early stopping prevents full epoch training."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -382,7 +382,7 @@ class TestFastpropLearner:
         assert str(learner.device) in ['cpu', 'cuda', 'cuda:0']
         assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_single_compound(self, tmp_path):
+    def test_single_compound_training_and_prediction_succeeds_with_batch_size_one(self, tmp_path):
         """Test with single compound (potential batch_size issues).
 
         Note: Single compound training may produce NaN due to variance

@@ -9,7 +9,7 @@ from learnm8.learners.torch.chemprop_learner import ChempropLearner
 @pytest.mark.integration
 class TestChempropLearnerBasic:
 
-    def test_initialization(self):
+    def test_initialization_sets_message_passing_hyperparameters(self):
         learner = ChempropLearner(
             message_hidden_dim=300,
             depth=3,
@@ -20,22 +20,22 @@ class TestChempropLearnerBasic:
         assert learner.max_epochs == 2
         assert learner.is_trained is False
 
-    def test_requires_smiles(self):
+    def test_requires_smiles_returns_true(self):
         learner = ChempropLearner(max_epochs=2)
         assert learner.requires_smiles() is True
 
-    def test_supports_uncertainty(self):
+    def test_supports_uncertainty_returns_false(self):
         learner = ChempropLearner(max_epochs=2)
         assert learner.supports_uncertainty() is False
 
-    def test_get_name(self):
+    def test_get_name_includes_depth_and_hidden_size(self):
         learner = ChempropLearner(depth=5, message_hidden_dim=500)
         name = learner.get_name()
         assert 'Chemprop' in name
         assert 'depth=5' in name
         assert 'hidden=500' in name
 
-    def test_train_requires_smiles(self):
+    def test_train_raises_when_smiles_are_missing(self):
         learner = ChempropLearner(max_epochs=2)
         features = np.random.rand(10, 100)
         targets = np.random.rand(10)
@@ -43,7 +43,7 @@ class TestChempropLearnerBasic:
         with pytest.raises(ValueError, match="requires SMILES"):
             learner.train(features, targets, smiles=None)
 
-    def test_predict_requires_smiles(self, small_real_compounds):
+    def test_predict_raises_when_smiles_are_missing_after_training(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=2)
 
         compounds = small_real_compounds.clone()
@@ -60,7 +60,7 @@ class TestChempropLearnerBasic:
         with pytest.raises(ValueError, match="requires SMILES"):
             learner.predict(features, smiles=None)
 
-    def test_predict_before_training(self):
+    def test_predict_raises_before_training(self):
         learner = ChempropLearner(max_epochs=2)
 
         with pytest.raises(RuntimeError, match="must be trained"):
@@ -71,7 +71,7 @@ class TestChempropLearnerBasic:
 @pytest.mark.integration
 class TestChempropLearnerTrainPredict:
 
-    def test_train_predict_integration(self, small_real_compounds):
+    def test_train_and_predict_return_finite_values_without_uncertainty(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=5)
 
         compounds = small_real_compounds.clone()
@@ -94,7 +94,7 @@ class TestChempropLearnerTrainPredict:
         assert uncertainties is None
         assert np.all(np.isfinite(predictions))
 
-    def test_prediction_on_new_compounds(self, small_real_compounds):
+    def test_predict_returns_finite_values_for_unseen_compounds(self, small_real_compounds):
         learner = ChempropLearner(max_epochs=5)
 
         compounds = small_real_compounds.clone()
@@ -120,7 +120,7 @@ class TestChempropLearnerTrainPredict:
 @pytest.mark.integration
 class TestChempropLearnerModelParameters:
 
-    def test_custom_architecture_params(self, small_real_compounds):
+    def test_custom_architecture_parameters_train_and_predict(self, small_real_compounds):
         learner = ChempropLearner(
             message_hidden_dim=500,
             depth=5,
@@ -144,7 +144,7 @@ class TestChempropLearnerModelParameters:
         assert predictions.shape == (len(smiles),)
         assert np.all(np.isfinite(predictions))
 
-    def test_atom_messages_mode(self, small_real_compounds):
+    def test_atom_messages_mode_trains_and_predicts(self, small_real_compounds):
         learner = ChempropLearner(
             atom_messages=True,
             max_epochs=3,
@@ -165,7 +165,7 @@ class TestChempropLearnerModelParameters:
 
         assert predictions.shape == (len(smiles),)
 
-    def test_batch_norm_enabled(self, small_real_compounds):
+    def test_batch_norm_enabled_trains_and_predicts(self, small_real_compounds):
         learner = ChempropLearner(
             batch_norm=True,
             max_epochs=3,
@@ -186,7 +186,7 @@ class TestChempropLearnerModelParameters:
 
         assert predictions.shape == (len(smiles),)
 
-    def test_different_aggregation_modes(self, small_real_compounds):
+    def test_supported_aggregation_modes_train_and_predict(self, small_real_compounds):
         for agg in ['mean', 'sum', 'norm']:
             learner = ChempropLearner(
                 aggregation=agg,
@@ -241,7 +241,7 @@ class TestChempropLearnerEarlyStopping:
         assert learner.is_trained is True
         assert learner.trainer.current_epoch < 100
 
-    def test_early_stopping_disabled(self, small_real_compounds):
+    def test_disabling_early_stopping_runs_full_epoch_count(self, small_real_compounds):
         max_epochs = 5
         learner = ChempropLearner(
             max_epochs=max_epochs,
@@ -262,7 +262,7 @@ class TestChempropLearnerEarlyStopping:
         assert learner.is_trained is True
         assert learner.trainer.current_epoch == max_epochs
 
-    def test_validation_split_correct_size(self, small_real_compounds):
+    def test_validation_split_configuration_trains_successfully(self, small_real_compounds):
         learner = ChempropLearner(
             max_epochs=2,
             early_stopping=True,
@@ -407,7 +407,7 @@ class TestChempropLearnerWithDescriptors:
         with pytest.raises(ValueError, match="Feature dimension mismatch"):
             learner.predict(features=test_features, smiles=smiles)
 
-    def test_multiple_featurizers(self, small_real_compounds, tmp_path):
+    def test_multiple_descriptor_featurizers_train_and_predict(self, small_real_compounds, tmp_path):
         """Test compatibility with different featurizer types."""
         from learnm8.features.extraction import extract_features
 
@@ -561,11 +561,11 @@ class TestChempropLearnerWithDescriptors:
 @pytest.mark.integration
 class TestChempropLearnerPerformanceConfig:
 
-    def test_predict_batch_size_default(self):
+    def test_default_predict_batch_size_is_four_times_training_batch_size(self):
         learner = ChempropLearner(batch_size=32)
         assert learner.predict_batch_size == 128
 
-    def test_predict_batch_size_custom(self):
+    def test_custom_predict_batch_size_overrides_default(self):
         learner = ChempropLearner(batch_size=32, predict_batch_size=256)
         assert learner.predict_batch_size == 256
 
@@ -575,7 +575,7 @@ class TestChempropLearnerPerformanceConfig:
         learner = ChempropLearner(precision='auto')
         assert learner.precision == '32-true'
 
-    def test_precision_explicit(self):
+    def test_explicit_precision_values_are_preserved(self):
         learner = ChempropLearner(precision='16-mixed')
         assert learner.precision == '16-mixed'
 
@@ -586,11 +586,11 @@ class TestChempropLearnerPerformanceConfig:
         with pytest.raises(ValueError, match="Invalid precision"):
             ChempropLearner(precision='invalid')
 
-    def test_pin_memory_default(self):
+    def test_pin_memory_defaults_to_true(self):
         learner = ChempropLearner()
         assert learner.pin_memory is True
 
-    def test_pin_memory_custom(self):
+    def test_pin_memory_can_be_disabled(self):
         learner = ChempropLearner(pin_memory=False)
         assert learner.pin_memory is False
 

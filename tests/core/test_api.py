@@ -65,7 +65,7 @@ class TestAPIBasicSimple:
         assert len(results['labeled_data']) > 0
         assert output_dir.exists()
 
-    def test_simple_api_strategy_parameter(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_simple_api_runs_with_explicit_random_strategy(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test simple API with different acquisition strategy."""
         output_dir = tmp_path / "strategy_test"
 
@@ -86,7 +86,7 @@ class TestAPIBasicSimple:
         assert len(results['cycle_metrics']) == 2
         assert results['compounds_df'] is not None
 
-    def test_simple_api_initial_sampling_parameters(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_simple_api_labels_expected_batch_in_initial_cycle(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test simple API with initialization phase."""
         output_dir = tmp_path / "initial_test"
 
@@ -380,7 +380,7 @@ class TestAPIModeDetection:
                 random_state=42
             )
 
-    def test_explicit_mode_parameter(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_explicit_mode_parameter_overrides_auto_detection(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test explicitly setting mode parameter."""
         output_dir = tmp_path / "explicit_mode_test"
 
@@ -451,7 +451,7 @@ class TestAPISavedFiles:
         for file_type, file_path in saved_files.items():
             assert Path(file_path).exists(), f"File {file_type} not found at {file_path}"
 
-    def test_output_dir_in_results(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_results_include_created_output_dir(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that output_dir is included in results."""
         output_dir = tmp_path / "output_dir_test"
 
@@ -519,7 +519,7 @@ class TestAPIResultsStructure:
 
         assert len(results['cycle_metrics']) == n_al_cycles
 
-    def test_cycle_0_in_metrics(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_cycle_metrics_start_with_random_cycle_zero_entry(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that cycle 0 (initialization) is included in cycle_metrics."""
         output_dir = tmp_path / "cycle_0_test"
 
@@ -555,7 +555,7 @@ class TestAPIResultsStructure:
         assert 'has_uncertainty' in cycle_metrics[0]
         assert cycle_metrics[0]['has_uncertainty'] is False
 
-    def test_labeled_data_accessor(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_labeled_data_accessor_returns_only_labeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test labeled_data convenience accessor."""
         output_dir = tmp_path / "labeled_accessor_test"
 
@@ -577,7 +577,7 @@ class TestAPIResultsStructure:
         assert len(labeled_data) > 0
         assert all(labeled_data['status'] == 'labeled')
 
-    def test_unlabeled_data_accessor(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_unlabeled_data_accessor_returns_only_unlabeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test unlabeled_data convenience accessor."""
         output_dir = tmp_path / "unlabeled_accessor_test"
 
@@ -598,7 +598,7 @@ class TestAPIResultsStructure:
         assert isinstance(unlabeled_data, pl.DataFrame)
         assert all(unlabeled_data['status'] == 'unlabeled')
 
-    def test_validation_result_structure(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_results_include_validation_result_with_expected_attributes(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test validation_result structure."""
         output_dir = tmp_path / "validation_result_test"
 
@@ -756,7 +756,7 @@ class TestAPIFeaturizerTypes:
     """Test different featurizer types."""
 
     @pytest.mark.parametrize('featurizer', ['morgan', 'maccs', 'ecfp6'])
-    def test_different_featurizers(self, tmp_path, sample_compounds, mock_learner, mock_oracle, featurizer):
+    def test_supported_featurizers_complete_active_learning_run(self, tmp_path, sample_compounds, mock_learner, mock_oracle, featurizer):
         """Test API with different featurizer types."""
         output_dir = tmp_path / f"featurizer_{featurizer}_test"
 
@@ -806,7 +806,7 @@ class TestAPIEvaluationMetrics:
             assert 'batch_size' in cycle_metric, "Batch size should be present"
             assert 'cumulative_labeled' in cycle_metric, "Cumulative labeled should be present"
 
-    def test_aggregate_metrics_in_results(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_results_include_aggregate_metrics_dictionary(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that aggregate_metrics is included in results dictionary."""
         output_dir = tmp_path / "agg_metrics_test"
 
@@ -913,7 +913,7 @@ class TestAPIEvaluationMetrics:
 @pytest.mark.slow
 class TestValidateCompoundPoolAPI:
 
-    def test_validate_returns_validation_result(self, sample_compounds):
+    def test_validate_compound_pool_returns_validation_result_object(self, sample_compounds):
         from learnm8 import validate_compound_pool, ValidationResult
 
         result = validate_compound_pool(sample_compounds, progress=False)
@@ -924,7 +924,7 @@ class TestValidateCompoundPoolAPI:
         assert len(result.valid_compounds) > 0
         assert result.valid_compounds['ID'].to_list() == sample_compounds['ID'].to_list()
 
-    def test_validate_with_invalid_smiles(self):
+    def test_validate_compound_pool_separates_invalid_smiles(self):
         from learnm8 import validate_compound_pool
         import pandas as pd
 
@@ -939,7 +939,7 @@ class TestValidateCompoundPoolAPI:
         assert len(result.invalid_compounds) == 1
         assert 'invalid_1' in result.invalid_compounds['ID'].to_list()
 
-    def test_validate_integration_with_run_active_learning(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+    def test_run_active_learning_accepts_prevalidated_compound_pool(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         from learnm8 import validate_compound_pool
 
         validation_result = validate_compound_pool(sample_compounds, progress=False)
@@ -1151,7 +1151,7 @@ class TestChempropWithExtraDescriptors:
 class TestPredictionBatchSizeParameter:
     """Test prediction_batch_size parameter at API level."""
 
-    def test_default_batch_size_none(self, sample_compounds, tmp_path):
+    def test_prediction_batch_size_none_uses_default_behavior(self, sample_compounds, tmp_path):
         """Test default behavior with prediction_batch_size=None."""
         from learnm8 import run_active_learning
 
@@ -1176,7 +1176,7 @@ class TestPredictionBatchSizeParameter:
         assert 'cycle_metrics' in results
         assert len(results['cycle_metrics']) == 2
 
-    def test_explicit_batch_size(self, sample_compounds, tmp_path):
+    def test_prediction_batch_size_accepts_explicit_override(self, sample_compounds, tmp_path):
         """Test explicit batch size override."""
         from learnm8 import run_active_learning
 

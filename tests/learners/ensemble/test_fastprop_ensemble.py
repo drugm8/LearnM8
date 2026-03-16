@@ -49,7 +49,7 @@ class TestFastpropEnsemble:
             device='cpu'
         )
 
-    def test_initialization(self, fastprop_ensemble):
+    def test_initialization_sets_default_architecture_random_states_and_untrained_state(self, fastprop_ensemble):
         """Test ensemble initialization with default parameters."""
         assert len(fastprop_ensemble.learners) == 3
         assert fastprop_ensemble.aggregation_method == 'mean'
@@ -92,7 +92,7 @@ class TestFastpropEnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_train_predict_integration(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -111,7 +111,7 @@ class TestFastpropEnsemble:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
         """Test that ensemble provides uncertainty estimates."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -170,7 +170,7 @@ class TestFastpropEnsemble:
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             fastprop_ensemble.predict(small_real_morgan_features)
 
-    def test_get_name(self, fastprop_ensemble):
+    def test_get_name_includes_model_count_layers_and_hidden_size(self, fastprop_ensemble):
         """Test name generation for Fastprop ensemble."""
         name = fastprop_ensemble.get_name()
         assert "FastpropEnsemble" in name
@@ -191,7 +191,7 @@ class TestFastpropEnsemble:
         assert "layers=3" in name
         assert "hidden=256" in name
 
-    def test_supports_uncertainty(self, fastprop_ensemble):
+    def test_supports_uncertainty_returns_true_for_fastprop_ensemble(self, fastprop_ensemble):
         """Test that Fastprop ensemble supports uncertainty estimation."""
         assert fastprop_ensemble.supports_uncertainty() is True
 
@@ -307,7 +307,7 @@ class TestFastpropEnsemble:
             assert len(preds) == len(compounds)
             assert np.all(np.isfinite(preds))
 
-    def test_edge_case_small_dataset(self, tmp_path):
+    def test_small_dataset_trains_and_predicts_finite_values(self, tmp_path):
         """Test with small dataset of 5 diverse compounds."""
         ensemble = FastpropEnsemble(
             fnn_layers=1,
@@ -372,7 +372,7 @@ class TestFastpropEnsemble:
         assert np.allclose(predictions1, predictions2)
         assert np.allclose(uncertainty1, uncertainty2)
 
-    def test_different_architectures(self, small_real_compounds, small_real_morgan_features):
+    def test_multiple_fastprop_architectures_train_and_predict(self, small_real_compounds, small_real_morgan_features):
         """Test ensemble with different architecture configurations."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:

@@ -19,14 +19,14 @@ class TestRandomForestLearner:
         """Create RandomForestLearner instance for testing."""
         return RandomForestLearner(n_estimators=10, random_state=42)
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_forest_parameters_and_uncertainty_support(self, learner):
         """Test learner initialization."""
         assert learner.n_estimators == 10
         assert learner.random_state == 42
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
 
-    def test_train_predict_integration(
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test training and prediction with real molecular data."""
@@ -70,13 +70,13 @@ class TestRandomForestLearner:
         with pytest.raises(LearnerError, match='must be trained before prediction'):
             learner.predict(features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_estimator_count(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert 'RandomForest' in name
         assert 'n_estimators=10' in name
 
-    def test_feature_importance(
+    def test_feature_importance_returns_non_negative_values_after_training(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test feature importance retrieval."""
@@ -95,7 +95,7 @@ class TestRandomForestLearner:
         assert len(importance) > 0
         assert np.all(importance >= 0)
 
-    def test_oob_score(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_oob_score_returns_float_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test out-of-bag score retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -111,7 +111,7 @@ class TestRandomForestLearner:
         assert oob_score is not None
         assert isinstance(oob_score, float)
 
-    def test_different_hyperparameters(
+    def test_custom_hyperparameters_train_and_predict(
         self, small_real_compounds, small_real_morgan_features
     ):
         """Test learner with different hyperparameters."""
@@ -132,7 +132,7 @@ class TestRandomForestLearner:
         assert learner.max_depth == 3
         assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_small_dataset(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame(
             {
@@ -151,7 +151,7 @@ class TestRandomForestLearner:
         assert len(predictions) == 5
         assert np.all(np.isfinite(predictions))
 
-    def test_uncertainty_consistency(
+    def test_repeated_predictions_return_same_predictions_and_uncertainty(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test that uncertainty is returned and consistent across calls."""
@@ -227,7 +227,7 @@ class TestRandomForestLearner:
         assert uncertainty is not None
         assert uncertainty.shape == predictions.shape
 
-    def test_learner_error_if_estimators_removed(
+    def test_predict_raises_when_estimators_are_removed_after_training(
         self, learner, small_real_compounds, small_real_morgan_features
     ):
         """Test LearnerError raised if estimators_ removed after training."""

@@ -19,7 +19,7 @@ class TestXGBoostLearner:
         """Create XGBoostLearner instance for testing."""
         return XGBoostLearner(n_estimators=10, random_state=42)
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_default_hyperparameters_and_no_uncertainty_support(self, learner):
         """Test learner initialization."""
         assert learner.n_estimators == 10
         assert learner.learning_rate == 0.1
@@ -28,7 +28,7 @@ class TestXGBoostLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
 
-    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -48,7 +48,7 @@ class TestXGBoostLearner:
         with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
             learner.predict(small_real_morgan_features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_estimators_learning_rate_and_depth(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert "XGBoost" in name
@@ -56,7 +56,7 @@ class TestXGBoostLearner:
         assert "lr=0.1" in name
         assert "depth=6" in name
 
-    def test_feature_importance(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_feature_importance_returns_non_negative_values_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -86,7 +86,7 @@ class TestXGBoostLearner:
             assert isinstance(stats, dict)
             assert 'num_boosted_rounds' in stats or 'num_features' in stats
 
-    def test_different_hyperparameters(self, small_real_compounds, small_real_morgan_features):
+    def test_custom_hyperparameters_train_and_predict(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different hyperparameters."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -109,7 +109,7 @@ class TestXGBoostLearner:
         assert learner.max_depth == 3
         assert predictions.shape[0] == len(compounds)
 
-    def test_edge_case_small_dataset(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(5)],

@@ -34,7 +34,7 @@ class TestRFEnsemble:
         with pytest.warns(DeprecationWarning, match='RFEnsemble is deprecated'):
             RFEnsemble(n_estimators=10)
 
-    def test_initialization(self, rf_ensemble):
+    def test_initialization_sets_default_estimator_count_random_states_and_untrained_state(self, rf_ensemble):
         """Test RFEnsemble initialization with default parameters."""
         assert len(rf_ensemble.learners) == 3
         assert rf_ensemble.n_estimators == 10
@@ -68,7 +68,7 @@ class TestRFEnsemble:
         assert len(set(random_states)) == 3
         assert random_states == [42, 123, 456]
 
-    def test_get_name(self, rf_ensemble):
+    def test_get_name_includes_model_count_and_estimator_count(self, rf_ensemble):
         """Test name generation."""
         name = rf_ensemble.get_name()
         assert 'RFEnsemble' in name

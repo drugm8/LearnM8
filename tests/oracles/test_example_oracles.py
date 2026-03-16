@@ -103,7 +103,7 @@ class TestSimilarityOracle:
         assert similarities[0] == 1.0
         assert similarities[1] is None
 
-    def test_different_fingerprints(self, sample_compounds):
+    def test_similarity_oracle_supports_multiple_fingerprint_types(self, sample_compounds):
         for fp_type in ['morgan', 'maccs', 'topological']:
             oracle = SimilarityOracle(
                 reference_smiles='C1CCCCC1N', fingerprint_type=fp_type
@@ -111,7 +111,7 @@ class TestSimilarityOracle:
             result = oracle.measure(sample_compounds, ['similarity'])
             assert result.height == 5
 
-    def test_different_metrics(self, sample_compounds):
+    def test_similarity_oracle_supports_multiple_similarity_metrics(self, sample_compounds):
         for metric in ['tanimoto', 'dice']:
             oracle = SimilarityOracle(reference_smiles='C1CCCCC1N', metric=metric)
             result = oracle.measure(sample_compounds, ['similarity'])
@@ -160,7 +160,7 @@ class TestPharmacophore2DOracle:
 
         assert result['ID'].to_list() == ['z', 'a', 'm']
 
-    def test_different_metrics(self):
+    def test_pharmacophore_2d_oracle_supports_multiple_similarity_metrics(self):
         compounds = pl.DataFrame(
             {'ID': ['comp1', 'comp2'], 'SMILES': ['c1ccccc1O', 'c1ccccc1N']}
         )
@@ -206,7 +206,7 @@ class TestCDPKitPharmacophoreOracle:
         assert 'ID' in result.columns
         assert 'score' in result.columns
 
-    def test_different_score_types(self):
+    def test_cdpkit_oracle_supports_multiple_score_types(self):
         compounds = pl.DataFrame({'ID': ['comp1'], 'SMILES': ['c1ccccc1O']})
 
         for score_type in ['alignment_score', 'feature_overlap', 'rmsd']:

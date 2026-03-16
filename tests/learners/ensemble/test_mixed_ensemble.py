@@ -16,7 +16,7 @@ class TestMixedEnsemble:
         """Create MixedEnsemble instance for testing."""
         return MixedEnsemble(random_state=42)
 
-    def test_initialization(self, mixed_ensemble):
+    def test_initialization_sets_default_aggregation_uncertainty_and_random_state(self, mixed_ensemble):
         """Test mixed ensemble initialization."""
         assert len(mixed_ensemble.learners) == 3
         assert mixed_ensemble.aggregation_method == 'mean'
@@ -42,7 +42,7 @@ class TestMixedEnsemble:
         assert len(unique_types) == 3
         assert len(learner_types) == 3
 
-    def test_get_name(self, mixed_ensemble):
+    def test_get_name_lists_mixed_component_types(self, mixed_ensemble):
         """Test name generation shows Mixed ensemble."""
         name = mixed_ensemble.get_name()
         assert name == "MixedEnsemble(RF+LR+XGB)"

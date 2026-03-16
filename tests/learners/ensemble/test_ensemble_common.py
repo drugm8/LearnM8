@@ -91,7 +91,7 @@ class TestEnsembleCommon:
         name, factory = request.param
         return name, factory()
 
-    def test_train_predict_integration(
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
@@ -108,7 +108,7 @@ class TestEnsembleCommon:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation(
+    def test_uncertainty_estimates_are_non_negative_and_nonconstant(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
@@ -123,7 +123,7 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
 
-    def test_supports_uncertainty(self, ensemble_setup):
+    def test_supports_uncertainty_returns_true_for_all_ensemble_types(self, ensemble_setup):
         _, ensemble = ensemble_setup
         assert ensemble.supports_uncertainty() is True
 
@@ -140,13 +140,13 @@ class TestEnsembleCommon:
         with pytest.raises(RuntimeError, match='must be trained'):
             ensemble.predict(small_real_morgan_features)
 
-    def test_ensemble_statistics_untrained(self, ensemble_setup):
+    def test_untrained_ensemble_statistics_report_multiple_learners_and_untrained_state(self, ensemble_setup):
         _, ensemble = ensemble_setup
         stats = ensemble.get_ensemble_statistics()
         assert stats['n_learners'] >= 2
         assert stats['is_trained'] is False
 
-    def test_ensemble_statistics_trained(
+    def test_trained_ensemble_statistics_include_learner_names(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
@@ -159,7 +159,7 @@ class TestEnsembleCommon:
         assert 'learner_names' in stats
         assert len(stats['learner_names']) >= 2
 
-    def test_individual_predictions(
+    def test_individual_predictions_return_finite_arrays_for_each_learner(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         _, ensemble = ensemble_setup
@@ -175,7 +175,7 @@ class TestEnsembleCommon:
                 assert len(preds) == len(compounds)
                 assert np.all(np.isfinite(preds))
 
-    def test_aggregation_mean(
+    def test_mean_aggregation_returns_prediction_and_uncertainty_per_compound(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
@@ -190,7 +190,7 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
-    def test_aggregation_median(
+    def test_median_aggregation_returns_prediction_and_uncertainty_per_compound(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
@@ -205,7 +205,7 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
-    def test_uncertainty_std(
+    def test_std_uncertainty_method_returns_non_negative_uncertainty(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
@@ -220,7 +220,7 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_mad(
+    def test_mad_uncertainty_method_returns_non_negative_uncertainty(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
@@ -235,7 +235,7 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_quantile(
+    def test_quantile_uncertainty_method_returns_non_negative_uncertainty(
         self, ensemble_setup, small_real_compounds, small_real_morgan_features
     ):
         name, _ = ensemble_setup
@@ -250,7 +250,7 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(uncertainty >= 0)
 
-    def test_edge_case_small_dataset(self, ensemble_setup, tmp_path):
+    def test_small_dataset_trains_and_predicts_finite_values_for_all_ensemble_types(self, ensemble_setup, tmp_path):
         _, ensemble = ensemble_setup
         small_dataset = pl.DataFrame(
             {

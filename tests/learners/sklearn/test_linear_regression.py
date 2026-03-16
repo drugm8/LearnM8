@@ -24,7 +24,7 @@ class TestLinearRegressionLearner:
         """Create Ridge regression learner instance for testing."""
         return LinearRegressionLearner(alpha=1.0, random_state=42)
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_linear_mode_defaults_and_uncertainty_support(self, learner):
         """Test learner initialization with default Linear Regression mode."""
         assert learner.alpha is None
         assert learner.fit_intercept is True
@@ -44,7 +44,7 @@ class TestLinearRegressionLearner:
         assert ridge_learner.supports_uncertainty() is True
         assert ridge_learner.is_ridge is True
 
-    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -164,7 +164,7 @@ class TestLinearRegressionLearner:
         with pytest.raises((RuntimeError, LearnerError), match="must be trained"):
             learner.predict(features)
 
-    def test_get_name(self, learner, ridge_learner):
+    def test_get_name_distinguishes_linear_and_ridge_modes(self, learner, ridge_learner):
         """Test name generation for both Ridge and Linear modes."""
         linear_name = learner.get_name()
         assert "LinearRegression" in linear_name
@@ -182,12 +182,12 @@ class TestLinearRegressionLearner:
         assert "LinearRegression" in name
         assert "no_intercept" in name
 
-    def test_supports_uncertainty(self, learner, ridge_learner):
+    def test_supports_uncertainty_returns_true_for_linear_and_ridge_modes(self, learner, ridge_learner):
         """Test that uncertainty is supported in both modes."""
         assert learner.supports_uncertainty() is True
         assert ridge_learner.supports_uncertainty() is True
 
-    def test_different_alpha_values(self, small_real_compounds, small_real_morgan_features):
+    def test_ridge_alpha_values_change_predictions_while_remaining_finite(self, small_real_compounds, small_real_morgan_features):
         """Test Ridge regression with different alpha values."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -212,7 +212,7 @@ class TestLinearRegressionLearner:
 
         assert not np.allclose(predictions_dict[0.1], predictions_dict[10.0])
 
-    def test_edge_case_small_dataset(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(5)],

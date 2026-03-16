@@ -16,7 +16,7 @@ class TestLREnsemble:
         """Create LREnsemble instance for testing."""
         return LREnsemble()
 
-    def test_initialization(self, lr_ensemble):
+    def test_initialization_sets_default_regularization_strengths_random_states_and_untrained_state(self, lr_ensemble):
         """Test ensemble initialization with default parameters."""
         assert len(lr_ensemble.learners) == 3
         assert lr_ensemble.aggregation_method == 'mean'
@@ -74,7 +74,7 @@ class TestLREnsemble:
             for j in range(i+1, len(pred_arrays)):
                 assert not np.allclose(pred_arrays[i], pred_arrays[j], rtol=1e-3)
 
-    def test_get_name(self, lr_ensemble):
+    def test_get_name_includes_regularization_strengths(self, lr_ensemble):
         """Test name generation for LR ensemble."""
         name = lr_ensemble.get_name()
         assert "LREnsemble" in name

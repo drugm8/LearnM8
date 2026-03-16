@@ -21,7 +21,7 @@ class TestChempropEnsemble:
             max_epochs=3
         )
 
-    def test_initialization(self, chemprop_ensemble):
+    def test_initialization_sets_default_architecture_random_states_and_uncertainty_support(self, chemprop_ensemble):
         """Test ensemble initialization with default parameters."""
         assert len(chemprop_ensemble.learners) == 3
         assert chemprop_ensemble.aggregation_method == 'mean'
@@ -64,7 +64,7 @@ class TestChempropEnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_train_predict_integration(self, chemprop_ensemble, small_real_compounds):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, chemprop_ensemble, small_real_compounds):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -85,7 +85,7 @@ class TestChempropEnsemble:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation(self, chemprop_ensemble, small_real_compounds):
+    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, chemprop_ensemble, small_real_compounds):
         """Test that ensemble provides uncertainty estimates."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -150,7 +150,7 @@ class TestChempropEnsemble:
         with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
             chemprop_ensemble.predict(features=None, smiles=smiles)
 
-    def test_get_name(self, chemprop_ensemble):
+    def test_get_name_includes_model_count_depth_and_hidden_size(self, chemprop_ensemble):
         """Test name generation for Chemprop ensemble."""
         name = chemprop_ensemble.get_name()
         assert "ChempropEnsemble" in name
@@ -170,7 +170,7 @@ class TestChempropEnsemble:
         assert "depth=5" in name
         assert "hidden=500" in name
 
-    def test_supports_uncertainty(self, chemprop_ensemble):
+    def test_supports_uncertainty_returns_true_for_chemprop_ensemble(self, chemprop_ensemble):
         """Test that Chemprop ensemble supports uncertainty estimation."""
         assert chemprop_ensemble.supports_uncertainty() is True
 
@@ -272,7 +272,7 @@ class TestChempropEnsemble:
         assert 'learners_with_uncertainty' in stats
         assert len(stats['learner_names']) == 3
 
-    def test_edge_case_small_dataset(self):
+    def test_small_dataset_trains_and_predicts_finite_values(self):
         """Test with small dataset of 5 diverse compounds."""
         ensemble = ChempropEnsemble(
             depth=2,
@@ -340,7 +340,7 @@ class TestChempropEnsemble:
         assert np.allclose(predictions1, predictions2)
         assert np.allclose(uncertainty1, uncertainty2)
 
-    def test_different_architectures(self, small_real_compounds):
+    def test_multiple_architecture_configurations_train_and_predict(self, small_real_compounds):
         """Test ensemble with different architecture configurations."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:

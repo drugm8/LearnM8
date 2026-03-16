@@ -504,7 +504,7 @@ class TestSelectCompounds:
 
         assert len(selected_df) == batch_size
 
-    def test_random_selection(self, sample_compounds):
+    def test_random_strategy_selects_requested_batch_size(self, sample_compounds):
         pool = sample_compounds.clone()
         pool = pool.with_columns(
             pl.Series('prediction', np.random.rand(len(pool)))

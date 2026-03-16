@@ -24,14 +24,14 @@ class TestGaussianProcessLearner:
         """Create GaussianProcessLearner instance for testing."""
         return GaussianProcessLearner(random_state=42)
 
-    def test_initialization(self, learner):
+    def test_initialization_sets_default_hyperparameters_and_uncertainty_support(self, learner):
         """Test learner initialization."""
         assert learner.alpha == 1e-3
         assert learner.random_state == 42
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
 
-    def test_train_predict_integration(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -48,7 +48,7 @@ class TestGaussianProcessLearner:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_quality(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_training_points_have_comparable_or_lower_uncertainty_than_holdout_points(self, learner, small_real_compounds, small_real_morgan_features):
         """Test that uncertainty estimates are reasonable."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -70,13 +70,13 @@ class TestGaussianProcessLearner:
         with pytest.raises(RuntimeError, match="must be trained before prediction"):
             learner.predict(small_real_morgan_features)
 
-    def test_get_name(self, learner):
+    def test_get_name_includes_alpha_configuration(self, learner):
         """Test name generation."""
         name = learner.get_name()
         assert "GaussianProcess" in name
         assert "alpha=0.001" in name
 
-    def test_learned_hyperparameters(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_learned_hyperparameters_returns_kernel_and_theta_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test hyperparameter learning."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -91,7 +91,7 @@ class TestGaussianProcessLearner:
         assert 'kernel' in hyperparams
         assert 'theta' in hyperparams
 
-    def test_custom_kernel(self, small_real_compounds, small_real_morgan_features):
+    def test_custom_alpha_configuration_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test learner with custom kernel configuration."""
         learner = GaussianProcessLearner(alpha=1e-6, random_state=42)
 
@@ -107,7 +107,7 @@ class TestGaussianProcessLearner:
         assert predictions.shape[0] == len(compounds)
         assert uncertainty is not None
 
-    def test_edge_case_small_dataset(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(5)],
@@ -124,7 +124,7 @@ class TestGaussianProcessLearner:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_numerical_stability(self, learner, tmp_path):
+    def test_extreme_targets_produce_finite_predictions_and_uncertainty(self, learner, tmp_path):
         """Test numerical stability with extreme values."""
         compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
@@ -140,7 +140,7 @@ class TestGaussianProcessLearner:
         assert np.all(np.isfinite(uncertainty))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_ordering(self, learner, tmp_path):
+    def test_predict_returns_non_negative_uncertainty_for_unseen_compounds(self, learner, tmp_path):
         """Test that uncertainty estimates have reasonable ordering."""
         train_compounds = pl.DataFrame({
             'ID': ['TRAIN_001', 'TRAIN_002'],
@@ -162,7 +162,7 @@ class TestGaussianProcessLearner:
         assert np.all(uncertainties >= 0)
         assert len(uncertainties) == len(test_compounds)
 
-    def test_uncertainty_consistency(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_uncertainty_array_when_learner_supports_uncertainty(self, learner, small_real_compounds, small_real_morgan_features):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
@@ -197,15 +197,15 @@ class TestGaussianProcessLearner:
         with pytest.raises((ValueError, RuntimeError)):
             learner.train(features_1d, targets)
 
-    def test_default_kernel_auto(self):
+    def test_default_kernel_configuration_is_auto(self):
         learner = GaussianProcessLearner()
         assert learner._kernel_config == "auto"
 
-    def test_kernel_none_treated_as_auto(self):
+    def test_none_kernel_configuration_is_normalized_to_auto(self):
         learner = GaussianProcessLearner(kernel=None)
         assert learner._kernel_config == "auto"
 
-    def test_get_name_reflects_kernel(self, small_real_compounds, small_real_morgan_features):
+    def test_get_name_reflects_selected_kernel_after_training(self, small_real_compounds, small_real_morgan_features):
         learner = GaussianProcessLearner(random_state=42)
         compounds = small_real_compounds.clone()
         if "Activity" not in compounds.columns:
@@ -235,14 +235,14 @@ class TestKernelAutoDetection:
         learner.train(X, y)
         assert learner._kernel_name == "RBF"
 
-    def test_explicit_tanimoto_kernel(self):
+    def test_explicit_tanimoto_kernel_sets_kernel_name_on_train(self):
         learner = GaussianProcessLearner(kernel="tanimoto", random_state=42)
         X = np.random.randn(20, 5).clip(0)
         y = np.random.randn(20)
         learner.train(X, y)
         assert learner._kernel_name == "Tanimoto"
 
-    def test_explicit_rbf_kernel(self):
+    def test_explicit_rbf_kernel_sets_kernel_name_on_train(self):
         learner = GaussianProcessLearner(kernel="rbf", random_state=42)
         X = np.random.randint(0, 2, size=(20, 10)).astype(float)
         y = np.random.randn(20)
@@ -257,7 +257,7 @@ class TestKernelAutoDetection:
         learner.train(X, y)
         assert isinstance(learner._kernel_config, type(custom_kernel))
 
-    def test_retrain_different_feature_type(self):
+    def test_retraining_on_continuous_features_switches_kernel_from_tanimoto_to_rbf(self):
         learner = GaussianProcessLearner(kernel="auto", random_state=42)
         X_binary = np.random.randint(0, 2, size=(20, 10)).astype(float)
         y = np.random.randn(20)
@@ -268,14 +268,14 @@ class TestKernelAutoDetection:
         learner.train(X_cont, y)
         assert learner._kernel_name == "RBF"
 
-    def test_mixed_binary_continuous_detection(self):
+    def test_auto_kernel_treats_binary_feature_matrix_as_tanimoto(self):
         learner = GaussianProcessLearner(kernel="auto", random_state=42)
         X = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 1.0]] * 10)
         y = np.random.randn(20)
         learner.train(X, y)
         assert learner._kernel_name == "Tanimoto"
 
-    def test_backward_compat_custom_kernel_object(self):
+    def test_custom_kernel_object_predicts_with_backward_compatible_api(self):
         custom_kernel = C(2.0, (1e-3, 1e3)) * RBF(0.5, (1e-3, 1e3))
         learner = GaussianProcessLearner(kernel=custom_kernel, random_state=42)
         X = np.random.randn(20, 5)
@@ -309,7 +309,7 @@ class TestKernelAutoDetection:
 class TestAlphaConfiguration:
     """Tests for alpha configuration passthrough (T007)."""
 
-    def test_alpha_custom_value(self):
+    def test_alpha_value_is_passed_to_underlying_model(self):
         learner = GaussianProcessLearner(alpha=0.05, random_state=42)
         assert learner.alpha == 0.05
         X = np.random.randn(20, 5)
@@ -322,7 +322,7 @@ class TestAlphaConfiguration:
 class TestSizeGuard:
     """Tests for training set size guards (T008)."""
 
-    def test_size_guard_warning(self, caplog):
+    def test_training_above_warning_threshold_logs_warning(self, caplog):
         learner = GaussianProcessLearner(max_train_size=50, random_state=42)
         n = 21  # > 50 * 0.4 = 20
         X = np.random.randn(n, 2)
@@ -331,7 +331,7 @@ class TestSizeGuard:
             learner.train(X, y)
         assert "large" in caplog.text.lower() or "slow" in caplog.text.lower()
 
-    def test_size_guard_no_warning(self, caplog):
+    def test_training_at_warning_threshold_does_not_log_warning(self, caplog):
         learner = GaussianProcessLearner(max_train_size=50, random_state=42)
         n = 20  # = 50 * 0.4, NOT > threshold
         X = np.random.randn(n, 2)
@@ -342,7 +342,7 @@ class TestSizeGuard:
                         and "large" in r.message.lower()]
         assert len(warning_msgs) == 0
 
-    def test_size_guard_error(self):
+    def test_training_above_max_train_size_raises_learner_error(self):
         learner = GaussianProcessLearner(max_train_size=50, random_state=42)
         n = 51  # > 50
         X = np.random.randn(n, 2)
@@ -350,7 +350,7 @@ class TestSizeGuard:
         with pytest.raises(LearnerError, match="exceeds maximum"):
             learner.train(X, y)
 
-    def test_size_guard_no_error(self):
+    def test_training_at_max_train_size_succeeds(self):
         learner = GaussianProcessLearner(max_train_size=50, random_state=42)
         n = 50  # = max, NOT > max
         X = np.random.randn(n, 2)
@@ -358,7 +358,7 @@ class TestSizeGuard:
         learner.train(X, y)
         assert learner.is_trained
 
-    def test_max_train_size_configurable(self):
+    def test_custom_max_train_size_allows_limit_and_rejects_excess(self):
         learner = GaussianProcessLearner(max_train_size=100, random_state=42)
         X_ok = np.random.randn(100, 2)
         y_ok = np.random.randn(100)

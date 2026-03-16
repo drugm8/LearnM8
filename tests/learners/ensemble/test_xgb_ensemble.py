@@ -24,7 +24,7 @@ class TestXGBEnsemble:
             random_states=[10, 20, 30]
         )
 
-    def test_initialization(self, xgb_ensemble):
+    def test_initialization_sets_default_learning_rates_random_states_and_untrained_state(self, xgb_ensemble):
         """Test XGBEnsemble initialization with default parameters."""
         assert len(xgb_ensemble.learners) == 3
         assert xgb_ensemble.learning_rates == [0.05, 0.1, 0.2]
@@ -55,7 +55,7 @@ class TestXGBEnsemble:
         assert len(set(random_states)) == 3
         assert random_states == [42, 123, 456]
 
-    def test_get_name(self, xgb_ensemble):
+    def test_get_name_includes_model_count_and_learning_rates(self, xgb_ensemble):
         """Test name generation for XGBEnsemble."""
         name = xgb_ensemble.get_name()
         assert name == "XGBEnsemble(3xXGB,lr=[0.05,0.10,0.20])"
