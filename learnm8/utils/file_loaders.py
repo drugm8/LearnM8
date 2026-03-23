@@ -133,6 +133,12 @@ def _load_csv_with_polars(
 
     if smiles_column and smiles_column in df.columns:
         df = df.rename({smiles_column: 'SMILES'})
+    elif 'SMILES' not in df.columns:
+        smiles_variants = ['smiles', 'Smiles']
+        for variant in smiles_variants:
+            if variant in df.columns:
+                df = df.rename({variant: 'SMILES'})
+                break
 
     if id_column and id_column in df.columns:
         df = df.rename({id_column: 'ID'})
@@ -207,7 +213,7 @@ def _load_sdf_with_datamol(
     else:
         df = pl.DataFrame(records)
         other_cols = [c for c in df.columns if c not in ['ID', 'SMILES']]
-        df = df.select(['ID', 'SMILES'] + other_cols)
+        df = df.select(['ID', 'SMILES', *other_cols])
 
     logger.info(f"Loaded {len(df)} compounds from SDF file")
     return df
@@ -257,7 +263,7 @@ def _load_smi_with_rdkit(file_path: Path) -> pl.DataFrame:
             raise ValueError(
                 f"Failed to load SMILES file: {e}. "
                 f"Expected format: SMILES<tab>Name with optional header line."
-            )
+            ) from e
 
     if not compounds:
         raise ValueError(
