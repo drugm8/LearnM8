@@ -10,6 +10,10 @@ from abc import ABC, abstractmethod
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import (
+    AcquisitionError,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -91,7 +95,7 @@ class AcquisitionFunction(ABC):
         # Check basic DataFrame structure
         if len(compounds) == 0:
             raise ValueError(
-                f"Cannot run {self.get_name()} on an empty compound pool. "
+                f"compounds DataFrame is empty. Cannot run {self.get_name()} on an empty compound pool. "
                 f"All compounds may have been labeled or pruned. "
                 f"Check n_cycles and pruning_fraction settings."
             )
@@ -101,7 +105,7 @@ class AcquisitionFunction(ABC):
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
             raise ValueError(
-                f"{self.get_name()} requires columns {required_cols}, "
+                f"Missing required columns for {self.get_name()}: expected {required_cols}, "
                 f"but {missing_cols} are missing. "
                 f"Available columns: {list(compounds.columns)}."
             )
@@ -132,7 +136,7 @@ class AcquisitionFunction(ABC):
         if pred_col.is_null().any() or pred_col.is_nan().any():
             nan_count = pred_col.is_null().sum() + pred_col.is_nan().sum()
             raise ValueError(
-                f"Predictions contain {nan_count} NaN/null values out of {len(compounds)} compounds. "
+                f"Predictions contain NaN values: found {nan_count} NaN/null values out of {len(compounds)} compounds. "
                 f"This may indicate a featurizer or learner issue. "
                 f"Check that all SMILES are valid and the model trained successfully."
             )
@@ -208,7 +212,7 @@ class AcquisitionFunction(ABC):
         selected_compounds = compounds.filter(pl.col('ID').is_in(selected_ids.tolist()))
 
         # Add acquisition scores for debugging/analysis
-        score_dict = dict(zip(selected_ids, scores[top_indices]))
+        score_dict = dict(zip(selected_ids, scores[top_indices], strict=False))
         selected_compounds = selected_compounds.with_columns(
             pl.col('ID').replace_strict(score_dict).alias('acquisition_score')
         )
@@ -217,11 +221,6 @@ class AcquisitionFunction(ABC):
         selected_compounds = selected_compounds.sort('acquisition_score', descending=not ascending)
 
         return selected_compounds
-
-
-from learnm8.exceptions import (
-    AcquisitionError,
-)
 
 
 # Utility functions for acquisition calculations
