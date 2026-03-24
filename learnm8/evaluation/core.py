@@ -42,6 +42,7 @@ def evaluate_cycle(
 	ground_truth_data: pl.DataFrame | None = None,
 	pool_predictions: np.ndarray | None = None,
 	pool_ids: np.ndarray | None = None,
+	pool_df: pl.DataFrame | None = None,
 	uncertainties: np.ndarray | None = None,
 	previously_selected: pl.DataFrame | None = None,
 	advanced_metrics: bool = False,
@@ -240,49 +241,53 @@ def evaluate_cycle(
 	if is_benchmark_mode:
 		try:
 			# CRITICAL: Filter predictions to exclude labeled compounds
-			if pool_predictions is not None and pool_ids is not None and cumulative_selected_ids is not None:
-				# Create unlabeled predictions DataFrame (EXCLUDE labeled)
+			unlabeled_predictions_df = None
+			if pool_df is not None and cumulative_selected_ids is not None:
+				unlabeled_predictions_df = pool_df.filter(
+					~pl.col('ID').is_in(cumulative_selected_ids)
+				).select(['ID', 'prediction'])
+			elif pool_predictions is not None and pool_ids is not None and cumulative_selected_ids is not None:
 				unlabeled_mask = ~np.isin(pool_ids, list(cumulative_selected_ids))
 				unlabeled_predictions_df = pl.DataFrame({
 					'ID': pool_ids[unlabeled_mask],
 					'prediction': pool_predictions[unlabeled_mask]
 				})
 
-				if len(unlabeled_predictions_df) > 0:
-					# Calculate unlabeled ranking overlaps
-					unlabeled_top_k_metrics = calculate_multiple_unlabeled_top_k_overlaps(
-						unlabeled_predictions_df=unlabeled_predictions_df,
-						ground_truth_df=ground_truth_data,
-						target_column=target_col,
-						score_direction=score_direction
-					)
-					metrics.update(unlabeled_top_k_metrics)
+			if unlabeled_predictions_df is not None and len(unlabeled_predictions_df) > 0:
+				# Calculate unlabeled ranking overlaps
+				unlabeled_top_k_metrics = calculate_multiple_unlabeled_top_k_overlaps(
+					unlabeled_predictions_df=unlabeled_predictions_df,
+					ground_truth_df=ground_truth_data,
+					target_column=target_col,
+					score_direction=score_direction
+				)
+				metrics.update(unlabeled_top_k_metrics)
 
-					# Calculate unlabeled prospective EFs (if Activity present)
-					unlabeled_ef_metrics = calculate_multiple_unlabeled_enrichment_factors(
-						unlabeled_predictions_df=unlabeled_predictions_df,
-						ground_truth_df=ground_truth_data,
-						activity_column='Activity',
-						score_direction=score_direction
-					)
-					metrics.update(unlabeled_ef_metrics)
+				# Calculate unlabeled prospective EFs (if Activity present)
+				unlabeled_ef_metrics = calculate_multiple_unlabeled_enrichment_factors(
+					unlabeled_predictions_df=unlabeled_predictions_df,
+					ground_truth_df=ground_truth_data,
+					activity_column='Activity',
+					score_direction=score_direction
+				)
+				metrics.update(unlabeled_ef_metrics)
 
-					# Calculate unlabeled ranking correlation
-					unlabeled_spearman = calculate_unlabeled_ranking_correlation(
-						unlabeled_predictions_df=unlabeled_predictions_df,
-						ground_truth_df=ground_truth_data,
-						target_column=target_col
-					)
-					metrics['unlabeled_spearman_correlation'] = unlabeled_spearman
-				else:
-					# No unlabeled compounds left
-					metrics.update({
-						'unlabeled_top_100_overlap': None,
-						'unlabeled_top_1000_overlap': None,
-						'unlabeled_ef_1_0': None,
-						'unlabeled_ef_5_0': None,
-						'unlabeled_spearman_correlation': None
-					})
+				# Calculate unlabeled ranking correlation
+				unlabeled_spearman = calculate_unlabeled_ranking_correlation(
+					unlabeled_predictions_df=unlabeled_predictions_df,
+					ground_truth_df=ground_truth_data,
+					target_column=target_col
+				)
+				metrics['unlabeled_spearman_correlation'] = unlabeled_spearman
+			else:
+				# No unlabeled compounds left
+				metrics.update({
+					'unlabeled_top_100_overlap': None,
+					'unlabeled_top_1000_overlap': None,
+					'unlabeled_ef_1_0': None,
+					'unlabeled_ef_5_0': None,
+					'unlabeled_spearman_correlation': None
+				})
 
 		except (ValueError, TypeError, ZeroDivisionError, KeyError) as e:
 			logger.warning(
