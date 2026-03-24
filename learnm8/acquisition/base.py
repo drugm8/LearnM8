@@ -46,6 +46,7 @@ class AcquisitionFunction(ABC):
 
         self.score_direction = score_direction
         self.maximize = score_direction == 'higher'
+        self._skip_unique_id_check = False
 
     @abstractmethod
     def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
@@ -131,23 +132,25 @@ class AcquisitionFunction(ABC):
             logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
                          f"will select all {len(compounds)} available compounds")
 
-        # Check for NaN/null values in predictions
+        # Check for NaN/null values in predictions — single combined pass (not 4 passes)
         pred_col = compounds.get_column('prediction')
-        if pred_col.is_null().any() or pred_col.is_nan().any():
-            nan_count = pred_col.is_null().sum() + pred_col.is_nan().sum()
+        null_or_nan = pred_col.is_null() | pred_col.is_nan()
+        if null_or_nan.any():
             raise ValueError(
-                f"Predictions contain NaN values: found {nan_count} NaN/null values out of {len(compounds)} compounds. "
+                f"Predictions contain NaN values: found {null_or_nan.sum()} NaN/null values out of {len(compounds)} compounds. "
                 f"This may indicate a featurizer or learner issue. "
                 f"Check that all SMILES are valid and the model trained successfully."
             )
 
-        # Check for duplicate IDs
-        if compounds.get_column('ID').n_unique() != len(compounds):
-            n_dupes = len(compounds) - compounds.get_column('ID').n_unique()
-            raise ValueError(
-                f"Found {n_dupes} duplicate compound IDs in input data. "
-                f"Each compound must have a unique ID for acquisition selection."
-            )
+        # Check for duplicate IDs — skipped on internal call path where uniqueness is guaranteed
+        if not self._skip_unique_id_check:
+            n_unique_count = compounds.get_column('ID').n_unique()
+            if n_unique_count != len(compounds):
+                n_dupes = len(compounds) - n_unique_count
+                raise ValueError(
+                    f"Found {n_dupes} duplicate compound IDs in input data. "
+                    f"Each compound must have a unique ID for acquisition selection."
+                )
 
         # Check uncertainty values if present
         if 'uncertainty' in compounds.columns:
@@ -189,36 +192,40 @@ class AcquisitionFunction(ABC):
                 f"This is an internal error in the acquisition function implementation."
             )
 
-        # Handle infinite or NaN scores
+        # Handle invalid scores — copy only when bad values exist (avoids large allocation on normal path)
+        # Note: scores may be modified in-place on this branch. Callers pass fresh .to_numpy() arrays
+        # so this is safe. Do not reuse the array after calling this method if NaN/Inf were present.
         valid_mask = np.isfinite(scores)
         if not valid_mask.all():
             logger.warning(f"Found {(~valid_mask).sum()} invalid scores, setting to worst value")
-            if ascending:
-                scores[~valid_mask] = np.inf
-            else:
-                scores[~valid_mask] = -np.inf
+            scores = scores.copy()
+            scores[~valid_mask] = np.inf if ascending else -np.inf
 
-        # Get top indices
+        n = len(scores)
+        actual_n_select = min(n_select, n)
+
         if ascending:
-            top_indices = np.argsort(scores)[:n_select]
+            if actual_n_select >= n:
+                top_indices = np.argsort(scores)
+            else:
+                # O(n) partition + O(k log k) sort with index-stable tie-breaking
+                top_indices = np.argpartition(scores, actual_n_select - 1)[:actual_n_select]
+                top_indices = top_indices[np.lexsort((top_indices, scores[top_indices]))]
         else:
-            top_indices = np.argsort(scores)[::-1][:n_select]
+            if actual_n_select >= n:
+                top_indices = np.argsort(scores)[::-1]
+            else:
+                # O(n) partition + O(k log k) sort with index-stable tie-breaking
+                top_indices = np.argpartition(scores, -actual_n_select)[-actual_n_select:]
+                top_indices = top_indices[np.lexsort((top_indices, -scores[top_indices]))]
 
-        # Get IDs for selected compounds
-        all_ids = compounds.get_column('ID').to_numpy()
-        selected_ids = all_ids[top_indices]
-
-        # Filter by selected IDs
-        selected_compounds = compounds.filter(pl.col('ID').is_in(selected_ids.tolist()))
-
-        # Add acquisition scores for debugging/analysis
-        score_dict = dict(zip(selected_ids, scores[top_indices], strict=False))
+        # O(k) positional row retrieval — requires Polars >=1.0 and 0-based positional alignment.
+        # Invariant: scores were extracted from this same DataFrame via .to_numpy() in the same
+        # execution context, so row i of compounds corresponds to scores[i].
+        selected_compounds = compounds[top_indices]
         selected_compounds = selected_compounds.with_columns(
-            pl.col('ID').replace_strict(score_dict).alias('acquisition_score')
+            pl.Series('acquisition_score', scores[top_indices])
         )
-
-        # Sort by acquisition score to preserve selection order
-        selected_compounds = selected_compounds.sort('acquisition_score', descending=not ascending)
 
         return selected_compounds
 
