@@ -91,6 +91,18 @@ class TestGreedyAcquisition:
         with pytest.raises(ValueError, match='n_select must be positive'):
             GreedyAcquisition().select(compounds, n_select=0)
 
+    def test_greedy_tiebreaking_at_boundary_is_index_stable(self, small_real_compounds):
+        compounds = _pool_with_predictions(
+            small_real_compounds.head(5).clone(),
+            [0.5, 0.5, 0.5, 0.5, 0.5],
+        )
+
+        result1 = GreedyAcquisition().select(compounds, n_select=3)
+        result2 = GreedyAcquisition().select(compounds, n_select=3)
+
+        assert result1.get_column('ID').to_list() == result2.get_column('ID').to_list()
+        assert len(result1) == 3
+
     def test_greedy_rejects_nan_predictions(self, small_real_compounds):
         compounds = _pool_with_predictions(
             small_real_compounds.head(5).clone(),

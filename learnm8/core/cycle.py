@@ -468,19 +468,16 @@ def execute_cycle(
     )
 
     pred_col = f'prediction_cycle_{cycle}'
-    selection_pool = compounds_df.filter(
-        (pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null())
-    ).select(['ID', 'SMILES', pred_col]).clone()
-    selection_pool = selection_pool.rename({pred_col: 'prediction'})
+    unc_col = f'uncertainty_cycle_{cycle}' if uncertainties is not None else None
+    cols_to_select = ['ID', 'SMILES', pred_col] + ([unc_col] if unc_col else [])
+    rename_map = {pred_col: 'prediction'} | ({unc_col: 'uncertainty'} if unc_col else {})
 
-    if uncertainties is not None:
-        unc_col = f'uncertainty_cycle_{cycle}'
-        unc_values = compounds_df.filter(
-            (pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null())
-        )[unc_col].to_numpy()
-        selection_pool = selection_pool.with_columns(
-            pl.lit(unc_values).alias('uncertainty')
-        )
+    selection_pool = (
+        compounds_df
+        .filter((pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null()))
+        .select(cols_to_select)
+        .rename(rename_map)
+    )
 
     if len(selection_pool) == 0:
         raise AcquisitionError(
@@ -677,12 +674,12 @@ def execute_cycle(
                     ).select(['ID', 'SMILES', target_col]).clone()
 
                     pool_predictions_for_eval = None
-                    pool_ids_for_eval = None
+                    pool_df_for_eval = None
                     original_pool_for_eval = None
 
                     if mode == 'benchmark' and original_pool is not None:
                         pool_predictions_for_eval = predictions
-                        pool_ids_for_eval = prediction_pool['ID'].to_numpy()
+                        pool_df_for_eval = prediction_pool.select(['ID', 'prediction'])
                         original_pool_for_eval = original_pool
 
                     eval_metrics = evaluate_cycle(
@@ -695,7 +692,7 @@ def execute_cycle(
                         oracle_type=mode,
                         ground_truth_data=original_pool_for_eval,
                         pool_predictions=pool_predictions_for_eval,
-                        pool_ids=pool_ids_for_eval,
+                        pool_df=pool_df_for_eval,
                         uncertainties=uncertainties if uncertainties is not None else None,
                         previously_selected=None,
                         advanced_metrics=False,
@@ -1001,6 +998,8 @@ def _select_compounds(
             f"Failed to create acquisition function '{strategy}': {e}. "
             f"Check that the acquisition parameters are valid for this strategy."
         ) from e
+    # Uniqueness of IDs in selection_pool is guaranteed by validate_compound_pool() upstream
+    acq_func._skip_unique_id_check = True
 
     # Validate requirements
     if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:
