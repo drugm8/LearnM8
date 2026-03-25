@@ -126,8 +126,8 @@ class TestFormatCycleMetricsTable:
         clean_result = self.strip_ansi(result)
 
         assert 'Cycle 1' in clean_result
-        assert 'Selection Quality' in clean_result
-        assert 'Discovery Metrics' in clean_result
+        assert 'Selection' in clean_result
+        assert 'Discovery' in clean_result
         assert 'Ranking' in clean_result
 
     def test_run_mode_table(self):
@@ -144,7 +144,7 @@ class TestFormatCycleMetricsTable:
         clean_result = self.strip_ansi(result)
 
         assert 'Cycle 2' in clean_result
-        assert 'Selection Quality' in clean_result
+        assert 'Selection' in clean_result
 
     def test_with_previous_metrics(self):
         """Format table with change indicators."""

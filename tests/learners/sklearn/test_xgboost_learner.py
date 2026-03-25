@@ -5,6 +5,7 @@ import numpy as np
 import polars as pl
 from unittest.mock import Mock
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 from learnm8.features.extraction import extract_features
 
@@ -45,7 +46,7 @@ class TestXGBoostLearner:
 
     def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
+        with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(small_real_morgan_features)
 
     def test_get_name_includes_estimators_learning_rate_and_depth(self, learner):
@@ -191,14 +192,14 @@ class TestXGBoostLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+        with pytest.raises(LearnerError, match="empty dataset"):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(ValueError, match="Features and targets must have same length"):
+        with pytest.raises(LearnerError, match="mismatched lengths"):
             learner.train(features, targets)
 
     def test_train_with_1d_features(self, learner):

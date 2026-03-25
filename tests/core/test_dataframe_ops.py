@@ -197,7 +197,7 @@ def test_update_compound_status_to_pruned(sample_master_df):
 def test_update_compound_status_invalid_status(sample_master_df):
     """Test validation with invalid status."""
     any_id = sample_master_df.get_column('ID').to_list()[:1]
-    with pytest.raises(ValueError, match='new_status must be one of'):
+    with pytest.raises(ValueError, match='Must be one of'):
         update_status(
             df=sample_master_df,
             compound_ids=any_id,

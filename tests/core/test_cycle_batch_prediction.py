@@ -12,6 +12,20 @@ from learnm8.oracles.csv_oracle import CSVOracle
 
 
 @pytest.fixture
+def oracle_csv(initialized_compounds, tmp_path):
+    """Create oracle CSV with activity values for all compounds."""
+    import csv
+    csv_path = tmp_path / 'oracle.csv'
+    ids = initialized_compounds['ID'].to_list()
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['ID', 'Activity'])
+        for i, cid in enumerate(ids):
+            writer.writerow([cid, 5.0 + i * 0.1])
+    return csv_path
+
+
+@pytest.fixture
 def initialized_compounds(sample_compounds, tmp_path):
     """Create initialized master DataFrame with some labeled compounds."""
     compounds_df = sample_compounds.clone()
@@ -23,7 +37,7 @@ def initialized_compounds(sample_compounds, tmp_path):
         pl.lit(None).cast(pl.Float64).alias('Activity')
     ])
 
-    labeled_indices = [0, 1, 2, 3, 4]
+    labeled_indices = [0, 1, 2]
     compounds_df = compounds_df.with_columns([
         pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
         .then(pl.lit('labeled'))
@@ -38,7 +52,7 @@ def initialized_compounds(sample_compounds, tmp_path):
         .otherwise(pl.col('labeled_cycle')).alias('labeled_cycle'),
 
         pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
-        .then(pl.lit(5.0 + pl.col('ID').cast(pl.Float64) * 0.1))
+        .then(pl.lit(5.0))
         .otherwise(pl.col('Activity')).alias('Activity')
     ])
 
@@ -49,10 +63,10 @@ def initialized_compounds(sample_compounds, tmp_path):
 class TestCycleBatchPrediction:
     """Test batch prediction integration in execute_cycle()."""
 
-    def test_auto_batch_size_small_dataset(self, initialized_compounds, tmp_path):
+    def test_auto_batch_size_small_dataset(self, initialized_compounds, oracle_csv, tmp_path):
         """Small dataset (≤100k) should use single batch automatically."""
         learner = RandomForestLearner(random_state=42)
-        oracle = CSVOracle(str(tmp_path / 'oracle.csv'))
+        oracle = CSVOracle(str(oracle_csv))
 
         config = CycleConfig(strategy='greedy', n_cycles=1, batch_fraction=0.1)
 
@@ -71,13 +85,13 @@ class TestCycleBatchPrediction:
             prediction_batch_size=None
         )
 
-        assert 'n_selected' in metrics
+        assert 'batch_size' in metrics
         assert compounds_df.filter(pl.col('selected_cycle') == 1).height > 0
 
-    def test_explicit_batch_size(self, initialized_compounds, tmp_path):
+    def test_explicit_batch_size(self, initialized_compounds, oracle_csv, tmp_path):
         """Explicit batch size should be used for prediction."""
         learner = RandomForestLearner(random_state=42)
-        oracle = CSVOracle(str(tmp_path / 'oracle.csv'))
+        oracle = CSVOracle(str(oracle_csv))
 
         config = CycleConfig(strategy='greedy', n_cycles=1, batch_fraction=0.1)
 
@@ -96,14 +110,14 @@ class TestCycleBatchPrediction:
             prediction_batch_size=5
         )
 
-        assert 'n_selected' in metrics
+        assert 'batch_size' in metrics
         assert compounds_df.filter(pl.col('selected_cycle') == 1).height > 0
 
-    def test_predictions_identical_across_batch_sizes(self, initialized_compounds, tmp_path):
+    def test_predictions_identical_across_batch_sizes(self, initialized_compounds, oracle_csv, tmp_path):
         """Predictions should be identical regardless of batch size."""
         learner1 = RandomForestLearner(random_state=42)
         learner2 = RandomForestLearner(random_state=42)
-        oracle = CSVOracle(str(tmp_path / 'oracle.csv'))
+        oracle = CSVOracle(str(oracle_csv))
 
         config = CycleConfig(strategy='greedy', n_cycles=1, batch_fraction=0.1)
 

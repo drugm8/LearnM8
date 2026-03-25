@@ -746,6 +746,8 @@ def run_args(minimal_compounds, tmp_path):
         random_state=42,
         mode=None,
         prediction_batch_size=None,
+        smiles_col=None,
+        id_col=None,
     )
 
 
@@ -756,6 +758,8 @@ def validate_args(minimal_compounds, tmp_path):
         compound_pool=minimal_compounds,
         n_jobs=1,
         output=None,
+        smiles_col=None,
+        id_col=None,
     )
 
 
@@ -960,3 +964,182 @@ class TestConfigParseErrorBoundary:
         from learnm8.cli.main import load_config_file
         with pytest.raises(ConfigurationError, match='Failed to parse config file'):
             load_config_file(config_path)
+
+
+@pytest.mark.unit
+class TestColumnArgsParsing:
+    """Test --smiles-col and --id-col are registered and parse correctly."""
+
+    def test_run_parser_has_smiles_col(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args([
+            'run', 'compounds.csv',
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--smiles-col', 'canonical_smiles',
+        ])
+        assert args.smiles_col == 'canonical_smiles'
+
+    def test_run_parser_has_id_col(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args([
+            'run', 'compounds.csv',
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--id-col', 'compound_id',
+        ])
+        assert args.id_col == 'compound_id'
+
+    def test_run_parser_col_defaults_to_none(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args([
+            'run', 'compounds.csv',
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+        ])
+        assert args.smiles_col is None
+        assert args.id_col is None
+
+    def test_validate_parser_has_smiles_col(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args([
+            'validate', 'compounds.csv',
+            '--smiles-col', 'canonical_smiles',
+        ])
+        assert args.smiles_col == 'canonical_smiles'
+
+    def test_validate_parser_has_id_col(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args([
+            'validate', 'compounds.csv',
+            '--id-col', 'compound_id',
+        ])
+        assert args.id_col == 'compound_id'
+
+    def test_validate_parser_col_defaults_to_none(self):
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        args = parser.parse_args(['validate', 'compounds.csv'])
+        assert args.smiles_col is None
+        assert args.id_col is None
+
+
+@pytest.mark.unit
+class TestColumnArgsForwarding:
+    """Test that --smiles-col/--id-col are forwarded correctly to underlying functions."""
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_smiles_col_forwarded_to_run_active_learning(self, mock_run, run_args, tmp_path):
+        run_args.smiles_col = 'canonical_smiles'
+        run_args.id_col = 'compound_id'
+        mock_run.return_value = {
+            'output_dir': tmp_path / 'output',
+            'cycle_metrics': [{}],
+            'labeled_data': pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
+            'unlabeled_data': pl.DataFrame({'ID': [], 'SMILES': []}),
+            'validation_result': type('R', (), {
+                'valid_compounds': pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
+                'invalid_compounds': pl.DataFrame({'ID': [], 'SMILES': []}),
+                'success_rate': 1.0,
+                'validation_errors': {},
+            })(),
+            'saved_files': {},
+        }
+        from learnm8.cli.main import cmd_run
+        cmd_run(run_args)
+        call_kwargs = mock_run.call_args.kwargs
+        assert call_kwargs.get('smiles_column') == 'canonical_smiles'
+        assert call_kwargs.get('id_column') == 'compound_id'
+
+    @patch('learnm8.cli.main.validate_compound_pool')
+    @patch('learnm8.cli.main.load_compound_file')
+    def test_smiles_col_forwarded_to_load_compound_file(
+        self, mock_load, mock_validate, validate_args
+    ):
+        validate_args.smiles_col = 'canonical_smiles'
+        validate_args.id_col = 'compound_id'
+        mock_load.return_value = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+        mock_validate.return_value = type('R', (), {
+            'valid_compounds': pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
+            'invalid_compounds': pl.DataFrame({'ID': [], 'SMILES': []}),
+            'success_rate': 1.0,
+            'validation_errors': {},
+        })()
+        from learnm8.cli.main import cmd_validate
+        cmd_validate(validate_args)
+        call_kwargs = mock_load.call_args.kwargs
+        assert call_kwargs.get('smiles_column') == 'canonical_smiles'
+        assert call_kwargs.get('id_column') == 'compound_id'
+
+
+@pytest.mark.slow
+class TestColumnArgsEndToEnd:
+    """End-to-end tests for --smiles-col and --id-col with non-standard column names."""
+
+    def test_run_with_custom_smiles_col(self, tmp_path):
+        csv_path = tmp_path / "compounds.csv"
+        df = pd.DataFrame({
+            'cid': ['C1', 'C2', 'C3', 'C4', 'C5'],
+            'canonical_smiles': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
+            'Activity': [0.1, 0.3, 0.5, 0.7, 0.9],
+        })
+        df.to_csv(csv_path, index=False)
+        output_dir = tmp_path / "output"
+
+        result = run_cli(
+            'run', str(csv_path),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--learner', 'rf',
+            '--smiles-col', 'canonical_smiles',
+            '--id-col', 'cid',
+            '--n-cycles', '2',
+            '--batch-fraction', '0.4',
+            '-o', str(output_dir),
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert (output_dir / 'compounds_final.csv').exists()
+
+    def test_validate_with_custom_smiles_col(self, tmp_path):
+        csv_path = tmp_path / "compounds.csv"
+        df = pd.DataFrame({
+            'cid': ['C1', 'C2', 'C3'],
+            'canonical_smiles': ['CCO', 'CCC', 'CCCC'],
+        })
+        df.to_csv(csv_path, index=False)
+
+        result = run_cli(
+            'validate', str(csv_path),
+            '--smiles-col', 'canonical_smiles',
+            '--id-col', 'cid',
+        )
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Valid compounds:' in result.stdout
+
+    def test_run_fails_without_smiles_col_on_nonstandard_file(self, tmp_path):
+        csv_path = tmp_path / "compounds.csv"
+        df = pd.DataFrame({
+            'cid': ['C1', 'C2'],
+            'canonical_smiles': ['CCO', 'CCC'],
+            'Activity': [0.1, 0.9],
+        })
+        df.to_csv(csv_path, index=False)
+
+        result = run_cli(
+            'run', str(csv_path),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--learner', 'rf',
+            '--n-cycles', '1',
+            '--batch-fraction', '0.4',
+            '-o', str(tmp_path / 'output'),
+        )
+
+        assert result.returncode != 0

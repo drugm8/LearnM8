@@ -122,7 +122,7 @@ class TestExecuteCycle:
     def test_benchmark_mode_requires_original_pool(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(ValueError, match="original_pool required for benchmark mode"):
+        with pytest.raises(ValueError, match="original_pool is required for benchmark mode"):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -473,7 +473,7 @@ class TestApplyPruning:
         )
         predictions = pool['prediction'].to_numpy()
 
-        with pytest.raises(RuntimeError, match="Pruning configuration invalid"):
+        with pytest.raises(RuntimeError, match="Pruning failed with strategy"):
             _apply_pruning(
                 pool,
                 predictions,

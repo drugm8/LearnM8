@@ -206,12 +206,12 @@ def test_score_based_pruner_input_validation(sample_compounds):
     
     # Test empty DataFrame
     empty_df = sample_compounds.head(0)
-    with pytest.raises(PruningError, match="compounds DataFrame is empty"):
+    with pytest.raises(PruningError, match="Cannot prune an empty compound pool"):
         pruner.prune(empty_df, np.array([]))
 
     # Test missing columns
     bad_df = sample_compounds.drop(['SMILES'])
-    with pytest.raises(PruningError, match="Missing required columns"):
+    with pytest.raises(PruningError, match="missing required columns"):
         pruner.prune(bad_df, predictions)
     
     # Test mismatched prediction length

@@ -1,5 +1,6 @@
 import pytest
 import polars as pl
+from learnm8.exceptions import OracleError
 from learnm8.oracles.python_oracle import PythonOracle
 
 
@@ -23,7 +24,7 @@ class TestPythonOracleInit:
         assert oracle.oracle_path == f
 
     def test_init_no_path_raises(self):
-        with pytest.raises(ValueError, match="Either module_path or oracle_path must be provided"):
+        with pytest.raises(OracleError, match="PythonOracle requires a path"):
             PythonOracle()
 
     def test_init_file_not_found(self, tmp_path):
@@ -40,19 +41,19 @@ class TestPythonOracleInit:
 
     def test_init_function_not_found(self, tmp_path):
         f = _write_oracle_file(tmp_path, "def oracle(compound_ids):\n    import polars as pl\n    return pl.DataFrame({'ID': compound_ids})\n")
-        with pytest.raises(ValueError, match="Function 'missing_fn' not found"):
+        with pytest.raises(OracleError, match="Function 'missing_fn' not found"):
             PythonOracle(module_path=str(f), function_name='missing_fn')
 
     def test_init_wrong_signature(self, tmp_path):
         f = _write_oracle_file(tmp_path, "def oracle(ids, extra_param):\n    pass\n")
-        with pytest.raises(ValueError, match="exactly 1 parameter"):
+        with pytest.raises(OracleError, match="exactly 1 parameter"):
             PythonOracle(module_path=str(f))
 
     def test_init_multiple_functions_no_common_name(self, tmp_path):
         f = _write_oracle_file(tmp_path,
             "def func_a(x):\n    return x\ndef func_b(x):\n    return x\n"
         )
-        with pytest.raises(ValueError, match="Multiple functions found"):
+        with pytest.raises(OracleError, match="Multiple functions found"):
             PythonOracle(module_path=str(f))
 
     def test_init_auto_detect_single_function(self, tmp_path):
@@ -123,7 +124,7 @@ class TestPythonOracleMeasure:
         )
         oracle = PythonOracle(module_path=str(f))
         compounds = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})
-        with pytest.raises(ValueError, match="'ID' column"):
+        with pytest.raises(OracleError, match="'ID' column"):
             oracle.measure(compounds, ['score'])
 
     def test_measure_function_raises(self, tmp_path):
@@ -143,7 +144,7 @@ class TestPythonOracleMeasure:
         )
         oracle = PythonOracle(module_path=str(f))
         compounds = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})
-        with pytest.raises(ValueError, match="must return"):
+        with pytest.raises(OracleError, match="must return"):
             oracle.measure(compounds, ['score'])
 
     def test_measure_missing_compound_in_result(self, tmp_path, caplog):
@@ -154,6 +155,8 @@ class TestPythonOracleMeasure:
         )
         oracle = PythonOracle(module_path=str(f))
         compounds = pl.DataFrame({'ID': ['COMP_001', 'COMP_002'], 'SMILES': ['CCO', 'CCC']})
+        import logging
+        logging.getLogger('learnm8').propagate = True
         with caplog.at_level('WARNING', logger='learnm8.oracles.python_oracle'):
             result = oracle.measure(compounds, ['score'])
         assert any('did not return results' in rec.message for rec in caplog.records)

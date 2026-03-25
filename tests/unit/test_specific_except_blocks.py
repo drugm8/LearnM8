@@ -197,7 +197,8 @@ class TestGracefulFallbacksLogWarnings:
                 'Activity': [1.0],
             })
 
-            with caplog.at_level(logging.WARNING):
+            logging.getLogger('learnm8').propagate = True
+            with caplog.at_level(logging.WARNING, logger='learnm8.core.initialization'):
                 calculate_initialization_metrics(
                     compounds_df=compounds,
                     selected_ids=['c1'],
