@@ -46,6 +46,8 @@ def run_active_learning(
     learner: Union[str, Learner],
     target_col: str,
     featurizer: Optional[str] = None,
+    smiles_column: Optional[str] = None,
+    id_column: Optional[str] = None,
     # Advanced API
     cycles: Optional[List[CycleConfig]] = None,
     # Simple API
@@ -91,6 +93,8 @@ def run_active_learning(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| **smiles_column** | `str` or `None` | `None` | Column name for SMILES in the input file (CSV only). Auto-detects from common names (`'SMILES'`, `'smiles'`, `'Smiles'`) when `None`. Ignored for DataFrames and non-CSV files. |
+| **id_column** | `str` or `None` | `None` | Column name for compound ID in the input file (CSV/SDF). Auto-detects from `'ID'` or generates synthetic IDs when `None`. Ignored when `compound_pool` is a DataFrame. |
 | **featurizer** | `str` or `None` | `None` | Molecular featurizer type. Optional for SMILES-aware learners (e.g., `'chemprop'`). Required for feature-based learners. Valid options: `'morgan'` (2048-bit circular fingerprints, radius=2), `'maccs'` (167-bit structural keys), `'ecfp6'` (2048-bit extended-connectivity, radius=3), `'descriptors'` (1613 Mordred descriptors), `'morgan_feat'` (2048-bit feature fingerprints). |
 
 **Performance Notes:**
