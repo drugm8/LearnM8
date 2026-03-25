@@ -5,7 +5,9 @@ metrics based on mode (benchmark vs run) and data availability.
 """
 
 import logging
+import threading
 from typing import Any
+from weakref import finalize
 
 import numpy as np
 import polars as pl
@@ -30,6 +32,63 @@ from .metrics.similarity import calculate_molecular_similarity_metrics
 
 logger = logging.getLogger(__name__)
 
+_GT_STATS_CACHE: dict[int, dict[tuple[str, str], dict[str, Any]]] = {}
+_GT_STATS_LOCK = threading.Lock()
+
+
+def _evict_gt_cache(df_id: int) -> None:
+    with _GT_STATS_LOCK:
+        _GT_STATS_CACHE.pop(df_id, None)
+
+
+def _compute_gt_stats(
+    ground_truth_data: pl.DataFrame,
+    target_col: str,
+    score_direction: str
+) -> dict[str, Any]:
+    result: dict[str, Any] = {'ground_truth_avg_score': None, 'gt_ef_metrics': {}}
+    if target_col in ground_truth_data.columns:
+        try:
+            gt_scores = ground_truth_data.get_column(target_col).to_numpy()
+            result['ground_truth_avg_score'] = calculate_average_score(gt_scores)
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            logger.warning(
+                f"Could not calculate ground_truth_avg_score: {e}. "
+                f"Setting to None. Check input data quality."
+            )
+    try:
+        result['gt_ef_metrics'] = calculate_ground_truth_enrichment_factors(
+            ground_truth_data, target_col, score_direction
+        )
+    except (ValueError, TypeError, ZeroDivisionError) as e:
+        logger.warning(
+            f"Could not calculate ground_truth_enrichment_factors: {e}. "
+            f"Setting to None. Check input data quality."
+        )
+        result['gt_ef_metrics'] = {
+            'ground_truth_ef_5_0': None, 'ground_truth_ef_1_0': None,
+            'ground_truth_ef_0_5': None, 'ground_truth_ef_0_1': None
+        }
+    return result
+
+
+def _get_gt_stats(
+    ground_truth_data: pl.DataFrame,
+    target_col: str,
+    score_direction: str
+) -> dict[str, Any]:
+    df_id = id(ground_truth_data)
+    inner_key = (target_col, score_direction)
+    with _GT_STATS_LOCK:
+        if df_id not in _GT_STATS_CACHE:
+            _GT_STATS_CACHE[df_id] = {}
+            finalize(ground_truth_data, _evict_gt_cache, df_id)
+        if inner_key not in _GT_STATS_CACHE[df_id]:
+            _GT_STATS_CACHE[df_id][inner_key] = _compute_gt_stats(
+                ground_truth_data, target_col, score_direction
+            )
+    return _GT_STATS_CACHE[df_id][inner_key]
+
 
 def evaluate_cycle(
 	cycle: int,
@@ -40,8 +99,6 @@ def evaluate_cycle(
 	target_col: str,
 	oracle_type: str = 'auto',
 	ground_truth_data: pl.DataFrame | None = None,
-	pool_predictions: np.ndarray | None = None,
-	pool_ids: np.ndarray | None = None,
 	pool_df: pl.DataFrame | None = None,
 	uncertainties: np.ndarray | None = None,
 	previously_selected: pl.DataFrame | None = None,
@@ -106,17 +163,10 @@ def evaluate_cycle(
 	else:
 		metrics['avg_score_selected'] = None
 
-	# Ground truth average score (if available)
-	if ground_truth_data is not None and target_col in ground_truth_data.columns:
-		try:
-			gt_scores = ground_truth_data.get_column(target_col).to_numpy()
-			metrics['ground_truth_avg_score'] = calculate_average_score(gt_scores)
-		except (ValueError, TypeError, ZeroDivisionError) as e:
-			logger.warning(
-				f"Could not calculate ground_truth_avg_score: {e}. "
-				f"Setting to None. Check input data quality."
-			)
-			metrics['ground_truth_avg_score'] = None
+	# Ground truth average score — cached (constant across cycles for same GT data)
+	if ground_truth_data is not None:
+		gt_stats = _get_gt_stats(ground_truth_data, target_col, score_direction)
+		metrics['ground_truth_avg_score'] = gt_stats['ground_truth_avg_score']
 	else:
 		metrics['ground_truth_avg_score'] = None
 
@@ -162,9 +212,9 @@ def evaluate_cycle(
 		})
 
 	# Benchmark mode specific metrics (when ground truth available)
-	# Auto mode: enable benchmark mode when ground_truth_data and pool_predictions are available
+	# Auto mode: enable benchmark mode when ground_truth_data and pool_df are available
 	is_benchmark_mode = (oracle_type == 'benchmark' or
-						(oracle_type == 'auto' and ground_truth_data is not None and pool_predictions is not None))
+						(oracle_type == 'auto' and ground_truth_data is not None and pool_df is not None))
 
 	# Discovery Metrics (Category A) - PRIMARY in benchmark mode
 	if is_benchmark_mode and ground_truth_data is not None and cumulative_selected_ids is not None:
@@ -246,20 +296,26 @@ def evaluate_cycle(
 				unlabeled_predictions_df = pool_df.filter(
 					~pl.col('ID').is_in(cumulative_selected_ids)
 				).select(['ID', 'prediction'])
-			elif pool_predictions is not None and pool_ids is not None and cumulative_selected_ids is not None:
-				unlabeled_mask = ~np.isin(pool_ids, list(cumulative_selected_ids))
-				unlabeled_predictions_df = pl.DataFrame({
-					'ID': pool_ids[unlabeled_mask],
-					'prediction': pool_predictions[unlabeled_mask]
-				})
 
 			if unlabeled_predictions_df is not None and len(unlabeled_predictions_df) > 0:
+				# Pre-join once for target_col (overlap + correlation) and once for Activity (EF).
+				# Kept separate to avoid duplicate column error when target_col == 'Activity'.
+				merged_target = unlabeled_predictions_df.join(
+					ground_truth_data.select(['ID', target_col]), on='ID', how='inner'
+				)
+				merged_activity = (
+					unlabeled_predictions_df.join(
+						ground_truth_data.select(['ID', 'Activity']), on='ID', how='inner'
+					) if 'Activity' in ground_truth_data.columns else None
+				)
+
 				# Calculate unlabeled ranking overlaps
 				unlabeled_top_k_metrics = calculate_multiple_unlabeled_top_k_overlaps(
 					unlabeled_predictions_df=unlabeled_predictions_df,
 					ground_truth_df=ground_truth_data,
 					target_column=target_col,
-					score_direction=score_direction
+					score_direction=score_direction,
+					merged_target=merged_target
 				)
 				metrics.update(unlabeled_top_k_metrics)
 
@@ -268,7 +324,8 @@ def evaluate_cycle(
 					unlabeled_predictions_df=unlabeled_predictions_df,
 					ground_truth_df=ground_truth_data,
 					activity_column='Activity',
-					score_direction=score_direction
+					score_direction=score_direction,
+					merged_activity=merged_activity
 				)
 				metrics.update(unlabeled_ef_metrics)
 
@@ -276,7 +333,8 @@ def evaluate_cycle(
 				unlabeled_spearman = calculate_unlabeled_ranking_correlation(
 					unlabeled_predictions_df=unlabeled_predictions_df,
 					ground_truth_df=ground_truth_data,
-					target_column=target_col
+					target_column=target_col,
+					merged_target=merged_target
 				)
 				metrics['unlabeled_spearman_correlation'] = unlabeled_spearman
 			else:
@@ -302,22 +360,9 @@ def evaluate_cycle(
 				'unlabeled_spearman_correlation': None
 			})
 
-	# Ground truth enrichment factors (when ground truth data available)
+	# Ground truth EF metrics — served from cache populated above
 	if ground_truth_data is not None:
-		try:
-			gt_ef_metrics = calculate_ground_truth_enrichment_factors(
-				ground_truth_data, target_col, score_direction
-			)
-			metrics.update(gt_ef_metrics)
-		except (ValueError, TypeError, ZeroDivisionError) as e:
-			logger.warning(
-				f"Could not calculate ground_truth_enrichment_factors: {e}. "
-				f"Setting to None. Check input data quality."
-			)
-			metrics.update({
-				'ground_truth_ef_5_0': None, 'ground_truth_ef_1_0': None,
-				'ground_truth_ef_0_5': None, 'ground_truth_ef_0_1': None
-			})
+		metrics.update(gt_stats['gt_ef_metrics'])
 
 	# Round numeric values for cleaner output
 	for key, value in metrics.items():

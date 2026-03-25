@@ -38,6 +38,7 @@ import numpy as np
 import polars as pl
 from tqdm import tqdm
 
+from learnm8.core.config import CycleConfig
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
 from learnm8.exceptions import (
@@ -175,7 +176,7 @@ def _predict_chunk(
 def execute_cycle(
     compounds_df: pl.DataFrame,
     cycle: int,
-    config: 'CycleConfig',
+    config: CycleConfig,
     learner: Learner,
     oracle: Oracle,
     target_col: str,
@@ -280,7 +281,7 @@ def execute_cycle(
     # Get Labeled Compounds for Training
     labeled_df = get_compounds_by_status(
         compounds_df, 'labeled', columns=['ID', 'SMILES', target_col]
-    ).clone()
+    )
 
     unlabeled_df = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
@@ -366,7 +367,7 @@ def execute_cycle(
     prediction_start_time = time.time()
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
-    ).clone()
+    )
 
     if len(prediction_pool) == 0:
         logger.warning(f"No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.")
@@ -661,7 +662,7 @@ def execute_cycle(
             )
 
             if len(labeled_with_pred) > 0:
-                labeled_for_eval = labeled_with_pred.select(['ID', 'SMILES', target_col, pred_col]).clone()
+                labeled_for_eval = labeled_with_pred.select(['ID', 'SMILES', target_col, pred_col])
 
                 eval_predictions = labeled_for_eval[pred_col].to_numpy()
                 eval_ground_truth = labeled_for_eval[target_col].to_numpy()
@@ -671,15 +672,13 @@ def execute_cycle(
                 if np.sum(valid_mask) > 0:
                     selected_for_eval = compounds_df.filter(
                         pl.col('ID').is_in(selected_ids)
-                    ).select(['ID', 'SMILES', target_col]).clone()
+                    ).select(['ID', 'SMILES', target_col])
 
-                    pool_predictions_for_eval = None
                     pool_df_for_eval = None
                     original_pool_for_eval = None
 
                     if mode == 'benchmark' and original_pool is not None:
-                        pool_predictions_for_eval = predictions
-                        pool_df_for_eval = prediction_pool.select(['ID', 'prediction'])
+                        pool_df_for_eval = pl.DataFrame({'ID': valid_compound_ids, 'prediction': predictions})
                         original_pool_for_eval = original_pool
 
                     eval_metrics = evaluate_cycle(
@@ -691,7 +690,6 @@ def execute_cycle(
                         target_col=target_col,
                         oracle_type=mode,
                         ground_truth_data=original_pool_for_eval,
-                        pool_predictions=pool_predictions_for_eval,
                         pool_df=pool_df_for_eval,
                         uncertainties=uncertainties if uncertainties is not None else None,
                         previously_selected=None,
