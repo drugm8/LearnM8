@@ -3,18 +3,20 @@
 Tests for virtual screening enrichment metrics using real molecular data.
 """
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.enrichment import (
-    calculate_top_k_overlap,
     calculate_enrichment_factor,
-    calculate_multiple_top_k_overlaps,
     calculate_multiple_enrichment_factors,
-    calculate_average_score_ratio,
-    calculate_batch_average_score_ratio
+    calculate_multiple_top_k_discovery_rates,
+    calculate_multiple_top_k_overlaps,
+    calculate_multiple_unlabeled_enrichment_factors,
+    calculate_multiple_unlabeled_top_k_overlaps,
+    calculate_top_k_overlap,
+    calculate_unlabeled_ranking_correlation,
 )
 
 
@@ -232,3 +234,219 @@ class TestEnrichmentMetrics:
         # Test enrichment factor - should work with valid directions
         ef_valid = calculate_enrichment_factor(scores, labels, 50.0, score_direction='lower')
         assert isinstance(ef_valid, (int, float))
+
+
+@pytest.mark.unit
+class TestDiscoveryRates:
+    """Regression tests for calculate_multiple_top_k_discovery_rates."""
+
+    def _make_gt_df(self, n: int, ascending: bool = False) -> pl.DataFrame:
+        ids = [f'mol_{i:04d}' for i in range(n)]
+        scores = [float(i + 1) if ascending else float(n - i) for i in range(n)]
+        return pl.DataFrame({'ID': ids, 'score': scores})
+
+    def test_top_selected_higher(self):
+        gt = self._make_gt_df(1234)
+        selected = {f'mol_{i:04d}' for i in range(10)}
+        result = calculate_multiple_top_k_discovery_rates(selected, gt, 'score', 'higher')
+        assert result['top_10_discovery'] == 100.0
+        assert result['top_100_discovery'] == 10.0
+        assert result['top_1000_discovery'] == 1.0
+        assert result['top_0_1_pct_discovery'] == 100.0
+        assert round(result['top_1_pct_discovery'], 2) == 83.33
+        assert round(result['top_10_pct_discovery'], 2) == 8.13
+
+    def test_empty_selected_ids(self):
+        gt = self._make_gt_df(500)
+        result = calculate_multiple_top_k_discovery_rates(set(), gt, 'score', 'higher')
+        for v in result.values():
+            assert v == 0.0
+
+    def test_all_selected(self):
+        n = 200
+        gt = self._make_gt_df(n)
+        result = calculate_multiple_top_k_discovery_rates(
+            {f'mol_{i:04d}' for i in range(n)}, gt, 'score', 'higher'
+        )
+        for v in result.values():
+            assert v == 100.0
+
+    def test_wrong_selection(self):
+        gt = self._make_gt_df(1234)
+        bottom_10 = {f'mol_{i:04d}' for i in range(1224, 1234)}
+        result = calculate_multiple_top_k_discovery_rates(bottom_10, gt, 'score', 'higher')
+        assert result['top_10_discovery'] == 0.0
+        assert result['top_100_discovery'] == 0.0
+
+    def test_score_direction_lower(self):
+        gt = self._make_gt_df(1234, ascending=True)  # mol_0000 has score=1 (best by lower)
+        selected = {f'mol_{i:04d}' for i in range(10)}
+        result = calculate_multiple_top_k_discovery_rates(selected, gt, 'score', 'lower')
+        assert result['top_10_discovery'] == 100.0
+
+    def test_score_direction_changes_results(self):
+        gt = self._make_gt_df(1234)
+        bottom_10 = {f'mol_{i:04d}' for i in range(1224, 1234)}
+        r_higher = calculate_multiple_top_k_discovery_rates(bottom_10, gt, 'score', 'higher')
+        r_lower = calculate_multiple_top_k_discovery_rates(bottom_10, gt, 'score', 'lower')
+        assert r_higher['top_10_discovery'] != r_lower['top_10_discovery']
+
+    def test_return_keys(self):
+        gt = self._make_gt_df(100)
+        result = calculate_multiple_top_k_discovery_rates({'mol_0000'}, gt, 'score', 'higher')
+        expected = {
+            'top_10_discovery', 'top_100_discovery', 'top_1000_discovery',
+            'top_0_1_pct_discovery', 'top_1_pct_discovery', 'top_10_pct_discovery',
+        }
+        assert set(result.keys()) == expected
+
+    def test_small_pool(self):
+        gt = self._make_gt_df(5)
+        result = calculate_multiple_top_k_discovery_rates(
+            {f'mol_{i:04d}' for i in range(3)}, gt, 'score', 'higher'
+        )
+        for v in result.values():
+            assert 0.0 <= v <= 100.0
+
+
+@pytest.mark.unit
+class TestUnlabeledTopKOverlaps:
+    """Regression tests for calculate_multiple_unlabeled_top_k_overlaps."""
+
+    def _make_dfs(self, n: int, anti: bool = False):
+        ids = [f'mol_{i:03d}' for i in range(n)]
+        pred = [float(n - i) for i in range(n)]
+        truth = [float(i + 1) if anti else float(n - i) for i in range(n)]
+        return (
+            pl.DataFrame({'ID': ids, 'prediction': pred}),
+            pl.DataFrame({'ID': ids, 'target': truth}),
+        )
+
+    def test_perfect_correlation(self):
+        preds, gt = self._make_dfs(500)
+        result = calculate_multiple_unlabeled_top_k_overlaps(preds, gt, 'target', 'higher')
+        assert result['unlabeled_top_100_overlap'] == 100.0
+        assert result['unlabeled_top_1000_overlap'] == 100.0
+
+    def test_anti_correlation(self):
+        preds, gt = self._make_dfs(500, anti=True)
+        result = calculate_multiple_unlabeled_top_k_overlaps(preds, gt, 'target', 'higher')
+        assert result['unlabeled_top_100_overlap'] == 0.0
+
+    def test_score_direction_lower_perfect(self):
+        ids = [f'mol_{i:03d}' for i in range(500)]
+        pred = [float(i + 1) for i in range(500)]
+        gt_vals = [float(i + 1) for i in range(500)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': pred})
+        gt_df = pl.DataFrame({'ID': ids, 'target': gt_vals})
+        result = calculate_multiple_unlabeled_top_k_overlaps(preds_df, gt_df, 'target', 'lower')
+        assert result['unlabeled_top_100_overlap'] == 100.0
+
+    def test_score_direction_changes_results(self):
+        n = 300
+        ids = [f'mol_{i:03d}' for i in range(n)]
+        pred = [float(i + 1) for i in range(n)]
+        truth = [0.0] * n
+        for i in range(n):
+            if i < 50:
+                truth[i] = float(i + 151)
+            elif i < 100:
+                truth[i] = float(i - 49)
+            elif i < 200:
+                truth[i] = float(i + 101)
+            elif i < 250:
+                truth[i] = float(i - 99)
+            else:
+                truth[i] = float(i - 199)
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': pred})
+        gt_df = pl.DataFrame({'ID': ids, 'target': truth})
+        r_higher = calculate_multiple_unlabeled_top_k_overlaps(preds_df, gt_df, 'target', 'higher')
+        r_lower = calculate_multiple_unlabeled_top_k_overlaps(preds_df, gt_df, 'target', 'lower')
+        assert r_higher['unlabeled_top_100_overlap'] == 0.0
+        assert r_lower['unlabeled_top_100_overlap'] == 50.0
+
+    def test_return_keys(self):
+        preds, gt = self._make_dfs(50)
+        result = calculate_multiple_unlabeled_top_k_overlaps(preds, gt, 'target', 'higher')
+        assert set(result.keys()) == {'unlabeled_top_100_overlap', 'unlabeled_top_1000_overlap'}
+
+    def test_small_pool(self):
+        preds, gt = self._make_dfs(30)
+        result = calculate_multiple_unlabeled_top_k_overlaps(preds, gt, 'target', 'higher')
+        for v in result.values():
+            assert 0.0 <= v <= 100.0
+
+
+@pytest.mark.unit
+class TestUnlabeledEnrichmentFactors:
+    """Regression tests for calculate_multiple_unlabeled_enrichment_factors."""
+
+    def _make_perfect_dfs(self, n: int = 200, n_actives: int = 40):
+        ids = [f'mol_{i:03d}' for i in range(n)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': [float(n - i) for i in range(n)]})
+        gt_df = pl.DataFrame({'ID': ids, 'Activity': [1 if i < n_actives else 0 for i in range(n)]})
+        return preds_df, gt_df
+
+    def test_perfect_enrichment_higher(self):
+        preds, gt = self._make_perfect_dfs(200, 40)
+        result = calculate_multiple_unlabeled_enrichment_factors(preds, gt, 'Activity', 'higher')
+        # EF = 1 / (40/200) = 5.0 at both 1% and 5%
+        assert result['unlabeled_ef_1_0'] == 5.0
+        assert result['unlabeled_ef_5_0'] == 5.0
+
+    def test_no_activity_column(self):
+        ids = [f'mol_{i:03d}' for i in range(50)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': list(range(50, 0, -1))})
+        gt_df = pl.DataFrame({'ID': ids, 'score': list(range(50, 0, -1))})
+        result = calculate_multiple_unlabeled_enrichment_factors(preds_df, gt_df, 'Activity', 'higher')
+        assert result['unlabeled_ef_1_0'] is None
+        assert result['unlabeled_ef_5_0'] is None
+
+    def test_return_keys(self):
+        preds, gt = self._make_perfect_dfs()
+        result = calculate_multiple_unlabeled_enrichment_factors(preds, gt, 'Activity', 'higher')
+        assert set(result.keys()) == {'unlabeled_ef_1_0', 'unlabeled_ef_5_0'}
+
+    def test_score_direction_lower(self):
+        n, n_actives = 200, 40
+        ids = [f'mol_{i:03d}' for i in range(n)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': [float(i + 1) for i in range(n)]})
+        gt_df = pl.DataFrame({'ID': ids, 'Activity': [1 if i < n_actives else 0 for i in range(n)]})
+        result = calculate_multiple_unlabeled_enrichment_factors(preds_df, gt_df, 'Activity', 'lower')
+        assert result['unlabeled_ef_1_0'] == 5.0
+        assert result['unlabeled_ef_5_0'] == 5.0
+
+
+@pytest.mark.unit
+class TestUnlabeledRankingCorrelation:
+    """Regression tests for calculate_unlabeled_ranking_correlation."""
+
+    def test_perfect_correlation(self):
+        ids = [f'mol_{i}' for i in range(20)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': list(range(20, 0, -1))})
+        gt_df = pl.DataFrame({'ID': ids, 'score': list(range(20, 0, -1))})
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == 1.0
+
+    def test_perfect_anti_correlation(self):
+        ids = [f'mol_{i}' for i in range(20)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': list(range(1, 21))})
+        gt_df = pl.DataFrame({'ID': ids, 'score': list(range(20, 0, -1))})
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == -1.0
+
+    def test_single_compound_returns_zero(self):
+        preds_df = pl.DataFrame({'ID': ['mol_0'], 'prediction': [1.0]})
+        gt_df = pl.DataFrame({'ID': ['mol_0'], 'score': [1.0]})
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == 0.0
+
+    def test_no_overlap_returns_zero(self):
+        preds_df = pl.DataFrame({'ID': ['mol_A', 'mol_B'], 'prediction': [1.0, 2.0]})
+        gt_df = pl.DataFrame({'ID': ['mol_X', 'mol_Y'], 'score': [3.0, 4.0]})
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == 0.0
+
+    def test_returns_finite_float(self):
+        ids = [f'mol_{i}' for i in range(10)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': list(range(10))})
+        gt_df = pl.DataFrame({'ID': ids, 'score': list(range(10))})
+        result = calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score')
+        assert isinstance(result, float)
+        assert not np.isnan(result)

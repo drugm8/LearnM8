@@ -441,8 +441,10 @@ class TestSpecificExceptionHandling:
     def test_discovery_metrics_catches_zero_division(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()
         gt_data = labeled.clone()
-        pool_preds = np.random.default_rng(42).random(20)
-        pool_ids = np.array([f'mol_{i}' for i in range(20)])
+        pool_df = pl.DataFrame({
+            'ID': [f'mol_{i}' for i in range(20)],
+            'prediction': np.random.default_rng(42).random(20).tolist(),
+        })
         cum_ids = {f'mol_{i}' for i in range(5)}
 
         with patch(
@@ -454,8 +456,8 @@ class TestSpecificExceptionHandling:
                     cycle=1, predictions=predictions, ground_truth=ground_truth,
                     labeled_data=labeled, selected_compounds=selected,
                     target_col='Activity', oracle_type='benchmark',
-                    ground_truth_data=gt_data, pool_predictions=pool_preds,
-                    pool_ids=pool_ids, cumulative_selected_ids=cum_ids,
+                    ground_truth_data=gt_data, pool_df=pool_df,
+                    cumulative_selected_ids=cum_ids,
                 )
             assert result.get('top_10_discovery') is None
             assert 'discovery' in caplog.text.lower()
@@ -463,8 +465,10 @@ class TestSpecificExceptionHandling:
     def test_unlabeled_ranking_catches_value_error(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()
         gt_data = labeled.clone()
-        pool_preds = np.random.default_rng(42).random(20)
-        pool_ids = np.array([f'mol_{i}' for i in range(20)])
+        pool_df = pl.DataFrame({
+            'ID': [f'mol_{i}' for i in range(20)],
+            'prediction': np.random.default_rng(42).random(20).tolist(),
+        })
         cum_ids = {f'mol_{i}' for i in range(5)}
 
         with patch(
@@ -476,8 +480,8 @@ class TestSpecificExceptionHandling:
                     cycle=1, predictions=predictions, ground_truth=ground_truth,
                     labeled_data=labeled, selected_compounds=selected,
                     target_col='Activity', oracle_type='benchmark',
-                    ground_truth_data=gt_data, pool_predictions=pool_preds,
-                    pool_ids=pool_ids, cumulative_selected_ids=cum_ids,
+                    ground_truth_data=gt_data, pool_df=pool_df,
+                    cumulative_selected_ids=cum_ids,
                 )
             assert result.get('unlabeled_spearman_correlation') is None
             assert 'unlabeled' in caplog.text.lower() or 'ranking' in caplog.text.lower()
@@ -523,3 +527,160 @@ class TestSpecificExceptionHandling:
                 )
             assert 'ground_truth_avg_score' in caplog.text
             assert 'Check input data quality' in caplog.text
+
+
+@pytest.mark.unit
+class TestEvaluateCycleRegression:
+    """Exact-value regression fixtures for evaluate_cycle.
+
+    These tests capture the baseline metric values BEFORE any refactoring.
+    All numeric assertions use atol=1e-8 so the rounded outputs must be
+    bit-for-bit identical after refactoring.
+    """
+
+    @pytest.fixture(scope='class')
+    def fd(self):
+        rng = np.random.default_rng(0)
+        n_total = 10_000
+        n_actives = 1_000
+        ids = [f'cmp_{i:05d}' for i in range(n_total)]
+        activity = np.array([1.0 if i < n_actives else 0.0 for i in range(n_total)])
+        ground_truth_data = pl.DataFrame({'ID': ids, 'Activity': activity.tolist()})
+        cumulative_selected_ids = {f'cmp_{i:05d}' for i in range(500)}
+        labeled_data = ground_truth_data.head(500)
+        selected_compounds = labeled_data.tail(50)
+        predictions = activity[:500] + rng.normal(0, 0.4, 500)
+        ground_truth_arr = activity[:500]
+        pool_size = n_total - 500
+        pool_ids = [f'cmp_{i:05d}' for i in range(500, n_total)]
+        pool_activity = activity[500:]
+        sw = 0.6
+        pool_preds = sw * pool_activity + np.sqrt(1 - sw**2) * rng.normal(0, 1, pool_size)
+        pool_df = pl.DataFrame({'ID': pool_ids, 'prediction': pool_preds.tolist()})
+        return dict(
+            ground_truth_data=ground_truth_data,
+            cumulative_selected_ids=cumulative_selected_ids,
+            labeled_data=labeled_data,
+            selected_compounds=selected_compounds,
+            predictions=predictions,
+            ground_truth_arr=ground_truth_arr,
+            pool_ids=pool_ids,
+            pool_df=pool_df,
+        )
+
+    def _call(self, fd, **overrides):
+        kwargs = dict(
+            cycle=5,
+            predictions=fd['predictions'],
+            ground_truth=fd['ground_truth_arr'],
+            labeled_data=fd['labeled_data'],
+            selected_compounds=fd['selected_compounds'],
+            target_col='Activity',
+            oracle_type='benchmark',
+            ground_truth_data=fd['ground_truth_data'],
+            pool_df=fd['pool_df'],
+            cumulative_selected_ids=fd['cumulative_selected_ids'],
+            score_direction='higher',
+            disable_molecular_similarity=True,
+        )
+        kwargs.update(overrides)
+        return evaluate_cycle(**kwargs)
+
+    def test_higher_direction_all_metrics(self, fd):
+        r = self._call(fd, score_direction='higher')
+        assert r['cycle'] == 5
+        assert r['batch_size'] == 50
+        assert r['cumulative_labeled'] == 500
+        assert_allclose(r['avg_score_selected'], 1.0, atol=1e-8)
+        assert_allclose(r['ground_truth_avg_score'], 0.1, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_0_1'], 10.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_0_5'], 10.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_1_0'], 10.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_5_0'], 10.0, atol=1e-8)
+        assert_allclose(r['top_10_discovery'], 100.0, atol=1e-8)
+        assert_allclose(r['top_100_discovery'], 100.0, atol=1e-8)
+        assert_allclose(r['top_1000_discovery'], 50.0, atol=1e-8)
+        assert_allclose(r['top_0_1_pct_discovery'], 100.0, atol=1e-8)
+        assert_allclose(r['top_1_pct_discovery'], 100.0, atol=1e-8)
+        assert_allclose(r['top_10_pct_discovery'], 50.0, atol=1e-8)
+        assert_allclose(r['cumulative_ef'], 10.0, atol=1e-8)
+        assert_allclose(r['cumulative_avg_score_ratio'], 10.0, atol=1e-8)
+        assert_allclose(r['batch_ef'], 10.0, atol=1e-8)
+        assert_allclose(r['batch_hit_rate'], 1.0, atol=1e-8)
+        assert_allclose(r['batch_avg_score_ratio'], 10.0, atol=1e-8)
+        assert_allclose(r['unlabeled_top_100_overlap'], 4.0, atol=1e-8)
+        assert_allclose(r['unlabeled_top_1000_overlap'], 17.5, atol=1e-8)
+        assert_allclose(r['unlabeled_ef_1_0'], 4.2, atol=1e-8)
+        assert_allclose(r['unlabeled_ef_5_0'], 2.68, atol=1e-8)
+        assert_allclose(r['unlabeled_spearman_correlation'], 0.1441, atol=1e-4)
+
+    def test_lower_direction_all_metrics(self, fd):
+        r = self._call(fd, score_direction='lower')
+        assert_allclose(r['ground_truth_ef_0_1'], 0.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_0_5'], 0.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_1_0'], 0.0, atol=1e-8)
+        assert_allclose(r['ground_truth_ef_5_0'], 0.0, atol=1e-8)
+        assert_allclose(r['top_10_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_100_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_1000_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_0_1_pct_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_1_pct_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_10_pct_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['unlabeled_ef_1_0'], 0.0, atol=1e-8)
+        assert_allclose(r['unlabeled_ef_5_0'], 0.24, atol=1e-8)
+        assert_allclose(r['unlabeled_spearman_correlation'], 0.1441, atol=1e-4)
+        assert_allclose(r['unlabeled_top_100_overlap'], 2.0, atol=1e-8)
+        assert_allclose(r['unlabeled_top_1000_overlap'], 12.7, atol=1e-8)
+        assert_allclose(r['batch_hit_rate'], 1.0, atol=1e-8)
+        assert_allclose(r['cumulative_ef'], 10.0, atol=1e-8)
+
+    def test_empty_cumulative_selected_ids(self, fd):
+        r = self._call(fd, cumulative_selected_ids=set(), cycle=0)
+        assert r['cycle'] == 0
+        assert_allclose(r['top_10_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_100_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_1000_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_0_1_pct_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_1_pct_discovery'], 0.0, atol=1e-8)
+        assert_allclose(r['top_10_pct_discovery'], 0.0, atol=1e-8)
+        assert r['cumulative_ef'] is None
+        assert_allclose(r['cumulative_avg_score_ratio'], 1.0, atol=1e-8)
+        assert_allclose(r['unlabeled_spearman_correlation'], 0.1441, atol=1e-4)
+
+    def test_no_activity_column_ef_metrics_are_none(self, fd):
+        rng = np.random.default_rng(0)
+        n_total = 10_000
+        ids = [f'cmp_{i:05d}' for i in range(n_total)]
+        score_vals = np.arange(n_total, dtype=float)
+        gt_no_act = pl.DataFrame({'ID': ids, 'Score': score_vals.tolist()})
+        lab = gt_no_act.head(500)
+        sel = lab.tail(50)
+        pool_size = n_total - 500
+        pool_ids = [f'cmp_{i:05d}' for i in range(500, n_total)]
+        pool_scores = score_vals[500:]
+        sw = 0.6
+        pool_pred = sw * pool_scores + np.sqrt(1 - sw**2) * rng.normal(0, pool_scores.std(), pool_size)
+        preds = score_vals[:500] + rng.normal(0, score_vals[:500].std() * 0.3, 500)
+        pool_df = pl.DataFrame({'ID': pool_ids, 'prediction': pool_pred.tolist()})
+
+        r = evaluate_cycle(
+            cycle=5, predictions=preds, ground_truth=score_vals[:500],
+            labeled_data=lab, selected_compounds=sel,
+            target_col='Score', oracle_type='benchmark',
+            ground_truth_data=gt_no_act,
+            pool_df=pool_df,
+            cumulative_selected_ids=fd['cumulative_selected_ids'],
+            score_direction='higher', disable_molecular_similarity=True,
+        )
+        assert r['batch_ef'] is None
+        assert r['batch_hit_rate'] is None
+        assert r['cumulative_ef'] is None
+        assert r['unlabeled_ef_1_0'] is None
+        assert r['unlabeled_ef_5_0'] is None
+        assert r['ground_truth_ef_0_1'] is None
+        assert r['ground_truth_ef_0_5'] is None
+        assert r['ground_truth_ef_1_0'] is None
+        assert r['ground_truth_ef_5_0'] is None
+        assert_allclose(r['unlabeled_top_100_overlap'], 7.0, atol=1e-8)
+        assert_allclose(r['unlabeled_top_1000_overlap'], 34.4, atol=1e-8)
+        assert_allclose(r['unlabeled_spearman_correlation'], 0.614, atol=1e-4)
