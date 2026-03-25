@@ -61,7 +61,7 @@ from learnm8.core.initialization import (
     initialize_master_dataframe_empty,
     select_initial_batch,
 )
-from learnm8.core.interfaces import Learner, Oracle
+from learnm8.core.interfaces import Featurizer, Learner, Oracle
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
@@ -343,6 +343,8 @@ def run_active_learning(
     learner: str | Learner,
     target_col: str,
     featurizer: str | Featurizer | None = None,
+    smiles_column: str | None = None,
+    id_column: str | None = None,
     # Advanced API
     cycles: list[CycleConfig] | None = None,
     # Simple API
@@ -432,6 +434,14 @@ def run_active_learning(
             Examples:
                 featurizer='morgan'  # Default Morgan fingerprints
                 featurizer=MorganFeaturizer(radius=3, fp_size=4096)  # Custom config
+
+        smiles_column: Column name for SMILES in the input file (CSV only).
+            If None, auto-detects from common names ('SMILES', 'smiles', 'Smiles').
+            Ignored when compound_pool is a DataFrame or a non-CSV file.
+
+        id_column: Column name for compound ID in the input file (CSV/SDF).
+            If None, auto-detects from common names ('ID') or generates synthetic IDs.
+            Ignored when compound_pool is a DataFrame.
 
         cycles: Advanced API - List of CycleConfig objects
             If provided, overrides simple API parameters
@@ -528,10 +538,7 @@ def run_active_learning(
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        if cache_dir is None:
-            cache_dir = output_dir / '.cache'
-        else:
-            cache_dir = Path(cache_dir)
+        cache_dir = output_dir / '.cache' if cache_dir is None else Path(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Setup checkpoint directory for Chemprop fine-tuning
@@ -557,7 +564,12 @@ def run_active_learning(
                     f"Verify the file path and ensure the file exists. "
                     f"Supported formats: CSV, SDF, SMI."
                 )
-            compound_pool = load_compound_file(compound_pool_path, progress=True)
+            compound_pool = load_compound_file(
+                compound_pool_path,
+                smiles_column=smiles_column,
+                id_column=id_column,
+                progress=True,
+            )
             logger.debug(f"Loaded DataFrame: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
         elif isinstance(compound_pool, pl.DataFrame):
             logger.debug("Using provided DataFrame as compound pool")
@@ -580,7 +592,7 @@ def run_active_learning(
         if oracle is None:
             logger.debug("Oracle not provided, attempting auto-detection from compound_pool")
             if original_compound_pool_path is not None:
-                oracle = CSVOracle(str(original_compound_pool_path))
+                oracle = CSVOracle(str(original_compound_pool_path), id_column=id_column or 'ID')
                 mode = 'benchmark'
                 mode_detected = True
                 logger.debug("Auto-detected CSV oracle from compound pool, mode=benchmark")
@@ -788,9 +800,8 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
 
         if pruning_fraction is not None or pruning_strategy is not None:
-            if pruning_fraction is not None:
-                if not (0.0 <= pruning_fraction <= 0.9):
-                    raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
+            if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
+                raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
 
             if pruning_strategy is None:
                 pruning_strategy = 'score'
