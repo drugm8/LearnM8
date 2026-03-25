@@ -110,7 +110,7 @@ class TestEvaluateCore:
     def test_evaluate_cycle_empty_selection(self, small_real_compounds):
         """Test evaluation with empty selected compounds."""
         labeled_data = small_real_compounds.clone()
-        empty_selection = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
+        empty_selection = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8, 'Activity': pl.Float64})
         
         predictions = labeled_data['Activity'].to_list()
         ground_truth = labeled_data['Activity'].to_list()

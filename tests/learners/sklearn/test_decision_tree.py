@@ -238,6 +238,7 @@ class TestDecisionTreeLearner:
         learner = DecisionTreeLearner(max_depth=None, min_samples_leaf=1, min_samples_split=2, random_state=42)
         learner.train(X, y)
 
+        logging.getLogger('learnm8').propagate = True
         with caplog.at_level(logging.DEBUG, logger="learnm8.learners.sklearn.decision_tree"):
             learner.predict(X)
 

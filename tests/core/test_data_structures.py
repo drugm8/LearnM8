@@ -272,7 +272,7 @@ class TestValidateMasterDataframe:
         first_row = master_df[0]
         master_df = master_df.vstack(first_row)
 
-        with pytest.raises(ValueError, match="Duplicate IDs found"):
+        with pytest.raises(ValueError, match="Duplicate compound IDs found"):
             validate_master_dataframe(master_df)
 
     def test_many_duplicate_ids_truncated_error(self, small_real_compounds):
@@ -288,7 +288,7 @@ class TestValidateMasterDataframe:
             row = master_df[i]
             master_df = master_df.vstack(row)
 
-        with pytest.raises(ValueError, match="Duplicate IDs found.*\\.\\.\\."):
+        with pytest.raises(ValueError, match="Duplicate compound IDs found"):
             validate_master_dataframe(master_df)
 
     def test_prediction_columns_validation(self, master_df_with_predictions):

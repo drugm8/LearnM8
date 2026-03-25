@@ -101,6 +101,8 @@ class TestCSVOracleMeasure:
             'ID': ['COMP_001', 'COMP_999'],
             'SMILES': ['CCO', 'CCNCC']
         })
+        import logging
+        logging.getLogger('learnm8').propagate = True
         with caplog.at_level('WARNING', logger='learnm8.oracles.csv_oracle'):
             result = oracle_with_data.measure(compounds, ['Activity'])
         assert result.height == 1
@@ -111,7 +113,7 @@ class TestCSVOracleMeasure:
             'ID': ['COMP_001'],
             'SMILES': ['CCO']
         })
-        with pytest.raises(ValueError, match="Properties not found"):
+        with pytest.raises(ValueError, match="Requested properties not found"):
             oracle_with_data.measure(compounds, ['NonExistentProp'])
 
     def test_measure_multiple_properties(self, tmp_path):

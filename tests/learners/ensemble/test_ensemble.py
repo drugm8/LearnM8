@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.ensemble import EnsembleLearner
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
@@ -45,15 +46,15 @@ class TestEnsembleLearner:
 
     def test_invalid_weights(self, base_learners):
         """Test error handling with invalid weights."""
-        with pytest.raises(ValueError, match="Number of weights must match"):
+        with pytest.raises(LearnerError, match="must match number of learners"):
             EnsembleLearner(base_learners, weights=[0.5])
 
-        with pytest.raises(ValueError, match="Weights must sum to 1.0"):
+        with pytest.raises(LearnerError, match="Weights must sum to 1.0"):
             EnsembleLearner(base_learners, weights=[0.3, 0.4])
 
     def test_empty_learners_list(self):
         """Test error handling with empty learners list."""
-        with pytest.raises(ValueError, match="At least one learner must be provided"):
+        with pytest.raises(LearnerError, match="requires at least one base learner"):
             EnsembleLearner([])
 
     def test_get_name_includes_aggregation_and_component_separator(self, ensemble):
@@ -141,7 +142,7 @@ class TestEnsembleLearner:
         targets = np.random.randn(8)
         ensemble = EnsembleLearner(base_learners)
 
-        with pytest.raises(ValueError, match="Features and targets must have same length"):
+        with pytest.raises(LearnerError, match="mismatched lengths"):
             ensemble.train(features, targets)
 
     def test_train_with_1d_features(self, base_learners):

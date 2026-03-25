@@ -182,7 +182,12 @@ class TestFeatureExtractionErrorMessages:
         from unittest.mock import MagicMock
 
         fp_mock = MagicMock()
-        featurizer = SkfpFeaturizer(fp_mock, auto_generate_conformers=False)
+
+        class _ConcreteFeaturizer(SkfpFeaturizer):
+            def get_name(self):
+                return "TestFeaturizer"
+
+        featurizer = _ConcreteFeaturizer(fp_mock, auto_generate_conformers=False)
         long_smiles = "C" * (MAX_SMILES_LENGTH + 1)
         with pytest.raises(FeatureExtractionError, match="exceeds") as exc_info:
             featurizer.transform([long_smiles])

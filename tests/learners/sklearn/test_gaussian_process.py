@@ -293,7 +293,8 @@ class TestKernelAutoDetection:
         learner = GaussianProcessLearner(kernel="tanimoto", random_state=42)
         X = np.array([[-1.0, 0.5, 0.3], [0.2, 0.1, 0.8]] * 10)
         y = np.random.randn(20)
-        with caplog.at_level(logging.WARNING):
+        logging.getLogger('learnm8').propagate = True
+        with caplog.at_level(logging.WARNING, logger='learnm8.learners.sklearn.gaussian_process'):
             learner.train(X, y)
         assert "non-negative" in caplog.text.lower() or "negative" in caplog.text.lower()
 
@@ -327,7 +328,8 @@ class TestSizeGuard:
         n = 21  # > 50 * 0.4 = 20
         X = np.random.randn(n, 2)
         y = np.random.randn(n)
-        with caplog.at_level(logging.WARNING):
+        logging.getLogger('learnm8').propagate = True
+        with caplog.at_level(logging.WARNING, logger='learnm8.learners.sklearn.gaussian_process'):
             learner.train(X, y)
         assert "large" in caplog.text.lower() or "slow" in caplog.text.lower()
 

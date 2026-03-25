@@ -12,6 +12,7 @@ from pathlib import Path
 from learnm8.features import extract_features
 from learnm8.acquisition import get_acquisition_function
 from learnm8.acquisition import GreedyAcquisition
+from learnm8.exceptions import OracleError
 from learnm8.oracles.csv_oracle import CSVOracle
 from learnm8.oracles.python_oracle import PythonOracle
 
@@ -142,7 +143,7 @@ class TestAcquisitionErrors:
         
         ucb_acq = get_acquisition_function('ucb')()
         
-        with pytest.raises(ValueError, match="requires 'uncertainty' column"):
+        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
             ucb_acq.select(compounds, n_select=3)
     
     def test_acquisition_function_not_found(self):
@@ -220,7 +221,7 @@ class TestOracleErrors:
         with open(py_file, 'w') as f:
             f.write("def wrong_function():\n    return 0.5\n")
         
-        with pytest.raises(ValueError):
+        with pytest.raises(OracleError):
             PythonOracle(module_path=str(py_file), function_name="nonexistent_function")
     
     def test_oracle_measurement_with_empty_compounds(self, tmp_path):

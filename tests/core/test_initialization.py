@@ -49,7 +49,7 @@ class TestInitializeMasterDataframeEmpty:
     def test_missing_required_columns_raises_error(self):
         invalid_df = pl.DataFrame({'compound_id': ['C1', 'C2'], 'structure': ['CCO', 'CCC']})
 
-        with pytest.raises(ValueError, match="must contain 'ID' and 'SMILES' columns"):
+        with pytest.raises(ValueError, match="missing required columns"):
             initialize_master_dataframe_empty(
                 valid_compounds=invalid_df,
                 target_col='Activity'

@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
 
@@ -82,7 +83,7 @@ class TestDTEnsemble:
         features = small_real_morgan_features[:10]
         targets = np.random.beta(2, 5, 15)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(LearnerError):
             dt_ensemble.train(features, targets)
 
     def test_prediction_variance(self, small_real_compounds, small_real_morgan_features):

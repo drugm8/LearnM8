@@ -17,7 +17,7 @@ class TestLinearRegressionLearner:
     @pytest.fixture
     def learner(self):
         """Create LinearRegressionLearner instance for testing."""
-        return LinearRegressionLearner(random_state=42)
+        return LinearRegressionLearner(alpha=None, random_state=42)
 
     @pytest.fixture
     def ridge_learner(self):
@@ -177,7 +177,7 @@ class TestLinearRegressionLearner:
 
     def test_get_name_no_intercept(self):
         """Test name generation when fit_intercept=False."""
-        learner = LinearRegressionLearner(fit_intercept=False, random_state=42)
+        learner = LinearRegressionLearner(alpha=None, fit_intercept=False, random_state=42)
         name = learner.get_name()
         assert "LinearRegression" in name
         assert "no_intercept" in name
@@ -262,13 +262,13 @@ class TestLinearRegressionLearner:
         features = small_real_morgan_features
         targets = compounds['Activity'].to_numpy()
 
-        learner_parallel = LinearRegressionLearner(n_jobs=-1, random_state=42)
+        learner_parallel = LinearRegressionLearner(alpha=None, n_jobs=-1, random_state=42)
         assert learner_parallel.n_jobs == -1
         learner_parallel.train(features, targets)
         predictions, _ = learner_parallel.predict(features)
         assert np.all(np.isfinite(predictions))
 
-        learner_single = LinearRegressionLearner(n_jobs=1, random_state=42)
+        learner_single = LinearRegressionLearner(alpha=None, n_jobs=1, random_state=42)
         assert learner_single.n_jobs == 1
         learner_single.train(features, targets)
         predictions_single, _ = learner_single.predict(features)

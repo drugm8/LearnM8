@@ -108,7 +108,7 @@ def test_create_pruning_strategy_success():
 
 def test_create_pruning_strategy_validation_failure():
     """Test that creation fails with invalid parameters."""
-    with pytest.raises(ValueError, match="Invalid parameters for score"):
+    with pytest.raises(ValueError, match="Invalid parameters for pruning strategy"):
         create_pruning_strategy('score', {
             'pruning_fraction': 1.5  # Invalid
         })
@@ -123,7 +123,7 @@ def test_create_pruning_strategy_unknown_strategy():
 def test_create_pruning_strategy_creation_failure():
     """Test handling of creation failures."""
     # This should trigger a validation error for invalid parameters
-    with pytest.raises(ValueError, match="Invalid parameters for score"):
+    with pytest.raises(ValueError, match="Invalid parameters for pruning strategy"):
         create_pruning_strategy('score', {
             'score_direction': 'invalid_direction'  # This will cause validation to fail
         })

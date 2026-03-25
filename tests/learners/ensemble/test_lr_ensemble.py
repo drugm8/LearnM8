@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 
 
@@ -116,7 +117,7 @@ class TestLREnsemble:
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(LearnerError):
             lr_ensemble.train(features, targets)
 
     def test_add_learner_to_ensemble(self, lr_ensemble):

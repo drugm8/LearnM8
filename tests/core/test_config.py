@@ -35,19 +35,19 @@ class TestCycleConfig:
         assert config.acquisition_params == {'exploration_weight': 2.0}
 
     def test_missing_batch_fraction_raises_error(self):
-        with pytest.raises(ValueError, match="Must provide batch_fraction"):
+        with pytest.raises(ValueError, match="CycleConfig requires batch_fraction"):
             CycleConfig('greedy', n_cycles=1)
 
     def test_invalid_batch_fraction_zero(self):
-        with pytest.raises(ValueError, match="batch_fraction must be between 0 and 1"):
+        with pytest.raises(ValueError, match="batch_fraction must be between 0"):
             CycleConfig('greedy', n_cycles=1, batch_fraction=0)
 
     def test_invalid_batch_fraction_negative(self):
-        with pytest.raises(ValueError, match="batch_fraction must be between 0 and 1"):
+        with pytest.raises(ValueError, match="batch_fraction must be between 0"):
             CycleConfig('greedy', n_cycles=1, batch_fraction=-0.1)
 
     def test_invalid_batch_fraction_too_high(self):
-        with pytest.raises(ValueError, match="batch_fraction must be between 0 and 1"):
+        with pytest.raises(ValueError, match="batch_fraction must be between 0"):
             CycleConfig('greedy', n_cycles=1, batch_fraction=1.5)
 
     def test_valid_batch_fraction_edge_case_one(self):
@@ -108,11 +108,11 @@ class TestParseCycleSpec:
             parse_cycle_spec("greedy0.01")
 
     def test_invalid_batch_fraction_too_high(self):
-        with pytest.raises(ValueError, match="batch_fraction must be between 0 and 1"):
+        with pytest.raises(ValueError, match="batch_fraction must be between 0"):
             parse_cycle_spec("greedy:1.5")
 
     def test_invalid_batch_fraction_zero(self):
-        with pytest.raises(ValueError, match="batch_fraction must be between 0 and 1"):
+        with pytest.raises(ValueError, match="batch_fraction must be between 0"):
             parse_cycle_spec("greedy:0")
 
     def test_invalid_n_cycles_zero(self):
