@@ -335,17 +335,17 @@ def calculate_multiple_top_k_discovery_rates(
         'top_10_pct_discovery': max(1, int(n_total * 0.10))     # 10%
     }
 
+    max_k = max(k_values.values())
+    sorted_ids = (
+        ground_truth_df.sort(target_column, descending=descending)
+        .head(max_k)
+        .get_column('ID')
+        .to_list()
+    )
+
     results = {}
     for key, k in k_values.items():
-        # Get true top-K compounds
-        true_top_k = set(
-            ground_truth_df.sort(target_column, descending=descending)
-            .head(k)
-            .get_column('ID')
-            .to_list()
-        )
-
-        # Calculate discovery: how many of true top-K have we selected?
+        true_top_k = set(sorted_ids[:k])
         discovered = selected_ids & true_top_k
         discovery_rate = (len(discovered) / k) * 100
         results[key] = round(discovery_rate, 2)
@@ -376,7 +376,7 @@ def calculate_cumulative_enrichment_factor(
         return None
 
     # Selected compounds
-    selected_df = ground_truth_df.filter(pl.col('ID').is_in(list(selected_ids)))
+    selected_df = ground_truth_df.filter(pl.col('ID').is_in(selected_ids))
     n_selected = len(selected_df)
     if n_selected == 0:
         return None
@@ -502,7 +502,7 @@ def calculate_average_score_ratio(
         Score ratio (>1.0 means selections better than average)
     """
     # Selected compounds
-    selected_df = ground_truth_df.filter(pl.col('ID').is_in(list(selected_ids)))
+    selected_df = ground_truth_df.filter(pl.col('ID').is_in(selected_ids))
     if len(selected_df) == 0:
         return 1.0
 
@@ -575,7 +575,8 @@ def calculate_multiple_unlabeled_top_k_overlaps(
     unlabeled_predictions_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
     target_column: str,
-    score_direction: str = 'higher'
+    score_direction: str = 'higher',
+    merged_target: pl.DataFrame | None = None
 ) -> dict:
     """
     Calculate top-K ranking overlaps on UNLABELED compounds only.
@@ -590,6 +591,8 @@ def calculate_multiple_unlabeled_top_k_overlaps(
         ground_truth_df: DataFrame with ground truth values
         target_column: Column name for target property
         score_direction: 'higher' or 'lower' for score interpretation
+        merged_target: Pre-joined DataFrame (unlabeled_predictions_df ⋈ ground_truth_df on target_column).
+            When provided, skips the internal join for performance.
 
     Returns:
         Dictionary with:
@@ -601,40 +604,40 @@ def calculate_multiple_unlabeled_top_k_overlaps(
         'unlabeled_top_1000_overlap': 1000
     }
 
-    # Merge predictions with ground truth (unlabeled only)
-    merged = unlabeled_predictions_df.join(
-        ground_truth_df.select(['ID', target_column]),
-        on='ID',
-        how='inner'
+    if merged_target is None:
+        merged = unlabeled_predictions_df.join(
+            ground_truth_df.select(['ID', target_column]),
+            on='ID',
+            how='inner'
+        )
+    else:
+        merged = merged_target
+
+    descending = (score_direction == 'higher')
+    n_merged = len(merged)
+
+    if n_merged == 0:
+        return {key: 0.0 for key in k_values}
+
+    max_k = max(k_values.values())
+    pred_ranked_ids = (
+        merged.sort('prediction', descending=descending)
+        .head(max_k)
+        .get_column('ID')
+        .to_list()
+    )
+    true_ranked_ids = (
+        merged.sort(target_column, descending=descending)
+        .head(max_k)
+        .get_column('ID')
+        .to_list()
     )
 
     results = {}
-    descending = (score_direction == 'higher')
-
     for key, k in k_values.items():
-        # Adjust k if unlabeled pool smaller
-        k_actual = min(k, len(merged))
-        if k_actual == 0:
-            results[key] = 0.0
-            continue
-
-        # Get top-K by MODEL predictions (on unlabeled)
-        model_top_k = set(
-            merged.sort('prediction', descending=descending)
-            .head(k_actual)
-            .get_column('ID')
-            .to_list()
-        )
-
-        # Get top-K by TRUTH (within unlabeled)
-        true_top_k = set(
-            merged.sort(target_column, descending=descending)
-            .head(k_actual)
-            .get_column('ID')
-            .to_list()
-        )
-
-        # Calculate overlap
+        k_actual = min(k, n_merged)
+        model_top_k = set(pred_ranked_ids[:k_actual])
+        true_top_k = set(true_ranked_ids[:k_actual])
         overlap = len(model_top_k & true_top_k)
         overlap_pct = (overlap / k_actual) * 100
         results[key] = round(overlap_pct, 2)
@@ -646,7 +649,8 @@ def calculate_multiple_unlabeled_enrichment_factors(
     unlabeled_predictions_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
     activity_column: str,
-    score_direction: str = 'higher'
+    score_direction: str = 'higher',
+    merged_activity: pl.DataFrame | None = None
 ) -> dict:
     """
     Calculate prospective enrichment factors on UNLABELED compounds only.
@@ -660,25 +664,28 @@ def calculate_multiple_unlabeled_enrichment_factors(
         ground_truth_df: Ground truth with Activity labels
         activity_column: Column name for binary labels
         score_direction: 'higher' or 'lower' for score interpretation
+        merged_activity: Pre-joined DataFrame (unlabeled_predictions_df ⋈ ground_truth_df on activity_column).
+            When provided, skips the internal join for performance. Must be None when activity_column absent.
 
     Returns:
         Dictionary with:
         - unlabeled_ef_1_0: Prospective EF at 1% (or None)
         - unlabeled_ef_5_0: Prospective EF at 5% (or None)
     """
-    # Check if Activity column present
-    if activity_column not in ground_truth_df.columns:
-        return {
-            'unlabeled_ef_1_0': None,
-            'unlabeled_ef_5_0': None
-        }
-
-    # Merge unlabeled predictions with Activity labels
-    merged = unlabeled_predictions_df.join(
-        ground_truth_df.select(['ID', activity_column]),
-        on='ID',
-        how='inner'
-    )
+    if merged_activity is not None:
+        merged = merged_activity
+    else:
+        # Check if Activity column present
+        if activity_column not in ground_truth_df.columns:
+            return {
+                'unlabeled_ef_1_0': None,
+                'unlabeled_ef_5_0': None
+            }
+        merged = unlabeled_predictions_df.join(
+            ground_truth_df.select(['ID', activity_column]),
+            on='ID',
+            how='inner'
+        )
 
     if len(merged) == 0:
         return {
@@ -720,7 +727,8 @@ def calculate_multiple_unlabeled_enrichment_factors(
 def calculate_unlabeled_ranking_correlation(
     unlabeled_predictions_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
-    target_column: str
+    target_column: str,
+    merged_target: pl.DataFrame | None = None
 ) -> float:
     """
     Calculate Spearman correlation on UNLABELED compounds only.
@@ -729,17 +737,22 @@ def calculate_unlabeled_ranking_correlation(
         unlabeled_predictions_df: Predictions on unlabeled only
         ground_truth_df: Ground truth values
         target_column: Target property column
+        merged_target: Pre-joined DataFrame (unlabeled_predictions_df ⋈ ground_truth_df on target_column).
+            When provided, skips the internal join for performance.
 
     Returns:
         Spearman correlation coefficient
     """
     from scipy.stats import spearmanr
 
-    merged = unlabeled_predictions_df.join(
-        ground_truth_df.select(['ID', target_column]),
-        on='ID',
-        how='inner'
-    )
+    if merged_target is None:
+        merged = unlabeled_predictions_df.join(
+            ground_truth_df.select(['ID', target_column]),
+            on='ID',
+            how='inner'
+        )
+    else:
+        merged = merged_target
 
     if len(merged) < 2:
         return 0.0

@@ -195,8 +195,6 @@ def calculate_initialization_metrics(
                 target_col=target_col,
                 oracle_type='benchmark',
                 ground_truth_data=original_pool,
-                pool_predictions=None,
-                pool_ids=None,
                 uncertainties=None,
                 previously_selected=None,
                 advanced_metrics=False,

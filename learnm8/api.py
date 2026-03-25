@@ -67,11 +67,13 @@ from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.learners import (
+    DecisionTreeLearner,
     DTEnsemble,
     EnsembleLearner,
     FastpropEnsemble,
     FastpropLearner,
     GaussianProcessLearner,
+    LinearRegressionLearner,
     LREnsemble,
     MCDropoutLearner,
     MixedEnsemble,
@@ -99,6 +101,8 @@ LEARNER_REGISTRY = {
     'rf': RandomForestLearner,
     'gp': GaussianProcessLearner,
     'xgb': XGBoostLearner,
+    'lr': LinearRegressionLearner,
+    'dt': DecisionTreeLearner,
 
     # PyTorch-based learners
     'mlp': MLPLearner,
