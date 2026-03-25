@@ -237,6 +237,18 @@ def create_parser() -> argparse.ArgumentParser:
         required=True,
         help='Target property column'
     )
+    core_group.add_argument(
+        '--smiles-col',
+        dest='smiles_col',
+        default=None,
+        help='Column name for SMILES (default: auto-detect)'
+    )
+    core_group.add_argument(
+        '--id-col',
+        dest='id_col',
+        default=None,
+        help='Column name for compound ID (default: auto-detect)'
+    )
     # Get available featurizers from registry
     from learnm8.features import list_available_featurizers
     available_featurizers = list_available_featurizers()
@@ -389,6 +401,18 @@ def create_parser() -> argparse.ArgumentParser:
         help='Compound file (CSV/SDF/SMI) with ID and SMILES. Supported: .csv, .sdf, .smi'
     )
     validate_parser.add_argument(
+        '--smiles-col',
+        dest='smiles_col',
+        default=None,
+        help='Column name for SMILES (default: auto-detect)'
+    )
+    validate_parser.add_argument(
+        '--id-col',
+        dest='id_col',
+        default=None,
+        help='Column name for compound ID (default: auto-detect)'
+    )
+    validate_parser.add_argument(
         '--n-jobs',
         type=int,
         default=-1,
@@ -506,6 +530,8 @@ def cmd_run(args: argparse.Namespace):
                         learner=args.learner,
                         target_col=args.target_col,
                         featurizer=args.featurizer,
+                        smiles_column=getattr(args, 'smiles_col', None),
+                        id_column=getattr(args, 'id_col', None),
                         cycles=cycles,
                         n_cycles=args.n_cycles,
                         batch_fraction=args.batch_fraction,
@@ -536,6 +562,8 @@ def cmd_run(args: argparse.Namespace):
                     learner=args.learner,
                     target_col=args.target_col,
                     featurizer=args.featurizer,
+                    smiles_column=getattr(args, 'smiles_col', None),
+                    id_column=getattr(args, 'id_col', None),
                     cycles=cycles,
                     n_cycles=args.n_cycles,
                     batch_fraction=args.batch_fraction,
@@ -715,7 +743,12 @@ def cmd_validate(args: argparse.Namespace):
             sys.exit(1)
 
         console.print(f"[cyan]Validating:[/cyan] {args.compound_pool}")
-        compounds = load_compound_file(args.compound_pool, progress=False)
+        compounds = load_compound_file(
+            args.compound_pool,
+            smiles_column=getattr(args, 'smiles_col', None),
+            id_column=getattr(args, 'id_col', None),
+            progress=False,
+        )
         console.print(f"Total compounds: {len(compounds)}")
 
         from learnm8.core.resources import validate_n_jobs
