@@ -16,6 +16,16 @@ STANDARD_DATASETS = {
         'score_direction': 'lower',
         'note': 'Lower docking scores indicate better binding affinity'
     },
+    'ampc_100k': {
+        'path': VALIDATION_ROOT / 'AmpC_screen_100K.csv',
+        'target_column': 'dockscore',
+        'id_column': 'zincid',
+        'smiles_column': 'smiles',
+        'expected_size': 100000,
+        'description': 'AmpC β-lactamase 100K screening dataset',
+        'score_direction': 'lower',
+        'note': 'Medium dataset for GPU learner benchmarking'
+    },
     'ampc_500k': {
         'path': DATASETS_ROOT / 'AmpC/subsampled_data/AmpC_screen_500K.csv',
         'target_column': 'dockscore',
