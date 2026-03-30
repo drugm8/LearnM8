@@ -10,12 +10,15 @@ class XGBEnsemble(EnsembleLearner):
     def __init__(self,
                  learning_rates: list[float] | None = None,
                  random_states: list[int] | None = None,
+                 device: str = 'cpu',
                  **kwargs):
         """Initialize XGB ensemble.
 
         Args:
             learning_rates: List of learning rates for diversity (default: [0.05, 0.1, 0.2])
             random_states: List of random states for diversity (default: [42, 123, 456])
+            device: Compute device for XGBoost members ('cpu', 'cuda', or 'auto').
+                'auto' resolves to 'cpu' — explicit GPU selection requires 'cuda'.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if learning_rates is None:
@@ -23,11 +26,14 @@ class XGBEnsemble(EnsembleLearner):
         if random_states is None:
             random_states = [42, 123, 456]
 
+        resolved_device = 'cpu' if device == 'auto' else device
+
         learners = []
-        for lr, rs in zip(learning_rates, random_states):
+        for lr, rs in zip(learning_rates, random_states):  # noqa: B905
             xgb = XGBoostLearner(
                 learning_rate=lr,
-                random_state=rs
+                random_state=rs,
+                device=resolved_device,
             )
             learners.append(xgb)
 
