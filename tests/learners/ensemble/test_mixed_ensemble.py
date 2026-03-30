@@ -1,9 +1,10 @@
 """Tests for MixedEnsemble implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
 
 
@@ -96,7 +97,7 @@ class TestMixedEnsemble:
         features = small_real_morgan_features
         mixed_ensemble.train(features, compounds['Activity'].to_numpy())
 
-        predictions, uncertainty = mixed_ensemble.predict(features)
+        _predictions, uncertainty = mixed_ensemble.predict(features)
         individual_preds = mixed_ensemble.get_individual_predictions(features)
 
         pred_arrays = np.array([preds for preds in individual_preds.values() if preds is not None])
@@ -196,7 +197,5 @@ class TestMixedEnsemble:
         mixed_ensemble.train(dummy_features, dummy_compounds['Activity'].to_numpy())
 
         empty_features = np.array([]).reshape(0, 2048)
-        predictions, uncertainty = mixed_ensemble.predict(empty_features)
-
-        assert len(predictions) == 0
-        assert len(uncertainty) == 0
+        with pytest.raises(LearnerError):
+            mixed_ensemble.predict(empty_features)

@@ -10,10 +10,7 @@ New Architecture (v1.0.0):
 
 import contextlib
 
-# Base classes
 from .base import SklearnLearner, TorchLearner
-
-# Ensemble learners
 from .ensemble import (
     DTEnsemble,
     EnsembleLearner,
@@ -23,8 +20,7 @@ from .ensemble import (
     RFEnsemble,
     XGBEnsemble,
 )
-
-# Scikit-learn learners
+from .gpu import RfFilLearner, RidgeCumlLearner
 from .sklearn import (
     AdvancedRandomForestLearner,
     DecisionTreeLearner,
@@ -33,11 +29,8 @@ from .sklearn import (
     RandomForestLearner,
     XGBoostLearner,
 )
-
-# PyTorch learners
 from .torch import ChempropLearner, FastpropLearner, MCDropoutLearner, MLPLearner
 
-# GPyTorch learners (optional dependency)
 with contextlib.suppress(ImportError):
     from .gpytorch import GPyTorchGPLearner  # noqa: F401
 with contextlib.suppress(ImportError):
@@ -48,7 +41,6 @@ __all__ = [
     'ChempropLearner',
     'DTEnsemble',
     'DecisionTreeLearner',
-    # Ensemble learners
     'EnsembleLearner',
     'FastpropEnsemble',
     'FastpropLearner',
@@ -56,13 +48,12 @@ __all__ = [
     'LREnsemble',
     'LinearRegressionLearner',
     'MCDropoutLearner',
-    # PyTorch learners
     'MLPLearner',
     'MixedEnsemble',
     'RFEnsemble',
-    # Sklearn learners
     'RandomForestLearner',
-    # Base classes
+    'RfFilLearner',
+    'RidgeCumlLearner',
     'SklearnLearner',
     'TorchLearner',
     'XGBEnsemble',

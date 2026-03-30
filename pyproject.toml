@@ -39,6 +39,10 @@ test = [
     "pytest-cov>=4.0.0",
     "pytest-xdist>=3.5.0",
 ]
+gpu = [
+    "treelite>=4.6,<5.0",
+    "cupy-cuda12x>=13.0",
+]
 
 [project.scripts]
 learnm8 = "learnm8.cli.main:main"
@@ -81,6 +85,7 @@ markers = [
     "scientific: Scientific validation tests",
     "benchmark: Performance benchmark tests",
     "molecular: Tests requiring molecular chemistry libraries (RDKit)",
+    "gpu: Tests requiring CUDA GPU",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

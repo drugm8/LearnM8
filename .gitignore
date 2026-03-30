@@ -15,6 +15,7 @@ eggs/
 lib/
 lib64/
 !validation/lib/
+!validation/speedup/lib/
 parts/
 sdist/
 var/
@@ -113,6 +114,7 @@ validation/uncertainty_acquisition/generate_ucb_complete.py
 validation/uncertainty_acquisition/generate_ucb_notebook.py
 validation/VALIDATION_ALTERNATIVES.md
 validation/reports/*
+validation/speedup/results/*.json
 tests/test_representations/.representations/
 
 # Worktrees
