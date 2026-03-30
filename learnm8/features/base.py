@@ -192,6 +192,10 @@ class SkfpFeaturizer(Featurizer):
                     f"Ensure the fingerprint class is a valid scikit-fingerprints object."
                 )
 
+    @property
+    def feature_type(self) -> str:
+        return 'binary'
+
     def requires_3d(self) -> bool:
         """Check if fingerprint requires 3D conformers.
 

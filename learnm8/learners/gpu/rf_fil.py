@@ -175,11 +175,13 @@ class RfFilLearner(SklearnLearner):
         _validate_predict_inputs(self.is_trained, self.get_name())
 
         t0 = time.perf_counter_ns()
-        features, _ = _preprocess_features(
+        features, _, _ = _preprocess_features(
             features,
             valid_feature_mask=self._valid_feature_mask,
             remove_zero_variance=self.remove_zero_variance,
             is_training=False,
+            feature_type=self._feature_type,
+            imputer=self._feature_imputer,
         )
         features = features.astype(np.float32)
         t_preprocess = time.perf_counter_ns() - t0

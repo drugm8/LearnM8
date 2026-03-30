@@ -84,10 +84,13 @@ class SVGPLearner(Learner):
         self._model = None
         self._likelihood = None
         self._valid_feature_mask: np.ndarray | None = None
+        self._feature_imputer = None
+        self._feature_scaler = None
         self._target_mean: float = 0.0
         self._target_std: float = 1.0
         self._kernel_name: str = ""
         self._effective_m: int = 0
+        self._feature_type = 'binary'
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -96,7 +99,7 @@ class SVGPLearner(Learner):
     def _resolve_kernel(self, features: np.ndarray):
         import gpytorch
 
-        is_binary = bool(np.all((features == 0) | (features == 1)))
+        is_binary = self._feature_type == 'binary'
         kernel_spec = self.kernel
 
         if kernel_spec == "auto":
@@ -219,6 +222,8 @@ class SVGPLearner(Learner):
         initial_loss: float | None = None
         final_loss: float = 0.0
         consecutive_nan = 0
+        best_state_dict = None
+        best_likelihood_state_dict = None
 
         for epoch in range(self.n_epochs):
             epoch_loss = 0.0
@@ -265,6 +270,8 @@ class SVGPLearner(Learner):
             if ema_loss < best_ema - 1e-4:
                 best_ema = ema_loss
                 patience_counter = 0
+                best_state_dict = {k: v.clone().cpu() for k, v in model.state_dict().items()}
+                best_likelihood_state_dict = {k: v.clone().cpu() for k, v in likelihood.state_dict().items()}
             else:
                 patience_counter += 1
 
@@ -280,6 +287,11 @@ class SVGPLearner(Learner):
                 ),
                 stacklevel=2,
             )
+
+        if best_state_dict is not None:
+            model.load_state_dict(best_state_dict)
+            likelihood.load_state_dict(best_likelihood_state_dict)
+            logger.debug("Restored best checkpoint (ELBO loss=%.6f)", best_ema)
 
         model.eval()
         likelihood.eval()
@@ -300,14 +312,23 @@ class SVGPLearner(Learner):
 
         covar_module, kernel_name = self._resolve_kernel(features)
 
-        features_proc, mask = _preprocess_features(
-            features, remove_zero_variance=self.remove_zero_variance, is_training=True
+        features_proc, mask, self._feature_imputer = _preprocess_features(
+            features, remove_zero_variance=self.remove_zero_variance, is_training=True,
+            feature_type=self._feature_type,
         )
         if features_proc.shape[1] == 0:
             raise LearnerError("No valid features remain after zero-variance removal.")
 
         self._valid_feature_mask = mask
         self._kernel_name = kernel_name
+
+        if kernel_name == 'rbf':
+            from sklearn.preprocessing import StandardScaler
+            self._feature_scaler = StandardScaler()
+            features_proc = self._feature_scaler.fit_transform(features_proc)
+        else:
+            self._feature_scaler = None
+
         self._target_mean = float(np.mean(targets))
         self._target_std = float(max(np.std(targets), 1e-10))
         targets_std = (targets - self._target_mean) / self._target_std
@@ -359,12 +380,17 @@ class SVGPLearner(Learner):
                 "SVGPLearner must be trained before predict(). Call train() first."
             )
 
-        features_proc, _ = _preprocess_features(
+        features_proc, _, _ = _preprocess_features(
             features,
             valid_feature_mask=self._valid_feature_mask,
             remove_zero_variance=self.remove_zero_variance,
             is_training=False,
+            feature_type=self._feature_type,
+            imputer=self._feature_imputer,
         )
+
+        if self._feature_scaler is not None:
+            features_proc = self._feature_scaler.transform(features_proc)
 
         all_means = []
         all_stds = []

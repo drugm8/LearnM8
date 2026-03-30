@@ -78,11 +78,14 @@ class RidgeCumlLearner(Learner):
         self.remove_zero_variance = remove_zero_variance
 
         self._model = None
+        self._feature_scaler = None
         self._gram_chol_cpu = None
         self._gram_chol_gpu = None
         self._sigma_hat_sq = None
         self.is_trained = False
         self._valid_feature_mask = None
+        self._feature_imputer = None
+        self._feature_type = 'binary'
 
     def train(
         self,
@@ -109,13 +112,18 @@ class RidgeCumlLearner(Learner):
         _validate_train_inputs(features, targets, self.get_name())
 
         t0 = time.perf_counter_ns()
-        features, self._valid_feature_mask = _preprocess_features(
+        features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
             features,
             remove_zero_variance=self.remove_zero_variance,
             is_training=True,
+            feature_type=self._feature_type,
         )
         t1 = time.perf_counter_ns()
         logger.debug('preprocess: %.3f ms', (t1 - t0) / 1e6)
+
+        from sklearn.preprocessing import StandardScaler
+        self._feature_scaler = StandardScaler()
+        features = self._feature_scaler.fit_transform(features)
 
         try:
             from cuml.linear_model import Ridge as CumlRidge
@@ -224,14 +232,19 @@ class RidgeCumlLearner(Learner):
         _validate_predict_inputs(self.is_trained, self.get_name())
 
         t0 = time.perf_counter_ns()
-        features, _ = _preprocess_features(
+        features, _, _ = _preprocess_features(
             features,
             valid_feature_mask=self._valid_feature_mask,
             remove_zero_variance=self.remove_zero_variance,
             is_training=False,
+            feature_type=self._feature_type,
+            imputer=self._feature_imputer,
         )
         t1 = time.perf_counter_ns()
         logger.debug('predict preprocess: %.3f ms', (t1 - t0) / 1e6)
+
+        if self._feature_scaler is not None:
+            features = self._feature_scaler.transform(features)
 
         try:
             t2 = time.perf_counter_ns()

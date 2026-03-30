@@ -73,7 +73,7 @@ class TestLREnsemble:
 
         for i in range(len(pred_arrays)):
             for j in range(i+1, len(pred_arrays)):
-                assert not np.allclose(pred_arrays[i], pred_arrays[j], rtol=1e-3)
+                assert not np.allclose(pred_arrays[i], pred_arrays[j], atol=1e-2)
 
     def test_get_name_includes_regularization_strengths(self, lr_ensemble):
         """Test name generation for LR ensemble."""
@@ -110,7 +110,7 @@ class TestLREnsemble:
         preds_weak, _ = ensemble_weak.predict(features)
         preds_strong, _ = ensemble_strong.predict(features)
 
-        assert not np.allclose(preds_weak, preds_strong, rtol=1e-2)
+        assert not np.allclose(preds_weak, preds_strong, atol=1e-1)
 
     def test_mismatched_array_lengths(self, lr_ensemble):
         """Test error handling with mismatched feature and target lengths."""

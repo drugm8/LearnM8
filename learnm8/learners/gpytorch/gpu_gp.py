@@ -69,9 +69,12 @@ class GPyTorchGPLearner(Learner):
         self._model = None
         self._likelihood = None
         self._valid_feature_mask: np.ndarray | None = None
+        self._feature_imputer = None
+        self._feature_scaler = None
         self._target_mean: float = 0.0
         self._target_std: float = 1.0
         self._kernel_name: str = ""
+        self._feature_type = 'binary'
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -80,7 +83,7 @@ class GPyTorchGPLearner(Learner):
     def _resolve_kernel(self, features: np.ndarray):
         import gpytorch
 
-        is_binary = bool(np.all((features == 0) | (features == 1)))
+        is_binary = self._feature_type == 'binary'
         kernel_spec = self.kernel
 
         if kernel_spec == "auto":
@@ -218,14 +221,23 @@ class GPyTorchGPLearner(Learner):
 
         covar_module, kernel_name = self._resolve_kernel(features)
 
-        features_proc, mask = _preprocess_features(
-            features, remove_zero_variance=self.remove_zero_variance, is_training=True
+        features_proc, mask, self._feature_imputer = _preprocess_features(
+            features, remove_zero_variance=self.remove_zero_variance, is_training=True,
+            feature_type=self._feature_type,
         )
         if features_proc.shape[1] == 0:
             raise LearnerError("No valid features remain after zero-variance removal.")
 
         self._valid_feature_mask = mask
         self._kernel_name = kernel_name
+
+        if kernel_name == 'rbf':
+            from sklearn.preprocessing import StandardScaler
+            self._feature_scaler = StandardScaler()
+            features_proc = self._feature_scaler.fit_transform(features_proc)
+        else:
+            self._feature_scaler = None
+
         self._target_mean = float(np.mean(targets))
         self._target_std = float(max(np.std(targets), 1e-10))
         targets_std = (targets - self._target_mean) / self._target_std
@@ -287,12 +299,17 @@ class GPyTorchGPLearner(Learner):
         if not self.is_trained:
             raise LearnerError("GPyTorchGPLearner must be trained before predict(). Call train() first.")
 
-        features_proc, _ = _preprocess_features(
+        features_proc, _, _ = _preprocess_features(
             features,
             valid_feature_mask=self._valid_feature_mask,
             remove_zero_variance=self.remove_zero_variance,
             is_training=False,
+            feature_type=self._feature_type,
+            imputer=self._feature_imputer,
         )
+
+        if self._feature_scaler is not None:
+            features_proc = self._feature_scaler.transform(features_proc)
 
         import gpytorch
 

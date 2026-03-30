@@ -36,6 +36,10 @@ class MordredFeaturizer(SkfpFeaturizer):
 
         self.ignore_3D = ignore_3D
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous'
+
     def get_name(self) -> str:
         return 'mordred'
 
