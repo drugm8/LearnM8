@@ -701,7 +701,6 @@ def execute_cycle(
                     )
 
                     metrics.update(eval_metrics)
-                    logger.debug(f"Enhanced metrics with evaluation (Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%)")
     except (ValueError, RuntimeError, TypeError, ArithmeticError, KeyError, pl.exceptions.ColumnNotFoundError) as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
 

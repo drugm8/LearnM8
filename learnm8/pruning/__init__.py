@@ -24,11 +24,9 @@ __all__ = [
     # Base classes
     'DesignSpacePruner',
     'PruningError',
-
     # Score-based pruning strategy
     'ScoreBasedPruner',
-
+    'create_pruning_strategy',
     # Utility functions
     'validate_pruning_parameters',
-    'create_pruning_strategy',
 ]

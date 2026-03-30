@@ -16,6 +16,8 @@ Key features:
 
 __version__ = "1.0.0"
 
+import contextlib
+
 # Acquisition strategies
 from .acquisition import (
     EntropyAcquisition,
@@ -73,6 +75,12 @@ from .learners.sklearn import (
 # Torch learners
 from .learners.torch import MCDropoutLearner, MLPLearner
 
+# GPyTorch learners (optional dependency)
+with contextlib.suppress(ImportError):
+    from .learners.gpytorch import GPyTorchGPLearner  # noqa: F401
+with contextlib.suppress(ImportError):
+    from .learners.gpytorch import SVGPLearner  # noqa: F401
+
 # Oracles
 from .oracles.csv_oracle import CSVOracle
 from .oracles.python_oracle import PythonOracle
@@ -84,43 +92,47 @@ from .pruning import DesignSpacePruner, ScoreBasedPruner
 from .utils.logging import setup_logging
 
 __all__ = [
-    # Exceptions and warnings
-    'LearnM8Error', 'ConfigurationError', 'ValidationError',
-    'FeatureExtractionError', 'LearnerError', 'AcquisitionError',
-    'OracleError', 'PersistenceError', 'PruningError',
-    'LearnM8Warning', 'ConvergenceWarning', 'DataConversionWarning',
-
-    # Main functional API
-    'run_active_learning',
-
-    # New core APIs
-    'validate_compound_pool', 'ValidationResult',
-    'extract_features',
+    'AcquisitionError',
+    'CSVOracle',
+    'ConfigurationError',
+    'ConvergenceWarning',
     'CycleConfig',
-
-    # Utility functions
+    'DTEnsemble',
+    'DataConversionWarning',
+    'DesignSpacePruner',
+    'EnsembleLearner',
+    'EntropyAcquisition',
+    'ExpectedImprovementAcquisition',
+    'FeatureExtractionError',
+    'GaussianProcessLearner',
+    'GreedyAcquisition',
+    'LREnsemble',
+    'LearnM8Error',
+    'LearnM8Warning',
+    'Learner',
+    'LearnerError',
+    'MCDropoutLearner',
+    'MLPLearner',
+    'MixedEnsemble',
+    'Oracle',
+    'OracleError',
+    'PersistenceError',
+    'ProbabilityImprovementAcquisition',
+    'PruningError',
+    'PythonOracle',
+    'RFEnsemble',
+    'RandomAcquisition',
+    'RandomForestLearner',
+    'ScoreBasedPruner',
+    'ThompsonSamplingAcquisition',
+    'TopKAcquisition',
+    'UCBAcquisition',
+    'ValidationError',
+    'ValidationResult',
+    'XGBEnsemble',
+    'XGBoostLearner',
+    'extract_features',
+    'run_active_learning',
     'setup_logging',
-
-    # Core interfaces (for advanced users)
-    'Learner', 'Oracle',
-
-    # Sklearn learners
-    'RandomForestLearner', 'GaussianProcessLearner', 'XGBoostLearner',
-
-    # Ensemble learners
-    'EnsembleLearner', 'RFEnsemble', 'LREnsemble', 'XGBEnsemble', 'DTEnsemble', 'MixedEnsemble',
-
-    # Torch learners
-    'MLPLearner', 'MCDropoutLearner',
-
-    # Acquisition strategies
-    'GreedyAcquisition', 'RandomAcquisition', 'TopKAcquisition',
-    'UCBAcquisition', 'ExpectedImprovementAcquisition',
-    'ProbabilityImprovementAcquisition', 'ThompsonSamplingAcquisition', 'EntropyAcquisition',
-
-    # Pruning strategies
-    'ScoreBasedPruner', 'DesignSpacePruner',
-
-    # Oracles
-    'CSVOracle', 'PythonOracle',
+    'validate_compound_pool',
 ]

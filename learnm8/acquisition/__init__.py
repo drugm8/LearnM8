@@ -19,27 +19,23 @@ from .top_k import TopKAcquisition
 from .ucb import UCBAcquisition
 
 __all__ = [
+    'AcquisitionError',
     # Base classes
     'AcquisitionFunction',
-    'AcquisitionError',
-
-    # Basic acquisition functions
-    'GreedyAcquisition',
-    'RandomAcquisition',
-    'TopKAcquisition',
-
-    # Uncertainty-based acquisition functions
-    'UCBAcquisition',
-    'ExpectedImprovementAcquisition',
-    'ProbabilityImprovementAcquisition',
-    'ThompsonSamplingAcquisition',
-    'EntropyAcquisition',
-
-    # Optimization-based acquisition functions
-    'SimulatedAnnealingAcquisition',
-
     # Diversity-based acquisition functions
     'BitBIRCHAcquisition',
+    'EntropyAcquisition',
+    'ExpectedImprovementAcquisition',
+    # Basic acquisition functions
+    'GreedyAcquisition',
+    'ProbabilityImprovementAcquisition',
+    'RandomAcquisition',
+    # Optimization-based acquisition functions
+    'SimulatedAnnealingAcquisition',
+    'ThompsonSamplingAcquisition',
+    'TopKAcquisition',
+    # Uncertainty-based acquisition functions
+    'UCBAcquisition',
 ]
 
 # Registry of acquisition functions for CLI and programmatic access

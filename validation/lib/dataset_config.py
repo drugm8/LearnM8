@@ -36,6 +36,16 @@ STANDARD_DATASETS = {
         'score_direction': 'lower',
         'note': 'Large dataset for performance benchmarking'
     },
+    'ampc_100k': {
+        'path': DATASETS_ROOT / 'AmpC/subsampled_data/AmpC_screen_100K.csv',
+        'target_column': 'dockscore',
+        'id_column': 'zincid',
+        'smiles_column': 'smiles',
+        'expected_size': 100000,
+        'description': 'AmpC β-lactamase 100K screening dataset',
+        'score_direction': 'lower',
+        'note': 'GPU benchmark dataset for GPyTorch GP evaluation'
+    },
 }
 
 DEFAULT_DATASET = 'ampc_30k'
@@ -46,7 +56,8 @@ RECOMMENDED_DATASETS = {
     'pruning': 'ampc_30k',
     'uncertainty': 'ampc_30k',
     'scalability': 'ampc_1000k',
-    'quick_test': 'ampc_30k'
+    'quick_test': 'ampc_30k',
+    'gpu_benchmark': 'ampc_100k',
 }
 
 
