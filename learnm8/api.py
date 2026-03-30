@@ -80,6 +80,8 @@ from learnm8.learners import (
     MLPLearner,
     RandomForestLearner,
     RFEnsemble,
+    RfFilLearner,
+    RidgeCumlLearner,
     XGBEnsemble,
     XGBoostLearner,
 )
@@ -103,6 +105,10 @@ LEARNER_REGISTRY = {
     'xgb': XGBoostLearner,
     'lr': LinearRegressionLearner,
     'dt': DecisionTreeLearner,
+
+    # GPU-accelerated learners
+    'rf_fil': RfFilLearner,
+    'ridge_cuml': RidgeCumlLearner,
 
     # PyTorch-based learners
     'mlp': MLPLearner,
@@ -128,6 +134,8 @@ LEARNER_DISPLAY_NAMES = {
     'rf': 'Random Forest',
     'gp': 'Gaussian Process',
     'xgb': 'XGBoost',
+    'rf_fil': 'RF FIL (GPU)',
+    'ridge_cuml': 'Ridge cuML (GPU)',
     'mlp': 'MLP',
     'mc_dropout': 'MC Dropout',
     'fastprop': 'FastProp',
@@ -425,6 +433,19 @@ def run_active_learning(
         learner: Learner specification:
             - str: Learner shortcut (see _create_learner for options)
             - Learner instance: Custom learner
+
+            GPU-accelerated learners (require RAPIDS/CUDA):
+            - 'rf_fil': sklearn RF trained on float32 + RAPIDS FIL GPU inference.
+              Provides ordinal uncertainty via per-tree std (ddof=0). Note: float32
+              training produces minor numerical divergence from the CPU 'rf' learner.
+            - 'ridge_cuml': cuML Ridge regression with CuPy leverage-based uncertainty.
+              Ordinal uncertainty (not calibrated). Requires RAPIDS cuML >= 25.04.
+
+            Ensemble learners with device parameter support (lr_ensemble, xgb_ensemble,
+            mixed_ensemble accept device='cpu', 'cuda', or 'auto'):
+            - device='auto' resolves to CPU member types for all ensembles.
+            - device='cuda' activates GPU members (RfFilLearner, RidgeCumlLearner, or
+              XGBoostLearner with device='cuda').
 
         target_col: Target property column name
 
