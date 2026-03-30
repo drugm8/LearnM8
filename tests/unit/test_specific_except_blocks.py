@@ -156,9 +156,8 @@ class TestEnsembleSpecificExceptions:
         ensemble.weights = None
         ensemble.aggregation_method = 'mean'
 
-        ensemble.train(np.array([[1.0, 2.0]]), np.array([1.0]))
-        assert ensemble.is_trained
-        assert len(ensemble.learners) == 1
+        with pytest.raises(LearnerError, match='BadLearner'):
+            ensemble.train(np.array([[1.0, 2.0]]), np.array([1.0]))
 
     def test_value_error_handled_gracefully_in_predict(self):
         from learnm8.learners.ensemble.ensemble import EnsembleLearner
@@ -177,8 +176,8 @@ class TestEnsembleSpecificExceptions:
         ensemble.aggregation_method = 'mean'
         ensemble.uncertainty_method = 'std'
 
-        preds, uncerts = ensemble.predict(np.array([[1.0, 2.0]]))
-        assert preds is not None
+        with pytest.raises(LearnerError, match='BadLearner'):
+            ensemble.predict(np.array([[1.0, 2.0]]))
 
 
 class TestGracefulFallbacksLogWarnings:
@@ -221,9 +220,8 @@ class TestPruningSpecificExceptions:
         with patch(
             'learnm8.pruning.score_based.ScoreBasedPruner',
             side_effect=MemoryError('out of memory'),
-        ):
-            with pytest.raises(MemoryError, match='out of memory'):
-                create_pruning_strategy('score', {})
+        ), pytest.raises(MemoryError, match='out of memory'):
+            create_pruning_strategy('score', {})
 
     def test_value_error_wrapped_properly(self):
         from learnm8.pruning.utils import create_pruning_strategy
@@ -231,9 +229,8 @@ class TestPruningSpecificExceptions:
         with patch(
             'learnm8.pruning.score_based.ScoreBasedPruner',
             side_effect=ValueError('bad param'),
-        ):
-            with pytest.raises(ValueError, match='bad param'):
-                create_pruning_strategy('score', {})
+        ), pytest.raises(ValueError, match='bad param'):
+            create_pruning_strategy('score', {})
 
 
 class TestFeatureExtractionSpecificExceptions:
@@ -300,9 +297,9 @@ class TestApiSpecificExceptions:
         mock_class = MagicMock(side_effect=MemoryError('out of memory'))
         mock_class.__name__ = 'MockLearner'
 
-        with patch('learnm8.api.LEARNER_REGISTRY', {'test': mock_class}):
-            with pytest.raises(MemoryError, match='out of memory'):
-                _create_learner('test', random_state=42)
+        with patch('learnm8.api.LEARNER_REGISTRY', {'test': mock_class}), \
+                pytest.raises(MemoryError, match='out of memory'):
+            _create_learner('test', random_state=42)
 
     def test_type_error_wrapped_as_configuration_error(self):
         from learnm8.api import _create_learner
@@ -310,6 +307,6 @@ class TestApiSpecificExceptions:
         mock_class = MagicMock(side_effect=TypeError('bad arg'))
         mock_class.__name__ = 'MockLearner'
 
-        with patch('learnm8.api.LEARNER_REGISTRY', {'test': mock_class}):
-            with pytest.raises(ConfigurationError, match='bad arg'):
-                _create_learner('test', random_state=42)
+        with patch('learnm8.api.LEARNER_REGISTRY', {'test': mock_class}), \
+                pytest.raises(ConfigurationError, match='bad arg'):
+            _create_learner('test', random_state=42)

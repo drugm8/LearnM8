@@ -8,6 +8,7 @@ architecture design.
 import logging
 import time
 from abc import abstractmethod
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +31,7 @@ def _preprocess_features(
     features: np.ndarray,
     valid_feature_mask: np.ndarray | None = None,
     remove_zero_variance: bool = True,
-    is_training: bool = True
+    is_training: bool = True,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Preprocess features by handling NaN/inf and optionally removing zero-variance columns.
 
@@ -55,14 +56,128 @@ def _preprocess_features(
         valid_feature_mask = variance > ZERO_VARIANCE_THRESHOLD
         n_removed = (~valid_feature_mask).sum()
         if n_removed > 0:
-            logger.debug(f"Removing {n_removed} zero-variance features "
-                        f"({features.shape[1]} -> {valid_feature_mask.sum()})")
+            logger.debug(
+                f'Removing {n_removed} zero-variance features '
+                f'({features.shape[1]} -> {valid_feature_mask.sum()})'
+            )
         features = features[:, valid_feature_mask]
     else:
         if valid_feature_mask is not None:
             features = features[:, valid_feature_mask]
 
     return features, valid_feature_mask
+
+
+def _validate_train_inputs(
+    features: np.ndarray,
+    targets: np.ndarray,
+    learner_name: str,
+) -> None:
+    """Validate feature and target arrays before training.
+
+    Args:
+        features: Feature matrix, must be 2D with shape (n_samples, n_features).
+        targets: Target array with shape (n_samples,).
+        learner_name: Name of the learner (for error messages).
+
+    Raises:
+        LearnerError: If features are not 2D, shapes are mismatched, or inputs are empty.
+    """
+    if features.ndim != 2:
+        raise LearnerError(
+            f'Features must be a 2D array for {learner_name}, got {features.ndim}D. '
+            f'Reshape your feature array to (n_samples, n_features).'
+        )
+    if features.shape[0] != targets.shape[0]:
+        raise LearnerError(
+            f'Feature and target arrays have mismatched lengths for {learner_name}: '
+            f'{features.shape[0]} features vs {targets.shape[0]} targets. '
+            f'Ensure each sample has exactly one target value.'
+        )
+    if features.shape[0] == 0:
+        raise LearnerError(
+            f'Cannot train {learner_name} on an empty dataset (0 samples). '
+            f'This usually means no labeled compounds are available. '
+            f'Check that batch_fraction is large enough to select at least one compound, '
+            f'or increase the initial pool size.'
+        )
+
+
+def _validate_predict_inputs(
+    is_trained: bool,
+    learner_name: str,
+) -> None:
+    """Guard against calling predict before train.
+
+    Args:
+        is_trained: Whether the learner has been trained.
+        learner_name: Name of the learner (for error messages).
+
+    Raises:
+        LearnerError: If the learner has not been trained.
+    """
+    if not is_trained:
+        raise LearnerError(
+            f'{learner_name} must be trained before prediction. '
+            f'Call train() with labeled data first. If using the active learning API, '
+            f'ensure at least one training cycle has completed before predicting.'
+        )
+
+
+def _predict_with_oom_retry(
+    features: np.ndarray,
+    predict_fn: Callable[[np.ndarray], np.ndarray],
+    min_batch: int = 256,
+    n_output_cols: int = 1,
+) -> np.ndarray:
+    """Retry prediction with halving batch size on GPU OOM.
+
+    Attempts full-batch prediction first. On CUDA OOM, halves the batch size
+    and retries with chunked prediction, concatenating results in input order.
+
+    Args:
+        features: Input feature matrix of shape (n_samples, n_features).
+        predict_fn: Callable that takes a feature chunk and returns predictions.
+        min_batch: Minimum batch size before giving up. Defaults to 256.
+        n_output_cols: Number of output columns per sample. Defaults to 1.
+
+    Returns:
+        Concatenated prediction array with shape[0] == features.shape[0].
+
+    Raises:
+        LearnerError: If prediction fails even at min_batch size, or on non-OOM errors.
+    """
+    n_samples = features.shape[0]
+    batch_size = n_samples
+    effective_min = min(min_batch, n_samples) if n_samples > 0 else 1
+
+    while batch_size >= effective_min:
+        try:
+            n_chunks = max(1, n_samples // batch_size)
+            chunks = np.array_split(features, n_chunks)
+            results = [predict_fn(chunk) for chunk in chunks]
+            return np.concatenate(results, axis=0)
+        except (RuntimeError, MemoryError, Exception) as e:
+            if 'out of memory' not in str(e).lower():
+                raise
+            logger.warning(
+                'GPU OOM at batch_size=%d, halving to %d',
+                batch_size,
+                batch_size // 2,
+            )
+            batch_size //= 2
+            try:
+                import gc
+
+                gc.collect()
+            except Exception:
+                pass
+
+    raise LearnerError(
+        f'GPU out of memory even at minimum batch size ({min_batch}). '
+        f'Input has {n_samples} samples with {features.shape[1]} features. '
+        f'Try reducing the dataset size or freeing GPU memory.'
+    )
 
 
 class SklearnLearner(Learner):
@@ -73,10 +188,12 @@ class SklearnLearner(Learner):
     between ML algorithms and molecular feature extraction.
     """
 
-    def __init__(self,
-                 model: BaseEstimator,
-                 random_state: int = 42,
-                 remove_zero_variance: bool = True):
+    def __init__(
+        self,
+        model: BaseEstimator,
+        random_state: int = 42,
+        remove_zero_variance: bool = True,
+    ):
         """Initialize sklearn learner.
 
         Args:
@@ -106,24 +223,26 @@ class SklearnLearner(Learner):
             RuntimeError: If training fails
         """
         if features.ndim != 2:
-            raise ValueError(f"Features must be 2D array, got {features.ndim}D")
+            raise ValueError(f'Features must be 2D array, got {features.ndim}D')
 
         if features.shape[0] != targets.shape[0]:
             raise LearnerError(
-                f"Feature and target arrays have mismatched lengths: "
-                f"{features.shape[0]} features vs {targets.shape[0]} targets. "
-                f"Ensure each sample has exactly one target value."
+                f'Feature and target arrays have mismatched lengths: '
+                f'{features.shape[0]} features vs {targets.shape[0]} targets. '
+                f'Ensure each sample has exactly one target value.'
             )
 
         if features.shape[0] == 0:
             raise LearnerError(
-                f"Cannot train {self.get_name()} on an empty dataset (0 samples). "
-                f"This usually means no labeled compounds are available. "
-                f"Check that batch_fraction is large enough to select at least one compound, "
-                f"or increase the initial pool size."
+                f'Cannot train {self.get_name()} on an empty dataset (0 samples). '
+                f'This usually means no labeled compounds are available. '
+                f'Check that batch_fraction is large enough to select at least one compound, '
+                f'or increase the initial pool size.'
             )
 
-        logger.debug(f"Training {self.get_name()} on features shape: {features.shape}, targets shape: {targets.shape}")
+        logger.debug(
+            f'Training {self.get_name()} on features shape: {features.shape}, targets shape: {targets.shape}'
+        )
 
         start_time = time.time()
 
@@ -131,23 +250,25 @@ class SklearnLearner(Learner):
             features, self._valid_feature_mask = _preprocess_features(
                 features,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=True
+                is_training=True,
             )
 
             self.model.fit(features, targets)
             self.is_trained = True
 
             train_time = time.time() - start_time
-            logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
+            logger.debug(
+                f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s'
+            )
 
         except LearnerError:
             raise
         except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
-            logger.error(f"Failed to train {self.get_name()}: {e}")
+            logger.error(f'Failed to train {self.get_name()}: {e}')
             raise LearnerError(
-                f"Training failed for {self.get_name()} with {features.shape[0]} samples: {e}. "
-                f"Check that the training data is valid, the featurizer is compatible "
-                f"with the learner, and there are enough labeled compounds."
+                f'Training failed for {self.get_name()} with {features.shape[0]} samples: {e}. '
+                f'Check that the training data is valid, the featurizer is compatible '
+                f'with the learner, and there are enough labeled compounds.'
             ) from e
 
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
@@ -165,12 +286,12 @@ class SklearnLearner(Learner):
         """
         if not self.is_trained:
             raise LearnerError(
-                f"{self.get_name()} must be trained before prediction. "
-                f"Call train() with labeled data first. If using the active learning API, "
-                f"ensure at least one training cycle has completed before predicting."
+                f'{self.get_name()} must be trained before prediction. '
+                f'Call train() with labeled data first. If using the active learning API, '
+                f'ensure at least one training cycle has completed before predicting.'
             )
 
-        logger.debug(f"Predicting with {self.get_name()} on {len(features)} samples")
+        logger.debug(f'Predicting with {self.get_name()} on {len(features)} samples')
 
         start_time = time.time()
 
@@ -179,29 +300,31 @@ class SklearnLearner(Learner):
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=False
+                is_training=False,
             )
 
             predictions = self.model.predict(features)
 
             pred_time = time.time() - start_time
-            logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s")
+            logger.debug(
+                f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+            )
 
             return predictions, None
 
         except LearnerError:
             raise
         except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
-            logger.error(f"Failed to predict with {self.get_name()}: {e}")
+            logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
-                f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
-                f"Check that the input features have the same shape as training features "
-                f"and that the featurizer is compatible with the model."
+                f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}. '
+                f'Check that the input features have the same shape as training features '
+                f'and that the featurizer is compatible with the model.'
             ) from e
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        return f"Sklearn{self.model.__class__.__name__}"
+        return f'Sklearn{self.model.__class__.__name__}'
 
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
@@ -217,14 +340,16 @@ class TorchLearner(Learner):
     architecture where learners work with numpy feature matrices.
     """
 
-    def __init__(self,
-                 device: str = 'auto',
-                 batch_size: int = 1024,
-                 max_epochs: int = 100,
-                 learning_rate: float = 0.001,
-                 early_stopping_patience: int = 10,
-                 random_state: int = 42,
-                 remove_zero_variance: bool = True):
+    def __init__(
+        self,
+        device: str = 'auto',
+        batch_size: int = 1024,
+        max_epochs: int = 100,
+        learning_rate: float = 0.001,
+        early_stopping_patience: int = 10,
+        random_state: int = 42,
+        remove_zero_variance: bool = True,
+    ):
         """Initialize PyTorch learner.
 
         Args:
@@ -262,15 +387,15 @@ class TorchLearner(Learner):
             torch.cuda.manual_seed(random_state)
             torch.cuda.manual_seed_all(random_state)
 
-        logger.debug(f"Initialized TorchLearner on device: {self.device}")
+        logger.debug(f'Initialized TorchLearner on device: {self.device}')
 
     @abstractmethod
     def _create_model(self, input_size: int) -> nn.Module:
         """Create the PyTorch model architecture.
-        
+
         Args:
             input_size: Number of input features
-            
+
         Returns:
             PyTorch model instance
         """
@@ -278,11 +403,11 @@ class TorchLearner(Learner):
 
     def _train_epoch(self, X: np.ndarray, y: np.ndarray) -> float:
         """Train for one epoch.
-        
+
         Args:
             X: Feature array
             y: Target array
-            
+
         Returns:
             Average loss for the epoch
         """
@@ -296,7 +421,9 @@ class TorchLearner(Learner):
 
         # Create dataset and dataloader
         dataset = torch.utils.data.TensorDataset(X_tensor, y_tensor)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        dataloader = torch.utils.data.DataLoader(
+            dataset, batch_size=self.batch_size, shuffle=True
+        )
 
         criterion = nn.MSELoss()
 
@@ -318,11 +445,11 @@ class TorchLearner(Learner):
 
     def _validate(self, X_val: np.ndarray, y_val: np.ndarray) -> float:
         """Validate model on validation data.
-        
+
         Args:
             X_val: Validation features
             y_val: Validation targets
-            
+
         Returns:
             Validation loss
         """
@@ -338,15 +465,16 @@ class TorchLearner(Learner):
 
         return val_loss
 
-    def _split_validation(self, X: np.ndarray, y: np.ndarray,
-                         val_fraction: float = 0.1) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _split_validation(
+        self, X: np.ndarray, y: np.ndarray, val_fraction: float = 0.1
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Split data into training and validation sets.
-        
+
         Args:
             X: Feature array
             y: Target array
             val_fraction: Fraction of data for validation
-            
+
         Returns:
             Tuple of (X_train, X_val, y_train, y_val)
         """
@@ -355,7 +483,9 @@ class TorchLearner(Learner):
         # Handle edge case of very small datasets
         if n_samples <= 2:
             # For very small datasets, use all data for both training and validation
-            logger.warning(f"Dataset too small ({n_samples} samples) for proper train/val split. Using all data for both.")
+            logger.warning(
+                f'Dataset too small ({n_samples} samples) for proper train/val split. Using all data for both.'
+            )
             return X, X, y, y
 
         n_val = max(1, int(n_samples * val_fraction))
@@ -384,17 +514,17 @@ class TorchLearner(Learner):
         """
         if features.shape[0] != targets.shape[0]:
             raise LearnerError(
-                f"Feature and target arrays have mismatched lengths: "
-                f"{features.shape[0]} features vs {targets.shape[0]} targets. "
-                f"Ensure each sample has exactly one target value."
+                f'Feature and target arrays have mismatched lengths: '
+                f'{features.shape[0]} features vs {targets.shape[0]} targets. '
+                f'Ensure each sample has exactly one target value.'
             )
 
         if features.shape[0] == 0:
             raise LearnerError(
-                f"Cannot train {self.get_name()} on an empty dataset (0 samples). "
-                f"This usually means no labeled compounds are available. "
-                f"Check that batch_fraction is large enough to select at least one compound, "
-                f"or increase the initial pool size."
+                f'Cannot train {self.get_name()} on an empty dataset (0 samples). '
+                f'This usually means no labeled compounds are available. '
+                f'Check that batch_fraction is large enough to select at least one compound, '
+                f'or increase the initial pool size.'
             )
 
         start_time = time.time()
@@ -403,14 +533,16 @@ class TorchLearner(Learner):
             features, self._valid_feature_mask = _preprocess_features(
                 features,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=True
+                is_training=True,
             )
 
             input_dim = features.shape[1]
             if self.model is None or self._input_dim != input_dim:
                 self._input_dim = input_dim
                 self.model = self._create_model(input_dim).to(self.device)
-                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+                self.optimizer = torch.optim.Adam(
+                    self.model.parameters(), lr=self.learning_rate
+                )
 
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(features)
@@ -421,17 +553,17 @@ class TorchLearner(Learner):
             patience_counter = 0
             self.training_history = []
 
-            logger.debug(f"Training {self.get_name()} for up to {self.max_epochs} epochs")
+            logger.debug(
+                f'Training {self.get_name()} for up to {self.max_epochs} epochs'
+            )
 
             for epoch in range(self.max_epochs):
                 train_loss = self._train_epoch(X_train, y_train)
                 val_loss = self._validate(X_val, y_val)
 
-                self.training_history.append({
-                    'epoch': epoch,
-                    'train_loss': train_loss,
-                    'val_loss': val_loss
-                })
+                self.training_history.append(
+                    {'epoch': epoch, 'train_loss': train_loss, 'val_loss': val_loss}
+                )
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
@@ -440,25 +572,29 @@ class TorchLearner(Learner):
                     patience_counter += 1
 
                 if patience_counter >= self.early_stopping_patience:
-                    logger.debug(f"Early stopping triggered at epoch {epoch}")
+                    logger.debug(f'Early stopping triggered at epoch {epoch}')
                     break
 
                 if epoch % 10 == 0:
-                    logger.debug(f"Epoch {epoch}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
+                    logger.debug(
+                        f'Epoch {epoch}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}'
+                    )
 
             self.is_trained = True
             train_time = time.time() - start_time
-            logger.debug(f"Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s")
+            logger.debug(
+                f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s'
+            )
 
         except LearnerError:
             raise
         except (ValueError, RuntimeError, TypeError) as e:
-            logger.error(f"Failed to train {self.get_name()}: {e}")
+            logger.error(f'Failed to train {self.get_name()}: {e}')
             raise LearnerError(
                 f"Training failed for {self.get_name()} on device '{self.device}' "
-                f"with {features.shape[0]} samples: {e}. "
-                f"Check that the training data is valid, the featurizer is compatible "
-                f"with the learner, and there are enough labeled compounds."
+                f'with {features.shape[0]} samples: {e}. '
+                f'Check that the training data is valid, the featurizer is compatible '
+                f'with the learner, and there are enough labeled compounds.'
             ) from e
 
     def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
@@ -476,9 +612,9 @@ class TorchLearner(Learner):
         """
         if not self.is_trained:
             raise LearnerError(
-                f"{self.get_name()} must be trained before prediction. "
-                f"Call train() with labeled data first. If using the active learning API, "
-                f"ensure at least one training cycle has completed before predicting."
+                f'{self.get_name()} must be trained before prediction. '
+                f'Call train() with labeled data first. If using the active learning API, '
+                f'ensure at least one training cycle has completed before predicting.'
             )
 
         start_time = time.time()
@@ -488,7 +624,7 @@ class TorchLearner(Learner):
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=False
+                is_training=False,
             )
 
             X_scaled = self.scaler.transform(features)
@@ -504,24 +640,26 @@ class TorchLearner(Learner):
                 predictions = np.array([predictions.item()])
 
             pred_time = time.time() - start_time
-            logger.debug(f"Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s")
+            logger.debug(
+                f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+            )
 
             return predictions, None
 
         except LearnerError:
             raise
         except (ValueError, RuntimeError, TypeError) as e:
-            logger.error(f"Failed to predict with {self.get_name()}: {e}")
+            logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
-                f"Prediction failed for {self.get_name()} on {len(features)} samples "
-                f"(device: {self.device}): {e}. "
-                f"Check that the input features have the same shape as training features "
-                f"and that the featurizer is compatible with the model."
+                f'Prediction failed for {self.get_name()} on {len(features)} samples '
+                f'(device: {self.device}): {e}. '
+                f'Check that the input features have the same shape as training features '
+                f'and that the featurizer is compatible with the model.'
             ) from e
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        return f"Torch{self.__class__.__name__}"
+        return f'Torch{self.__class__.__name__}'
 
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
@@ -530,7 +668,7 @@ class TorchLearner(Learner):
 
     def get_training_history(self) -> list:
         """Get training history for analysis.
-        
+
         Returns:
             List of dictionaries containing training metrics per epoch
         """
@@ -538,19 +676,21 @@ class TorchLearner(Learner):
 
     def save_model(self, path: Path) -> None:
         """Save model state to file.
-        
+
         Args:
             path: Path to save model
         """
         if self.model is None:
             raise LearnerError(
-                f"No model to save for {self.get_name()}. "
-                f"The model has not been created yet. Call train() first to create and train the model."
+                f'No model to save for {self.get_name()}. '
+                f'The model has not been created yet. Call train() first to create and train the model.'
             )
 
         state = {
             'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict() if self.optimizer else None,
+            'optimizer_state_dict': self.optimizer.state_dict()
+            if self.optimizer
+            else None,
             'scaler': self.scaler,
             'training_history': self.training_history,
             'is_trained': self.is_trained,
@@ -559,23 +699,23 @@ class TorchLearner(Learner):
                 'max_epochs': self.max_epochs,
                 'learning_rate': self.learning_rate,
                 'early_stopping_patience': self.early_stopping_patience,
-                'random_state': self.random_state
-            }
+                'random_state': self.random_state,
+            },
         }
 
         torch.save(state, path)
-        logger.debug(f"Saved {self.get_name()} model to {path}")
+        logger.debug(f'Saved {self.get_name()} model to {path}')
 
     def load_model(self, path: Path) -> None:
         """Load model state from file.
-        
+
         Args:
             path: Path to load model from
         """
         if not path.exists():
             raise FileNotFoundError(
-                f"Model file not found: {path}. "
-                f"Verify the path is correct and that the model was previously saved with save_model()."
+                f'Model file not found: {path}. '
+                f'Verify the path is correct and that the model was previously saved with save_model().'
             )
 
         state = torch.load(path, map_location=self.device)
@@ -593,4 +733,4 @@ class TorchLearner(Learner):
         self.training_history = state.get('training_history', [])
         self.is_trained = state.get('is_trained', False)
 
-        logger.debug(f"Loaded {self.get_name()} model from {path}")
+        logger.debug(f'Loaded {self.get_name()} model from {path}')

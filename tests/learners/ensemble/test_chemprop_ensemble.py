@@ -1,8 +1,8 @@
 """Tests for ChempropEnsemble implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
 from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 
@@ -98,7 +98,7 @@ class TestChempropEnsemble:
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
-        predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
+        _predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
 
         assert uncertainty is not None
         assert len(uncertainty) == len(compounds)
@@ -308,7 +308,7 @@ class TestChempropEnsemble:
         targets = compounds['Activity'].to_numpy()
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-        predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
+        _predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
