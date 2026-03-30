@@ -46,6 +46,10 @@ class AutocorrFeaturizer(SkfpFeaturizer):
             n_jobs=n_jobs
         )
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous'
+
     def get_name(self) -> str:
         return 'autocorr'
 

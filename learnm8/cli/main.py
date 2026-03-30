@@ -674,6 +674,7 @@ def cmd_list(args: argparse.Namespace):
         table.add_column("Name", style="blue", no_wrap=True)
         table.add_column("Type", style="green")
         table.add_column("Dimension", justify="right", style="yellow")
+        table.add_column("Feature Type", style="magenta")
         table.add_column("Description", style="white")
 
         # Add 2D featurizers
@@ -683,6 +684,7 @@ def cmd_list(args: argparse.Namespace):
                 try:
                     temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
                     dim = temp_feat.get_dimension()
+                    feature_type = temp_feat.feature_type
                     desc = {
                         'morgan': 'Circular fingerprints (ECFP4)',
                         'ecfp': 'Circular fingerprints (ECFP4)',
@@ -697,9 +699,9 @@ def cmd_list(args: argparse.Namespace):
                         'mordred': 'Mordred molecular descriptors',
                         'descriptors': 'Mordred molecular descriptors'
                     }.get(name, '')
-                    table.add_row(name, "2D", str(dim), desc)
+                    table.add_row(name, "2D", str(dim), feature_type, desc)
                 except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "2D", "N/A", "")
+                    table.add_row(name, "2D", "N/A", "N/A", "")
 
         # Add 3D featurizers
         for name in available['3d']:
@@ -708,14 +710,15 @@ def cmd_list(args: argparse.Namespace):
                 try:
                     temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
                     dim = temp_feat.get_dimension()
+                    feature_type = temp_feat.feature_type
                     desc = {
                         'whim': 'WHIM 3D molecular descriptors',
                         'usr': 'USR 3D shape descriptors',
                         'e3fp': 'Extended 3D fingerprints'
                     }.get(name, '')
-                    table.add_row(name, "3D", str(dim), desc)
+                    table.add_row(name, "3D", str(dim), feature_type, desc)
                 except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "3D", "N/A", "")
+                    table.add_row(name, "3D", "N/A", "N/A", "")
 
         console.print(table)
 

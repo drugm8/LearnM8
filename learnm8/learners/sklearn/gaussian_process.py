@@ -79,7 +79,7 @@ class GaussianProcessLearner(SklearnLearner):
             random_state=random_state,
         )
 
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, random_state=random_state, scale_features=True, **kwargs)
 
         logger.debug(
             f'Initialized GaussianProcessLearner with kernel={self._kernel_config}, '
@@ -146,12 +146,17 @@ class GaussianProcessLearner(SklearnLearner):
             )
 
         try:
-            features, _ = _preprocess_features(
+            features, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
+
+            if self._feature_scaler is not None:
+                features = self._feature_scaler.transform(features)
 
             predictions, std = self.model.predict(features, return_std=True)
             logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')

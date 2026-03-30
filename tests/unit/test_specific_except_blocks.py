@@ -31,6 +31,10 @@ class TestUnexpectedErrorsPropagateFromSklearnTrain:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner.scale_features = False
+        learner._feature_scaler = None
         learner.is_trained = False
         learner.model = MagicMock()
         learner.model.fit.side_effect = MemoryError('out of memory')
@@ -44,6 +48,10 @@ class TestUnexpectedErrorsPropagateFromSklearnTrain:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner.scale_features = False
+        learner._feature_scaler = None
         learner.is_trained = False
         learner.model = MagicMock()
         learner.model.fit.side_effect = KeyboardInterrupt()
@@ -57,6 +65,10 @@ class TestUnexpectedErrorsPropagateFromSklearnTrain:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner.scale_features = False
+        learner._feature_scaler = None
         learner.is_trained = False
         learner.model = MagicMock()
         learner.model.fit.side_effect = ValueError('bad input shape')
@@ -70,6 +82,10 @@ class TestUnexpectedErrorsPropagateFromSklearnTrain:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner.scale_features = False
+        learner._feature_scaler = None
         learner.is_trained = False
         learner.model = MagicMock()
         learner.model.fit.side_effect = np.linalg.LinAlgError('singular matrix')
@@ -86,6 +102,9 @@ class TestUnexpectedErrorsPropagateFromSklearnPredict:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner._feature_scaler = None
         learner.is_trained = True
         learner.model = MagicMock()
         learner.model.predict.side_effect = MemoryError('out of memory')
@@ -99,6 +118,9 @@ class TestUnexpectedErrorsPropagateFromSklearnPredict:
         learner = SklearnLearner.__new__(SklearnLearner)
         learner.remove_zero_variance = False
         learner._valid_feature_mask = None
+        learner._feature_type = 'binary'
+        learner._feature_imputer = None
+        learner._feature_scaler = None
         learner.is_trained = True
         learner.model = MagicMock()
         learner.model.predict.side_effect = RuntimeError('computation failed')

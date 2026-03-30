@@ -29,6 +29,10 @@ class GhoseCrippenFeaturizer(SkfpFeaturizer):
 
         super().__init__(fp, auto_generate_conformers=False, n_jobs=n_jobs)
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous'
+
     def get_name(self) -> str:
         return 'ghose_crippen'
 
