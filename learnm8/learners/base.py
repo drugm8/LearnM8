@@ -322,6 +322,10 @@ class SklearnLearner(Learner):
                 f'and that the featurizer is compatible with the model.'
             ) from e
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        """Return memory usage profile for batch size estimation."""
+        return {'bytes_per_sample': n_features * 8, 'working_multiplier': 1.3, 'fixed_overhead': 0}
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f'Sklearn{self.model.__class__.__name__}'
@@ -656,6 +660,10 @@ class TorchLearner(Learner):
                 f'Check that the input features have the same shape as training features '
                 f'and that the featurizer is compatible with the model.'
             ) from e
+
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        """Return memory usage profile for batch size estimation."""
+        return {'bytes_per_sample': n_features * 4, 'working_multiplier': 3.0, 'fixed_overhead': 0}
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""

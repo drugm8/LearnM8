@@ -745,7 +745,7 @@ def run_args(minimal_compounds, tmp_path):
         device='cpu',
         random_state=42,
         mode=None,
-        prediction_batch_size=None,
+        memory_safety_factor=0.7,
         smiles_col=None,
         id_col=None,
     )

@@ -382,9 +382,10 @@ def create_parser() -> argparse.ArgumentParser:
         help='Execution mode (auto-detected if not specified)'
     )
     advanced_group.add_argument(
-        '--prediction-batch-size',
-        type=int,
-        help='Prediction batch size for memory management (default: auto-calculated)'
+        '--memory-safety-factor',
+        type=float,
+        default=0.7,
+        help='Fraction of available memory to use for prediction batching (default: 0.7)'
     )
 
     list_parser = subparsers.add_parser('list', help='List available components')
@@ -545,7 +546,7 @@ def cmd_run(args: argparse.Namespace):
                         pruning_fraction=args.pruning_fraction,
                         pruning_strategy=args.pruning_strategy,
                         acquisition_params=acquisition_params,
-                        prediction_batch_size=getattr(args, 'prediction_batch_size', None),
+                        memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
                         n_jobs=getattr(args, 'n_jobs', -1),
                         device=getattr(args, 'device', 'auto')
                     )
@@ -577,7 +578,7 @@ def cmd_run(args: argparse.Namespace):
                     pruning_fraction=args.pruning_fraction,
                     pruning_strategy=args.pruning_strategy,
                     acquisition_params=acquisition_params,
-                    prediction_batch_size=getattr(args, 'prediction_batch_size', None),
+                    memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
                     n_jobs=getattr(args, 'n_jobs', -1),
                     device=getattr(args, 'device', 'auto')
                 )
