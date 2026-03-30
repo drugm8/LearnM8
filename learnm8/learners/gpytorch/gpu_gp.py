@@ -205,6 +205,7 @@ class GPyTorchGPLearner(Learner):
             ConfigurationError: If required dependencies are missing.
         """
         n = features.shape[0]
+        self._n_train = n
         if n > self.max_train_size:
             raise LearnerError(
                 f"Training set size {n} exceeds max_train_size={self.max_train_size}. "
@@ -343,6 +344,14 @@ class GPyTorchGPLearner(Learner):
     def supports_uncertainty(self) -> bool:
         """Return True; GP models always provide uncertainty estimates."""
         return True
+
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        n_train = getattr(self, '_n_train', 0)
+        return {
+            'bytes_per_sample': n_features * 4 + n_train * 4 * 2,
+            'working_multiplier': 1.0,
+            'fixed_overhead': 0,
+        }
 
     def requires_smiles(self) -> bool:
         """Return False; this learner operates on feature arrays."""

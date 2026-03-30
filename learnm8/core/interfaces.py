@@ -15,9 +15,9 @@ import polars as pl
 
 class Oracle(ABC):
     """Interface for measuring molecular properties.
-    
+
     Oracles are responsible for evaluating compounds and returning their
-    measured properties. This could be experimental measurements, 
+    measured properties. This could be experimental measurements,
     computational simulations, or lookup from databases.
     """
 
@@ -59,10 +59,9 @@ class Learner(ABC):
     """
 
     @abstractmethod
-    def train(self,
-              features: np.ndarray,
-              targets: np.ndarray,
-              smiles: list[str] | None = None) -> None:
+    def train(
+        self, features: np.ndarray, targets: np.ndarray, smiles: list[str] | None = None
+    ) -> None:
         """
         Train the model on feature matrix or SMILES.
 
@@ -78,10 +77,9 @@ class Learner(ABC):
         pass
 
     @abstractmethod
-    def predict(self,
-                features: np.ndarray,
-                smiles: list[str] | None = None
-                ) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self, features: np.ndarray, smiles: list[str] | None = None
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Predict on feature matrix or SMILES.
 
@@ -101,7 +99,7 @@ class Learner(ABC):
     @abstractmethod
     def get_name(self) -> str:
         """Return a descriptive name for this learner.
-        
+
         Returns:
             String identifier for the learner type and configuration
         """
@@ -132,10 +130,32 @@ class Learner(ABC):
         """
         return False
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        """Return memory cost estimate for prediction batch sizing.
+
+        Args:
+            n_features: Number of input features.
+
+        Returns:
+            Dict with keys:
+                'bytes_per_sample': int — per-sample memory cost in bytes
+                'working_multiplier': float — overhead factor for temporaries
+                'fixed_overhead': int — fixed cost independent of batch size
+
+        Note:
+            Learners with training-size-dependent costs (e.g., GP) access
+            self._n_train internally rather than receiving it as a parameter.
+        """
+        return {
+            'bytes_per_sample': n_features * 8,
+            'working_multiplier': 2.0,
+            'fixed_overhead': 0,
+        }
+
 
 class AcquisitionFunction(ABC):
     """Base class for compound selection strategies.
-    
+
     Acquisition functions determine which compounds to select for labeling
     in each active learning cycle based on model predictions and optionally
     uncertainty estimates.
@@ -162,7 +182,7 @@ class AcquisitionFunction(ABC):
 
     def requires_uncertainty(self) -> bool:
         """Return True if this acquisition function requires uncertainty estimates.
-        
+
         Returns:
             Boolean indicating if uncertainty column is required
         """

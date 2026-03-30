@@ -36,8 +36,8 @@ from typing import Any, Literal
 
 import numpy as np
 import polars as pl
-from tqdm import tqdm
 
+from learnm8.core.batching import predict_with_batching
 from learnm8.core.config import CycleConfig
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import evaluate_cycle
@@ -55,124 +55,6 @@ from learnm8.utils.logging_formatters import format_cycle_metrics_table
 logger = logging.getLogger(__name__)
 
 
-def _calculate_optimal_batch_size(
-    n_compounds: int,
-    featurizer: str | None,
-    available_memory_gb: float = 4.0
-) -> int:
-    """Calculate optimal batch size to stay under memory threshold.
-
-    Args:
-        n_compounds: Number of compounds to predict on
-        featurizer: Type of featurizer (morgan, maccs, etc.)
-        available_memory_gb: Available memory budget in GB
-
-    Returns:
-        Optimal batch size (bounded between 1000 and 50000)
-
-    Strategy:
-        - Calculate bytes per compound based on feature dimension
-        - Use 50% of available memory for safety margin
-        - Apply reasonable min/max bounds
-    """
-    # Get feature dimension from featurizer if available
-    if featurizer is not None:
-        from learnm8.features import FEATURIZER_REGISTRY
-        if featurizer in FEATURIZER_REGISTRY:
-            temp_featurizer = FEATURIZER_REGISTRY[featurizer](n_jobs=1)  # n_jobs=1 OK here: only reading dimension
-            feature_dim = temp_featurizer.get_dimension()
-        else:
-            # Fallback for unknown types
-            feature_dim = 2048
-    else:
-        # Default to 2048 for SMILES-aware learners (no featurization)
-        feature_dim = 2048
-
-    bytes_per_compound = feature_dim * 8  # float64
-
-    # Use 50% of available memory for features + predictions
-    bytes_per_batch = available_memory_gb * 1e9 * 0.5
-
-    batch_size = int(bytes_per_batch / bytes_per_compound)
-
-    # Apply reasonable bounds
-    batch_size = max(1000, min(batch_size, 50000))
-
-    # Never exceed total compounds
-    batch_size = min(batch_size, n_compounds)
-
-    return batch_size
-
-
-def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
-    """Yield DataFrame chunks for batch processing.
-
-    Args:
-        df: DataFrame to chunk
-        chunk_size: Number of rows per chunk
-
-    Yields:
-        DataFrame chunks of size chunk_size (last chunk may be smaller)
-    """
-    for i in range(0, len(df), chunk_size):
-        yield df[i:i+chunk_size]
-
-
-def _predict_chunk(
-    chunk_df: pl.DataFrame,
-    learner: Learner,
-    featurizer: str | None,
-    cache_dir: Path,
-    show_progress: bool = False,
-    n_jobs: int = -1
-) -> tuple[np.ndarray, np.ndarray | None]:
-    """
-    Generate predictions for a chunk of compounds.
-
-    Single source of truth for all prediction logic. Handles both SMILES-aware
-    learners (Chemprop, Fastprop) and feature-based learners (RF, XGBoost, GP)
-    transparently.
-
-    Args:
-        chunk_df: DataFrame with ID and SMILES columns
-        learner: Trained learner instance
-        featurizer: Type of featurizer (morgan, maccs, etc.) or None
-        cache_dir: Feature cache directory
-        show_progress: Whether to show progress bar for feature extraction
-
-    Returns:
-        (predictions, uncertainties) tuple
-    """
-    chunk_smiles = chunk_df['SMILES'].to_list()
-
-    if learner.requires_smiles():
-        # SMILES-aware learners (Chemprop, Fastprop)
-        if featurizer is not None:
-            chunk_features = extract_features(
-                chunk_smiles, featurizer,
-                cache_dir=cache_dir, show_progress=show_progress,
-                n_jobs=n_jobs
-            )
-        else:
-            chunk_features = None
-        return learner.predict(features=chunk_features, smiles=chunk_smiles)
-    else:
-        # Feature-based learners (RF, XGBoost, GP, etc.)
-        if featurizer is None:
-            raise ValueError(
-                f"featurizer is required for {learner.get_name()} because it is a "
-                f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
-                f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
-                f"a featurizer (featurizer=None)."
-            )
-        chunk_features = extract_features(
-            chunk_smiles, featurizer,
-            cache_dir=cache_dir, show_progress=show_progress,
-            n_jobs=n_jobs
-        )
-        return learner.predict(chunk_features)
-
-
 def execute_cycle(
     compounds_df: pl.DataFrame,
     cycle: int,
@@ -187,7 +69,7 @@ def execute_cycle(
     mode: Literal['run', 'benchmark'] = 'run',
     original_pool: pl.DataFrame | None = None,
     cumulative_selected_ids: set | None = None,
-    prediction_batch_size: int | None = None,
+    memory_safety_factor: float = 0.7,
     previous_metrics: dict[str, Any] | None = None,
     n_jobs: int = -1
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
@@ -215,10 +97,8 @@ def execute_cycle(
         mode: 'run' or 'benchmark' execution mode
         original_pool: Required for benchmark mode - full original compound pool
         cumulative_selected_ids: Optional set of previously selected compound IDs
-        prediction_batch_size: Optional batch size for chunked prediction.
-            If None, auto-enables for >100k compounds. Set to a specific
-            value to override auto-calculation. Use this to control memory
-            usage during prediction on large compound libraries.
+        memory_safety_factor: Fraction of available memory to use for prediction
+            batching (0.0, 1.0]. Default 0.7. Higher values use more memory.
         previous_metrics: Optional metrics from previous cycle for change indicators
 
     Returns:
@@ -383,75 +263,26 @@ def execute_cycle(
         }
         return compounds_df, metrics
 
-    # Determine batch size (smart defaults)
-    n_unlabeled = len(prediction_pool)
-    if prediction_batch_size is None:
-        # Auto: full dataset for small, chunked for large
-        batch_size = (
-            _calculate_optimal_batch_size(n_unlabeled, featurizer, 4.0)
-            if n_unlabeled > 100000
-            else n_unlabeled
+    try:
+        predictions, uncertainties, valid_compound_ids = predict_with_batching(
+            prediction_pool,
+            learner,
+            featurizer,
+            cache_dir,
+            memory_safety_factor=memory_safety_factor,
+            n_jobs=n_jobs,
         )
-        if n_unlabeled > 100000:
-            logger.debug(f"Auto-batching {n_unlabeled} compounds (batch_size={batch_size})")
-    else:
-        batch_size = prediction_batch_size
-        logger.debug(f"Using batch_size={batch_size} for {n_unlabeled} compounds")
-
-    # Process in batches (unified path for ALL sizes)
-    all_predictions = []
-    all_uncertainties = [] if learner.supports_uncertainty() else None
-    all_valid_ids = []
-
-    n_batches = math.ceil(n_unlabeled / batch_size)
-    chunks = list(_chunk_dataframe(prediction_pool, batch_size))
-
-    if n_batches > 1:
-        batch_iterator = tqdm(
-            enumerate(chunks, 1),
-            total=n_batches,
-            desc="Predicting batches",
-            unit="batch",
-            smoothing=0,
-            leave=False
+    except (LearnerError, FeatureExtractionError):
+        raise
+    except (ValueError, RuntimeError, TypeError) as e:
+        logger.error(f"Prediction failed in cycle {cycle}: {e}")
+        err = LearnerError(
+            f"Prediction failed in cycle {cycle}: {e}. "
+            f"Check featurizer compatibility with your learner and that training "
+            f"completed successfully."
         )
-    else:
-        batch_iterator = enumerate(chunks, 1)
-
-    for batch_idx, chunk_df in batch_iterator:
-
-        try:
-            chunk_predictions, chunk_uncertainties = _predict_chunk(
-                chunk_df, learner, featurizer, cache_dir,
-                show_progress=(n_batches == 1 and n_unlabeled > 100000),
-                n_jobs=n_jobs
-            )
-            all_predictions.append(chunk_predictions)
-            all_valid_ids.extend(chunk_df['ID'].to_list())
-            if all_uncertainties is not None and chunk_uncertainties is not None:
-                all_uncertainties.append(chunk_uncertainties)
-        except (LearnerError, FeatureExtractionError):
-            raise
-        except (ValueError, RuntimeError, TypeError) as e:
-            logger.error(f"Batch {batch_idx} prediction failed: {e}")
-            err = LearnerError(
-                f"Prediction failed in cycle {cycle}, batch {batch_idx}/{n_batches}: {e}. "
-                f"Check featurizer compatibility with your learner and that training "
-                f"completed successfully."
-            )
-            err.add_note(f"Failed during cycle {cycle}, predicting batch {batch_idx} of {n_batches}")
-            raise err from e
-
-    # Combine results (optimized for single-batch case)
-    predictions = (
-        all_predictions[0] if len(all_predictions) == 1
-        else np.concatenate(all_predictions)
-    )
-    uncertainties = (
-        all_uncertainties[0] if all_uncertainties and len(all_uncertainties) == 1
-        else (np.concatenate(all_uncertainties) if all_uncertainties else None)
-    )
-    valid_compound_ids = all_valid_ids
+        err.add_note(f"Failed during cycle {cycle}")
+        raise err from e
 
     prediction_time = time.time() - prediction_start_time
     logger.info(f"Prediction complete: {len(predictions)} predictions (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
