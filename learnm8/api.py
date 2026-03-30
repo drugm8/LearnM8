@@ -393,7 +393,7 @@ def run_active_learning(
     # Acquisition
     acquisition_params: dict | None = None,
     # Memory management
-    prediction_batch_size: int | None = None,
+    memory_safety_factor: float = 0.7,
     # Resource control
     n_jobs: int = -1,
     device: str = 'auto',
@@ -527,11 +527,9 @@ def run_active_learning(
 
         acquisition_params: Additional acquisition parameters
 
-        prediction_batch_size: Optional batch size for memory-efficient prediction.
-            Uses unified always-batch approach: for small datasets (≤100k), batch_size
-            equals dataset length (single iteration, zero overhead). For large datasets
-            (>100k), uses auto-calculated batch size based on memory and featurizer type.
-            Set to a specific integer to override auto-calculation.
+        memory_safety_factor: Fraction of available memory to use for prediction
+            batching (0.0, 1.0]. Default 0.7. Higher values use more memory for
+            larger batches. Use 0.85 on dedicated hardware, 0.5 on shared clusters.
 
         **kwargs: Additional parameters passed to cycle execution
 
@@ -773,23 +771,12 @@ def run_active_learning(
                 featurizer_obj = featurizer
                 logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
 
-        # Validate prediction_batch_size if provided
-        if prediction_batch_size is not None:
-            if not isinstance(prediction_batch_size, int):
-                raise TypeError(
-                    f"prediction_batch_size must be an integer, got {type(prediction_batch_size).__name__}. "
-                    f"Use None for auto-detection or an integer >= 100."
-                )
-            if prediction_batch_size < 100:
-                raise ValueError(
-                    f"prediction_batch_size must be >= 100, got {prediction_batch_size}. "
-                    f"Very small batch sizes may cause performance degradation."
-                )
-            if prediction_batch_size > 100000:
-                logger.warning(
-                    f"prediction_batch_size={prediction_batch_size} is very large. "
-                    f"Consider using smaller batches for better memory management."
-                )
+        if not (0.0 < memory_safety_factor <= 1.0):
+            raise ConfigurationError(
+                f"memory_safety_factor must be in (0.0, 1.0], got {memory_safety_factor}. "
+                f"Use 0.7 (default) for most cases, 0.85 for dedicated hardware, "
+                f"0.5 for shared clusters."
+            )
 
         oracle_desc = f"{oracle.__class__.__name__}"
         if hasattr(oracle, 'source_file'):
@@ -946,7 +933,7 @@ def run_active_learning(
                     mode=mode,
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
-                    prediction_batch_size=prediction_batch_size,
+                    memory_safety_factor=memory_safety_factor,
                     previous_metrics=previous_metrics,
                     n_jobs=n_jobs
                 )

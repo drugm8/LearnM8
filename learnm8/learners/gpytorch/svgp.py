@@ -412,5 +412,12 @@ class SVGPLearner(Learner):
     def supports_uncertainty(self) -> bool:
         return True
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        return {
+            'bytes_per_sample': n_features * 4 + self._effective_m * 4 * 2,
+            'working_multiplier': 1.0,
+            'fixed_overhead': 0,
+        }
+
     def requires_smiles(self) -> bool:
         return False

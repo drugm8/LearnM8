@@ -268,6 +268,10 @@ class EnsembleLearner(Learner):
         """Return True since ensemble provides uncertainty through model diversity."""
         return True
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        profiles = [m.memory_profile(n_features) for m in self.learners]
+        return max(profiles, key=lambda p: p['bytes_per_sample'] * p['working_multiplier'])
+
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         learner_names = [learner.get_name() for learner in self.learners]
