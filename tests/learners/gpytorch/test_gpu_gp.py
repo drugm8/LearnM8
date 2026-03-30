@@ -1,4 +1,3 @@
-import gc
 import logging
 import sys
 
@@ -6,7 +5,7 @@ import numpy as np
 import pytest
 import torch
 
-from learnm8.exceptions import ConfigurationError, ConvergenceWarning, LearnerError
+from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.learners.gpytorch import GPyTorchGPLearner
 
 
