@@ -8,10 +8,7 @@ New Architecture (v1.0.0):
 - Uncertainty quantification capabilities
 """
 
-# Base classes
 from .base import SklearnLearner, TorchLearner
-
-# Ensemble learners
 from .ensemble import (
     DTEnsemble,
     EnsembleLearner,
@@ -21,8 +18,7 @@ from .ensemble import (
     RFEnsemble,
     XGBEnsemble,
 )
-
-# Scikit-learn learners
+from .gpu import RfFilLearner, RidgeCumlLearner
 from .sklearn import (
     AdvancedRandomForestLearner,
     DecisionTreeLearner,
@@ -31,35 +27,28 @@ from .sklearn import (
     RandomForestLearner,
     XGBoostLearner,
 )
-
-# PyTorch learners
 from .torch import ChempropLearner, FastpropLearner, MCDropoutLearner, MLPLearner
 
 __all__ = [
-    # Base classes
+    'AdvancedRandomForestLearner',
+    'ChempropLearner',
+    'DTEnsemble',
+    'DecisionTreeLearner',
+    'EnsembleLearner',
+    'FastpropEnsemble',
+    'FastpropLearner',
+    'GaussianProcessLearner',
+    'LREnsemble',
+    'LinearRegressionLearner',
+    'MCDropoutLearner',
+    'MLPLearner',
+    'MixedEnsemble',
+    'RFEnsemble',
+    'RandomForestLearner',
+    'RfFilLearner',
+    'RidgeCumlLearner',
     'SklearnLearner',
     'TorchLearner',
-
-    # Sklearn learners
-    'RandomForestLearner',
-    'GaussianProcessLearner',
-    'XGBoostLearner',
-    'DecisionTreeLearner',
-    'LinearRegressionLearner',
-    'AdvancedRandomForestLearner',
-
-    # PyTorch learners
-    'MLPLearner',
-    'MCDropoutLearner',
-    'FastpropLearner',
-    'ChempropLearner',
-
-    # Ensemble learners
-    'EnsembleLearner',
-    'RFEnsemble',
-    'LREnsemble',
     'XGBEnsemble',
-    'DTEnsemble',
-    'MixedEnsemble',
-    'FastpropEnsemble',
+    'XGBoostLearner',
 ]
