@@ -10,6 +10,7 @@ import time
 from abc import abstractmethod
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -32,7 +33,9 @@ def _preprocess_features(
     valid_feature_mask: np.ndarray | None = None,
     remove_zero_variance: bool = True,
     is_training: bool = True,
-) -> tuple[np.ndarray, np.ndarray | None]:
+    feature_type: str = 'binary',
+    imputer: Any | None = None,
+) -> tuple[np.ndarray, np.ndarray | None, Any | None]:
     """Preprocess features by handling NaN/inf and optionally removing zero-variance columns.
 
     Args:
@@ -40,16 +43,32 @@ def _preprocess_features(
         valid_feature_mask: Boolean mask from training (required if is_training=False)
         remove_zero_variance: Whether to remove zero-variance columns
         is_training: If True, compute mask; if False, apply existing mask
+        feature_type: 'binary' or 'continuous' — determines NaN handling strategy
+        imputer: Fitted SimpleImputer for prediction (continuous features only)
 
     Returns:
-        Tuple of (preprocessed_features, valid_feature_mask)
-        - During training: returns computed mask
-        - During prediction: returns the input mask unchanged
+        Tuple of (preprocessed_features, valid_feature_mask, imputer)
+        - During training: returns computed mask and fitted imputer (or None)
+        - During prediction: returns the input mask unchanged and input imputer unchanged
     """
-    features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+    if feature_type == 'continuous':
+        features = np.where(np.isinf(features), np.nan, features)
+        if is_training:
+            from sklearn.impute import SimpleImputer
+            imputer = SimpleImputer(strategy='median')
+            features = imputer.fit_transform(features)
+        else:
+            if imputer is not None:
+                features = imputer.transform(features)
+            else:
+                features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+    else:
+        if np.any(np.isnan(features)):
+            logger.warning('NaN detected in binary fingerprint features')
+        features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
 
     if not remove_zero_variance:
-        return features, None
+        return features, None, imputer
 
     if is_training:
         variance = np.var(features, axis=0)
@@ -65,7 +84,7 @@ def _preprocess_features(
         if valid_feature_mask is not None:
             features = features[:, valid_feature_mask]
 
-    return features, valid_feature_mask
+    return features, valid_feature_mask, imputer
 
 
 def _validate_train_inputs(
@@ -193,6 +212,7 @@ class SklearnLearner(Learner):
         model: BaseEstimator,
         random_state: int = 42,
         remove_zero_variance: bool = True,
+        scale_features: bool = False,
     ):
         """Initialize sklearn learner.
 
@@ -201,12 +221,17 @@ class SklearnLearner(Learner):
             random_state: Random seed for reproducibility
             remove_zero_variance: Remove zero-variance features during training (default: True).
                                  NaN/inf values are always replaced with 0 regardless of this setting.
+            scale_features: Apply StandardScaler to features after preprocessing (default: False).
         """
         self.model = model
         self.random_state = random_state
         self.remove_zero_variance = remove_zero_variance
+        self.scale_features = scale_features
         self.is_trained = False
         self._valid_feature_mask = None
+        self._feature_type = 'binary'
+        self._feature_imputer = None
+        self._feature_scaler = None
 
         if hasattr(self.model, 'random_state'):
             self.model.random_state = random_state
@@ -247,11 +272,18 @@ class SklearnLearner(Learner):
         start_time = time.time()
 
         try:
-            features, self._valid_feature_mask = _preprocess_features(
+            features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
                 features,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=True,
+                feature_type=self._feature_type,
             )
+
+            if self.scale_features:
+                self._feature_scaler = StandardScaler()
+                features = self._feature_scaler.fit_transform(features)
+            else:
+                self._feature_scaler = None
 
             self.model.fit(features, targets)
             self.is_trained = True
@@ -296,12 +328,17 @@ class SklearnLearner(Learner):
         start_time = time.time()
 
         try:
-            features, _ = _preprocess_features(
+            features, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
+
+            if self._feature_scaler is not None:
+                features = self._feature_scaler.transform(features)
 
             predictions = self.model.predict(features)
 
@@ -385,6 +422,9 @@ class TorchLearner(Learner):
         self.training_history = []
         self._valid_feature_mask = None
         self._input_dim = None
+        self._feature_type = 'binary'
+        self._feature_imputer = None
+        self._target_scaler = None
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -534,27 +574,43 @@ class TorchLearner(Learner):
         start_time = time.time()
 
         try:
-            features, self._valid_feature_mask = _preprocess_features(
+            features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
                 features,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=True,
+                feature_type=self._feature_type,
             )
 
             input_dim = features.shape[1]
-            if self.model is None or self._input_dim != input_dim:
-                self._input_dim = input_dim
-                self.model = self._create_model(input_dim).to(self.device)
-                self.optimizer = torch.optim.Adam(
-                    self.model.parameters(), lr=self.learning_rate
-                )
+            self._input_dim = input_dim
+            torch.manual_seed(self.random_state)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(self.random_state)
+            self.model = self._create_model(input_dim).to(self.device)
+            self.optimizer = torch.optim.Adam(
+                self.model.parameters(), lr=self.learning_rate
+            )
+            logger.debug(
+                f'Cold-start: creating new model with input_dim={input_dim}'
+            )
 
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(features)
 
-            X_train, X_val, y_train, y_val = self._split_validation(X_scaled, targets)
+            self._target_scaler = StandardScaler()
+            if np.std(targets) < 1e-8:
+                y_scaled = targets
+                self._target_scaler = None
+            else:
+                y_scaled = self._target_scaler.fit_transform(
+                    targets.reshape(-1, 1)
+                ).ravel()
+
+            X_train, X_val, y_train, y_val = self._split_validation(X_scaled, y_scaled)
 
             best_val_loss = float('inf')
             patience_counter = 0
+            best_state_dict = None
             self.training_history = []
 
             logger.debug(
@@ -569,8 +625,12 @@ class TorchLearner(Learner):
                     {'epoch': epoch, 'train_loss': train_loss, 'val_loss': val_loss}
                 )
 
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                if epoch == 0 or val_loss < best_val_loss:
+                    best_state_dict = {
+                        k: v.clone().cpu() for k, v in self.model.state_dict().items()
+                    }
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
                     patience_counter = 0
                 else:
                     patience_counter += 1
@@ -578,6 +638,13 @@ class TorchLearner(Learner):
                 if patience_counter >= self.early_stopping_patience:
                     logger.debug(f'Early stopping triggered at epoch {epoch}')
                     break
+
+            if best_state_dict is not None:
+                self.model.load_state_dict(best_state_dict)
+                self.model.to(self.device)
+                logger.debug(
+                    f'Restored best checkpoint (val_loss={best_val_loss:.6f})'
+                )
 
                 if epoch % 10 == 0:
                     logger.debug(
@@ -624,11 +691,13 @@ class TorchLearner(Learner):
         start_time = time.time()
 
         try:
-            features, _ = _preprocess_features(
+            features, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
 
             X_scaled = self.scaler.transform(features)
@@ -643,12 +712,16 @@ class TorchLearner(Learner):
             elif predictions.ndim == 0:
                 predictions = np.array([predictions.item()])
 
+            predictions, uncertainty = self._inverse_transform_predictions(
+                predictions, None
+            )
+
             pred_time = time.time() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )
 
-            return predictions, None
+            return predictions, uncertainty
 
         except LearnerError:
             raise
@@ -664,6 +737,19 @@ class TorchLearner(Learner):
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         """Return memory usage profile for batch size estimation."""
         return {'bytes_per_sample': n_features * 4, 'working_multiplier': 3.0, 'fixed_overhead': 0}
+
+    def _inverse_transform_predictions(
+        self,
+        predictions: np.ndarray,
+        uncertainty: np.ndarray | None,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        if self._target_scaler is not None:
+            predictions = self._target_scaler.inverse_transform(
+                predictions.reshape(-1, 1)
+            ).ravel()
+            if uncertainty is not None:
+                uncertainty = uncertainty * self._target_scaler.scale_[0]
+        return predictions, uncertainty
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""

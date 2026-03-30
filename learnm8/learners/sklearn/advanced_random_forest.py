@@ -118,11 +118,13 @@ class AdvancedRandomForestLearner(SklearnLearner):
         start_time = time.time()
 
         try:
-            preprocessed, _ = _preprocess_features(
+            preprocessed, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
 
             if not hasattr(self.model, 'estimators_'):

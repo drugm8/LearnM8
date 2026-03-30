@@ -138,11 +138,13 @@ class MCDropoutLearner(TorchLearner):
             )
 
         try:
-            features, _ = _preprocess_features(
+            features, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
-                is_training=False
+                is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
 
             X_scaled = self.scaler.transform(features)
@@ -167,6 +169,10 @@ class MCDropoutLearner(TorchLearner):
                 mean_predictions = np.array([mean_predictions])
             if np.isscalar(uncertainties):
                 uncertainties = np.array([uncertainties])
+
+            mean_predictions, uncertainties = self._inverse_transform_predictions(
+                mean_predictions, uncertainties
+            )
 
             logger.debug(f"Predicted {len(mean_predictions)} samples with {self.get_name()} "
                         f"using {self.n_dropout_samples} MC samples")

@@ -178,6 +178,17 @@ def execute_cycle(
             f"measurements, and that batch_fraction is large enough to select at least 1 compound."
         )
     else:
+        # Propagate feature_type from featurizer to learner
+        if featurizer is not None:
+            from learnm8.features import FEATURIZER_REGISTRY
+            if featurizer in FEATURIZER_REGISTRY:
+                featurizer_instance = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+                learner._feature_type = featurizer_instance.feature_type
+            else:
+                learner._feature_type = 'binary'
+        else:
+            learner._feature_type = 'binary'
+
         # Extract features and train learner
         training_start_time = time.time()
         try:

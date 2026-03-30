@@ -382,6 +382,8 @@ class TestLinearRegressionLearner:
         """Compare leverage uncertainty vs scipy.linalg.inv reference."""
         from scipy.linalg import inv
 
+        from sklearn.preprocessing import StandardScaler
+
         rng = np.random.RandomState(42)
         X = rng.randn(30, 5)
         y = X @ rng.randn(5) + rng.randn(30) * 0.1
@@ -394,6 +396,9 @@ class TestLinearRegressionLearner:
         variance = np.var(preprocessed, axis=0)
         mask = variance > 1e-10
         preprocessed = preprocessed[:, mask]
+
+        scaler = StandardScaler()
+        preprocessed = scaler.fit_transform(preprocessed)
 
         n, p = preprocessed.shape
         gram = preprocessed.T @ preprocessed + alpha * np.eye(p)
@@ -512,3 +517,22 @@ class TestLinearRegressionLearner:
         assert unc is not None
         assert unc.shape == (3,)
         assert np.all(np.isfinite(unc))
+
+
+@pytest.mark.unit
+class TestRidgeFeatureScaling:
+    def test_scale_features_default_true(self):
+        from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
+
+        learner = LinearRegressionLearner(alpha=1.0, random_state=42)
+        assert learner.scale_features is True
+
+    def test_feature_scaler_fitted_after_training(self):
+        from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
+
+        rng = np.random.RandomState(42)
+        features = rng.randn(30, 5) * 100
+        targets = rng.randn(30)
+        learner = LinearRegressionLearner(alpha=1.0, random_state=42)
+        learner.train(features, targets)
+        assert learner._feature_scaler is not None
