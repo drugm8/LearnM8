@@ -110,7 +110,8 @@ class GaussianProcessLearner(SklearnLearner):
         return C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
 
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
-        n_samples = features.shape[0] if features.ndim == 2 else len(features)
+        self._n_train = features.shape[0] if features.ndim == 2 else len(features)
+        n_samples = self._n_train
 
         if n_samples > self.max_train_size:
             raise LearnerError(
@@ -170,6 +171,14 @@ class GaussianProcessLearner(SklearnLearner):
 
     def get_name(self) -> str:
         return f'GaussianProcess({self._kernel_name},alpha={self.alpha})'
+
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        n_train = getattr(self, '_n_train', 0)
+        return {
+            'bytes_per_sample': n_features * 8 + n_train * 8 * 2,
+            'working_multiplier': 1.0,
+            'fixed_overhead': 0,
+        }
 
     def get_learned_hyperparameters(self) -> dict | None:
         if not self.is_trained:

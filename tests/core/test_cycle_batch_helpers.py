@@ -1,55 +1,12 @@
-"""Unit tests for batch prediction helper functions in cycle.py."""
+"""Unit tests for batch prediction helper functions in batching.py."""
 
-import pytest
-import polars as pl
-import numpy as np
-from pathlib import Path
 from unittest.mock import Mock, patch
 
-from learnm8.core.cycle import (
-    _calculate_optimal_batch_size,
-    _chunk_dataframe,
-    _predict_chunk
-)
+import numpy as np
+import polars as pl
+import pytest
 
-
-@pytest.mark.unit
-class TestCalculateOptimalBatchSize:
-    """Test _calculate_optimal_batch_size() helper function."""
-
-    def test_small_dataset_returns_full_size(self):
-        """Small datasets (≤100k) should return n_compounds."""
-        batch_size = _calculate_optimal_batch_size(50000, 'morgan', 4.0)
-        assert batch_size == 50000
-
-    def test_large_dataset_returns_calculated_size(self):
-        """Large datasets (>100k) should return calculated batch size."""
-        batch_size = _calculate_optimal_batch_size(500000, 'morgan', 4.0)
-        assert 1000 <= batch_size <= 50000
-
-    def test_featurizer_feature_sizes_change_calculated_batch_size_ordering(self):
-        """Different featurizers should affect batch size calculation."""
-        batch_maccs = _calculate_optimal_batch_size(500000, 'maccs', 0.1)
-        batch_morgan = _calculate_optimal_batch_size(500000, 'morgan', 0.1)
-        batch_descriptors = _calculate_optimal_batch_size(500000, 'descriptors', 0.1)
-
-        assert batch_maccs > batch_descriptors
-        assert batch_descriptors > batch_morgan
-
-    def test_unknown_featurizer_uses_default(self):
-        """Unknown featurizer should use default feature size."""
-        batch_size = _calculate_optimal_batch_size(500000, 'unknown', 4.0)
-        assert 1000 <= batch_size <= 50000
-
-    def test_minimum_batch_size_enforced(self):
-        """Batch size should never be less than 1000."""
-        batch_size = _calculate_optimal_batch_size(100000, 'descriptors', 0.1)
-        assert batch_size >= 1000
-
-    def test_maximum_batch_size_enforced(self):
-        """Batch size should never exceed 50000."""
-        batch_size = _calculate_optimal_batch_size(100000, 'maccs', 100.0)
-        assert batch_size <= 50000
+from learnm8.core.batching import _chunk_dataframe, _predict_chunk
 
 
 @pytest.mark.unit
@@ -107,7 +64,7 @@ class TestPredictChunk:
             None
         )
 
-        with patch('learnm8.core.cycle.extract_features') as mock_extract:
+        with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)
 
             predictions, uncertainties = _predict_chunk(
@@ -163,7 +120,7 @@ class TestPredictChunk:
             None
         )
 
-        with patch('learnm8.core.cycle.extract_features') as mock_extract:
+        with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)
 
             predictions, uncertainties = _predict_chunk(

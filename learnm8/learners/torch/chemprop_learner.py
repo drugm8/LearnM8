@@ -434,6 +434,13 @@ class ChempropLearner(Learner):
 		"""Return descriptive learner name."""
 		return f"Chemprop(depth={self.depth},hidden={self.message_hidden_dim})"
 
+	def memory_profile(self, n_features: int) -> dict[str, int | float]:
+		return {
+			'bytes_per_sample': 1024,
+			'working_multiplier': 3.0,
+			'fixed_overhead': 0,
+		}
+
 	def _cleanup_gpu_memory(self, context: str = "") -> None:
 		"""Force garbage collection and clear GPU cache if enabled.
 

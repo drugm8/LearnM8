@@ -17,10 +17,11 @@ Validates results structure:
 """
 
 import logging
-import pytest
-import polars as pl
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import polars as pl
+import pytest
 
 from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig
@@ -701,7 +702,7 @@ class TestAPIErrorHandling:
         """Test that invalid compound_pool type raises error."""
         output_dir = tmp_path / "invalid_type_test"
 
-        with pytest.raises(TypeError, match="compound_pool must be str, Path, or pl.DataFrame"):
+        with pytest.raises(TypeError, match=r"compound_pool must be str, Path, or pl.DataFrame"):
             run_active_learning(
                 compound_pool={'invalid': 'type'},
                 oracle=mock_oracle,
@@ -914,7 +915,7 @@ class TestAPIEvaluationMetrics:
 class TestValidateCompoundPoolAPI:
 
     def test_validate_compound_pool_returns_validation_result_object(self, sample_compounds):
-        from learnm8 import validate_compound_pool, ValidationResult
+        from learnm8 import ValidationResult, validate_compound_pool
 
         result = validate_compound_pool(sample_compounds, progress=False)
 
@@ -925,8 +926,8 @@ class TestValidateCompoundPoolAPI:
         assert result.valid_compounds['ID'].to_list() == sample_compounds['ID'].to_list()
 
     def test_validate_compound_pool_separates_invalid_smiles(self):
+
         from learnm8 import validate_compound_pool
-        import pandas as pd
 
         compounds = pl.DataFrame({
             'ID': ['valid_1', 'invalid_1', 'valid_2'],
@@ -1011,7 +1012,7 @@ class TestLoggingBehavior:
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
         oracle_data.write_csv(oracle_path)
 
-        results = run_active_learning(
+        run_active_learning(
             compound_pool=sample_compounds,
             oracle=str(oracle_path),
             learner='rf',
@@ -1044,7 +1045,7 @@ class TestLoggingBehavior:
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
         oracle_data.write_csv(oracle_path)
 
-        results = run_active_learning(
+        run_active_learning(
             compound_pool=sample_compounds,
             oracle=str(oracle_path),
             learner='rf',
@@ -1071,7 +1072,7 @@ class TestLoggingBehavior:
         oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
         oracle_data.write_csv(oracle_path)
 
-        results = run_active_learning(
+        run_active_learning(
             compound_pool=sample_compounds,
             oracle=str(oracle_path),
             learner='rf',
@@ -1147,12 +1148,11 @@ class TestChempropWithExtraDescriptors:
         assert 'compounds_df' in results
 
 
-@pytest.mark.slow
-class TestPredictionBatchSizeParameter:
-    """Test prediction_batch_size parameter at API level."""
+class TestMemorySafetyFactorParameter:
+    """Test memory_safety_factor parameter at API level."""
 
-    def test_prediction_batch_size_none_uses_default_behavior(self, sample_compounds, tmp_path):
-        """Test default behavior with prediction_batch_size=None."""
+    @pytest.mark.slow
+    def test_memory_safety_factor_default(self, sample_compounds, tmp_path):
         from learnm8 import run_active_learning
 
         oracle_path = tmp_path / "oracle.csv"
@@ -1169,15 +1169,82 @@ class TestPredictionBatchSizeParameter:
             n_cycles=2,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
-            prediction_batch_size=None
         )
 
         assert 'compounds_df' in results
         assert 'cycle_metrics' in results
-        assert len(results['cycle_metrics']) == 2
 
-    def test_prediction_batch_size_accepts_explicit_override(self, sample_compounds, tmp_path):
-        """Test explicit batch size override."""
+    @pytest.mark.unit
+    def test_memory_safety_factor_zero_raises(self, sample_compounds, tmp_path):
+        from learnm8 import run_active_learning
+        from learnm8.exceptions import ConfigurationError
+
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
+
+        with pytest.raises(ConfigurationError, match="memory_safety_factor must be in"):
+            run_active_learning(
+                compound_pool=sample_compounds,
+                oracle=str(oracle_path),
+                learner='rf',
+                target_col='Activity',
+                featurizer='morgan',
+                n_cycles=2,
+                batch_fraction=0.1,
+                output_dir=tmp_path / "output",
+                memory_safety_factor=0.0,
+            )
+
+    @pytest.mark.unit
+    def test_memory_safety_factor_negative_raises(self, sample_compounds, tmp_path):
+        from learnm8 import run_active_learning
+        from learnm8.exceptions import ConfigurationError
+
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
+
+        with pytest.raises(ConfigurationError, match="memory_safety_factor must be in"):
+            run_active_learning(
+                compound_pool=sample_compounds,
+                oracle=str(oracle_path),
+                learner='rf',
+                target_col='Activity',
+                featurizer='morgan',
+                n_cycles=2,
+                batch_fraction=0.1,
+                output_dir=tmp_path / "output",
+                memory_safety_factor=-0.5,
+            )
+
+    @pytest.mark.unit
+    def test_memory_safety_factor_above_one_raises(self, sample_compounds, tmp_path):
+        from learnm8 import run_active_learning
+        from learnm8.exceptions import ConfigurationError
+
+        oracle_path = tmp_path / "oracle.csv"
+        oracle_data = sample_compounds.clone()
+        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
+        oracle_data.write_csv(oracle_path)
+
+        with pytest.raises(ConfigurationError, match="memory_safety_factor must be in"):
+            run_active_learning(
+                compound_pool=sample_compounds,
+                oracle=str(oracle_path),
+                learner='rf',
+                target_col='Activity',
+                featurizer='morgan',
+                n_cycles=2,
+                batch_fraction=0.1,
+                output_dir=tmp_path / "output",
+                memory_safety_factor=1.5,
+            )
+
+    @pytest.mark.slow
+    def test_memory_safety_factor_one_accepted(self, sample_compounds, tmp_path):
         from learnm8 import run_active_learning
 
         oracle_path = tmp_path / "oracle.csv"
@@ -1194,52 +1261,7 @@ class TestPredictionBatchSizeParameter:
             n_cycles=2,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
-            prediction_batch_size=500
+            memory_safety_factor=1.0,
         )
 
         assert 'compounds_df' in results
-        assert len(results['cycle_metrics']) == 2
-
-    def test_batch_size_too_small_raises_error(self, sample_compounds, tmp_path):
-        """Test validation error for batch_size < 100."""
-        from learnm8 import run_active_learning
-
-        oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.clone()
-        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
-        oracle_data.write_csv(oracle_path)
-
-        with pytest.raises(ValueError, match="prediction_batch_size must be >= 100"):
-            run_active_learning(
-                compound_pool=sample_compounds,
-                oracle=str(oracle_path),
-                learner='rf',
-                target_col='Activity',
-                featurizer='morgan',
-                n_cycles=2,
-                batch_fraction=0.1,
-                output_dir=tmp_path / "output",
-                prediction_batch_size=50
-            )
-
-    def test_batch_size_wrong_type_raises_error(self, sample_compounds, tmp_path):
-        """Test validation error for non-integer batch_size."""
-        from learnm8 import run_active_learning
-
-        oracle_path = tmp_path / "oracle.csv"
-        oracle_data = sample_compounds.clone()
-        oracle_data = oracle_data.with_columns(pl.Series('Activity', np.random.uniform(0, 1, len(sample_compounds))))
-        oracle_data.write_csv(oracle_path)
-
-        with pytest.raises(TypeError, match="prediction_batch_size must be an integer"):
-            run_active_learning(
-                compound_pool=sample_compounds,
-                oracle=str(oracle_path),
-                learner='rf',
-                target_col='Activity',
-                featurizer='morgan',
-                n_cycles=2,
-                batch_fraction=0.1,
-                output_dir=tmp_path / "output",
-                prediction_batch_size=500.5
-            )
