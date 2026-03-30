@@ -1,13 +1,13 @@
 """Tests for EnsembleLearner implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
 from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.ensemble import EnsembleLearner
-from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
+from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 
 @pytest.mark.integration
@@ -46,15 +46,15 @@ class TestEnsembleLearner:
 
     def test_invalid_weights(self, base_learners):
         """Test error handling with invalid weights."""
-        with pytest.raises(LearnerError, match="must match number of learners"):
+        with pytest.raises(LearnerError, match='Number of weights'):
             EnsembleLearner(base_learners, weights=[0.5])
 
-        with pytest.raises(LearnerError, match="Weights must sum to 1.0"):
+        with pytest.raises(LearnerError, match=r'Weights must sum to 1\.0'):
             EnsembleLearner(base_learners, weights=[0.3, 0.4])
 
     def test_empty_learners_list(self):
         """Test error handling with empty learners list."""
-        with pytest.raises(LearnerError, match="requires at least one base learner"):
+        with pytest.raises(LearnerError, match='at least one base learner'):
             EnsembleLearner([])
 
     def test_get_name_includes_aggregation_and_component_separator(self, ensemble):
@@ -117,9 +117,8 @@ class TestEnsembleLearner:
         ensemble = EnsembleLearner([good_learner, bad_learner])
 
         features = small_real_morgan_features
-        ensemble.train(features, compounds['Activity'].to_numpy())
-        assert len(ensemble.learners) == 1
-        assert ensemble.is_trained
+        with pytest.raises(LearnerError, match='BadLearner'):
+            ensemble.train(features, compounds['Activity'].to_numpy())
 
     def test_uncertainty_diversity(self, base_learners, small_real_compounds, small_real_morgan_features):
         """Test that ensemble uncertainty captures model diversity."""
@@ -131,7 +130,7 @@ class TestEnsembleLearner:
 
         features = small_real_morgan_features
         ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = ensemble.predict(features)
+        _predictions, uncertainty = ensemble.predict(features)
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
@@ -142,7 +141,7 @@ class TestEnsembleLearner:
         targets = np.random.randn(8)
         ensemble = EnsembleLearner(base_learners)
 
-        with pytest.raises(LearnerError, match="mismatched lengths"):
+        with pytest.raises(LearnerError, match='mismatched lengths'):
             ensemble.train(features, targets)
 
     def test_train_with_1d_features(self, base_learners):

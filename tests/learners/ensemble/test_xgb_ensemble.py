@@ -1,8 +1,8 @@
 """Tests for XGBEnsemble implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
 from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 
@@ -78,7 +78,7 @@ class TestXGBEnsemble:
         xgb_ensemble.train(features, compounds['Activity'].to_numpy())
 
         individual_preds = xgb_ensemble.get_individual_predictions(features)
-        predictions, uncertainty = xgb_ensemble.predict(features)
+        _predictions, uncertainty = xgb_ensemble.predict(features)
 
         pred_arrays = [preds for preds in individual_preds.values()]
         assert len(pred_arrays) == 3
