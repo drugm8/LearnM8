@@ -8,9 +8,15 @@ import torch
 from scipy.stats import spearmanr
 
 from learnm8.learners.base import _preprocess_features
-from validation.speedup.lib.assertions import assert_predictions_match, assert_ranking_preserved
+from validation.speedup.lib.assertions import (
+    assert_predictions_match,
+)
 from validation.speedup.lib.data_setup import generate_synthetic_data
-from validation.speedup.lib.model_factory import create_learner, predict_primary_output, train_learner
+from validation.speedup.lib.model_factory import (
+    create_learner,
+    predict_primary_output,
+    train_learner,
+)
 
 
 def _generate_structured_regression_data(

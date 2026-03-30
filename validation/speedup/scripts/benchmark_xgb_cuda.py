@@ -11,23 +11,23 @@ from scipy.stats import spearmanr
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from validation.speedup.lib.assertions import assert_ranking_preserved
-from validation.speedup.lib.runtime import (
-    benchmark_learner_kwargs,
-    configure_process_environment,
-)
-from validation.speedup.lib.data_setup import load_benchmark_data
-from validation.speedup.lib.model_factory import (
+from validation.speedup.lib.assertions import assert_ranking_preserved  # noqa: E402
+from validation.speedup.lib.data_setup import load_benchmark_data  # noqa: E402
+from validation.speedup.lib.model_factory import (  # noqa: E402
     create_learner,
     predict_primary_output,
     train_learner,
 )
-from validation.speedup.lib.reporting import (
+from validation.speedup.lib.reporting import (  # noqa: E402
     create_result,
     print_result_table,
     save_result,
 )
-from validation.speedup.lib.timing import time_prediction, time_training
+from validation.speedup.lib.runtime import (  # noqa: E402
+    benchmark_learner_kwargs,
+    configure_process_environment,
+)
+from validation.speedup.lib.timing import time_prediction, time_training  # noqa: E402
 
 configure_process_environment()
 
@@ -41,7 +41,7 @@ if not torch.cuda.is_available():
     print("Skipping benchmark: CUDA GPU not available")
     sys.exit(0)
 
-from learnm8.learners.base import _preprocess_features
+from learnm8.learners.base import _preprocess_features  # noqa: E402
 
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 

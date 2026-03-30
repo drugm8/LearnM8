@@ -3,7 +3,6 @@ from __future__ import annotations
 import contextlib
 import os
 
-
 CPU_THREAD_ENV_VARS = (
     "OMP_NUM_THREADS",
     "MKL_NUM_THREADS",

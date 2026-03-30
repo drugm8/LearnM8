@@ -12,7 +12,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from validation.speedup.lib.runtime import (
+from validation.speedup.lib.runtime import (  # noqa: E402
     benchmark_learner_kwargs,
     configure_process_environment,
     max_cpu_threads,
@@ -20,7 +20,7 @@ from validation.speedup.lib.runtime import (
 
 configure_process_environment()
 
-import sklearn
+import sklearn  # noqa: E402
 
 try:
     import onnxruntime as ort
@@ -33,7 +33,7 @@ except ImportError:
 
 try:
     import torch
-    import torch.nn as nn
+    import torch.nn as nn  # noqa: F401
 
     _HAS_TORCH = torch.cuda.is_available()
 except ImportError:
@@ -44,24 +44,31 @@ if _HAS_TORCH:
 
     configure_torch_runtime(torch, use_gpu=True)
 
-from learnm8.learners.base import _preprocess_features
-from validation.speedup.lib.assertions import assert_predictions_match, assert_ranking_preserved
-from validation.speedup.lib.data_setup import load_benchmark_data
-from validation.speedup.lib.model_factory import (
+from rich.console import Console  # noqa: E402
+from rich.table import Table  # noqa: E402
+
+from learnm8.learners.base import _preprocess_features  # noqa: E402
+from validation.speedup.lib.assertions import (  # noqa: E402
+    assert_predictions_match,
+    assert_ranking_preserved,
+)
+from validation.speedup.lib.config import get_results_dir  # noqa: E402
+from validation.speedup.lib.data_setup import load_benchmark_data  # noqa: E402
+from validation.speedup.lib.model_factory import (  # noqa: E402
     create_learner,
     predict_primary_output,
     train_learner,
 )
-from validation.speedup.lib.reporting import (
-    _NumpyEncoder,
+from validation.speedup.lib.reporting import (  # noqa: E402
     _get_hardware_info,
     _get_software_info,
+    _NumpyEncoder,
 )
-from validation.speedup.lib.config import get_results_dir
-from validation.speedup.lib.timing import time_prediction, time_training, time_with_setup
-
-from rich.console import Console
-from rich.table import Table
+from validation.speedup.lib.timing import (  # noqa: E402
+    time_prediction,
+    time_training,
+    time_with_setup,
+)
 
 _console = Console()
 
@@ -252,19 +259,19 @@ def _sweep_onnx_runtime(
 
         ort_session = [None]
 
-        def onnx_setup(t=trained, pp=preprocessed):
+        def onnx_setup(t=trained, pp=preprocessed, _os=ort_session):
             initial_type = [("X", FloatTensorType([None, pp.shape[1]]))]
             onnx_model = convert_sklearn(t.model, initial_types=initial_type)
             options = ort.SessionOptions()
             options.intra_op_num_threads = max_cpu_threads()
             options.inter_op_num_threads = 1
-            ort_session[0] = ort.InferenceSession(
+            _os[0] = ort.InferenceSession(
                 onnx_model.SerializeToString(), sess_options=options
             )
 
-        def onnx_predict(pf32=preprocessed_f32):
-            input_name = ort_session[0].get_inputs()[0].name
-            return ort_session[0].run(None, {input_name: pf32})[0].flatten()
+        def onnx_predict(pf32=preprocessed_f32, _os=ort_session):
+            input_name = _os[0].get_inputs()[0].name
+            return _os[0].run(None, {input_name: pf32})[0].flatten()
 
         optimized_timing = time_with_setup(
             onnx_setup, onnx_predict, n_samples=pool_size, n_warmup=1, n_runs=3
@@ -548,8 +555,8 @@ def print_campaign_summary(all_results: list[dict]) -> None:
     table.add_column("Campaign Speedup")
 
     for result in all_results:
-        train_label, train_color = _speedup_label(result["campaign_train_speedup"])
-        pred_label, pred_color = _speedup_label(result["campaign_pred_speedup"])
+        _train_label, train_color = _speedup_label(result["campaign_train_speedup"])
+        _pred_label, pred_color = _speedup_label(result["campaign_pred_speedup"])
         total_label, total_color = _speedup_label(result["campaign_speedup"])
 
         table.add_row(

@@ -12,23 +12,30 @@ from scipy.stats import spearmanr
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from validation.speedup.lib.assertions import assert_predictions_match, assert_ranking_preserved
-from validation.speedup.lib.data_setup import load_benchmark_data
-from validation.speedup.lib.model_factory import (
+from validation.speedup.lib.assertions import (  # noqa: E402
+    assert_predictions_match,
+    assert_ranking_preserved,
+)
+from validation.speedup.lib.data_setup import load_benchmark_data  # noqa: E402
+from validation.speedup.lib.model_factory import (  # noqa: E402
     create_learner,
     predict_primary_output,
     train_learner,
 )
-from validation.speedup.lib.reporting import (
+from validation.speedup.lib.reporting import (  # noqa: E402
     create_result,
     print_result_table,
     save_result,
 )
-from validation.speedup.lib.runtime import (
+from validation.speedup.lib.runtime import (  # noqa: E402
     benchmark_learner_kwargs,
     configure_process_environment,
 )
-from validation.speedup.lib.timing import time_prediction, time_training, time_with_setup
+from validation.speedup.lib.timing import (  # noqa: E402
+    time_prediction,
+    time_training,
+    time_with_setup,
+)
 
 configure_process_environment()
 
@@ -357,8 +364,8 @@ def main():
         def fil_setup():
             pass
 
-        def fil_predict_fn():
-            return np.asarray(fil_ref[0]()).squeeze()
+        def fil_predict_fn(_fr=fil_ref):
+            return np.asarray(_fr[0]()).squeeze()
 
         try:
             baseline_timing = time_prediction(

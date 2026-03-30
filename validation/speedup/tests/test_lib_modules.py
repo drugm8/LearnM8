@@ -7,16 +7,16 @@ import numpy as np
 import pytest
 
 from learnm8.core.interfaces import Learner
+from validation.speedup.lib.assertions import (
+    assert_predictions_match,
+    assert_uncertainty_ranking_preserved,
+)
 from validation.speedup.lib.config import (
     DATASET_ENV_VAR,
     RESULTS_DIR_ENV_VAR,
     TIMED_ENV_VAR,
     WARMUP_ENV_VAR,
     get_benchmark_dataset_path,
-)
-from validation.speedup.lib.assertions import (
-    assert_predictions_match,
-    assert_uncertainty_ranking_preserved,
 )
 from validation.speedup.lib.data_setup import generate_synthetic_data
 from validation.speedup.lib.model_factory import create_learner

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 
 import numpy as np
 import polars as pl
 
 from learnm8.features.extraction import extract_features
-
 from validation.speedup.lib.config import get_benchmark_dataset_path
 
 DEFAULT_AMPC_PATH = str(get_benchmark_dataset_path())
@@ -76,7 +74,7 @@ def load_benchmark_data(
 ) -> tuple[np.ndarray, np.ndarray, list[str]]:
     cache_path = os.environ.get(CACHE_ENV_VAR)
     if cache_path and os.path.exists(cache_path):
-        print(f"  Loading pre-computed features from cache...")
+        print("  Loading pre-computed features from cache...")
         data = np.load(cache_path, allow_pickle=True)
         features = data["features"]
         targets = data["targets"]

@@ -67,7 +67,7 @@ class TestLREnsembleGpu:
         from learnm8.learners.ensemble.lr_ensemble import LREnsemble
         strengths = [0.01, 0.5, 5.0]
         ensemble = LREnsemble(device='cuda', regularization_strengths=strengths)
-        for member, expected_alpha in zip(ensemble.learners, strengths):
+        for member, expected_alpha in zip(ensemble.learners, strengths, strict=False):
             assert member.alpha == expected_alpha
 
 
@@ -77,7 +77,7 @@ class TestXGBEnsembleGpu:
         X_train, y_train, X_test = synthetic_data
         ensemble = XGBEnsemble(device='cuda')
         ensemble.train(X_train, y_train.astype(np.float64))
-        preds, unc = ensemble.predict(X_test)
+        preds, _unc = ensemble.predict(X_test)
         assert preds.shape == (200,)
 
     def test_predictions_finite(self, synthetic_data):
@@ -101,7 +101,7 @@ class TestMixedEnsembleGpu:
         X_train, y_train, X_test = synthetic_data
         ensemble = MixedEnsemble(device='cuda', random_state=42)
         ensemble.train(X_train, y_train.astype(np.float64))
-        preds, unc = ensemble.predict(X_test)
+        preds, _unc = ensemble.predict(X_test)
         assert preds.shape == (200,)
 
     def test_predictions_finite(self, synthetic_data):

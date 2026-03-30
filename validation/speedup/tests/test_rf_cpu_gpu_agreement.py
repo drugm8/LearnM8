@@ -24,8 +24,8 @@ _MIN_SPEARMAN = 0.99
 
 @pytest.fixture(scope='module')
 def cpu_gpu_rf_pair():
-    from learnm8.learners.sklearn.random_forest import RandomForestLearner
     from learnm8.learners.gpu.rf_fil import RfFilLearner
+    from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
     rng = np.random.default_rng(42)
     X = rng.random((2000, 100)).astype(np.float32)

@@ -1,7 +1,7 @@
 """Tests for XGBoostLearner device parameter and aggressive GC behavior."""
 
 import gc
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -60,9 +60,9 @@ class TestXGBoostDeviceCuda:
     def test_cuda_failure_at_train_raises_learner_error(self, features, targets):
         learner = XGBoostLearner(device='cuda', n_estimators=5)
         cuda_err = RuntimeError('CUDA error: no kernel image is available for execution on the device')
-        with patch.object(learner.model, 'fit', side_effect=cuda_err):
-            with pytest.raises(LearnerError, match='XGBoost CUDA training failed'):
-                learner.train(features, targets)
+        with patch.object(learner.model, 'fit', side_effect=cuda_err), \
+                pytest.raises(LearnerError, match='XGBoost CUDA training failed'):
+            learner.train(features, targets)
 
     def test_no_silent_cpu_substitution_on_cuda_failure(self, features, targets):
         learner = XGBoostLearner(device='cuda', n_estimators=5)

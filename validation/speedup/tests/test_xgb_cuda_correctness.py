@@ -37,13 +37,13 @@ def trained_xgb_cpu():
 
 def test_finite_predictions(trained_xgb_cuda):
     learner, X = trained_xgb_cuda
-    preds, unc = learner.predict(X[:100])
+    preds, _unc = learner.predict(X[:100])
     assert np.all(np.isfinite(preds)), 'VR-001: predictions must be finite'
 
 
 def test_predictions_shape(trained_xgb_cuda):
     learner, X = trained_xgb_cuda
-    preds, unc = learner.predict(X[:100])
+    preds, _unc = learner.predict(X[:100])
     assert preds.shape == (100,), 'VR-002: predictions shape must match n_samples'
 
 
@@ -73,8 +73,8 @@ def test_supports_uncertainty_false():
 
 
 def test_predict_before_train_raises():
-    from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
     from learnm8.exceptions import LearnerError
+    from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
     learner = XGBoostLearner(n_estimators=5, device='cuda')
     X = np.random.rand(10, 5).astype(np.float32)
     with pytest.raises(LearnerError):

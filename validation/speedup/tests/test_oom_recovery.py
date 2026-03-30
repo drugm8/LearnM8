@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -20,7 +20,7 @@ def synthetic_data():
 class TestRfFilOomRecovery:
     def test_oom_triggers_chunked_fallback(self, synthetic_data):
         from learnm8.learners.base import _predict_with_oom_retry
-        X_train, y_train, X_test = synthetic_data
+        _X_train, _y_train, X_test = synthetic_data
 
         call_count = [0]
 
@@ -52,8 +52,8 @@ class TestRfFilOomRecovery:
         assert np.all(np.isfinite(result))
 
     def test_non_oom_error_propagates(self, synthetic_data):
-        from learnm8.learners.base import _predict_with_oom_retry
         from learnm8.exceptions import LearnerError
+        from learnm8.learners.base import _predict_with_oom_retry
         _, _, X_test = synthetic_data
 
         def mock_predict_fn(chunk):
@@ -79,7 +79,7 @@ class TestRfFilOomRecovery:
 
 class TestRidgeCumlOomFallback:
     def test_leverage_fallback_on_oom(self):
-        cuml = pytest.importorskip('cuml', reason='RAPIDS cuML not available')
+        pytest.importorskip('cuml', reason='RAPIDS cuML not available')
 
         from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
         rng = np.random.default_rng(42)
@@ -92,7 +92,6 @@ class TestRidgeCumlOomFallback:
 
         with patch('learnm8.learners.gpu.ridge_cuml.cho_solve') as mock_cho_solve:
             call_count = [0]
-            original_result = None
 
             import scipy.linalg
             real_cho_solve = scipy.linalg.cho_solve
@@ -111,10 +110,10 @@ class TestRidgeCumlOomFallback:
             assert unc is not None
 
     def test_non_oom_leverage_error_raises(self):
-        cuml = pytest.importorskip('cuml', reason='RAPIDS cuML not available')
+        pytest.importorskip('cuml', reason='RAPIDS cuML not available')
 
-        from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
         from learnm8.exceptions import LearnerError
+        from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
         rng = np.random.default_rng(42)
         X_train = rng.random((200, 15))
         y_train = rng.random(200)
@@ -138,8 +137,8 @@ class TestXGBCudaOomRecovery:
         except ImportError:
             pytest.skip('torch not available')
 
-        from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
         from learnm8.exceptions import LearnerError
+        from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
         rng = np.random.default_rng(42)
         X = rng.random((100, 10)).astype(np.float32)

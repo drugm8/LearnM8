@@ -23,19 +23,19 @@ def trained_ridge_cuml():
 
 def test_finite_predictions(trained_ridge_cuml):
     learner, X, _ = trained_ridge_cuml
-    preds, unc = learner.predict(X[:100])
+    preds, _unc = learner.predict(X[:100])
     assert np.all(np.isfinite(preds)), 'VR-001: predictions must be finite'
 
 
 def test_predictions_shape(trained_ridge_cuml):
     learner, X, _ = trained_ridge_cuml
-    preds, unc = learner.predict(X[:100])
+    preds, _unc = learner.predict(X[:100])
     assert preds.shape == (100,), 'VR-002: predictions shape must match n_samples'
 
 
 def test_finite_non_negative_uncertainty(trained_ridge_cuml):
     learner, X, _ = trained_ridge_cuml
-    preds, unc = learner.predict(X[:100])
+    _preds, unc = learner.predict(X[:100])
     assert unc is not None, 'VR-003: uncertainty must not be None'
     assert np.all(np.isfinite(unc)), 'VR-003: uncertainty must be finite'
     assert np.all(unc >= 0.0), 'VR-003: uncertainty must be non-negative'
@@ -74,15 +74,15 @@ def test_get_name():
 
 
 def test_none_alpha_raises():
-    from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
     from learnm8.exceptions import LearnerError
+    from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
     with pytest.raises(LearnerError, match='alpha'):
         RidgeCumlLearner(alpha=None)
 
 
 def test_predict_before_train_raises():
-    from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
     from learnm8.exceptions import LearnerError
+    from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
     learner = RidgeCumlLearner(alpha=0.1)
     X = np.random.rand(10, 5)
     with pytest.raises(LearnerError):

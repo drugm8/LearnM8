@@ -14,7 +14,9 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from validation.speedup.lib.runtime import configure_process_environment
+import contextlib  # noqa: E402
+
+from validation.speedup.lib.runtime import configure_process_environment  # noqa: E402
 
 configure_process_environment()
 
@@ -29,8 +31,8 @@ if not torch.cuda.is_available():
     sys.exit(0)
 
 try:
-    from cuml import ForestInference
-    from cuml.linear_model import Ridge as CumlRidge
+    from cuml import ForestInference  # noqa: F401
+    from cuml.linear_model import Ridge as CumlRidge  # noqa: F401
 except ImportError:
     print('Skipping benchmark: cuml not available (install RAPIDS for GPU support)')
     sys.exit(0)
@@ -56,10 +58,8 @@ def _vram_peak_mb() -> float | None:
 
 
 def _reset_vram_stats():
-    try:
+    with contextlib.suppress(Exception):
         torch.cuda.reset_peak_memory_stats(0)
-    except Exception:
-        pass
 
 
 def _summarize_ns(times_ns: list[int]) -> tuple[float, float]:
@@ -103,6 +103,7 @@ def _load_ampc_features(dataset_size: int) -> tuple[np.ndarray, np.ndarray] | No
         return None
 
     import polars as pl
+
     from learnm8.features.extraction import extract_features
 
     print(f'  Loading {path.name}...')
@@ -222,7 +223,7 @@ def _benchmark_ridge_cuml(
     predict_gpu_median, predict_gpu_iqr, _ = _time_fn_ns(predict_gpu, N_WARMUP, N_REPS, cuda_sync=True)
     vram_peak = _vram_peak_mb()
 
-    n, p = X_train.shape
+    _n, p = X_train.shape
     chunked = p > 5000
 
     speedup = predict_cpu_median / predict_gpu_median if predict_gpu_median > 0 else float('inf')
@@ -368,7 +369,7 @@ def main():
 
         n_train = int(len(features) * 0.8)
         X_train, X_test = features[:n_train], features[n_train:]
-        y_train, y_test = targets[:n_train], targets[n_train:]
+        y_train, _y_test = targets[:n_train], targets[n_train:]
 
         print(f'  Source: {source}, train={len(X_train)}, test={len(X_test)}, features={features.shape[1]}')
 
