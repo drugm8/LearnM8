@@ -26,24 +26,25 @@ from .persistence import save_results
 from .validation import ValidationResult, validate_compound_pool
 
 __all__ = [
-    # Core interfaces
-    'Oracle', 'Learner',
-
-    # Validation
-    'validate_compound_pool', 'ValidationResult',
-
-    # Initialization
-    'initialize_master_dataframe_empty',
-
     # Configuration
-    'CycleConfig', 'parse_cycle_schedule', 'parse_cycle_spec',
-
+    'CycleConfig',
+    'Learner',
+    # Core interfaces
+    'Oracle',
+    'ValidationResult',
+    # DataFrame operations
+    'add_predictions',
+    'batch_update',
     # Cycle execution
     'execute_cycle',
-
+    'get_compounds_by_status',
+    # Initialization
+    'initialize_master_dataframe_empty',
+    'parse_cycle_schedule',
+    'parse_cycle_spec',
     # Persistence
     'save_results',
-
-    # DataFrame operations
-    'add_predictions', 'update_status', 'get_compounds_by_status', 'batch_update',
+    'update_status',
+    # Validation
+    'validate_compound_pool',
 ]

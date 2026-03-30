@@ -22,18 +22,17 @@ from .metrics import (
 
 # Public API exports for backward compatibility
 __all__ = [
-    # Main evaluation functions
-    'evaluate_cycle',
-    'format_progress_output',
-    'export_metrics_csv',
-
+    'calculate_average_score',
+    'calculate_enrichment_factor',
+    'calculate_mape',
+    'calculate_molecular_similarity_metrics',
+    'calculate_multiple_enrichment_factors',
+    'calculate_multiple_top_k_overlaps',
     # Specialized metric functions (sklearn basics not exported)
     'calculate_spearman_correlation',
-    'calculate_average_score',
     'calculate_top_k_overlap',
-    'calculate_multiple_top_k_overlaps',
-    'calculate_enrichment_factor',
-    'calculate_multiple_enrichment_factors',
-    'calculate_molecular_similarity_metrics',
-    'calculate_mape'
+    # Main evaluation functions
+    'evaluate_cycle',
+    'export_metrics_csv',
+    'format_progress_output'
 ]
