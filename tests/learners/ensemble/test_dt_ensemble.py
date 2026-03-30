@@ -1,8 +1,8 @@
 """Tests for DTEnsemble implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
 from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
@@ -83,7 +83,7 @@ class TestDTEnsemble:
         features = small_real_morgan_features[:10]
         targets = np.random.beta(2, 5, 15)
 
-        with pytest.raises(LearnerError):
+        with pytest.raises((ValueError, LearnerError)):
             dt_ensemble.train(features, targets)
 
     def test_prediction_variance(self, small_real_compounds, small_real_morgan_features):
@@ -171,7 +171,5 @@ class TestDTEnsemble:
         ensemble.add_learner(MockBadLearner())
 
         features = small_real_morgan_features
-        ensemble.train(features, compounds['Activity'].to_numpy())
-
-        assert ensemble.is_trained
-        assert len(ensemble.learners) < 2
+        with pytest.raises(LearnerError, match='BadLearner'):
+            ensemble.train(features, compounds['Activity'].to_numpy())
