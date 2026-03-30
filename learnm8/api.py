@@ -123,6 +123,18 @@ LEARNER_REGISTRY = {
     'fastprop_ensemble': FastpropEnsemble,
 }
 
+try:
+    from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner
+    LEARNER_REGISTRY['gpu_gp'] = GPyTorchGPLearner
+except ImportError:
+    pass
+
+try:
+    from learnm8.learners.gpytorch.svgp import SVGPLearner
+    LEARNER_REGISTRY['svgp'] = SVGPLearner
+except ImportError:
+    pass
+
 
 LEARNER_DISPLAY_NAMES = {
     'rf': 'Random Forest',
@@ -139,7 +151,9 @@ LEARNER_DISPLAY_NAMES = {
     'xgb_ensemble': 'XGBoost Ensemble',
     'dt_ensemble': 'DT Ensemble',
     'mixed_ensemble': 'Mixed Ensemble',
-    'fastprop_ensemble': 'FastProp Ensemble'
+    'fastprop_ensemble': 'FastProp Ensemble',
+    'gpu_gp': 'GPyTorch GPU GP',
+    'svgp': 'SVGP (Sparse Variational GP)',
 }
 
 
