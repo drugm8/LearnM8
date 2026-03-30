@@ -433,3 +433,27 @@ class TestScientificValidation:
         assert rho_tan >= rho_rbf, (
             f"Expected Tanimoto rho ({rho_tan:.4f}) >= RBF rho ({rho_rbf:.4f}) on binary features"
         )
+
+
+@pytest.mark.unit
+class TestGPFeatureScaling:
+    def test_scale_features_default_true(self):
+        learner = GaussianProcessLearner(random_state=42)
+        assert learner.scale_features is True
+
+    def test_feature_scaler_fitted_after_training(self):
+        rng = np.random.RandomState(42)
+        features = rng.randn(30, 5) * 100
+        targets = rng.randn(30)
+        learner = GaussianProcessLearner(random_state=42)
+        learner.train(features, targets)
+        assert learner._feature_scaler is not None
+
+    def test_predictions_use_scaled_features(self):
+        rng = np.random.RandomState(42)
+        features = rng.randn(30, 5) * 100
+        targets = rng.randn(30)
+        learner = GaussianProcessLearner(random_state=42)
+        learner.train(features, targets)
+        preds, _ = learner.predict(features)
+        assert np.all(np.isfinite(preds))

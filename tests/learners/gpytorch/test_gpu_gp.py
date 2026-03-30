@@ -8,6 +8,8 @@ import torch
 from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.learners.gpytorch import GPyTorchGPLearner
 
+gauche = pytest.importorskip('gauche', reason='GAUCHE required for GPyTorchGP Tanimoto tests')
+
 
 @pytest.fixture
 def binary_features():

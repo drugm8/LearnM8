@@ -53,7 +53,7 @@ class LinearRegressionLearner(SklearnLearner):
             )
             self.is_ridge = True
 
-        super().__init__(model, random_state=random_state, **kwargs)
+        super().__init__(model, random_state=random_state, scale_features=self.is_ridge, **kwargs)
 
         self.alpha = alpha
         self.fit_intercept = fit_intercept
@@ -86,12 +86,17 @@ class LinearRegressionLearner(SklearnLearner):
         """
         super().train(features, targets)
 
-        preprocessed, _ = _preprocess_features(
+        preprocessed, _, _ = _preprocess_features(
             features,
             valid_feature_mask=self._valid_feature_mask,
             remove_zero_variance=self.remove_zero_variance,
             is_training=False,
+            feature_type=self._feature_type,
+            imputer=self._feature_imputer,
         )
+
+        if self._feature_scaler is not None:
+            preprocessed = self._feature_scaler.transform(preprocessed)
 
         n, p = preprocessed.shape
 
@@ -136,12 +141,17 @@ class LinearRegressionLearner(SklearnLearner):
         start_time = time.time()
 
         try:
-            preprocessed, _ = _preprocess_features(
+            preprocessed, _, _ = _preprocess_features(
                 features,
                 valid_feature_mask=self._valid_feature_mask,
                 remove_zero_variance=self.remove_zero_variance,
                 is_training=False,
+                feature_type=self._feature_type,
+                imputer=self._feature_imputer,
             )
+
+            if self._feature_scaler is not None:
+                preprocessed = self._feature_scaler.transform(preprocessed)
 
             predictions = self.model.predict(preprocessed)
 

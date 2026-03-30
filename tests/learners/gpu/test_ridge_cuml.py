@@ -38,7 +38,12 @@ def _make_cuml_mock(n_train: int):
 def _build_trained(X: np.ndarray, y: np.ndarray, alpha: float = 0.1) -> RidgeCumlLearner:
     """Build RidgeCumlLearner with internal state set directly (no cuml needed)."""
     learner = RidgeCumlLearner(alpha=alpha)
-    features_pp, mask = _preprocess_features(X, remove_zero_variance=True, is_training=True)
+    features_pp, mask, imputer = _preprocess_features(X, remove_zero_variance=True, is_training=True)
+
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    features_pp = scaler.fit_transform(features_pp)
+
     n, p = features_pp.shape
     Xd = features_pp.astype(np.float64)
     gram = Xd.T @ Xd + alpha * np.eye(p, dtype=np.float64)
@@ -48,6 +53,8 @@ def _build_trained(X: np.ndarray, y: np.ndarray, alpha: float = 0.1) -> RidgeCum
     mock_model.predict.side_effect = lambda f: sk_model.predict(f)
 
     learner._valid_feature_mask = mask
+    learner._feature_imputer = imputer
+    learner._feature_scaler = scaler
     learner._model = mock_model
     learner._gram_chol_cpu = cho_factor(gram)
     preds = sk_model.predict(features_pp).astype(np.float64)

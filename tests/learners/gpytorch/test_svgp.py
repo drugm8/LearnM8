@@ -7,6 +7,8 @@ import torch
 from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.learners.gpytorch import SVGPLearner
 
+gauche = pytest.importorskip('gauche', reason='GAUCHE required for SVGP Tanimoto tests')
+
 
 @pytest.fixture
 def binary_features():
