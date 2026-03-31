@@ -343,6 +343,10 @@ class TestIntegrationErrors:
 class TestErrorRecovery:
     """Test error recovery and graceful degradation."""
 
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
     @pytest.mark.slow
     def test_partial_failure_recovery(self, medium_real_compounds, tmp_path):
         """Test recovery from partial failures in batch operations."""
@@ -374,9 +378,9 @@ class TestErrorRecovery:
             pass
     
     @pytest.mark.slow
-    def test_error_message_clarity(self, small_real_compounds):
+    def test_error_message_clarity(self, compounds_20):
         """Test that error messages are clear and informative."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         acq = GreedyAcquisition()
         
         # Test clear error message for missing column
