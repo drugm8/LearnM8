@@ -37,11 +37,14 @@ except ImportError:
     sys.exit(0)
 
 RESULTS_DIR = Path(__file__).parent.parent / 'results'
-N_REPS = 5
-N_WARMUP = 1
-DATASET_SIZES = [100_000, 1_000_000]
-AMPC_100K = ROOT / 'validation' / 'AmpC_screen_100K.csv'
-AMPC_1000K = ROOT / 'validation' / 'AmpC_screen_1000K.csv'
+N_REPS = 1
+N_WARMUP = 0
+ALL_DATASET_SIZES = [100_000, 1_000_000]
+
+DATASET_SIZE_TO_NAME = {
+    100_000: 'ampc_100k',
+    1_000_000: 'ampc_1000k',
+}
 
 
 def _cuda_sync():
@@ -96,23 +99,28 @@ def _time_fn_ns(fn, n_warmup: int, n_reps: int, cuda_sync: bool = False) -> tupl
 
 
 def _load_ampc_features(dataset_size: int) -> tuple[np.ndarray, np.ndarray] | None:
-    path = AMPC_100K if dataset_size <= 100_000 else AMPC_1000K
-    if not path.exists():
-        print(f'  AmpC dataset not found: {path}')
+    from validation.lib import load_validation_dataset
+
+    dataset_name = DATASET_SIZE_TO_NAME.get(dataset_size)
+    if dataset_name is None:
+        print(f'  No registered dataset for size {dataset_size}')
         return None
 
-    import polars as pl
+    try:
+        df, metadata = load_validation_dataset(dataset_name)
+    except FileNotFoundError as e:
+        print(f'  AmpC dataset not found: {e}')
+        return None
 
     from learnm8.features.extraction import extract_features
 
-    print(f'  Loading {path.name}...')
-    df = pl.read_csv(path)
-    smiles_col = 'smiles' if 'smiles' in df.columns else 'SMILES'
-    smiles = df[smiles_col].to_list()
-    targets = df['dockscore'].to_numpy()
+    target_col = metadata['target_column']
+    smiles = df['SMILES'].to_list()
+    targets = df[target_col].to_numpy()
 
+    cache_dir = ROOT / '.shared_cache'
     print(f'  Extracting Morgan features for {len(smiles)} compounds...')
-    features = extract_features(smiles_list=smiles, featurizer='morgan', n_jobs=-1)
+    features = extract_features(smiles_list=smiles, featurizer='morgan', n_jobs=-1, cache_dir=cache_dir)
     n = min(dataset_size, len(features))
     return features[:n].astype(np.float32), targets[:n]
 
@@ -422,14 +430,14 @@ def _benchmark_batched_prediction(
                 return np.concatenate(all_preds)
 
             run_batched()
-            median_s, iqr_s, _ = _time_fn_ns(run_batched, 1, 3, cuda_sync=True)
+            median_s, iqr_s, _ = _time_fn_ns(run_batched, N_WARMUP, N_REPS, cuda_sync=True)
             vram_peak = _vram_peak_mb()
 
             def run_unbatched(_lr=learner):
                 return _lr.predict(X_test)
 
             unbatched_median, unbatched_iqr, _ = _time_fn_ns(
-                run_unbatched, 1, 3, cuda_sync=True
+                run_unbatched, N_WARMUP, N_REPS, cuda_sync=True
             )
 
             result = {
@@ -458,8 +466,26 @@ def _benchmark_batched_prediction(
     return results
 
 
+def _parse_args() -> list[int]:
+    import argparse
+
+    parser = argparse.ArgumentParser(description='GPU Learner Benchmark Suite')
+    parser.add_argument(
+        '--size',
+        type=str,
+        choices=['100k', '1m', 'all'],
+        default='all',
+        help='Dataset size to benchmark (default: all)',
+    )
+    args = parser.parse_args()
+    size_map = {'100k': [100_000], '1m': [1_000_000], 'all': ALL_DATASET_SIZES}
+    return size_map[args.size]
+
+
 def main():
     import datetime
+
+    dataset_sizes = _parse_args()
 
     print('=' * 60)
     print('GPU Learner Benchmark Suite')
@@ -471,7 +497,7 @@ def main():
 
     all_results = []
 
-    for dataset_size in DATASET_SIZES:
+    for dataset_size in dataset_sizes:
         print(f'\n--- Dataset size: {dataset_size:,} ---')
         data = _load_ampc_features(dataset_size)
 
@@ -485,7 +511,7 @@ def main():
             features, targets = _synthetic_data(dataset_size)
             source = 'synthetic'
 
-        n_train = int(len(features) * 0.8)
+        n_train = int(len(features) * 0.1)
         X_train, X_test = features[:n_train], features[n_train:]
         y_train, _y_test = targets[:n_train], targets[n_train:]
 
