@@ -118,7 +118,7 @@ class TestPreprocessFeatures:
     def test_binary_nan_triggers_warning(self, caplog):
         """T046: Binary features with NaN trigger a warning."""
         import logging
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger='learnm8.learners.base'):
             features = np.array([[1.0, np.nan], [0.0, 1.0]])
             result, _, _ = _preprocess_features(
                 features, remove_zero_variance=False, is_training=True, feature_type='binary'
