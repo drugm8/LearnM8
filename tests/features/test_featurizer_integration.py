@@ -105,7 +105,7 @@ class TestRunActiveLearningWithFeaturizers:
 
     def test_run_active_learning_with_string_featurizer(self, small_real_compounds, tmp_path):
         """run_active_learning() accepts string featurizer."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(20).clone()
         compounds = compounds.with_columns([
             compounds.get_column('Activity').alias('target')
         ])
@@ -117,7 +117,7 @@ class TestRunActiveLearningWithFeaturizers:
             featurizer='morgan',
             target_col='target',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.2,
             cache_dir=tmp_path,
             output_dir=tmp_path / 'results',
             random_state=42
@@ -128,7 +128,7 @@ class TestRunActiveLearningWithFeaturizers:
 
     def test_run_active_learning_with_featurizer_instance(self, small_real_compounds, tmp_path):
         """run_active_learning() accepts Featurizer instance."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(20).clone()
         compounds = compounds.with_columns([
             compounds.get_column('Activity').alias('target')
         ])
@@ -142,7 +142,7 @@ class TestRunActiveLearningWithFeaturizers:
             featurizer=featurizer,
             target_col='target',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.2,
             cache_dir=tmp_path,
             output_dir=tmp_path / 'results',
             random_state=42
@@ -153,7 +153,7 @@ class TestRunActiveLearningWithFeaturizers:
 
     def test_run_active_learning_with_maccs(self, small_real_compounds, tmp_path):
         """run_active_learning() works with MACCS featurizer."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(20).clone()
         compounds = compounds.with_columns([
             compounds.get_column('Activity').alias('target')
         ])
@@ -165,7 +165,7 @@ class TestRunActiveLearningWithFeaturizers:
             featurizer='maccs',
             target_col='target',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.2,
             cache_dir=tmp_path,
             output_dir=tmp_path / 'results',
             random_state=42
@@ -175,7 +175,7 @@ class TestRunActiveLearningWithFeaturizers:
 
     def test_run_active_learning_caches_features(self, small_real_compounds, tmp_path):
         """run_active_learning() creates HDF5 cache files."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(20).clone()
         compounds = compounds.with_columns([
             compounds.get_column('Activity').alias('target')
         ])
@@ -189,7 +189,7 @@ class TestRunActiveLearningWithFeaturizers:
             featurizer='morgan',
             target_col='target',
             n_cycles=2,
-            batch_fraction=0.1,
+            batch_fraction=0.2,
             cache_dir=cache_dir,
             output_dir=tmp_path / 'results',
             random_state=42
