@@ -1,3 +1,4 @@
+from . import uq_metrics, uq_plots
 from .data_loading import load_validation_dataset, validate_compounds_with_features
 from .dataset_config import (
     DEFAULT_DATASET,
@@ -59,6 +60,8 @@ __all__ = [
     'get_recommended_dataset',
     'list_available_datasets',
     'load_validation_dataset',
+    'uq_metrics',
+    'uq_plots',
     'validate_compounds_with_features',
     'validate_dataset_exists',
 ]
