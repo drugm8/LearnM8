@@ -13,6 +13,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.molecular, pytest.mark.skipif(
 
 class TestComputeMordredDescriptors:
 
+    @pytest.mark.slow
     def test_basic_functionality_single_molecule(self):
         smiles_list = ['CCO']
         result = _compute_mordred_descriptors(smiles_list)
@@ -21,6 +22,7 @@ class TestComputeMordredDescriptors:
         assert result.shape[0] == 1
         assert result.shape[1] > 1000
 
+    @pytest.mark.slow
     def test_basic_functionality_multiple_molecules(self):
         smiles_list = ['CCO', 'CCC', 'CCN']
         result = _compute_mordred_descriptors(smiles_list)
@@ -29,6 +31,7 @@ class TestComputeMordredDescriptors:
         assert result.shape[0] == 3
         assert result.shape[1] > 1000
 
+    @pytest.mark.slow
     def test_output_shape_matches_input_length(self):
         smiles_list = ['CCO', 'CCC', 'c1ccccc1', 'CCN', 'CCCC']
         result = _compute_mordred_descriptors(smiles_list)
@@ -134,6 +137,7 @@ class TestComputeMordredDescriptors:
         assert result.shape[0] == 5
         assert result.shape[1] > 1000
 
+    @pytest.mark.slow
     def test_consistency_across_multiple_calls(self):
         smiles_list = ['CCO', 'CCC', 'CCN']
         result1 = _compute_mordred_descriptors(smiles_list)

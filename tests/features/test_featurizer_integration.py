@@ -76,6 +76,7 @@ class TestExtractFeaturesAPI:
         cache_files = list(tmp_path.glob("*.h5"))
         assert len(cache_files) == 1
 
+    @pytest.mark.slow
     def test_extract_features_with_different_n_jobs(self, small_real_compounds, tmp_path):
         """extract_features() works with different n_jobs settings."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
@@ -203,6 +204,7 @@ class TestRunActiveLearningWithFeaturizers:
 class TestFeaturizerStringVsInstance:
     """Test equivalence between string and instance usage."""
 
+    @pytest.mark.slow
     def test_string_and_instance_produce_same_features(self, small_real_compounds, tmp_path):
         """String name and instance with defaults produce same features."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]

@@ -8,6 +8,7 @@ from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 class TestLREnsemble:
     """Test LREnsemble functionality with real molecular data."""

@@ -29,6 +29,7 @@ class TestXGBoostLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
 
+    @pytest.mark.slow
     def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
@@ -57,6 +58,7 @@ class TestXGBoostLearner:
         assert "lr=0.1" in name
         assert "depth=6" in name
 
+    @pytest.mark.slow
     def test_feature_importance_returns_non_negative_values_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test feature importance retrieval."""
         compounds = small_real_compounds.clone()
@@ -72,6 +74,7 @@ class TestXGBoostLearner:
         assert len(importance) > 0
         assert np.all(importance >= 0)
 
+    @pytest.mark.slow
     def test_booster_stats(self, learner, small_real_compounds, small_real_morgan_features):
         """Test booster statistics retrieval."""
         compounds = small_real_compounds.clone()
@@ -125,6 +128,7 @@ class TestXGBoostLearner:
         assert len(predictions) == 5
         assert np.all(np.isfinite(predictions))
 
+    @pytest.mark.slow
     def test_large_dataset_handling(self, learner, tmp_path):
         """Test XGBoost efficiency with larger datasets."""
         n_compounds = 500
@@ -155,6 +159,7 @@ class TestXGBoostLearner:
 
         assert np.all(np.isfinite(predictions))
 
+    @pytest.mark.slow
     def test_regularization_parameters(self, small_real_compounds, small_real_morgan_features):
         """Test learner with regularization parameters."""
         compounds = small_real_compounds.clone()
@@ -175,6 +180,7 @@ class TestXGBoostLearner:
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
+    @pytest.mark.slow
     def test_uncertainty_consistency(self, learner, small_real_compounds, small_real_morgan_features):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:

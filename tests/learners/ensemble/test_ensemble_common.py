@@ -81,6 +81,7 @@ def _prepare_targets(compounds):
     return compounds, compounds['Activity'].to_numpy()
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 class TestEnsembleCommon:
     """Parametrized tests shared by all non-SMILES ensemble types."""
