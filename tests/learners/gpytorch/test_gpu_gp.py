@@ -58,6 +58,7 @@ def test_kernel_auto_binary(binary_features, targets):
 @pytest.mark.unit
 def test_kernel_auto_continuous(continuous_features, targets):
     learner = GPyTorchGPLearner(device='cpu')
+    learner._feature_type = 'continuous'
     learner.train(continuous_features, targets)
     assert 'rbf' in learner.get_name().lower()
 
