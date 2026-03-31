@@ -122,8 +122,8 @@ def test_gpu_leverage_computed_during_training():
     y = X[:, 0] * 3.0 + rng.normal(0, 0.1, 500)
     learner = RidgeCumlLearner(alpha=0.1, random_state=99)
     learner.train(X, y)
-    assert learner._gram_chol_gpu is not None, \
-        'GPU Cholesky factor must be computed during training when cuML is available'
+    assert learner._leverage_A_gpu is not None, \
+        'GPU leverage A matrix must be computed during training when cuML is available'
 
 
 def test_gpu_cpu_leverage_numerical_agreement(trained_ridge_cuml):
@@ -134,14 +134,14 @@ def test_gpu_cpu_leverage_numerical_agreement(trained_ridge_cuml):
     _, unc_gpu = learner.predict(X_test)
     t_gpu = time.perf_counter_ns() - t0
 
-    gram_chol_gpu_backup = learner._gram_chol_gpu
-    learner._gram_chol_gpu = None
+    leverage_A_gpu_backup = learner._leverage_A_gpu
+    learner._leverage_A_gpu = None
     try:
         t0 = time.perf_counter_ns()
         _, unc_cpu = learner.predict(X_test)
         t_cpu = time.perf_counter_ns() - t0
     finally:
-        learner._gram_chol_gpu = gram_chol_gpu_backup
+        learner._leverage_A_gpu = leverage_A_gpu_backup
 
     print(f'\n  GPU leverage time: {t_gpu / 1e6:.2f} ms')
     print(f'  CPU leverage time: {t_cpu / 1e6:.2f} ms')
