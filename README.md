@@ -8,7 +8,7 @@ LearnM8 is a comprehensive active learning framework for molecular property pred
 
 Built on a pure functional architecture, LearnM8 provides explicit cycle control, comprehensive uncertainty quantification, and molecular-specific optimizations. The framework supports both benchmark analysis (with known ground truth) and production screening (with expensive experimental measurements), making it suitable for both research and real-world drug discovery applications.
 
-**Key Capabilities:** 15+ ML models (including Chemprop GNNs), 11+ acquisition strategies, HDF5 caching for 100x speedup, automatic parallelization, and design space pruning for large-scale screening.
+**Key Capabilities:** 21 ML models (including Chemprop GNNs, ensembles, and CUDA-accelerated learners), 9 acquisition strategies, 34 featurizers (25 2D + 9 3D), HDF5 caching for 100x speedup, automatic parallelization, GPU acceleration via GPyTorch and RAPIDS cuML, and design space pruning for large-scale screening.
 
 ## 📚 Documentation
 
@@ -27,58 +27,52 @@ Built on a pure functional architecture, LearnM8 provides explicit cycle control
 
 ```bash
 conda env create -f environment.yml
-conda activate base
+conda activate learnm8
 pip install -e .
 ```
 
 ### Your First Experiment
 
 **Python API:**
+
 ```python
 from learnm8 import run_active_learning
 
+# Oracle auto-detected from companion CSV (benchmark mode)
+results = run_active_learning(
+    compound_pool='compounds.csv',
+    learner='gp',
+    target_col='Activity',
+    featurizer='morgan',
+    n_cycles=10
+)
+
+# Explicit oracle, non-standard column names
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
     learner='gp',
     target_col='Activity',
     featurizer='morgan',
-    n_cycles=10
+    n_cycles=10,
+    smiles_column='Smiles',
+    id_column='CompoundID'
 )
 ```
 
 **CLI Alternative:**
+
 ```bash
 learnm8 validate compounds.csv
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
-```
 
-**Memory Management (Large Libraries):**
-```python
-# Auto-calculated batch size (recommended)
-results = run_active_learning(
-    compound_pool='large_library.csv',  # 100k+ compounds
-    learner='rf',
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=10
-)
+# Non-standard column names
+learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
+  --smiles-col Smiles --id-col CompoundID
 
-# Manual override for specific hardware
-results = run_active_learning(
-    compound_pool='large_library.csv',
-    learner='rf',
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=10,
-    prediction_batch_size=5000  # Process 5000 compounds per batch
-)
-```
-
-```bash
-# CLI with custom batch size
-learnm8 run large_library.csv --target Activity --learner rf --featurizer morgan \
-  --prediction-batch-size 5000
+# GPU + parallelism control
+learnm8 run compounds.csv --target Activity --learner chemprop \
+  --device cuda --n-jobs 8
 ```
 
 ## 📖 Examples
@@ -86,12 +80,14 @@ learnm8 run large_library.csv --target Activity --learner rf --featurizer morgan
 Learn LearnM8 through hands-on examples:
 
 **Notebooks:** ([examples/notebooks/](examples/notebooks/))
+
 - [Quickstart](examples/notebooks/01_quickstart.ipynb) (10 min): First active learning experiment (benchmark mode)
 - [Custom Oracles](examples/notebooks/02_custom_oracles.ipynb) (15 min): Custom oracles in production (run mode)
 - [Advanced Configuration](examples/notebooks/03_advanced_configuration.ipynb) (15 min): Custom learners and multi-stage workflows
 - [Production Screening](examples/notebooks/04_production_screening.ipynb) (20 min): Real-world deployment
 
 **Example Oracles:** ([examples/oracles/](examples/oracles/))
+
 - `SimilarityOracle`: 2D fingerprint-based similarity
 - `Pharmacophore2DOracle`: Functional group pattern matching
 - `CDPKitPharmacophoreOracle`: 3D pharmacophore alignment (requires CDPKit)
@@ -99,41 +95,144 @@ Learn LearnM8 through hands-on examples:
 
 See [examples/README.md](examples/README.md) for complete guide.
 
-## ✨ Key Features
-
-**Architecture & Performance:**
-- Pure functional design with explicit cycle control
-- HDF5 caching for 100x speedup on repeated operations
-- Automatic parallelization (5-10x faster feature extraction)
-- Early validation with datamol (catch SMILES errors before experiments)
-- Memory-efficient batch prediction for large compound libraries (auto-calculated or manual override)
-
-**Machine Learning Models:**
-- 15+ models: Scikit-learn (RF, GP, XGB), PyTorch (MLP, MC Dropout, FastProp), GNNs (Chemprop)
-- Ensemble learning with automatic uncertainty quantification
-- Chemprop with fine-tuning for active learning
-
-**Acquisition Strategies:**
-- 11+ strategies: Basic (greedy, random), Uncertainty-based (UCB, EI, Thompson), Diversity (BitBIRCH, simulated annealing)
-- Multi-stage cycles with per-cycle configuration
-- Predefined schedules (quick, standard, intensive, diverse)
-
-**Molecular Screening:**
-- Two modes: Benchmark (known ground truth) and Production (expensive measurements)
-- Design space pruning for large libraries (>100k compounds)
-- Multiple featurizers: Morgan, MACCS, ECFP6, Mordred descriptors
-- RDKit integration for molecular handling
-
 ## 📊 Components Overview
 
 | Component | Count | Examples |
-|-----------|-------|----------|
-| **Learners** | 18 | RandomForest, GaussianProcess, XGBoost, MLP, MCDropout, FastProp, Chemprop, Ensembles |
-| **Acquisition** | 11 | greedy, random, ucb, ei, pi, thompson, entropy, bitbirch, simulated_annealing |
-| **Featurizers** | 5 | morgan (2048-bit), maccs (167-bit), ecfp6 (2048-bit), morgan_feat (2048-bit), descriptors (1613-D) |
+| --------- | ----- | -------- |
+| **Learners** | 21 | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble, ensemble |
+| **Acquisition** | 9 | greedy, random, topk, ucb, ei, pi, thompson, entropy, simulated_annealing |
+| **Featurizers** | 34 | 25 2D + 9 3D (see categories below) |
 | **Pruning** | 1 | score_based |
 
+### Learners
+
+Pool size reflects the total compound pool. GP is limited by labeled set growth (O(n³) training). Neural models benefit significantly from GPU for larger pools. GPU learners require CUDA-capable hardware and optional dependencies (GPyTorch, RAPIDS cuML).
+
+| Shortcut | Class | Uncertainty Method | CPU | GPU | CPU Pool Size | GPU Pool Size |
+| -------- | ----- | ------------------ | --- | --- | ------------- | ------------- |
+| `rf` | `RandomForestLearner` | Tree std dev | ✓ | — | 1K – 10M+ | — |
+| `gp` | `GaussianProcessLearner` | GP posterior variance | ✓ | — | < 10K | — |
+| `gpu_gp` | `GPUGaussianProcessLearner` | GP posterior variance | ✓ | ✓ | < 10K | < 10K |
+| `svgp` | `SVGPLearner` | Variational posterior | ✓ | ✓ | < 10K | 10K – 100K+ |
+| `xgb` | `XGBoostLearner` | None | ✓ | ✓ | 1K – 10M+ | 1K – 10M+ |
+| `lr` | `LinearRegressionLearner` | Leverage-based analytical | ✓ | — | any size | — |
+| `dt` | `DecisionTreeLearner` | Leaf impurity | ✓ | — | 1K – 10M+ | — |
+| `mlp` | `MLPLearner` | None | ✓ | ✓ | 10K – 100K | 10K – 1M+ |
+| `mc_dropout` | `MCDropoutLearner` | MC Dropout sampling | ✓ | ✓ | 5K – 50K | 5K – 500K |
+| `fastprop` | `FastpropLearner` | None | ✓ | ✓ | 10K – 100K | 10K – 1M+ |
+| `chemprop` | `ChempropLearner` | None | ✓ | ✓ | 5K – 50K | 5K – 500K |
+| `rf_fil` | `RfFilLearner` | Per-tree std dev | — | ✓ | — | 1K – 10M+ |
+| `ridge_cuml` | `RidgeCumlLearner` | Leverage-based analytical | — | ✓ | — | any size |
+| `chemprop_ensemble` | `ChempropEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 20K | 1K – 200K |
+| `rf_ensemble` | `RFEnsemble` | Ensemble std dev | ✓ | — | 1K – 10M+ | — |
+| `lr_ensemble` | `LREnsemble` | Ensemble std dev | ✓ | ✓ | any size | any size |
+| `xgb_ensemble` | `XGBEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 10M+ | 1K – 10M+ |
+| `dt_ensemble` | `DTEnsemble` | Ensemble std dev | ✓ | — | 1K – 10M+ | — |
+| `mixed_ensemble` | `MixedEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 50K | 1K – 50K |
+| `fastprop_ensemble` | `FastpropEnsemble` | Ensemble std dev | ✓ | ✓ | 5K – 50K | 5K – 500K |
+| `ensemble` | `EnsembleLearner` | Ensemble std dev | ✓ | — | 1K – 100K | — |
+
+### Acquisition Strategies
+
+| Shortcut | Class | Requires Uncertainty | Key Parameter | Strategy |
+| -------- | ----- | -------------------- | ------------- | -------- |
+| `greedy` | `GreedyAcquisition` | No | `score_direction` | Pure exploitation — selects compounds with highest predicted values |
+| `random` | `RandomAcquisition` | No | `random_state` | Random selection — baseline for evaluating other strategies |
+| `topk` | `TopKAcquisition` | No | `k_fraction` (0.1) | Rank-ordered selection from configurable top/bottom fraction |
+| `ucb` | `UCBAcquisition` | Yes | `beta` (2.0) | Exploitation + exploration via `mean + β × uncertainty`; higher β = more exploration |
+| `ei` | `ExpectedImprovementAcquisition` | Yes | `xi` (0.01) | Expected improvement over current best; principled exploitation/exploration trade-off |
+| `pi` | `ProbabilityImprovementAcquisition` | Yes | `xi` (0.01) | Probability of improving over current best; more conservative than EI |
+| `thompson` | `ThompsonSamplingAcquisition` | Yes | `random_state` | Stochastic — samples from posterior predictive distribution |
+| `entropy` | `EntropyAcquisition` | Yes | `entropy_type` | Maximum information gain — selects most uncertain compounds |
+| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `initial_temp`, `cooling_rate` | Temperature-based probabilistic selection; starts random, cools to greedy |
+
+**Uncertainty-based strategies** (`ucb`, `ei`, `pi`, `thompson`, `entropy`) require a learner that supports uncertainty. See the Learners table above — the **Uncertainty Method** column indicates compatibility.
+
+### Featurizers by Category
+
+| Category | Count | Names |
+| -------- | ----- | ----- |
+| **2D Circular** | 5 | morgan, ecfp, ecfp6, morgan_feat, secfp |
+| **2D Structural Keys** | 4 | maccs, pubchem, klekota_roth, laggner |
+| **2D Topological** | 6 | avalon, atom_pair, topological_torsion, rdkit, pattern, layered |
+| **2D Hashed** | 4 | map4, mhfp, lingo, erg |
+| **2D Descriptors** | 10 | mordred/descriptors, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups |
+| **3D** (conformer) | 9 | whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape |
+
 See the [documentation](docs/) for complete details on all components.
+
+## ⚡ CUDA Acceleration
+
+LearnM8 supports GPU acceleration for training and inference via CUDA. GPU learners are optional — dependencies are lazy-imported and only required when a GPU learner is selected.
+
+### GPU Gaussian Process (`gpu_gp`)
+
+GPyTorch-based Exact GP with LOVE (Low-Rank Orthogonal Variance Estimation) for fast variance computation. Auto-selects Tanimoto kernel for binary fingerprints (via GAUCHE) or RBF for continuous features. LOVE-enabled variance is **12–96x faster** than naive GP at pool sizes ≥10K.
+
+```python
+results = run_active_learning(
+    compound_pool='compounds.csv', target_col='Activity',
+    learner='gpu_gp', featurizer='morgan', n_cycles=10, device='cuda'
+)
+```
+
+**Requires:** GPyTorch ≥1.11, GAUCHE ≥0.1.6 (for Tanimoto kernel)
+
+### Scalable Variational GP (`svgp`)
+
+Stochastic Variational GP for datasets beyond the 10K limit of Exact GP. Uses inducing-point approximation with minibatch SGD — memory is O(M²) independent of training set size.
+
+```python
+results = run_active_learning(
+    compound_pool='compounds.csv', target_col='Activity',
+    learner='svgp', featurizer='morgan', n_cycles=10, device='cuda'
+)
+```
+
+**Requires:** GPyTorch ≥1.11, GAUCHE ≥0.1.6
+
+### RF FIL (`rf_fil`)
+
+Trains a standard sklearn RandomForest on CPU, then converts the fitted forest to RAPIDS cuML Forest Inference Library (FIL) for GPU-accelerated batch inference. Provides uncertainty via per-tree prediction std dev.
+
+```python
+results = run_active_learning(
+    compound_pool='compounds.csv', target_col='Activity',
+    learner='rf_fil', featurizer='morgan', n_cycles=10
+)
+```
+
+**Requires:** RAPIDS cuML ≥25.04, Treelite ≥4.6
+
+### Ridge cuML (`ridge_cuml`)
+
+GPU-accelerated Ridge regression via RAPIDS cuML with leverage-based uncertainty estimation. Gram matrix Cholesky computed on CPU (float64) with optional GPU leverage via CuPy.
+
+**Requires:** RAPIDS cuML ≥25.04, CuPy (optional, for GPU leverage)
+
+### GPU-Accelerated Ensembles
+
+Several ensemble learners automatically use GPU backends when `device='cuda'`:
+
+| Ensemble | CPU Members | GPU Members (`device='cuda'`) |
+| -------- | ----------- | ----------------------------- |
+| `mixed_ensemble` | RF + LR + XGBoost | RF FIL + Ridge cuML + XGBoost CUDA |
+| `xgb_ensemble` | XGBoost CPU | XGBoost CUDA |
+| `lr_ensemble` | LinearRegression | Ridge cuML |
+
+### Device Configuration
+
+All learners accept a `device` parameter (`'auto'`, `'cpu'`, `'cuda'`, `'cuda:N'`). When set to `'auto'` (default), CUDA is used if available.
+
+```bash
+# CLI with GPU
+learnm8 run compounds.csv --target Activity --learner gpu_gp --device cuda
+
+# CLI with specific GPU
+learnm8 run compounds.csv --target Activity --learner rf_fil --device cuda:0
+```
+
+GPU learners include automatic OOM recovery — training falls back to CPU when GPU memory is exceeded.
 
 ## 🔗 Links
 
@@ -165,8 +264,9 @@ If you use LearnM8 in your research, please cite our work (citation details to b
 ## 🧪 Testing
 
 ```bash
-pytest tests/
-pytest tests/ --cov=learnm8 --cov-report=html
+pytest -m "not slow" tests/                          # Fast tests only (~1295 tests)
+pytest tests/                                         # All tests including slow
+pytest tests/ --cov=learnm8 --cov-fail-under=90      # Coverage (minimum 90%)
 ```
 
 ---
