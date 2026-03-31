@@ -6,16 +6,6 @@ DATASETS_ROOT = Path('/home/tony/Compound_Libraries/LearnM8_datasets')
 ESSENCE_ROOT = PROJECT_ROOT / 'ESSENCE_benchmark_input'
 
 STANDARD_DATASETS = {
-    'ampc_30k': {
-        'path': VALIDATION_ROOT / 'ampc_30k_subsample.csv',
-        'target_column': 'dockscore',
-        'id_column': 'ID',
-        'smiles_column': 'SMILES',
-        'expected_size': 30000,
-        'description': 'AmpC β-lactamase 30K screening dataset',
-        'score_direction': 'lower',
-        'note': 'Lower docking scores indicate better binding affinity'
-    },
     'ampc_100k': {
         'path': VALIDATION_ROOT / 'AmpC_screen_100K.csv',
         'target_column': 'dockscore',
@@ -58,15 +48,15 @@ STANDARD_DATASETS = {
     },
 }
 
-DEFAULT_DATASET = 'ampc_30k'
+DEFAULT_DATASET = 'ampc_100k'
 
 RECOMMENDED_DATASETS = {
-    'clustering': 'ampc_30k',
-    'acquisition': 'ampc_30k',
-    'pruning': 'ampc_30k',
-    'uncertainty': 'ampc_30k',
+    'clustering': 'ampc_100k',
+    'acquisition': 'ampc_100k',
+    'pruning': 'ampc_100k',
+    'uncertainty': 'ampc_100k',
     'scalability': 'ampc_1000k',
-    'quick_test': 'ampc_30k',
+    'quick_test': 'ampc_100k',
     'gpu_benchmark': 'ampc_100k',
 }
 

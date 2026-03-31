@@ -115,6 +115,11 @@ validation/uncertainty_acquisition/generate_ucb_notebook.py
 validation/VALIDATION_ALTERNATIVES.md
 validation/reports/*
 validation/speedup/results/*.json
+validation/performance/speedup/results/*.json
+**/*.ckpt
+**/__pycache__/
+validation/**/.cache/
+.shared_cache/
 tests/test_representations/.representations/
 
 # Worktrees
