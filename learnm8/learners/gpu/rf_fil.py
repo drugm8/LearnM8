@@ -79,6 +79,16 @@ class RfFilLearner(SklearnLearner):
     def get_name(self) -> str:
         return 'rf_fil'
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        per_tree_output = self.n_estimators * 4
+        input_cost = n_features * 4
+        bytes_per_sample = input_cost + per_tree_output
+        return {
+            'bytes_per_sample': bytes_per_sample,
+            'working_multiplier': 2.0,
+            'fixed_overhead': 0,
+        }
+
     def supports_uncertainty(self) -> bool:
         return True
 

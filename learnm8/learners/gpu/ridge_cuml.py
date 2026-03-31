@@ -336,6 +336,16 @@ class RidgeCumlLearner(Learner):
         """
         return 'ridge_cuml'
 
+    def memory_profile(self, n_features: int) -> dict[str, int | float]:
+        bytes_per_sample = n_features * 8
+        working_multiplier = 3.0
+        fixed_overhead = n_features * n_features * 8
+        return {
+            'bytes_per_sample': bytes_per_sample,
+            'working_multiplier': working_multiplier,
+            'fixed_overhead': fixed_overhead,
+        }
+
     def supports_uncertainty(self) -> bool:
         """Return True — RidgeCumlLearner provides leverage-based uncertainty.
 
