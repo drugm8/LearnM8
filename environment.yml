@@ -1,211 +1,60 @@
 name: learnm8
 channels:
-  - conda-forge
-  - defaults
-dependencies:
-  - python=3.11.9  
-  - pandas
-  - chardet
-  - charset-normalizer
-  - lightning
-  - aimsim
-  - amply
-  - astartes
-  - biopandas
-  - biopython
-  - blas
-  - bottleneck
-  - brotli
-  - brotli-bin
-  - brotli-python
-  - bzip2
-  - c-ares
-  - ca-certificates
-  - cairo
-  - certifi
-  - chemprop
-  - coin-or-cbc
-  - coin-or-cgl
-  - coin-or-clp
-  - coin-or-osi
-  - coin-or-utils
-  - coincbc
-  - configargparse
-  - contourpy
-  - cssselect
-  - curl
-  - custom-inherit
-  - cycler
-  - darkdetect
-  - deprecated
-  - dill
-  - docutils
-  - et_xmlfile
-  - expat
-  - filelock
-  - font-ttf-dejavu-sans-mono
-  - font-ttf-inconsolata
-  - font-ttf-source-code-pro
-  - font-ttf-ubuntu
-  - fontconfig
-  - fonts-anaconda
-  - fonts-conda-ecosystem
-  - fonttools
-  - freetype
-  - freetype-py
-  - fsspec
-  - gdbm
-  - gettext
-  - git
-  - glib
-  - glib-tools
-  - gmp
-  - gmpy2
-  - greenlet
-  - icu
-  - idna
-  - importlib-metadata
-  - importlib_metadata
-  - jinja2
-  - joblib
-  - jpeg
-  - krb5
-  - lcms2
-  - lerc
-  - libblas
-  - libboost
-  - libboost-python
-  - libbrotlicommon
-  - libbrotlidec
-  - libbrotlienc
-  - libcblas
-  - libcurl
-  - libcxx
-  - libdeflate
-  - libedit
-  - libev
-  - libexpat
-  - libffi
-  - libgfortran
-  - libgfortran5
-  - libglib
-  - libiconv
-  - liblapack
-  - liblapacke
-  - libnghttp2
-  - libopenblas
-  - libpng
-  - libpq
-  - libprotobuf
-  - librdkit
-  - libsqlite
-  - libssh2
-  - libtiff
-  - libwebp-base
-  - libxml2
-  - libxslt
-  - libzlib
-  - lightning-utilities
-  - llvm-openmp
-  - looseversion
-  - lxml
-  - markupsafe
-  - matplotlib-base
-  - methodtools
-  - mhfp
-  - mmtf-python
-  - mordredcommunity
-  - mpc
-  - mpfr
-  - mpmath
-  - msgpack-python
-  - multiprocess
-  - ncurses
-  - networkx
-  - numexpr
-  - numpy
-  - numpy-base
-  - openbabel
-  - openjdk
-  - openjpeg
-  - openpyxl
-  - openssl
-  - packaging
-  - padelpy
-  - pcre2
-  - pebble
-  - perl
-  - pillow
-  - pip
-  - pixman
-  - plotly
-  - prody
-  - psutil
-  - pulp
-  - pybind11-abi
-  - pycairo
-  - pyparsing
-  - pyquery
-  - pysocks
-  - python
-  - python-dateutil
-  - python-tzdata
-  - python_abi
+  - rapidsai
   - pytorch
-  - pytorch-lightning
-  - pytest
-  - pytz
-  - pyyaml
-  - rdkit
-  - readline
-  - reportlab
-  - requests
-  - rlpycairo
-  - scikit-criteria
-  - scikit-learn
-  - scikit-fingerprints
-  - scipy
-  - seaborn
-  - setuptools
-  - six
-  - sqlalchemy
-  - sqlite
-  - sympy
-  - tabulate
-  - tenacity
-  - threadpoolctl
-  - tk
-  - torchmetrics
-  - tqdm
-  - typing-extensions
-  - typing_extensions
-  - tzdata
-  - unicodedata2
-  - urllib3
-  - wheel
-  - wirerope
-  - wrapt
-  - xz
-  - yaml
-  - zipp
-  - zlib
-  - zstd
-  - ruff
-  - mypy
-  - watchdog
-  - pytorch-cuda=12.4
-  - torchaudio
-  - torchvision
-  - ray-tune
-  - hyperopt
-  - flask
-  - flask_cors
-  - h5py
+  - conda-forge
+  - nvidia
+
+dependencies:
+  # --- Python runtime ---
+  - python>=3.10,<3.13
+
+  # --- Core scientific computing ---
+  - numpy>=1.24,<3.0
+  - scipy>=1.10,<2.0
+  - pandas>=1.5,<3.0
+  - polars>=1.0
+  - pyarrow>=15.0
+
+  # --- Machine learning ---
+  - scikit-learn>=1.2,<2.0
+  - xgboost>=1.7,<3.0
+  - joblib>=1.2
+
+  # --- Chemistry ---
+  - rdkit>=2023.03
+  - datamol>=0.12
+  - mordredcommunity
+
+  # --- Deep learning (PyTorch + CUDA 12) ---
+  - pytorch>=2.0,<3.0
+  - pytorch-cuda>=12.4
+  - pytorch-lightning>=2.0,<3.0
+
+  # --- GPU acceleration (CUDA 12) ---
+  - gpytorch>=1.11
+  - cuml>=25.04
+  - cupy
+  - treelite>=4.4,<5.0
+
+  # --- IO, display & config ---
+  - h5py>=3.0
   - hdf5plugin>=3.0
-  - datamol
+  - matplotlib-base>=3.5
+  - rich>=10.0
+  - pyyaml>=5.0
+
+  # --- Dev & testing ---
+  - pytest>=7.0
+  - ruff>=0.4
+  - mypy>=1.0
+
+  # --- Pip-only packages ---
   - pip
   - pip:
-    - git+https://github.com/mqcomplab/bitbirch.git
-    - fastprop
     - chemprop
-    - pytest-xdist>=3.5.0
+    - fastprop
+    - scikit-fingerprints
+    - gauche>=0.1.6
+    - pytest-xdist>=3.5
+    - git+https://github.com/mqcomplab/bitbirch.git
