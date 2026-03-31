@@ -39,9 +39,21 @@ test = [
     "pytest-cov>=4.0.0",
     "pytest-xdist>=3.5.0",
 ]
-gpu = [
-    "treelite>=4.6,<5.0",
+gpu-gp = [
+    "gpytorch>=1.11",
+    "gauche>=0.1.6",
+]
+gpu-rapids = [
+    "cuml-cu12>=25.04",
     "cupy-cuda12x>=13.0",
+    "treelite>=4.6,<5.0",
+]
+gpu = [
+    "gpytorch>=1.11",
+    "gauche>=0.1.6",
+    "cuml-cu12>=25.04",
+    "cupy-cuda12x>=13.0",
+    "treelite>=4.6,<5.0",
 ]
 
 [project.scripts]
