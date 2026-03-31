@@ -129,16 +129,20 @@ def _benchmark_rf_fil(
 
     print(f'  Benchmarking rf_fil vs rf_cpu (n_train={len(X_train)}, n_test={len(X_test)})')
 
+    X_train_f64 = X_train.astype(np.float64)
+    y_train_f64 = y_train.astype(np.float64)
+    X_test_f64 = X_test.astype(np.float64)
+
     cpu_learner = RandomForestLearner(n_estimators=100, random_state=42, n_jobs=-1)
 
     def train_cpu():
-        cpu_learner.train(X_train.astype(np.float64), y_train.astype(np.float64))
+        cpu_learner.train(X_train_f64, y_train_f64)
 
     train_cpu()
     train_cpu_median, train_cpu_iqr, _ = _time_fn_ns(train_cpu, N_WARMUP, N_REPS)
 
     def predict_cpu():
-        cpu_learner.predict(X_test.astype(np.float64))
+        cpu_learner.predict(X_test_f64)
 
     predict_cpu()
     predict_cpu_median, predict_cpu_iqr, _ = _time_fn_ns(predict_cpu, N_WARMUP, N_REPS)
@@ -192,16 +196,20 @@ def _benchmark_ridge_cuml(
 
     print(f'  Benchmarking ridge_cuml vs lr_cpu (n_train={len(X_train)}, n_test={len(X_test)})')
 
+    X_train_f64 = X_train.astype(np.float64)
+    y_train_f64 = y_train.astype(np.float64)
+    X_test_f64 = X_test.astype(np.float64)
+
     cpu_learner = LinearRegressionLearner(alpha=0.1)
 
     def train_cpu():
-        cpu_learner.train(X_train.astype(np.float64), y_train.astype(np.float64))
+        cpu_learner.train(X_train_f64, y_train_f64)
 
     train_cpu()
     train_cpu_median, train_cpu_iqr, _ = _time_fn_ns(train_cpu, N_WARMUP, N_REPS)
 
     def predict_cpu():
-        cpu_learner.predict(X_test.astype(np.float64))
+        cpu_learner.predict(X_test_f64)
 
     predict_cpu()
     predict_cpu_median, predict_cpu_iqr, _ = _time_fn_ns(predict_cpu, N_WARMUP, N_REPS)
@@ -209,14 +217,14 @@ def _benchmark_ridge_cuml(
     gpu_learner = RidgeCumlLearner(alpha=0.1, random_state=42)
 
     def train_gpu():
-        gpu_learner.train(X_train.astype(np.float64), y_train.astype(np.float64))
+        gpu_learner.train(X_train_f64, y_train_f64)
 
     _reset_vram_stats()
     train_gpu()
     train_gpu_median, train_gpu_iqr, _ = _time_fn_ns(train_gpu, N_WARMUP, N_REPS, cuda_sync=True)
 
     def predict_gpu():
-        gpu_learner.predict(X_test.astype(np.float64))
+        gpu_learner.predict(X_test_f64)
 
     _reset_vram_stats()
     predict_gpu()
@@ -257,16 +265,20 @@ def _benchmark_xgb_cuda(
 
     print(f'  Benchmarking xgb_cuda vs xgb_cpu (n_train={len(X_train)}, n_test={len(X_test)})')
 
+    X_train_f64 = X_train.astype(np.float64)
+    y_train_f64 = y_train.astype(np.float64)
+    X_test_f64 = X_test.astype(np.float64)
+
     cpu_learner = XGBoostLearner(n_estimators=100, random_state=42, device='cpu', n_jobs=-1)
 
     def train_cpu():
-        cpu_learner.train(X_train.astype(np.float64), y_train.astype(np.float64))
+        cpu_learner.train(X_train_f64, y_train_f64)
 
     train_cpu()
     train_cpu_median, train_cpu_iqr, _ = _time_fn_ns(train_cpu, N_WARMUP, N_REPS)
 
     def predict_cpu():
-        cpu_learner.predict(X_test.astype(np.float64))
+        cpu_learner.predict(X_test_f64)
 
     predict_cpu()
     predict_cpu_median, predict_cpu_iqr, _ = _time_fn_ns(predict_cpu, N_WARMUP, N_REPS)
@@ -274,14 +286,14 @@ def _benchmark_xgb_cuda(
     gpu_learner = XGBoostLearner(n_estimators=100, random_state=42, device='cuda', n_jobs=-1)
 
     def train_gpu():
-        gpu_learner.train(X_train.astype(np.float64), y_train.astype(np.float64))
+        gpu_learner.train(X_train_f64, y_train_f64)
 
     _reset_vram_stats()
     train_gpu()
     train_gpu_median, train_gpu_iqr, _ = _time_fn_ns(train_gpu, N_WARMUP, N_REPS, cuda_sync=True)
 
     def predict_gpu():
-        gpu_learner.predict(X_test.astype(np.float64))
+        gpu_learner.predict(X_test_f64)
 
     _reset_vram_stats()
     predict_gpu()
@@ -311,7 +323,18 @@ def _benchmark_xgb_cuda(
 
 def _synthetic_data(n: int, n_features: int = 1024, seed: int = 42) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
-    X = rng.random((n, n_features)).astype(np.float32)
+    chunk_size = 100_000
+    if n <= chunk_size:
+        X = rng.random((n, n_features)).astype(np.float32)
+    else:
+        chunks = []
+        remaining = n
+        while remaining > 0:
+            k = min(remaining, chunk_size)
+            chunks.append(rng.random((k, n_features)).astype(np.float32))
+            remaining -= k
+        X = np.concatenate(chunks, axis=0)
+        del chunks
     y = (X[:, 0] * 3.0 + rng.normal(0, 0.1, n)).astype(np.float32)
     return X, y
 
@@ -339,6 +362,103 @@ def _save_result(result: dict, label: str) -> None:
     print(f'  Saved: {path}')
 
 
+def _benchmark_batched_prediction(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_test: np.ndarray,
+    dataset_size: int,
+) -> list[dict]:
+    import math
+
+    from learnm8.core.batching import estimate_batch_size, get_available_memory
+
+    results = []
+    learner_configs = []
+
+    try:
+        from learnm8.learners.gpu.rf_fil import RfFilLearner
+        learner_configs.append(('rf_fil', RfFilLearner(n_estimators=100, random_state=42, n_jobs=-1)))
+    except Exception as e:
+        print(f'  Skipping rf_fil batched benchmark: {e}')
+
+    try:
+        from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
+        learner_configs.append(('ridge_cuml', RidgeCumlLearner(alpha=0.1, random_state=42)))
+    except Exception as e:
+        print(f'  Skipping ridge_cuml batched benchmark: {e}')
+
+    try:
+        from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
+        learner_configs.append(('xgb_cuda', XGBoostLearner(n_estimators=100, random_state=42, device='cuda', n_jobs=-1)))
+    except Exception as e:
+        print(f'  Skipping xgb_cuda batched benchmark: {e}')
+
+    for learner_id, learner in learner_configs:
+        print(f'  Batched prediction benchmark: {learner_id} (n_test={len(X_test)})')
+        try:
+            learner.train(X_train.copy(), y_train.copy())
+
+            n_features = X_test.shape[1]
+            from learnm8.core.batching import _get_learner_device
+            device = _get_learner_device(learner)
+            available_mem = get_available_memory(device)
+            profile = learner.memory_profile(n_features)
+            batch_size = estimate_batch_size(learner, len(X_test), n_features, device)
+            n_batches = math.ceil(len(X_test) / batch_size)
+            print(
+                f'    memory_profile: {profile}')
+            print(
+                f'    available={available_mem / (1024**3):.1f} GiB, '
+                f'batch_size={batch_size:,}, n_batches={n_batches}'
+            )
+
+            _reset_vram_stats()
+
+            def run_batched(_bs=batch_size, _lr=learner):
+                all_preds = []
+                for i in range(0, len(X_test), _bs):
+                    chunk = X_test[i:i + _bs]
+                    preds, _ = _lr.predict(chunk)
+                    all_preds.append(preds)
+                return np.concatenate(all_preds)
+
+            run_batched()
+            median_s, iqr_s, _ = _time_fn_ns(run_batched, 1, 3, cuda_sync=True)
+            vram_peak = _vram_peak_mb()
+
+            def run_unbatched(_lr=learner):
+                return _lr.predict(X_test)
+
+            unbatched_median, unbatched_iqr, _ = _time_fn_ns(
+                run_unbatched, 1, 3, cuda_sync=True
+            )
+
+            result = {
+                'learner_id': f'{learner_id}_batched',
+                'dataset_size': dataset_size,
+                'n_test': len(X_test),
+                'batch_size': batch_size,
+                'n_batches': n_batches,
+                'memory_profile': profile,
+                'predict_time_s': {
+                    'batched': median_s, 'batched_iqr': iqr_s,
+                    'unbatched': unbatched_median, 'unbatched_iqr': unbatched_iqr,
+                },
+                'gpu_vram_peak_mb': vram_peak,
+                'n_reps': 3,
+            }
+            _save_result(result, f'{learner_id}_batched_{dataset_size}')
+            results.append(result)
+            print(
+                f'    {learner_id}: batched={median_s:.4f}s unbatched={unbatched_median:.4f}s '
+                f'(batch_size={batch_size:,}, {n_batches} batches)'
+            )
+        except Exception as e:
+            print(f'    {learner_id} batched benchmark failed: {e}')
+
+    return results
+
+
 def main():
     import datetime
 
@@ -363,8 +483,7 @@ def main():
             source = 'AmpC'
         else:
             print(f'  Using synthetic data (n={dataset_size})')
-            n_synth = min(dataset_size, 50_000)
-            features, targets = _synthetic_data(n_synth)
+            features, targets = _synthetic_data(dataset_size)
             source = 'synthetic'
 
         n_train = int(len(features) * 0.8)
@@ -403,17 +522,34 @@ def main():
         except Exception as e:
             print(f'  xgb_cuda benchmark failed: {e}')
 
+        print(f'\n  --- Memory-aware batched prediction (dataset_size={dataset_size:,}) ---')
+        try:
+            batched_results = _benchmark_batched_prediction(X_train, y_train, X_test, dataset_size)
+            for br in batched_results:
+                br['data_source'] = source
+                br['hardware'] = hw
+            all_results.extend(batched_results)
+        except Exception as e:
+            print(f'  Batched prediction benchmark failed: {e}')
+
     print('\n' + '=' * 60)
     print('Summary')
     print('=' * 60)
     for r in all_results:
-        pred_cpu = r['predict_time_s']['cpu']
-        pred_gpu = r['predict_time_s']['gpu']
-        print(
-            f'  {r["learner_id"]:20s}  size={r["dataset_size"]:>8,}  '
-            f'cpu={pred_cpu:.4f}s  gpu={pred_gpu:.4f}s  '
-            f'speedup={r["predict_speedup"]:.2f}x'
-        )
+        if 'batched' in r.get('learner_id', ''):
+            pred_batched = r['predict_time_s']['batched']
+            print(
+                f'  {r["learner_id"]:20s}  size={r["dataset_size"]:>8,}  '
+                f'batched={pred_batched:.4f}s  batch_size={r["batch_size"]:,}'
+            )
+        else:
+            pred_cpu = r['predict_time_s']['cpu']
+            pred_gpu = r['predict_time_s']['gpu']
+            print(
+                f'  {r["learner_id"]:20s}  size={r["dataset_size"]:>8,}  '
+                f'cpu={pred_cpu:.4f}s  gpu={pred_gpu:.4f}s  '
+                f'speedup={r["predict_speedup"]:.2f}x'
+            )
 
     summary_path = RESULTS_DIR / 'gpu_benchmark_summary.json'
     with open(summary_path, 'w') as f:
