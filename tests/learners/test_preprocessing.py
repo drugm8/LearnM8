@@ -138,6 +138,7 @@ class TestPreprocessFeatures:
 
 @pytest.mark.parametrize('learner_factory', _make_cpu_learners())
 class TestLearnerPreprocessing:
+    @pytest.mark.slow
     def test_nan_inf_handled_in_train(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 10)
@@ -148,6 +149,7 @@ class TestLearnerPreprocessing:
         preds, _ = learner.predict(features)
         assert np.all(np.isfinite(preds))
 
+    @pytest.mark.slow
     def test_zero_variance_columns_handled(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 10)
@@ -157,6 +159,7 @@ class TestLearnerPreprocessing:
         preds, _ = learner.predict(features)
         assert preds.shape == (50,)
 
+    @pytest.mark.slow
     def test_feature_shape_consistency_train_predict(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 10)
@@ -166,6 +169,7 @@ class TestLearnerPreprocessing:
         preds, _ = learner.predict(pred_feats)
         assert preds.shape == (20,)
 
+    @pytest.mark.slow
     def test_nan_in_predict_handled(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 10)
@@ -178,6 +182,7 @@ class TestLearnerPreprocessing:
         assert np.all(np.isfinite(preds))
         assert preds.shape == (20,)
 
+    @pytest.mark.slow
     def test_zero_variance_mask_stored_after_train(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 10)
@@ -189,6 +194,7 @@ class TestLearnerPreprocessing:
         assert not learner._valid_feature_mask[0]
         assert not learner._valid_feature_mask[9]
 
+    @pytest.mark.slow
     def test_multiple_predict_calls_consistent(self, learner_factory):
         learner = learner_factory()
         features = np.random.rand(50, 8)
@@ -200,6 +206,7 @@ class TestLearnerPreprocessing:
         preds2, _ = learner.predict(pred_feats)
         np.testing.assert_allclose(preds1, preds2, rtol=1e-12)
 
+    @pytest.mark.slow
     def test_retrain_updates_zero_variance_mask(self, learner_factory):
         learner = learner_factory()
         features1 = np.random.rand(50, 5)

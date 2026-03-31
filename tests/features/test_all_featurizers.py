@@ -20,6 +20,7 @@ class TestAllFeaturizers:
         name = featurizer.get_name()
         assert isinstance(name, str) and len(name) > 0
 
+    @pytest.mark.slow
     @pytest.mark.parametrize("featurizer_name", FEATURIZERS_2D)
     def test_featurizer_produces_output(self, featurizer_name, small_real_compounds):
         smiles = small_real_compounds.get_column("SMILES").to_list()[:1]

@@ -14,6 +14,7 @@ from learnm8.features.extraction import extract_features
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestGaussianProcessLearner:
@@ -217,6 +218,7 @@ class TestGaussianProcessLearner:
         assert "Tanimoto" in name or "RBF" in name
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 class TestKernelAutoDetection:
     """Tests for kernel auto-detection and explicit selection (T006)."""
@@ -306,6 +308,7 @@ class TestKernelAutoDetection:
         assert "RBF" in learner_rbf.get_name()
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 class TestAlphaConfiguration:
     """Tests for alpha configuration passthrough (T007)."""
@@ -319,6 +322,7 @@ class TestAlphaConfiguration:
         assert learner.model.alpha == 0.05
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 class TestSizeGuard:
     """Tests for training set size guards (T008)."""
@@ -373,6 +377,7 @@ class TestSizeGuard:
             learner.train(X_too_big, y_too_big)
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestScientificValidation:
@@ -438,6 +443,7 @@ class TestScientificValidation:
             )
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 class TestGPFeatureScaling:
     def test_scale_features_default_true(self):

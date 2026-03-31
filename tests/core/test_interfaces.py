@@ -82,6 +82,7 @@ class MockOracle(Oracle):
 class TestLearnerInterface:
     """Test Learner interface compliance."""
     
+    @pytest.mark.slow
     def test_learner_interface_methods(self, small_real_compounds, tmp_path):
         """Test that Learner interface methods are properly defined."""
         compounds = small_real_compounds.clone()

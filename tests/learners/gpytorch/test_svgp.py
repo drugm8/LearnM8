@@ -28,6 +28,7 @@ def targets():
     return rng.random(50).astype(np.float64)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_instantiation_default():
     learner = SVGPLearner(device="cpu")
@@ -37,6 +38,7 @@ def test_instantiation_default():
     assert learner.n_epochs == 50
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_instantiation_custom():
     learner = SVGPLearner(
@@ -48,6 +50,7 @@ def test_instantiation_custom():
     assert learner.learning_rate == 0.05
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_gpytorch_not_installed(monkeypatch):
     monkeypatch.setitem(sys.modules, "gpytorch", None)
@@ -55,6 +58,7 @@ def test_gpytorch_not_installed(monkeypatch):
         SVGPLearner(device="cpu")
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_kernel_auto_binary(binary_features, targets):
     learner = SVGPLearner(device="cpu", n_inducing=20, n_epochs=5)
@@ -62,6 +66,7 @@ def test_kernel_auto_binary(binary_features, targets):
     assert "tanimoto" in learner.get_name().lower()
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_kernel_auto_continuous(continuous_features, targets):
     learner = SVGPLearner(device="cpu", n_inducing=20, n_epochs=5)
@@ -70,6 +75,7 @@ def test_kernel_auto_continuous(continuous_features, targets):
     assert "rbf" in learner.get_name().lower()
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_kernel_explicit_tanimoto(continuous_features, targets):
     learner = SVGPLearner(device="cpu", kernel="tanimoto", n_inducing=20, n_epochs=5)
@@ -77,6 +83,7 @@ def test_kernel_explicit_tanimoto(continuous_features, targets):
     assert "tanimoto" in learner.get_name().lower()
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_kernel_explicit_rbf(binary_features, targets):
     learner = SVGPLearner(device="cpu", kernel="rbf", n_inducing=20, n_epochs=5)
@@ -84,6 +91,7 @@ def test_kernel_explicit_rbf(binary_features, targets):
     assert "rbf" in learner.get_name().lower()
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_train_predict_cpu(binary_features, targets):
     learner = SVGPLearner(device="cpu", n_inducing=20, n_epochs=5)
@@ -96,6 +104,7 @@ def test_train_predict_cpu(binary_features, targets):
     assert np.all(stds > 0)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_target_standardization_round_trip(binary_features):
     rng = np.random.default_rng(42)
@@ -106,6 +115,7 @@ def test_target_standardization_round_trip(binary_features):
     assert np.abs(np.mean(means) - 100.0) < 30.0
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_predict_before_train(binary_features):
     learner = SVGPLearner(device="cpu")
@@ -113,22 +123,26 @@ def test_predict_before_train(binary_features):
         learner.predict(binary_features)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_supports_uncertainty():
     assert SVGPLearner(device="cpu").supports_uncertainty() is True
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_requires_smiles():
     assert SVGPLearner(device="cpu").requires_smiles() is False
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_get_name_untrained():
     learner = SVGPLearner(device="cpu")
     assert learner.get_name() == "SVGP(untrained)"
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_get_name_trained(binary_features, targets):
     learner = SVGPLearner(device="cpu", n_inducing=20, n_epochs=5)
@@ -138,6 +152,7 @@ def test_get_name_trained(binary_features, targets):
     assert "M=20" in name
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_zero_variance_removal_all_constant():
     features = np.ones((30, 10), dtype=np.float64)
@@ -148,6 +163,7 @@ def test_zero_variance_removal_all_constant():
         learner.train(features, t)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_nan_inf_preprocessing(targets):
     rng = np.random.default_rng(42)
@@ -160,6 +176,7 @@ def test_nan_inf_preprocessing(targets):
     assert learner.is_trained
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_n_inducing_clamped_to_n_train():
     rng = np.random.default_rng(42)
@@ -170,6 +187,7 @@ def test_n_inducing_clamped_to_n_train():
     assert learner._effective_m == 10
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_retrain_creates_fresh_model(binary_features, targets):
     learner = SVGPLearner(device="cpu", n_inducing=20, n_epochs=5)
@@ -180,6 +198,7 @@ def test_retrain_creates_fresh_model(binary_features, targets):
     assert model_id_first != model_id_second
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_chunked_prediction_shape(binary_features):
     rng = np.random.default_rng(42)
@@ -192,6 +211,7 @@ def test_chunked_prediction_shape(binary_features):
     assert stds.shape == (50,)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_gauche_missing_tanimoto_raises(monkeypatch, binary_features, targets):
     monkeypatch.setitem(sys.modules, "gauche", None)
@@ -205,6 +225,7 @@ def test_gauche_missing_tanimoto_raises(monkeypatch, binary_features, targets):
         learner.train(binary_features, targets)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_feature_target_mismatch():
     rng = np.random.default_rng(42)
@@ -215,6 +236,7 @@ def test_feature_target_mismatch():
         learner.train(features, t)
 
 
+@pytest.mark.slow
 @pytest.mark.unit
 def test_1d_features_raise():
     features = np.ones(50, dtype=np.float64)

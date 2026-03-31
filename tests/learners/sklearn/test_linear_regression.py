@@ -9,6 +9,7 @@ from learnm8.features.extraction import extract_features
 from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestLinearRegressionLearner:

@@ -120,6 +120,7 @@ class TestEnsembleLearner:
         with pytest.raises(LearnerError, match='BadLearner'):
             ensemble.train(features, compounds['Activity'].to_numpy())
 
+    @pytest.mark.slow
     def test_uncertainty_diversity(self, base_learners, small_real_compounds, small_real_morgan_features):
         """Test that ensemble uncertainty captures model diversity."""
         compounds = small_real_compounds.clone()
