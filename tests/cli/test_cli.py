@@ -247,6 +247,7 @@ class TestRunSubcommand:
                 '--featurizer', 'morgan',
                 '--learner', 'rf',
                 '--schedule', schedule,
+                '--batch-fraction', '0.4',
                 '-o', str(output_dir / schedule)
             )
 
