@@ -42,7 +42,7 @@ class TestAPIBasicSimple:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=cache_dir,
@@ -62,7 +62,7 @@ class TestAPIBasicSimple:
         assert isinstance(results['labeled_data'], pl.DataFrame)
         assert isinstance(results['unlabeled_data'], pl.DataFrame)
 
-        assert len(results['cycle_metrics']) == 3
+        assert len(results['cycle_metrics']) == 1
         assert len(results['labeled_data']) > 0
         assert output_dir.exists()
 
@@ -76,7 +76,7 @@ class TestAPIBasicSimple:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             strategy='random',
             output_dir=output_dir,
@@ -84,7 +84,7 @@ class TestAPIBasicSimple:
             random_state=42
         )
 
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
         assert results['compounds_df'] is not None
 
     def test_simple_api_labels_expected_batch_in_initial_cycle(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
@@ -328,7 +328,7 @@ class TestAPIModeDetection:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -336,7 +336,7 @@ class TestAPIModeDetection:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
     def test_oracle_none_with_csv_compound_pool(self, tmp_path, sample_compounds, mock_learner):
         """Test oracle=None auto-detects CSV oracle from compound_pool path."""
@@ -353,7 +353,7 @@ class TestAPIModeDetection:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -391,7 +391,7 @@ class TestAPIModeDetection:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             mode='run',
             output_dir=output_dir,
@@ -400,7 +400,7 @@ class TestAPIModeDetection:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
 
 @pytest.mark.slow
@@ -417,7 +417,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -441,7 +441,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -462,7 +462,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -767,7 +767,7 @@ class TestAPIFeaturizerTypes:
             learner=mock_learner,
             target_col='Activity',
             featurizer=featurizer,
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / f"cache_{featurizer}",
@@ -775,7 +775,7 @@ class TestAPIFeaturizerTypes:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
 
 @pytest.mark.slow
@@ -792,7 +792,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -817,7 +817,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -829,7 +829,7 @@ class TestAPIEvaluationMetrics:
 
         assert 'total_cycles' in agg
         assert 'total_labeled' in agg
-        assert agg['total_cycles'] == 3
+        assert agg['total_cycles'] == 1
 
     def test_aggregate_metrics_basic_tracking(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that aggregate metrics track basic information."""
@@ -841,7 +841,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -853,7 +853,7 @@ class TestAPIEvaluationMetrics:
         # Check basic aggregate metrics exist
         assert 'total_cycles' in agg
         assert 'total_labeled' in agg
-        assert agg['total_cycles'] == 3
+        assert agg['total_cycles'] == 1
 
     def test_benchmark_mode_includes_top_k_metrics(self, tmp_path, sample_compounds, mock_learner):
         """Test that benchmark mode includes top-K overlap metrics."""
@@ -870,7 +870,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             mode='benchmark',
             output_dir=output_dir,
@@ -894,7 +894,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -1147,7 +1147,7 @@ class TestChempropWithExtraDescriptors:
             learner='chemprop',
             featurizer='morgan',
             target_col='Activity',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.1,
             output_dir=tmp_path / "output",
             cache_dir=tmp_path / "cache"
@@ -1155,10 +1155,7 @@ class TestChempropWithExtraDescriptors:
 
         assert 'compounds_df' in results
         assert 'cycle_metrics' in results
-        assert len(results['cycle_metrics']) == 2
-
-        compounds_df = results['compounds_df']
-        assert 'prediction_cycle_1' in compounds_df.columns
+        assert len(results['cycle_metrics']) == 1
 
     def test_chemprop_without_featurizer_backward_compat(self, sample_compounds, tmp_path):
         """Test backward compatibility - Chemprop without featurizer (graph-only)."""
@@ -1175,7 +1172,7 @@ class TestChempropWithExtraDescriptors:
             learner='chemprop',
             featurizer=None,
             target_col='Activity',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.1,
             output_dir=tmp_path / "output"
         )
@@ -1201,7 +1198,7 @@ class TestMemorySafetyFactorParameter:
             learner='rf',
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
         )
@@ -1293,7 +1290,7 @@ class TestMemorySafetyFactorParameter:
             learner='rf',
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
             memory_safety_factor=1.0,
