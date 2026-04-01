@@ -9,6 +9,7 @@ from learnm8.features.extraction import extract_features
 from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestLinearRegressionLearner:
@@ -23,6 +24,14 @@ class TestLinearRegressionLearner:
     def ridge_learner(self):
         """Create Ridge regression learner instance for testing."""
         return LinearRegressionLearner(alpha=1.0, random_state=42)
+
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
 
     def test_initialization_sets_linear_mode_defaults_and_uncertainty_support(self, learner):
         """Test learner initialization with default Linear Regression mode."""
@@ -44,15 +53,15 @@ class TestLinearRegressionLearner:
         assert ridge_learner.supports_uncertainty() is True
         assert ridge_learner.is_ridge is True
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, compounds_20, features_20):
         """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
         targets = compounds['Activity'].to_numpy()
 
         learner.train(features, targets)
@@ -65,15 +74,15 @@ class TestLinearRegressionLearner:
         assert np.all(uncertainty >= 0)
         assert np.all(np.isfinite(predictions))
 
-    def test_ridge_vs_linear_mode(self, small_real_compounds, small_real_morgan_features):
+    def test_ridge_vs_linear_mode(self, compounds_20, features_20):
         """Test both Ridge and Linear modes produce valid predictions."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
         targets = compounds['Activity'].to_numpy()
 
         linear_learner = LinearRegressionLearner(alpha=None, random_state=42)
@@ -89,9 +98,9 @@ class TestLinearRegressionLearner:
         assert np.all(np.isfinite(ridge_predictions))
         assert not np.allclose(linear_predictions, ridge_predictions)
 
-    def test_get_coefficients(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_coefficients(self, learner, compounds_20, features_20):
         """Test coefficient retrieval."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -99,7 +108,7 @@ class TestLinearRegressionLearner:
 
         assert learner.get_coefficients() is None
 
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         coefficients = learner.get_coefficients()
 
@@ -107,9 +116,9 @@ class TestLinearRegressionLearner:
         assert len(coefficients) == np.sum(learner._valid_feature_mask)
         assert np.all(np.isfinite(coefficients))
 
-    def test_get_intercept(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_intercept(self, learner, compounds_20, features_20):
         """Test intercept retrieval."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -117,7 +126,7 @@ class TestLinearRegressionLearner:
 
         assert learner.get_intercept() is None
 
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         intercept = learner.get_intercept()
 
@@ -125,16 +134,16 @@ class TestLinearRegressionLearner:
         assert isinstance(intercept, (float, np.floating))
         assert np.isfinite(intercept)
 
-    def test_get_intercept_no_intercept_mode(self, small_real_compounds, small_real_morgan_features):
+    def test_get_intercept_no_intercept_mode(self, compounds_20, features_20):
         """Test intercept retrieval when fit_intercept=False."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
         learner = LinearRegressionLearner(fit_intercept=False, random_state=42)
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         intercept = learner.get_intercept()
 
@@ -187,15 +196,15 @@ class TestLinearRegressionLearner:
         assert learner.supports_uncertainty() is True
         assert ridge_learner.supports_uncertainty() is True
 
-    def test_ridge_alpha_values_change_predictions_while_remaining_finite(self, small_real_compounds, small_real_morgan_features):
+    def test_ridge_alpha_values_change_predictions_while_remaining_finite(self, compounds_20, features_20):
         """Test Ridge regression with different alpha values."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
         targets = compounds['Activity'].to_numpy()
 
         alphas = [0.1, 1.0, 10.0]
@@ -227,15 +236,15 @@ class TestLinearRegressionLearner:
         assert len(predictions) == 5
         assert np.all(np.isfinite(predictions))
 
-    def test_coefficients_ridge_vs_linear(self, small_real_compounds, small_real_morgan_features):
+    def test_coefficients_ridge_vs_linear(self, compounds_20, features_20):
         """Test that Ridge produces smaller coefficients than Linear (regularization effect)."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
         targets = compounds['Activity'].to_numpy()
 
         linear_learner = LinearRegressionLearner(alpha=None, random_state=42)
@@ -251,15 +260,15 @@ class TestLinearRegressionLearner:
 
         assert ridge_l2_norm < linear_l2_norm
 
-    def test_n_jobs_parameter(self, small_real_compounds, small_real_morgan_features):
+    def test_n_jobs_parameter(self, compounds_20, features_20):
         """Test that n_jobs parameter is respected for LinearRegression mode."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
         targets = compounds['Activity'].to_numpy()
 
         learner_parallel = LinearRegressionLearner(alpha=None, n_jobs=-1, random_state=42)
@@ -278,38 +287,38 @@ class TestLinearRegressionLearner:
         """Test that Ridge mode does not use n_jobs parameter."""
         assert ridge_learner.n_jobs is None
 
-    def test_uncertainty_shape_matches_predictions(self, learner, small_real_compounds, small_real_morgan_features):
-        compounds = small_real_compounds.clone()
+    def test_uncertainty_shape_matches_predictions(self, learner, compounds_20, features_20):
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
         assert uncertainty is not None
         assert uncertainty.shape == predictions.shape
 
-    def test_uncertainty_non_negative(self, learner, small_real_compounds, small_real_morgan_features):
-        compounds = small_real_compounds.clone()
+    def test_uncertainty_non_negative(self, learner, compounds_20, features_20):
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         _, uncertainty = learner.predict(features)
         assert uncertainty is not None
         assert np.all(uncertainty >= 0)
         assert np.all(np.isfinite(uncertainty))
 
-    def test_uncertainty_consistency(self, learner, small_real_compounds, small_real_morgan_features):
-        compounds = small_real_compounds.clone()
+    def test_uncertainty_consistency(self, learner, compounds_20, features_20):
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
-        features = small_real_morgan_features
+        features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
         _, unc1 = learner.predict(features)
         _, unc2 = learner.predict(features)

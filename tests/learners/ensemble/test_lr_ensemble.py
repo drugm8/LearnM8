@@ -8,6 +8,7 @@ from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 class TestLREnsemble:
     """Test LREnsemble functionality with real molecular data."""
@@ -16,6 +17,14 @@ class TestLREnsemble:
     def lr_ensemble(self):
         """Create LREnsemble instance for testing."""
         return LREnsemble()
+
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
 
     def test_initialization_sets_default_regularization_strengths_random_states_and_untrained_state(self, lr_ensemble):
         """Test ensemble initialization with default parameters."""
@@ -50,7 +59,7 @@ class TestLREnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_diverse_regularization(self, lr_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_diverse_regularization(self, lr_ensemble, compounds_20, features_20):
         """Test that ensemble learners have different regularization strengths."""
         assert len(lr_ensemble.learners) == 3
 
@@ -58,11 +67,11 @@ class TestLREnsemble:
         assert len(set(alphas)) == 3
         assert alphas == [0.1, 1.0, 10.0]
 
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = small_real_morgan_features
+        features = features_20
         lr_ensemble.train(features, compounds['Activity'].to_numpy())
 
         individual_preds = lr_ensemble.get_individual_predictions(features)
@@ -93,13 +102,13 @@ class TestLREnsemble:
         assert "0.5" in name
         assert "5.0" in name
 
-    def test_regularization_effect_on_predictions(self, small_real_compounds, small_real_morgan_features):
+    def test_regularization_effect_on_predictions(self, compounds_20, features_20):
         """Test that different regularization strengths produce different predictions."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = small_real_morgan_features
+        features = features_20
 
         ensemble_weak = LREnsemble(regularization_strengths=[0.01, 0.01, 0.01])
         ensemble_strong = LREnsemble(regularization_strengths=[10.0, 10.0, 10.0])
@@ -141,13 +150,13 @@ class TestLREnsemble:
         assert len(lr_ensemble.learners) == initial_count - 1
         assert not lr_ensemble.is_trained
 
-    def test_prediction_consistency(self, lr_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_prediction_consistency(self, lr_ensemble, compounds_20, features_20):
         """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
-        features = small_real_morgan_features
+        features = features_20
         lr_ensemble.train(features, compounds['Activity'].to_numpy())
 
         predictions1, uncertainty1 = lr_ensemble.predict(features)

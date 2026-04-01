@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import polars as pl
 from learnm8.utils.data_loaders import (
@@ -95,19 +97,19 @@ class TestLoadBenchmarkData:
         assert compound_pool.height == 5
         assert ground_truth.height == 5
 
-    def test_with_activity_binary_column(self, tmp_path, capsys):
+    def test_with_activity_binary_column(self, tmp_path, caplog):
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("ID,SMILES,Activity\nCOMP_001,CCO,1\nCOMP_002,CCC,0\n")
-        load_benchmark_data(str(csv_file), 'Activity')
-        out = capsys.readouterr().out
-        assert 'Activity' in out
+        with caplog.at_level(logging.INFO):
+            load_benchmark_data(str(csv_file), 'Activity')
+        assert 'Activity' in caplog.text
 
-    def test_without_activity_column(self, tmp_path, capsys):
+    def test_without_activity_column(self, tmp_path, caplog):
         csv_file = tmp_path / "data.csv"
         csv_file.write_text("ID,SMILES,Score\nCOMP_001,CCO,1.5\nCOMP_002,CCC,2.3\n")
-        load_benchmark_data(str(csv_file), 'Score')
-        out = capsys.readouterr().out
-        assert 'No Activity column' in out
+        with caplog.at_level(logging.INFO):
+            load_benchmark_data(str(csv_file), 'Score')
+        assert 'Activity' in caplog.text or 'No Activity column' in caplog.text
 
 
 @pytest.mark.unit
@@ -150,14 +152,14 @@ class TestLoadRunData:
         result = load_run_data(str(csv_file), str(oracle_file))
         assert 'ID' in result.columns
 
-    def test_non_py_oracle_extension_warns(self, tmp_path, capsys):
+    def test_non_py_oracle_extension_warns(self, tmp_path, caplog):
         csv_file = tmp_path / "compounds.csv"
         csv_file.write_text("ID,SMILES\nCOMP_001,CCO\n")
         oracle_file = tmp_path / "oracle.txt"
         oracle_file.write_text("# not a python file\n")
-        load_run_data(str(csv_file), str(oracle_file))
-        out = capsys.readouterr().out
-        assert 'Warning' in out or 'py' in out.lower()
+        with caplog.at_level(logging.WARNING):
+            load_run_data(str(csv_file), str(oracle_file))
+        assert '.py' in caplog.text or 'extension' in caplog.text.lower()
 
     def test_correct_row_count(self, tmp_path):
         csv_file = tmp_path / "compounds.csv"

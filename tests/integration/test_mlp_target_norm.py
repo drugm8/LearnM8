@@ -6,6 +6,7 @@ from learnm8.learners.torch.mlp import MLPLearner
 pytestmark = pytest.mark.unit
 
 class TestMLPTargetNormIntegration:
+    @pytest.mark.slow
     def test_predictions_in_original_scale_for_high_magnitude_targets(self):
         """MLP trained on targets with mean>1000 returns predictions in original scale."""
         rng = np.random.RandomState(42)

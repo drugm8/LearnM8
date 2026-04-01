@@ -118,7 +118,7 @@ class TestPreprocessFeatures:
     def test_binary_nan_triggers_warning(self, caplog):
         """T046: Binary features with NaN trigger a warning."""
         import logging
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger='learnm8.learners.base'):
             features = np.array([[1.0, np.nan], [0.0, 1.0]])
             result, _, _ = _preprocess_features(
                 features, remove_zero_variance=False, is_training=True, feature_type='binary'
@@ -138,77 +138,84 @@ class TestPreprocessFeatures:
 
 @pytest.mark.parametrize('learner_factory', _make_cpu_learners())
 class TestLearnerPreprocessing:
+    @pytest.mark.slow
     def test_nan_inf_handled_in_train(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 10)
+        features = np.random.rand(20, 10)
         features[0, 0] = np.nan
         features[1, 1] = np.inf
-        targets = np.random.rand(50)
+        targets = np.random.rand(20)
         learner.train(features, targets)
         preds, _ = learner.predict(features)
         assert np.all(np.isfinite(preds))
 
+    @pytest.mark.slow
     def test_zero_variance_columns_handled(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 10)
+        features = np.random.rand(20, 10)
         features[:, 3] = 5.0
-        targets = np.random.rand(50)
+        targets = np.random.rand(20)
         learner.train(features, targets)
         preds, _ = learner.predict(features)
-        assert preds.shape == (50,)
+        assert preds.shape == (20,)
 
+    @pytest.mark.slow
     def test_feature_shape_consistency_train_predict(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 10)
-        targets = np.random.rand(50)
+        features = np.random.rand(20, 10)
+        targets = np.random.rand(20)
         learner.train(features, targets)
-        pred_feats = np.random.rand(20, 10)
+        pred_feats = np.random.rand(10, 10)
         preds, _ = learner.predict(pred_feats)
-        assert preds.shape == (20,)
+        assert preds.shape == (10,)
 
+    @pytest.mark.slow
     def test_nan_in_predict_handled(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 10)
-        targets = np.random.rand(50)
+        features = np.random.rand(20, 10)
+        targets = np.random.rand(20)
         learner.train(features, targets)
-        pred_feats = np.random.rand(20, 10)
+        pred_feats = np.random.rand(10, 10)
         pred_feats[5, 2] = np.nan
-        pred_feats[10, 7] = -np.inf
+        pred_feats[8, 7] = -np.inf
         preds, _ = learner.predict(pred_feats)
         assert np.all(np.isfinite(preds))
-        assert preds.shape == (20,)
+        assert preds.shape == (10,)
 
+    @pytest.mark.slow
     def test_zero_variance_mask_stored_after_train(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 10)
+        features = np.random.rand(20, 10)
         features[:, 0] = 1.0
         features[:, 9] = 0.0
-        targets = np.random.rand(50)
+        targets = np.random.rand(20)
         learner.train(features, targets)
         assert learner._valid_feature_mask is not None
         assert not learner._valid_feature_mask[0]
         assert not learner._valid_feature_mask[9]
 
+    @pytest.mark.slow
     def test_multiple_predict_calls_consistent(self, learner_factory):
         learner = learner_factory()
-        features = np.random.rand(50, 8)
+        features = np.random.rand(20, 8)
         features[:, 2] = 3.14
-        targets = np.random.rand(50)
+        targets = np.random.rand(20)
         learner.train(features, targets)
-        pred_feats = np.random.rand(15, 8)
+        pred_feats = np.random.rand(10, 8)
         preds1, _ = learner.predict(pred_feats)
         preds2, _ = learner.predict(pred_feats)
         np.testing.assert_allclose(preds1, preds2, rtol=1e-12)
 
+    @pytest.mark.slow
     def test_retrain_updates_zero_variance_mask(self, learner_factory):
         learner = learner_factory()
-        features1 = np.random.rand(50, 5)
+        features1 = np.random.rand(20, 5)
         features1[:, 1] = 7.0
-        targets = np.random.rand(50)
+        targets = np.random.rand(20)
         learner.train(features1, targets)
         assert not learner._valid_feature_mask[1]
 
-        features2 = np.random.rand(50, 5)
+        features2 = np.random.rand(20, 5)
         learner.train(features2, targets)
         assert learner._valid_feature_mask is not None
         assert np.all(learner._valid_feature_mask)

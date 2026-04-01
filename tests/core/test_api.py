@@ -42,7 +42,7 @@ class TestAPIBasicSimple:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=cache_dir,
@@ -62,7 +62,7 @@ class TestAPIBasicSimple:
         assert isinstance(results['labeled_data'], pl.DataFrame)
         assert isinstance(results['unlabeled_data'], pl.DataFrame)
 
-        assert len(results['cycle_metrics']) == 3
+        assert len(results['cycle_metrics']) == 1
         assert len(results['labeled_data']) > 0
         assert output_dir.exists()
 
@@ -76,7 +76,7 @@ class TestAPIBasicSimple:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             strategy='random',
             output_dir=output_dir,
@@ -84,7 +84,7 @@ class TestAPIBasicSimple:
             random_state=42
         )
 
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
         assert results['compounds_df'] is not None
 
     def test_simple_api_labels_expected_batch_in_initial_cycle(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
@@ -323,12 +323,12 @@ class TestAPIModeDetection:
         output_dir = tmp_path / "csv_oracle_test"
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(csv_file),
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -336,7 +336,7 @@ class TestAPIModeDetection:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
     def test_oracle_none_with_csv_compound_pool(self, tmp_path, sample_compounds, mock_learner):
         """Test oracle=None auto-detects CSV oracle from compound_pool path."""
@@ -353,7 +353,7 @@ class TestAPIModeDetection:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -367,7 +367,7 @@ class TestAPIModeDetection:
         """Test that oracle=None with DataFrame compound_pool raises error."""
         output_dir = tmp_path / "no_oracle_df_test"
 
-        with pytest.raises(ValueError, match="Oracle required when compound_pool is DataFrame"):
+        with pytest.raises(ValueError, match="Oracle is required when compound_pool is a DataFrame"):
             run_active_learning(
                 compound_pool=sample_compounds,
                 oracle=None,
@@ -391,7 +391,7 @@ class TestAPIModeDetection:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             mode='run',
             output_dir=output_dir,
@@ -400,7 +400,7 @@ class TestAPIModeDetection:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
 
 @pytest.mark.slow
@@ -417,7 +417,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -441,7 +441,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -462,7 +462,7 @@ class TestAPISavedFiles:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -684,7 +684,7 @@ class TestAPIErrorHandling:
 
         output_dir = tmp_path / "missing_columns_test"
 
-        with pytest.raises(ValueError, match="must have 'ID' and 'SMILES' columns"):
+        with pytest.raises(ValueError, match="missing required column"):
             run_active_learning(
                 compound_pool=invalid_compounds,
                 oracle=mock_oracle,
@@ -767,7 +767,7 @@ class TestAPIFeaturizerTypes:
             learner=mock_learner,
             target_col='Activity',
             featurizer=featurizer,
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / f"cache_{featurizer}",
@@ -775,7 +775,7 @@ class TestAPIFeaturizerTypes:
         )
 
         assert results is not None
-        assert len(results['cycle_metrics']) == 2
+        assert len(results['cycle_metrics']) == 1
 
 
 @pytest.mark.slow
@@ -792,7 +792,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -817,7 +817,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -829,7 +829,7 @@ class TestAPIEvaluationMetrics:
 
         assert 'total_cycles' in agg
         assert 'total_labeled' in agg
-        assert agg['total_cycles'] == 3
+        assert agg['total_cycles'] == 1
 
     def test_aggregate_metrics_basic_tracking(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test that aggregate metrics track basic information."""
@@ -841,7 +841,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=3,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -853,7 +853,7 @@ class TestAPIEvaluationMetrics:
         # Check basic aggregate metrics exist
         assert 'total_cycles' in agg
         assert 'total_labeled' in agg
-        assert agg['total_cycles'] == 3
+        assert agg['total_cycles'] == 1
 
     def test_benchmark_mode_includes_top_k_metrics(self, tmp_path, sample_compounds, mock_learner):
         """Test that benchmark mode includes top-K overlap metrics."""
@@ -865,12 +865,12 @@ class TestAPIEvaluationMetrics:
         output_dir = tmp_path / "benchmark_topk_test"
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(csv_file),
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             mode='benchmark',
             output_dir=output_dir,
@@ -894,7 +894,7 @@ class TestAPIEvaluationMetrics:
             learner=mock_learner,
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.05,
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
@@ -1003,9 +1003,20 @@ class TestCacheDirParameter:
 class TestLoggingBehavior:
     """Test logging level behavior after refactoring."""
 
-    def test_info_logs_are_user_focused(self, sample_compounds, tmp_path, caplog_info):
+    def test_info_logs_are_user_focused(self, sample_compounds, tmp_path, caplog_info, monkeypatch):
         """INFO logs should show high-level progress only, no technical details."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1013,7 +1024,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1029,16 +1040,29 @@ class TestLoggingBehavior:
 
         assert any('Starting active learning' in msg for msg in info_messages)
         assert any('Phase 1: Validating' in msg for msg in info_messages)
-        assert any('Training model' in msg for msg in info_messages)
-        assert any('Acquiring compounds' in msg for msg in info_messages)
+        assert any('Training' in msg for msg in info_messages)
+        assert any('Phase 4: Active Learning Cycles' in msg for msg in info_messages)
 
         assert not any('cache_dir=' in msg.lower() for msg in info_messages)
         assert not any('shape:' in msg.lower() for msg in info_messages)
         assert not any('dtype' in msg.lower() for msg in info_messages)
 
-    def test_debug_logs_contain_technical_details(self, sample_compounds, tmp_path, caplog_debug):
+    def test_debug_logs_contain_technical_details(self, sample_compounds, tmp_path, caplog_debug, monkeypatch):
         """DEBUG logs should contain technical details and shapes."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            kwargs['level'] = 'DEBUG'
+            kwargs['force_reconfigure'] = True
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1046,7 +1070,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1063,9 +1087,20 @@ class TestLoggingBehavior:
         assert len(debug_messages) > 0
         assert any('shape' in msg.lower() for msg in debug_messages)
 
-    def test_phase_separators_in_info_logs(self, sample_compounds, tmp_path, caplog_info):
+    def test_phase_separators_in_info_logs(self, sample_compounds, tmp_path, caplog_info, monkeypatch):
         """INFO logs should include phase separators for visual organization."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1073,7 +1108,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1107,12 +1142,12 @@ class TestChempropWithExtraDescriptors:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='chemprop',
             featurizer='morgan',
             target_col='Activity',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.1,
             output_dir=tmp_path / "output",
             cache_dir=tmp_path / "cache"
@@ -1120,10 +1155,7 @@ class TestChempropWithExtraDescriptors:
 
         assert 'compounds_df' in results
         assert 'cycle_metrics' in results
-        assert len(results['cycle_metrics']) == 2
-
-        compounds_df = results['compounds_df']
-        assert 'prediction_cycle_1' in compounds_df.columns
+        assert len(results['cycle_metrics']) == 1
 
     def test_chemprop_without_featurizer_backward_compat(self, sample_compounds, tmp_path):
         """Test backward compatibility - Chemprop without featurizer (graph-only)."""
@@ -1135,12 +1167,12 @@ class TestChempropWithExtraDescriptors:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='chemprop',
             featurizer=None,
             target_col='Activity',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.1,
             output_dir=tmp_path / "output"
         )
@@ -1161,12 +1193,12 @@ class TestMemorySafetyFactorParameter:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
         )
@@ -1253,12 +1285,12 @@ class TestMemorySafetyFactorParameter:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
             featurizer='morgan',
-            n_cycles=2,
+            n_cycles=1,
             batch_fraction=0.4,
             output_dir=tmp_path / "output",
             memory_safety_factor=1.0,

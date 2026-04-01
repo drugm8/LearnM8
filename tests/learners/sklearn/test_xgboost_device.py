@@ -79,6 +79,7 @@ class TestXGBoostAggressiveGc:
         learner = XGBoostLearner()
         assert learner.enable_aggressive_gc is True
 
+    @pytest.mark.slow
     def test_enable_aggressive_gc_deletes_old_model_before_refit(self, features, targets):
         learner = XGBoostLearner(n_estimators=5, enable_aggressive_gc=True)
         learner.train(features, targets)
@@ -96,6 +97,7 @@ class TestXGBoostAggressiveGc:
 
         assert len(gc_calls) > 0, 'gc.collect was not called during refit'
 
+    @pytest.mark.slow
     def test_enable_aggressive_gc_false_skips_gc(self, features, targets):
         learner = XGBoostLearner(n_estimators=5, enable_aggressive_gc=False)
         learner.train(features, targets)

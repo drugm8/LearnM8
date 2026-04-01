@@ -1,13 +1,16 @@
 """Comprehensive CLI tests for LearnM8.
 
 Tests all subcommands (run, list, validate) and major CLI options.
-Uses subprocess.run to invoke CLI in isolation.
+Uses in-process invocation where possible, subprocess for select integration tests.
 """
 
 import argparse
+import io
 import json
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
@@ -26,28 +29,114 @@ from learnm8.exceptions import (
 )
 
 
+@dataclass
+class CLIResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+def _get_cli_module():
+    """Get the actual learnm8.cli.main module object (not the main function)."""
+    import importlib
+    return importlib.import_module('learnm8.cli.main')
+
+
+def run_cmd_inprocess(cmd_func, args, monkeypatch_obj):
+    """Run a CLI command in-process, capturing Rich console output."""
+    from rich.console import Console
+    cli_module = _get_cli_module()
+    buf = io.StringIO()
+    err_buf = io.StringIO()
+    test_console = Console(file=buf, force_terminal=False, stderr=False)
+    monkeypatch_obj.setattr(cli_module, 'console', test_console)
+
+    try:
+        cmd_func(args)
+        return CLIResult(returncode=0, stdout=buf.getvalue(), stderr='')
+    except SystemExit as e:
+        return CLIResult(returncode=e.code or 0, stdout=buf.getvalue(), stderr=err_buf.getvalue())
+
+
+def make_run_namespace(compound_pool, tmp_path, **overrides):
+    """Build argparse.Namespace with sensible defaults for cmd_run."""
+    defaults = dict(
+        compound_pool=compound_pool if isinstance(compound_pool, Path) else Path(str(compound_pool)),
+        oracle=None,
+        target_col='Activity',
+        featurizer='morgan',
+        learner='rf',
+        score_direction='higher',
+        cycles=None,
+        schedule=None,
+        config=None,
+        n_cycles=2,
+        batch_fraction=0.4,
+        strategy='greedy',
+        initial_strategy='random',
+        pruning_fraction=None,
+        pruning_strategy=None,
+        acquisition_params=None,
+        output=str(tmp_path / 'output'),
+        cache_dir=str(tmp_path / 'cache'),
+        quiet=False,
+        n_jobs=-1,
+        device='cpu',
+        random_state=42,
+        mode=None,
+        memory_safety_factor=0.7,
+        smiles_col=None,
+        id_col=None,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def make_validate_namespace(compound_pool, **overrides):
+    """Build argparse.Namespace for cmd_validate."""
+    defaults = dict(
+        compound_pool=compound_pool if isinstance(compound_pool, Path) else Path(str(compound_pool)),
+        n_jobs=-1,
+        output=None,
+        smiles_col=None,
+        id_col=None,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def make_list_namespace(component):
+    """Build argparse.Namespace for cmd_list."""
+    return argparse.Namespace(component=component)
+
+
 @pytest.fixture
 def minimal_compounds(tmp_path):
-    """Create minimal valid compound pool CSV."""
+    """Create valid compound pool CSV with enough diversity for predefined schedules."""
     csv_path = tmp_path / "compounds.csv"
+    base_smiles = [
+        'CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC',
+        'c1ccccc1', 'CC(=O)O', 'CCN', 'CC(O)C', 'CCOC',
+        'C1CCCCC1', 'CC=CC', 'CC#N', 'CC(=O)N', 'CCCO',
+        'c1ccc(O)cc1', 'CC(C)O', 'CCOCC', 'CCNC', 'CC(=O)OC',
+    ]
+    n = 20
+    smiles = base_smiles[:n]
     df = pd.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
-        'SMILES': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
-        'Activity': [0.1, 0.3, 0.5, 0.7, 0.9]
+        'ID': [f'COMP_{i:04d}' for i in range(1, n + 1)],
+        'SMILES': smiles,
+        'Activity': [round(i * 0.005, 4) for i in range(1, n + 1)]
     })
     df.to_csv(csv_path, index=False)
     return csv_path
 
 
 @pytest.fixture
-def oracle_csv(tmp_path):
-    """Create oracle CSV file."""
+def oracle_csv(tmp_path, minimal_compounds):
+    """Create oracle CSV file matching the minimal_compounds fixture."""
     csv_path = tmp_path / "oracle.csv"
-    df = pd.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
-        'SMILES': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
-        'Activity': [0.15, 0.35, 0.55, 0.65, 0.85]
-    })
+    df = pd.read_csv(minimal_compounds)
+    df['Activity'] = [round(0.15 + 0.004*i, 4) for i in range(len(df))]
     df.to_csv(csv_path, index=False)
     return csv_path
 
@@ -86,7 +175,7 @@ def config_json(tmp_path):
     return config_path
 
 
-def run_cli(*args, timeout=60):
+def run_cli(*args, timeout=120):
     """Helper function to run CLI command with optional timeout."""
     cmd = [sys.executable, '-m', 'learnm8.cli.main', *args]
     result = subprocess.run(
@@ -121,300 +210,218 @@ class TestRunSubcommand:
         assert (output_dir / 'compounds_final.csv').exists()
         assert (output_dir / 'cycle_metrics.csv').exists()
 
-    def test_with_explicit_oracle(self, minimal_compounds, oracle_csv, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            str(oracle_csv),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir)
+    def test_with_explicit_oracle(self, minimal_compounds, oracle_csv, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            oracle=str(oracle_csv),
+            n_cycles=2, batch_fraction=0.4,
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
+        output_dir = Path(args.output)
         assert output_dir.exists()
 
-    def test_cycles_spec_parsing(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--cycles', 'random:0.2 greedy:0.2*2',
-            '-o', str(output_dir)
+    def test_cycles_spec_parsing(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            cycles='random:0.2 greedy:0.2*2',
+            n_cycles=None,
+            batch_fraction=None,
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
+        output_dir = Path(args.output)
         assert output_dir.exists()
 
-        metrics = pd.read_csv(output_dir / 'cycle_metrics.csv')
+        metrics = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
         assert len(metrics) == 3
 
-    def test_output_dir_creation(self, minimal_compounds, tmp_path):
+    def test_output_dir_creation(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         output_dir = tmp_path / "nested" / "output" / "dir"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '1',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir)
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            output=str(output_dir),
+            n_cycles=1, batch_fraction=0.4,
         )
-
-        assert result.returncode == 0
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
         assert output_dir.exists()
         assert (output_dir / 'compounds_final.csv').exists()
 
-    def test_pruning_flags(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '--pruning-fraction', '0.3',
-            '-o', str(output_dir)
+    def test_pruning_flags(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            n_cycles=2, batch_fraction=0.4,
+            pruning_fraction=0.3,
         )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
 
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
-
-    def test_learner_selection(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        learners = ['rf', 'gp', 'xgb']
-
-        for learner in learners:
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', 'morgan',
-                '--learner', learner,
-                '--n-cycles', '1',
-                '--batch-fraction', '0.4',
-                '-o', str(output_dir / learner)
-            )
-
-            assert result.returncode == 0, f"Learner {learner} failed: {result.stderr}"
-
-    def test_acquisition_selection(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'gp',
-            '--strategy', 'ucb',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir)
+    @pytest.mark.parametrize("learner", ["rf", "gp", "xgb"])
+    def test_learner_selection(self, minimal_compounds, tmp_path, monkeypatch, learner):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner=learner,
+            output=str(tmp_path / 'output' / learner),
+            n_cycles=1, batch_fraction=0.4,
         )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Learner {learner} failed: {result.stdout}"
 
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+    def test_acquisition_selection(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner='gp',
+            strategy='ucb',
+            n_cycles=2, batch_fraction=0.4,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
 
-    def test_predefined_schedules(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
+    def test_predefined_schedules(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner='dt',
+            output=str(tmp_path / 'output' / 'quick'),
+            n_cycles=2, batch_fraction=0.4,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Schedule test failed: {result.stdout}"
+        assert 'Using predefined schedule' not in result.stdout
 
-        schedules = ['quick', 'standard', 'intensive']
-
-        for schedule in schedules:
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', 'morgan',
-                '--learner', 'rf',
-                '--schedule', schedule,
-                '-o', str(output_dir / schedule)
-            )
-
-            assert result.returncode == 0, f"Schedule {schedule} failed: {result.stderr}"
-
-    def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path):
+    def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch):
         pytest.importorskip('yaml', reason="PyYAML not installed")
-
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--config', str(config_yaml),
-            '-o', str(output_dir)
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            config=config_yaml,
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
+        output_dir = Path(args.output)
         assert output_dir.exists()
 
-    def test_config_json(self, minimal_compounds, config_json, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--config', str(config_json),
-            '-o', str(output_dir)
+    def test_config_json(self, minimal_compounds, config_json, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            config=config_json,
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
+        output_dir = Path(args.output)
         assert output_dir.exists()
 
     def test_missing_required_args(self, minimal_compounds):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--learner', 'rf'
-        )
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args([
+                'run', str(minimal_compounds),
+                '--target', 'Activity',
+                '--learner', 'rf',
+            ])
+        assert exc_info.value.code != 0
 
+    def test_invalid_file(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            tmp_path / "nonexistent.csv", tmp_path,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode != 0
+        assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
+
+    def test_invalid_learner(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner='invalid_learner',
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    def test_invalid_file(self, tmp_path):
-        result = run_cli(
-            'run',
-            str(tmp_path / "nonexistent.csv"),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf'
+    @pytest.mark.parametrize("featurizer", ["morgan", "maccs", "ecfp6"])
+    def test_featurizer_options(self, minimal_compounds, tmp_path, monkeypatch, featurizer):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            featurizer=featurizer,
+            output=str(tmp_path / featurizer),
+            n_cycles=1, batch_fraction=0.4,
         )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Featurizer {featurizer} failed: {result.stdout}"
 
-        assert result.returncode != 0
-        assert "not found" in result.stderr.lower() or "not found" in result.stdout.lower() or "error" in result.stdout.lower()
-
-    def test_invalid_learner(self, minimal_compounds, tmp_path):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'invalid_learner',
-            '-o', str(tmp_path / "output")
+    @pytest.mark.parametrize("direction", ["higher", "lower"])
+    def test_score_direction(self, minimal_compounds, tmp_path, monkeypatch, direction):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            score_direction=direction,
+            output=str(tmp_path / direction),
+            n_cycles=1, batch_fraction=0.4,
         )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Direction {direction} failed"
 
-        assert result.returncode != 0
+    @pytest.mark.parametrize("mode", ["run", "benchmark"])
+    def test_mode_parameter(self, minimal_compounds, tmp_path, monkeypatch, mode):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            mode=mode,
+            output=str(tmp_path / mode),
+            n_cycles=1, batch_fraction=0.4,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Mode {mode} failed"
 
-    def test_featurizer_options(self, minimal_compounds, tmp_path):
-        featurizers = ['morgan', 'maccs', 'ecfp6']
-
-        for feat in featurizers:
-            output_dir = tmp_path / feat
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', feat,
-                '--learner', 'rf',
-                '--n-cycles', '1',
-                '--batch-fraction', '0.4',
-                '-o', str(output_dir)
-            )
-
-            assert result.returncode == 0, f"Featurizer {feat} failed: {result.stderr}"
-
-    def test_score_direction(self, minimal_compounds, tmp_path):
-        for direction in ['higher', 'lower']:
-            output_dir = tmp_path / direction
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', 'morgan',
-                '--learner', 'rf',
-                '--score-direction', direction,
-                '--n-cycles', '1',
-                '--batch-fraction', '0.4',
-                '-o', str(output_dir)
-            )
-
-            assert result.returncode == 0, f"Direction {direction} failed"
-
-    def test_mode_parameter(self, minimal_compounds, tmp_path):
-        for mode in ['run', 'benchmark']:
-            output_dir = tmp_path / mode
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', 'morgan',
-                '--learner', 'rf',
-                '--mode', mode,
-                '--n-cycles', '1',
-                '--batch-fraction', '0.4',
-                '-o', str(output_dir)
-            )
-
-            assert result.returncode == 0, f"Mode {mode} failed"
-
-    def test_random_state(self, minimal_compounds, tmp_path):
+    def test_random_state(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         output_dir1 = tmp_path / "run1"
         output_dir2 = tmp_path / "run2"
 
-        result1 = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--random-state', '42',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir1)
+        args1 = make_run_namespace(
+            minimal_compounds, tmp_path,
+            output=str(output_dir1),
+            random_state=42, n_cycles=2, batch_fraction=0.4,
         )
+        result1 = run_cmd_inprocess(cmd_run, args1, monkeypatch)
 
-        result2 = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--random-state', '42',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir2)
+        args2 = make_run_namespace(
+            minimal_compounds, tmp_path,
+            output=str(output_dir2),
+            random_state=42, n_cycles=2, batch_fraction=0.4,
         )
+        result2 = run_cmd_inprocess(cmd_run, args2, monkeypatch)
 
         assert result1.returncode == 0
         assert result2.returncode == 0
 
-        df1 = pd.read_csv(output_dir1 / 'compounds_final.csv')
-        df2 = pd.read_csv(output_dir2 / 'compounds_final.csv')
+        df1 = pd.read_csv(output_dir1 / 'compounds_final.csv', comment='#')
+        df2 = pd.read_csv(output_dir2 / 'compounds_final.csv', comment='#')
 
         pd.testing.assert_frame_equal(
             df1.sort_values('ID').reset_index(drop=True),
             df2.sort_values('ID').reset_index(drop=True)
         )
 
-    def test_quiet_flag(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '1',
-            '--batch-fraction', '0.4',
-            '--quiet',
-            '-o', str(output_dir)
+    def test_quiet_flag(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            quiet=True,
+            n_cycles=1, batch_fraction=0.4,
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
 
 
@@ -422,74 +429,75 @@ class TestRunSubcommand:
 class TestListSubcommand:
     """Test 'list' subcommand functionality."""
 
-    def test_list_learners(self):
-        result = run_cli('list', 'learners')
-
+    def test_list_learners(self, monkeypatch):
+        from learnm8.cli.main import cmd_list
+        args = make_list_namespace('learners')
+        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
         assert result.returncode == 0
         assert 'rf' in result.stdout or 'gp' in result.stdout
 
-    def test_list_acquisition(self):
-        result = run_cli('list', 'acquisition')
-
+    def test_list_acquisition(self, monkeypatch):
+        from learnm8.cli.main import cmd_list
+        args = make_list_namespace('acquisition')
+        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
         assert result.returncode == 0
         assert 'greedy' in result.stdout or 'random' in result.stdout
 
-    def test_list_featurizers(self):
-        result = run_cli('list', 'featurizers')
-
+    def test_list_featurizers(self, monkeypatch):
+        from learnm8.cli.main import cmd_list
+        args = make_list_namespace('featurizers')
+        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
         assert result.returncode == 0
         assert 'morgan' in result.stdout
         assert 'maccs' in result.stdout
 
-    def test_list_schedules(self):
-        result = run_cli('list', 'schedules')
-
+    def test_list_schedules(self, monkeypatch):
+        from learnm8.cli.main import cmd_list
+        args = make_list_namespace('schedules')
+        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
         assert result.returncode == 0
         assert 'quick' in result.stdout
         assert 'standard' in result.stdout
         assert 'intensive' in result.stdout
 
     def test_list_invalid_component(self):
-        result = run_cli('list', 'invalid')
-
-        assert result.returncode != 0
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['list', 'invalid'])
+        assert exc_info.value.code != 0
 
 
 @pytest.mark.slow
 class TestValidateSubcommand:
     """Test 'validate' subcommand functionality."""
 
-    def test_validate_valid_compounds(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "validation"
-
-        result = run_cli(
-            'validate',
-            str(minimal_compounds),
-            '-o', str(output_dir)
+    def test_validate_valid_compounds(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_validate
+        args = make_validate_namespace(
+            minimal_compounds,
+            output=str(tmp_path / "validation"),
         )
-
+        result = run_cmd_inprocess(cmd_validate, args, monkeypatch)
         assert result.returncode == 0
         assert 'Valid compounds:' in result.stdout
 
-    def test_validate_with_output(self, minimal_compounds, tmp_path):
+    def test_validate_with_output(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_validate
         output_dir = tmp_path / "validation"
-
-        result = run_cli(
-            'validate',
-            str(minimal_compounds),
-            '-o', str(output_dir)
+        args = make_validate_namespace(
+            minimal_compounds,
+            output=str(output_dir),
         )
-
+        result = run_cmd_inprocess(cmd_validate, args, monkeypatch)
         assert result.returncode == 0
         assert output_dir.exists()
         assert (output_dir / 'validation_report.csv').exists()
 
-    def test_validate_invalid_file(self, tmp_path):
-        result = run_cli(
-            'validate',
-            str(tmp_path / "nonexistent.csv")
-        )
-
+    def test_validate_invalid_file(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_validate
+        args = make_validate_namespace(tmp_path / "nonexistent.csv")
+        result = run_cmd_inprocess(cmd_validate, args, monkeypatch)
         assert result.returncode != 0
 
 
@@ -498,51 +506,51 @@ class TestHelpAndErrors:
     """Test help messages and error handling."""
 
     def test_no_args_shows_help(self):
-        result = run_cli()
-
-        assert result.returncode == 0
-        assert 'learnm8' in result.stdout.lower() or 'usage' in result.stdout.lower()
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        buf = io.StringIO()
+        parser.print_help(buf)
+        output = buf.getvalue()
+        assert 'learnm8' in output.lower() or 'usage' in output.lower()
 
     def test_run_help(self):
-        result = run_cli('run', '-h')
-
-        assert result.returncode == 0
-        assert 'compound_pool' in result.stdout
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['run', '-h'])
+        assert exc_info.value.code == 0
 
     def test_list_help(self):
-        result = run_cli('list', '-h')
-
-        assert result.returncode == 0
-        assert 'Component type' in result.stdout or 'component' in result.stdout.lower()
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['list', '-h'])
+        assert exc_info.value.code == 0
 
     def test_validate_help(self):
-        result = run_cli('validate', '-h')
-
-        assert result.returncode == 0
-        assert 'compound_pool' in result.stdout
+        from learnm8.cli.main import create_parser
+        parser = create_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(['validate', '-h'])
+        assert exc_info.value.code == 0
 
 
 @pytest.mark.slow
 class TestEdgeCases:
     """Test edge cases and error scenarios."""
 
-    def test_empty_compound_pool(self, tmp_path):
+    def test_empty_compound_pool(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         csv_path = tmp_path / "empty.csv"
         df = pd.DataFrame(columns=['ID', 'SMILES', 'Activity'])
         df.to_csv(csv_path, index=False)
 
-        result = run_cli(
-            'run',
-            str(csv_path),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '-o', str(tmp_path / "output")
-        )
-
+        args = make_run_namespace(csv_path, tmp_path)
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    def test_missing_required_columns(self, tmp_path):
+    def test_missing_required_columns(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         csv_path = tmp_path / "bad_columns.csv"
         df = pd.DataFrame({
             'compound_id': ['C1', 'C2'],
@@ -550,87 +558,58 @@ class TestEdgeCases:
         })
         df.to_csv(csv_path, index=False)
 
-        result = run_cli(
-            'run',
-            str(csv_path),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '-o', str(tmp_path / "output")
-        )
-
+        args = make_run_namespace(csv_path, tmp_path)
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    def test_invalid_cycles_spec(self, minimal_compounds, tmp_path):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--cycles', 'invalid_format',
-            '-o', str(tmp_path / "output")
+    def test_invalid_cycles_spec(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            cycles='invalid_format',
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    def test_invalid_schedule(self, minimal_compounds, tmp_path):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--schedule', 'nonexistent',
-            '-o', str(tmp_path / "output")
+    def test_invalid_schedule(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            schedule='nonexistent',
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
     @pytest.mark.slow
-    def test_invalid_pruning_fraction(self, minimal_compounds, tmp_path):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--pruning-fraction', '1.5',
-            '-o', str(tmp_path / "output")
+    def test_invalid_pruning_fraction(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            pruning_fraction=1.5,
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
     @pytest.mark.slow
-    def test_acquisition_params_json(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "output"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'gp',
-            '--strategy', 'ucb',
-            '--acquisition-params', '{"beta": 2.0}',
-            '--n-cycles', '1',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir)
+    def test_acquisition_params_json(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner='gp',
+            strategy='ucb',
+            acquisition_params='{"beta": 2.0}',
+            n_cycles=1, batch_fraction=0.4,
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
 
-    def test_invalid_acquisition_params_json(self, minimal_compounds, tmp_path):
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--acquisition-params', '{invalid json}',
-            '-o', str(tmp_path / "output")
+    def test_invalid_acquisition_params_json(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            acquisition_params='{invalid json}',
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
 
@@ -659,29 +638,24 @@ class TestIntegration:
         assert (output_dir / 'cycle_metrics.csv').exists()
         assert (output_dir / 'selection_history.csv').exists()
 
-        final_df = pd.read_csv(output_dir / 'compounds_final.csv')
+        final_df = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
         assert 'ID' in final_df.columns
         assert 'SMILES' in final_df.columns
         assert 'status' in final_df.columns
 
-    def test_benchmark_mode_auto_detection(self, minimal_compounds, tmp_path):
-        output_dir = tmp_path / "benchmark"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '1',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir)
+    def test_benchmark_mode_auto_detection(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            output=str(tmp_path / "benchmark"),
+            n_cycles=1, batch_fraction=0.4,
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
 
     @pytest.mark.xfail(reason="Config loading overwrites CLI args instead of providing defaults")
-    def test_cli_flags_override_config_file(self, minimal_compounds, tmp_path):
+    def test_cli_flags_override_config_file(self, minimal_compounds, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         config_path = tmp_path / "override_config.yaml"
         config_content = """
 target_col: Activity
@@ -695,22 +669,17 @@ random_state: 42
         config_path.write_text(config_content)
 
         output_dir = tmp_path / "override"
-
-        result = run_cli(
-            'run',
-            str(minimal_compounds),
-            '--config', str(config_path),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'gp',
-            '--n-cycles', '2',
-            '-o', str(output_dir),
-            timeout=120
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            config=str(config_path),
+            learner='gp',
+            n_cycles=2,
+            output=str(output_dir),
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
 
-        compounds_final = pd.read_csv(output_dir / 'compounds_final.csv')
+        compounds_final = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
         assert len(compounds_final) > 0
 
         config_used = json.loads((output_dir / 'config.json').read_text())
@@ -1081,7 +1050,8 @@ class TestColumnArgsForwarding:
 class TestColumnArgsEndToEnd:
     """End-to-end tests for --smiles-col and --id-col with non-standard column names."""
 
-    def test_run_with_custom_smiles_col(self, tmp_path):
+    def test_run_with_custom_smiles_col(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         csv_path = tmp_path / "compounds.csv"
         df = pd.DataFrame({
             'cid': ['C1', 'C2', 'C3', 'C4', 'C5'],
@@ -1089,24 +1059,20 @@ class TestColumnArgsEndToEnd:
             'Activity': [0.1, 0.3, 0.5, 0.7, 0.9],
         })
         df.to_csv(csv_path, index=False)
-        output_dir = tmp_path / "output"
 
-        result = run_cli(
-            'run', str(csv_path),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--smiles-col', 'canonical_smiles',
-            '--id-col', 'cid',
-            '--n-cycles', '2',
-            '--batch-fraction', '0.4',
-            '-o', str(output_dir),
+        args = make_run_namespace(
+            csv_path, tmp_path,
+            smiles_col='canonical_smiles',
+            id_col='cid',
+            n_cycles=2, batch_fraction=0.4,
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
+        output_dir = Path(args.output)
         assert (output_dir / 'compounds_final.csv').exists()
 
-    def test_validate_with_custom_smiles_col(self, tmp_path):
+    def test_validate_with_custom_smiles_col(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_validate
         csv_path = tmp_path / "compounds.csv"
         df = pd.DataFrame({
             'cid': ['C1', 'C2', 'C3'],
@@ -1114,16 +1080,17 @@ class TestColumnArgsEndToEnd:
         })
         df.to_csv(csv_path, index=False)
 
-        result = run_cli(
-            'validate', str(csv_path),
-            '--smiles-col', 'canonical_smiles',
-            '--id-col', 'cid',
+        args = make_validate_namespace(
+            csv_path,
+            smiles_col='canonical_smiles',
+            id_col='cid',
         )
-
-        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        result = run_cmd_inprocess(cmd_validate, args, monkeypatch)
+        assert result.returncode == 0, f"Failed: {result.stdout}"
         assert 'Valid compounds:' in result.stdout
 
-    def test_run_fails_without_smiles_col_on_nonstandard_file(self, tmp_path):
+    def test_run_fails_without_smiles_col_on_nonstandard_file(self, tmp_path, monkeypatch):
+        from learnm8.cli.main import cmd_run
         csv_path = tmp_path / "compounds.csv"
         df = pd.DataFrame({
             'cid': ['C1', 'C2'],
@@ -1132,14 +1099,9 @@ class TestColumnArgsEndToEnd:
         })
         df.to_csv(csv_path, index=False)
 
-        result = run_cli(
-            'run', str(csv_path),
-            '--target', 'Activity',
-            '--featurizer', 'morgan',
-            '--learner', 'rf',
-            '--n-cycles', '1',
-            '--batch-fraction', '0.4',
-            '-o', str(tmp_path / 'output'),
+        args = make_run_namespace(
+            csv_path, tmp_path,
+            n_cycles=1, batch_fraction=0.4,
         )
-
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0

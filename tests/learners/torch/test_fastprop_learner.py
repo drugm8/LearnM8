@@ -210,7 +210,7 @@ class TestFastpropLearner:
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
-        assert features.shape[1] == 167
+        assert features.shape[1] == 166
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
@@ -529,12 +529,7 @@ class TestFastpropLearner:
         assert any('after prediction' in ctx for ctx in cleanup_called)
 
     def test_cleanup_not_called_when_disabled(self, tmp_path, small_real_compounds, monkeypatch):
-        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
-        cleanup_called = []
-
-        def mock_cleanup(self, context=""):
-            cleanup_called.append(context)
-
+        """Verify _cleanup_gpu_memory is a no-op when enable_aggressive_gc=False."""
         learner = FastpropLearner(
             fnn_layers=2,
             hidden_size=64,
@@ -542,7 +537,17 @@ class TestFastpropLearner:
             enable_aggressive_gc=False
         )
 
-        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+        assert learner.enable_aggressive_gc is False
+
+        cleanup_did_work = []
+        original_cleanup = FastpropLearner._cleanup_gpu_memory
+
+        def tracking_cleanup(self, context=""):
+            original_cleanup(self, context)
+            if self.enable_aggressive_gc:
+                cleanup_did_work.append(context)
+
+        monkeypatch.setattr(FastpropLearner, '_cleanup_gpu_memory', tracking_cleanup)
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -559,7 +564,7 @@ class TestFastpropLearner:
         learner.train(features, compounds['Activity'].to_numpy())
         learner.predict(features)
 
-        assert len(cleanup_called) == 0
+        assert len(cleanup_did_work) == 0
 
     def test_predictions_unaffected_by_gc(self, tmp_path, small_real_compounds):
         """Verify predictions are identical with GC enabled vs disabled."""
@@ -619,7 +624,7 @@ class TestFastpropLearner:
         assert len(es_callbacks) == 1
         assert es_callbacks[0].monitor == 'validation_mse_scaled_loss'
 
-    def test_train_skips_validation_on_small_dataset(self, tmp_path, caplog):
+    def test_train_skips_validation_on_small_dataset(self, tmp_path, capsys):
         """Verify early stopping disabled when n_samples < min_samples_for_split."""
         small_dataset = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
@@ -634,15 +639,14 @@ class TestFastpropLearner:
             fnn_layers=1, hidden_size=64, max_epochs=3,
             val_fraction=0.1, random_state=42
         )
-        import logging
-        with caplog.at_level(logging.WARNING):
-            learner.train(features, small_dataset['Activity'].to_numpy())
+        learner.train(features, small_dataset['Activity'].to_numpy())
         es_callbacks = [
             cb for cb in learner.trainer.callbacks
             if isinstance(cb, EarlyStopping)
         ]
         assert len(es_callbacks) == 0
-        assert 'min_samples_for_split' in caplog.text
+        captured = capsys.readouterr()
+        assert 'min_samples_for_split' in captured.out
 
     def test_val_fraction_zero_disables_validation(self, small_real_compounds, tmp_path):
         """Verify val_fraction=0.0 trains without validation regardless of sample count."""

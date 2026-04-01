@@ -27,6 +27,14 @@ class TestEnsembleLearner:
         """Create EnsembleLearner instance for testing."""
         return EnsembleLearner(base_learners)
 
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
+
     def test_initialization_sets_default_aggregation_uncertainty_and_untrained_state(self, ensemble, base_learners):
         """Test ensemble initialization."""
         assert len(ensemble.learners) == 2
@@ -83,9 +91,9 @@ class TestEnsembleLearner:
         assert len(ensemble.learners) == initial_count - 1
         assert not ensemble.is_trained
 
-    def test_failed_learner_handling(self, small_real_compounds, small_real_morgan_features):
+    def test_failed_learner_handling(self, compounds_20, features_20):
         """Test handling of failed learners during training."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
@@ -116,19 +124,20 @@ class TestEnsembleLearner:
 
         ensemble = EnsembleLearner([good_learner, bad_learner])
 
-        features = small_real_morgan_features
+        features = features_20
         with pytest.raises(LearnerError, match='BadLearner'):
             ensemble.train(features, compounds['Activity'].to_numpy())
 
-    def test_uncertainty_diversity(self, base_learners, small_real_compounds, small_real_morgan_features):
+    @pytest.mark.slow
+    def test_uncertainty_diversity(self, base_learners, compounds_20, features_20):
         """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
 
         ensemble = EnsembleLearner(base_learners)
 
-        features = small_real_morgan_features
+        features = features_20
         ensemble.train(features, compounds['Activity'].to_numpy())
         _predictions, uncertainty = ensemble.predict(features)
 

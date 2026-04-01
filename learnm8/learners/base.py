@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import torch
-import torch.nn as nn
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 
@@ -403,6 +401,8 @@ class TorchLearner(Learner):
             remove_zero_variance: Remove zero-variance features during training (default: True).
                                  NaN/inf values are always replaced with 0 regardless of this setting.
         """
+        import torch
+
         if device == 'auto':
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -434,7 +434,7 @@ class TorchLearner(Learner):
         logger.debug(f'Initialized TorchLearner on device: {self.device}')
 
     @abstractmethod
-    def _create_model(self, input_size: int) -> nn.Module:
+    def _create_model(self, input_size: int) -> 'torch.nn.Module':
         """Create the PyTorch model architecture.
 
         Args:
@@ -455,11 +455,13 @@ class TorchLearner(Learner):
         Returns:
             Average loss for the epoch
         """
+        import torch
+        import torch.nn as nn
+
         self.model.train()
         total_loss = 0.0
         n_batches = 0
 
-        # Convert to tensors
         X_tensor = torch.FloatTensor(X).to(self.device)
         y_tensor = torch.FloatTensor(y).to(self.device)
 
@@ -497,6 +499,9 @@ class TorchLearner(Learner):
         Returns:
             Validation loss
         """
+        import torch
+        import torch.nn as nn
+
         self.model.eval()
 
         with torch.no_grad():
@@ -580,6 +585,8 @@ class TorchLearner(Learner):
                 is_training=True,
                 feature_type=self._feature_type,
             )
+
+            import torch
 
             input_dim = features.shape[1]
             self._input_dim = input_dim
@@ -700,6 +707,8 @@ class TorchLearner(Learner):
                 imputer=self._feature_imputer,
             )
 
+            import torch
+
             X_scaled = self.scaler.transform(features)
             X_tensor = torch.FloatTensor(X_scaled).to(self.device)
 
@@ -797,6 +806,7 @@ class TorchLearner(Learner):
             },
         }
 
+        import torch
         torch.save(state, path)
         logger.debug(f'Saved {self.get_name()} model to {path}')
 
@@ -806,6 +816,8 @@ class TorchLearner(Learner):
         Args:
             path: Path to load model from
         """
+        import torch
+
         if not path.exists():
             raise FileNotFoundError(
                 f'Model file not found: {path}. '
