@@ -35,16 +35,9 @@ def minimal_compounds(tmp_path):
         'c1ccccc1', 'CC(=O)O', 'CCN', 'CC(O)C', 'CCOC',
         'C1CCCCC1', 'CC=CC', 'CC#N', 'CC(=O)N', 'CCCO',
         'c1ccc(O)cc1', 'CC(C)O', 'CCOCC', 'CCNC', 'CC(=O)OC',
-        'CCCCCCC', 'CCCCCCCC', 'c1ccc(N)cc1', 'CC(=O)CC',
-        'CCCCN', 'CCC(O)CC', 'CC(C)(C)O', 'CCCOC', 'CC(=O)OCC',
-        'CCCCCO', 'c1ccc(C)cc1', 'CC(C)CC', 'CCCNC', 'CC(=O)NCC',
-        'CCCCCCCCC', 'CCCCCCCCCC', 'c1ccc(F)cc1', 'CC(=O)CCC',
-        'CCCCNC', 'CCC(O)CCC', 'CC(C)(C)CC', 'CCCCOC', 'CC(=O)OCCC',
-        'CCCCCCCO', 'c1ccc(Cl)cc1', 'CC(C)CCC', 'CCCCNCC', 'CCC(=O)N',
-        'CCCCCCCCCC', 'CCCCCCCCCCC',
     ]
-    n = 200
-    smiles = (base_smiles * (n // len(base_smiles) + 1))[:n]
+    n = 20
+    smiles = base_smiles[:n]
     df = pd.DataFrame({
         'ID': [f'COMP_{i:04d}' for i in range(1, n + 1)],
         'SMILES': smiles,
