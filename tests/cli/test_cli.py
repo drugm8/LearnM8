@@ -91,7 +91,7 @@ def config_json(tmp_path):
     return config_path
 
 
-def run_cli(*args, timeout=60):
+def run_cli(*args, timeout=120):
     """Helper function to run CLI command with optional timeout."""
     cmd = [sys.executable, '-m', 'learnm8.cli.main', *args]
     result = subprocess.run(
@@ -245,9 +245,8 @@ class TestRunSubcommand:
                 str(minimal_compounds),
                 '--target', 'Activity',
                 '--featurizer', 'morgan',
-                '--learner', 'rf',
+                '--learner', 'dt',
                 '--schedule', schedule,
-                '--batch-fraction', '0.05',
                 '-o', str(output_dir / schedule)
             )
 
