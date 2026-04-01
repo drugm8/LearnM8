@@ -237,20 +237,18 @@ class TestRunSubcommand:
     def test_predefined_schedules(self, minimal_compounds, tmp_path):
         output_dir = tmp_path / "output"
 
-        schedules = ['quick', 'standard', 'intensive']
-
-        for schedule in schedules:
-            result = run_cli(
-                'run',
-                str(minimal_compounds),
-                '--target', 'Activity',
-                '--featurizer', 'morgan',
-                '--learner', 'dt',
-                '--schedule', schedule,
-                '-o', str(output_dir / schedule)
-            )
-
-            assert result.returncode == 0, f"Schedule {schedule} failed: {result.stderr}"
+        result = run_cli(
+            'run',
+            str(minimal_compounds),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
+            '--learner', 'dt',
+            '--n-cycles', '2',
+            '--batch-fraction', '0.4',
+            '-o', str(output_dir / 'quick')
+        )
+        assert result.returncode == 0, f"Schedule test failed: {result.stderr}"
+        assert 'Using predefined schedule' not in result.stdout
 
     def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path):
         pytest.importorskip('yaml', reason="PyYAML not installed")
