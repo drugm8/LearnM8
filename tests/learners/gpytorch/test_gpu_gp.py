@@ -1,4 +1,4 @@
-import logging
+
 import sys
 
 import numpy as np
@@ -115,14 +115,14 @@ def test_max_train_size_exceeded(continuous_features, targets):
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_training_size_warning_large(caplog):
+def test_training_size_warning_large(capsys):
     rng = np.random.default_rng(42)
     features = rng.random(size=(5001, 20)).astype(np.float64)
     targets = rng.random(5001).astype(np.float64)
     learner = GPyTorchGPLearner(device='cpu', max_train_size=10000, n_iterations=5)
-    with caplog.at_level(logging.WARNING, logger='learnm8.learners.gpytorch.gpu_gp'):
-        learner.train(features, targets)
-    assert any('O(n^2)' in r.message or 'n^2' in r.message.lower() for r in caplog.records)
+    learner.train(features, targets)
+    captured = capsys.readouterr()
+    assert 'O(n^2)' in captured.out or 'n^2' in captured.out.lower()
 
 
 @pytest.mark.slow
