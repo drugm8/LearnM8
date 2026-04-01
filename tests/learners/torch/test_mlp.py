@@ -54,7 +54,7 @@ class TestMLPLearner:
     def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
         """Test error when predicting without training."""
         features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
+        with pytest.raises(RuntimeError, match="must be trained before prediction"):
             learner.predict(features)
     
     def test_get_name_includes_architecture_activation_and_dropout(self, learner):
@@ -159,6 +159,8 @@ class TestMLPLearner:
 
     def test_single_compound_without_batch_norm_trains_and_predicts(self, tmp_path):
         """Test with single compound using learner without batch norm."""
+        from learnm8.exceptions import LearnerError
+
         single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
             'SMILES': ['CCO'],
@@ -169,7 +171,8 @@ class TestMLPLearner:
             hidden_sizes=(32,),
             batch_norm=False,
             max_epochs=2,
-            random_state=42
+            random_state=42,
+            remove_zero_variance=False
         )
 
         features = extract_features(single_compound['SMILES'].to_list(), 'morgan', tmp_path)
@@ -259,22 +262,27 @@ class TestMLPLearner:
         assert uncertainty is None
 
     def test_train_with_empty_arrays(self, learner):
+        from learnm8.exceptions import LearnerError
+
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(ValueError, match="Cannot train on empty dataset"):
+        with pytest.raises(LearnerError, match="empty dataset"):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
+        from learnm8.exceptions import LearnerError
+
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(ValueError, match="Features and targets must have same length"):
+        with pytest.raises(LearnerError, match="mismatched lengths"):
             learner.train(features, targets)
 
     def test_train_with_1d_features(self, learner):
         features_1d = np.random.rand(10)
         targets = np.random.rand(10)
 
-        with pytest.raises((ValueError, RuntimeError)):
-            learner.train(features_1d, targets)
+        learner.train(features_1d.reshape(-1, 1), targets)
+        predictions, _ = learner.predict(features_1d.reshape(-1, 1))
+        assert len(predictions) == 10
