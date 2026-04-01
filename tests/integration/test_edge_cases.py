@@ -30,6 +30,7 @@ class TestFeatureExtractionEdgeCases:
         assert features.shape[0] <= 1
         assert features.shape[1] > 0  # Should have feature dimensions
     
+    @pytest.mark.slow
     def test_invalid_smiles_handling(self, tmp_path):
         """Test handling of invalid SMILES strings."""
         invalid_smiles = ['INVALID', 'C(((']  # Invalid SMILES
@@ -181,6 +182,7 @@ class TestEvaluationEdgeCases:
 class TestIntegratedEdgeCases:
     """Edge cases that span multiple components."""
     
+    @pytest.mark.slow
     def test_workflow_with_edge_case_molecules(self, valid_edge_case_compounds, tmp_path):
         """Test complete workflow with edge case molecular structures."""
         compounds = valid_edge_case_compounds.clone()
@@ -210,6 +212,7 @@ class TestIntegratedEdgeCases:
             # Some edge cases may legitimately fail
             pytest.skip(f"Edge case molecules caused expected failure: {e}")
     
+    @pytest.mark.slow
     def test_workflow_with_minimal_data(self, valid_edge_case_compounds, tmp_path):
         """Test workflow with minimal viable dataset."""
         # Use just 2 compounds

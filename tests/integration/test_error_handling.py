@@ -47,6 +47,7 @@ class TestDataValidationErrors:
         # Test would need DataFrame with SMILES column
         assert 'SMILES' not in compounds_no_smiles.columns
     
+    @pytest.mark.slow
     def test_invalid_smiles_handling(self, tmp_path):
         """Test handling of invalid SMILES strings."""
         invalid_smiles = ['CCO', 'invalid_smiles', 'C1CCC']  # One valid, two invalid
@@ -256,6 +257,7 @@ class TestFeatureExtractionErrors:
         with pytest.raises((ValueError, KeyError)):
             extract_features(smiles_list, 'unsupported_featurizer', tmp_path)
 
+    @pytest.mark.slow
     def test_corrupted_cache(self, tmp_path):
         """Test feature extraction with corrupted cache files."""
         # Create corrupted cache file
@@ -305,6 +307,7 @@ class TestIntegrationErrors:
         # Should fail because missing SMILES column
         assert 'SMILES' not in incomplete_data.columns
     
+    @pytest.mark.slow
     def test_mixed_valid_invalid_data(self, tmp_path):
         """Test handling of mixed valid and invalid data."""
         mixed_smiles = ['CCO', 'invalid_smiles', 'CCC', '']  # Mixed valid/invalid
@@ -313,6 +316,7 @@ class TestIntegrationErrors:
         with pytest.raises(Exception):
             extract_features(mixed_smiles, 'morgan', tmp_path)
     
+    @pytest.mark.slow
     def test_resource_cleanup_after_errors(self, tmp_path):
         """Test that resources are cleaned up after errors."""
         # Simulate error during feature computation
@@ -338,7 +342,12 @@ class TestIntegrationErrors:
 @pytest.mark.molecular
 class TestErrorRecovery:
     """Test error recovery and graceful degradation."""
-    
+
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.mark.slow
     def test_partial_failure_recovery(self, medium_real_compounds, tmp_path):
         """Test recovery from partial failures in batch operations."""
         compounds = medium_real_compounds.clone()
@@ -354,6 +363,7 @@ class TestErrorRecovery:
         with pytest.raises(Exception):
             extract_features(smiles_list, 'morgan', tmp_path)
     
+    @pytest.mark.slow
     def test_graceful_degradation_with_limited_resources(self, tmp_path):
         """Test graceful degradation when resources are limited."""
         smiles_list = ['CCO'] * 5
@@ -367,9 +377,10 @@ class TestErrorRecovery:
         except (OSError, MemoryError):
             pass
     
-    def test_error_message_clarity(self, small_real_compounds):
+    @pytest.mark.slow
+    def test_error_message_clarity(self, compounds_20):
         """Test that error messages are clear and informative."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         acq = GreedyAcquisition()
         
         # Test clear error message for missing column

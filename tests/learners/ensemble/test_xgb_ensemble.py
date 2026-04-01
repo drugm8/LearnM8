@@ -17,12 +17,35 @@ class TestXGBEnsemble:
         return XGBEnsemble()
 
     @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
+
+    @pytest.fixture
     def custom_xgb_ensemble(self):
         """Create XGBEnsemble with custom hyperparameters."""
         return XGBEnsemble(
             learning_rates=[0.01, 0.05, 0.1],
             random_states=[10, 20, 30]
         )
+
+    @pytest.fixture(scope="class")
+    def trained_xgb(self, small_real_compounds, _small_real_morgan_features_raw):
+        """Class-scoped trained XGBEnsemble — shared across read-only tests."""
+        compounds = small_real_compounds.head(20).clone()
+        if 'Activity' not in compounds.columns:
+            rng = np.random.RandomState(42)
+            compounds = compounds.with_columns(
+                pl.Series('Activity', rng.beta(2, 5, len(compounds)))
+            )
+        features = _small_real_morgan_features_raw[:20].copy()
+        targets = compounds['Activity'].to_numpy()
+        ensemble = XGBEnsemble()
+        ensemble.train(features, targets)
+        return ensemble, features, compounds
 
     def test_initialization_sets_default_learning_rates_random_states_and_untrained_state(self, xgb_ensemble):
         """Test XGBEnsemble initialization with default parameters."""
@@ -68,17 +91,12 @@ class TestXGBEnsemble:
         name = custom_xgb_ensemble.get_name()
         assert name == "XGBEnsemble(3xXGB,lr=[0.01,0.05,0.10])"
 
-    def test_uncertainty_diversity_across_models(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_diversity_across_models(self, trained_xgb):
         """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+        ensemble, features, _compounds = trained_xgb
 
-        features = small_real_morgan_features
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        individual_preds = xgb_ensemble.get_individual_predictions(features)
-        _predictions, uncertainty = xgb_ensemble.predict(features)
+        individual_preds = ensemble.get_individual_predictions(features)
+        _predictions, uncertainty = ensemble.predict(features)
 
         pred_arrays = [preds for preds in individual_preds.values()]
         assert len(pred_arrays) == 3
@@ -86,17 +104,12 @@ class TestXGBEnsemble:
         manual_std = np.std(pred_arrays, axis=0)
         np.testing.assert_allclose(uncertainty, manual_std, rtol=1e-5)
 
-    def test_consistency_across_predictions(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_consistency_across_predictions(self, trained_xgb):
         """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+        ensemble, features, _compounds = trained_xgb
 
-        features = small_real_morgan_features
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        predictions1, uncertainty1 = xgb_ensemble.predict(features)
-        predictions2, uncertainty2 = xgb_ensemble.predict(features)
+        predictions1, uncertainty1 = ensemble.predict(features)
+        predictions2, uncertainty2 = ensemble.predict(features)
 
         np.testing.assert_array_equal(predictions1, predictions2)
         np.testing.assert_array_equal(uncertainty1, uncertainty2)
@@ -127,15 +140,10 @@ class TestXGBEnsemble:
         ensemble = XGBEnsemble(learning_rates=[0.1, 0.2], random_states=[42])
         assert len(ensemble.learners) == 1
 
-    def test_prediction_quality_improves_with_training_data(self, xgb_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_prediction_quality_improves_with_training_data(self, trained_xgb):
         """Test that predictions are reasonable with sufficient training data."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = small_real_morgan_features
-        xgb_ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, uncertainty = xgb_ensemble.predict(features)
+        ensemble, features, compounds = trained_xgb
+        predictions, uncertainty = ensemble.predict(features)
 
         assert predictions.min() >= compounds['Activity'].min() - 0.5
         assert predictions.max() <= compounds['Activity'].max() + 0.5

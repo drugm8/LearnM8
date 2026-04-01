@@ -13,9 +13,32 @@ class TestMixedEnsemble:
     """Test MixedEnsemble functionality with real molecular data."""
 
     @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
+
+    @pytest.fixture
     def mixed_ensemble(self):
         """Create MixedEnsemble instance for testing."""
         return MixedEnsemble(random_state=42)
+
+    @pytest.fixture(scope="class")
+    def trained_mixed(self, small_real_compounds, _small_real_morgan_features_raw):
+        """Class-scoped trained MixedEnsemble — shared across read-only tests."""
+        compounds = small_real_compounds.head(20).clone()
+        if 'Activity' not in compounds.columns:
+            rng = np.random.RandomState(42)
+            compounds = compounds.with_columns(
+                pl.Series('Activity', rng.beta(2, 5, len(compounds)))
+            )
+        features = _small_real_morgan_features_raw[:20].copy()
+        targets = compounds['Activity'].to_numpy()
+        ensemble = MixedEnsemble(random_state=42)
+        ensemble.train(features, targets)
+        return ensemble, features, compounds
 
     def test_initialization_sets_default_aggregation_uncertainty_and_random_state(self, mixed_ensemble):
         """Test mixed ensemble initialization."""
@@ -66,17 +89,10 @@ class TestMixedEnsemble:
         ensemble = MixedEnsemble(uncertainty_method='mad', random_state=42)
         assert ensemble.uncertainty_method == 'mad'
 
-    def test_model_diversity_in_predictions(self, mixed_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_model_diversity_in_predictions(self, trained_mixed):
         """Test that different models produce diverse predictions."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        features = small_real_morgan_features
-        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
-        individual_preds = mixed_ensemble.get_individual_predictions(features)
+        ensemble, features, compounds = trained_mixed
+        individual_preds = ensemble.get_individual_predictions(features)
 
         pred_arrays = [preds for preds in individual_preds.values() if preds is not None]
         assert len(pred_arrays) >= 2
@@ -86,19 +102,12 @@ class TestMixedEnsemble:
                 correlation = np.corrcoef(pred_arrays[i], pred_arrays[j])[0, 1]
                 assert correlation < 1.0
 
-    def test_uncertainty_captures_model_disagreement(self, mixed_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_captures_model_disagreement(self, trained_mixed):
         """Test that uncertainty reflects disagreement between models."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
+        ensemble, features, _compounds = trained_mixed
 
-        features = small_real_morgan_features
-        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        _predictions, uncertainty = mixed_ensemble.predict(features)
-        individual_preds = mixed_ensemble.get_individual_predictions(features)
+        _predictions, uncertainty = ensemble.predict(features)
+        individual_preds = ensemble.get_individual_predictions(features)
 
         pred_arrays = np.array([preds for preds in individual_preds.values() if preds is not None])
         expected_std = np.std(pred_arrays, axis=0)
@@ -106,33 +115,16 @@ class TestMixedEnsemble:
         assert uncertainty.shape == expected_std.shape
         np.testing.assert_allclose(uncertainty, expected_std, rtol=1e-5)
 
-    def test_all_learners_train_successfully(self, mixed_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_all_learners_train_successfully(self, trained_mixed):
         """Test that all learners train without errors."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
+        ensemble, _features, _compounds = trained_mixed
+        assert len(ensemble.learners) == 3
+        assert ensemble.is_trained
 
-        features = small_real_morgan_features
-
-        initial_learner_count = len(mixed_ensemble.learners)
-        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        assert len(mixed_ensemble.learners) == initial_learner_count
-        assert mixed_ensemble.is_trained
-
-    def test_prediction_range_reasonable(self, mixed_ensemble, small_real_compounds, small_real_morgan_features):
+    def test_prediction_range_reasonable(self, trained_mixed):
         """Test that predictions are in reasonable range given training data."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        features = small_real_morgan_features
-        mixed_ensemble.train(features, compounds['Activity'].to_numpy())
-        predictions, _ = mixed_ensemble.predict(features)
+        ensemble, features, compounds = trained_mixed
+        predictions, _ = ensemble.predict(features)
 
         train_min = compounds['Activity'].min()
         train_max = compounds['Activity'].max()
@@ -144,15 +136,15 @@ class TestMixedEnsemble:
         assert pred_min < train_max + 2 * train_range
         assert pred_max > train_min - 2 * train_range
 
-    def test_reproducibility_with_fixed_random_state(self, small_real_compounds, small_real_morgan_features):
+    def test_reproducibility_with_fixed_random_state(self, compounds_20, features_20):
         """Test that fixed random state produces reproducible results."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
 
         ensemble1 = MixedEnsemble(random_state=42)
         ensemble1.train(features, compounds['Activity'].to_numpy())
@@ -165,15 +157,15 @@ class TestMixedEnsemble:
         np.testing.assert_array_almost_equal(pred1, pred2)
         np.testing.assert_array_almost_equal(unc1, unc2)
 
-    def test_different_random_states_produce_different_results(self, small_real_compounds, small_real_morgan_features):
+    def test_different_random_states_produce_different_results(self, compounds_20, features_20):
         """Test that different random states produce different results."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = features_20
 
         ensemble1 = MixedEnsemble(random_state=42)
         ensemble1.train(features, compounds['Activity'].to_numpy())

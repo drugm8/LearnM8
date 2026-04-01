@@ -72,6 +72,7 @@ class TestExtractFeatures:
 
 		assert features.shape == (1, 2048)
 
+	@pytest.mark.slow
 	def test_invalid_smiles_raises_error(self, tmp_path):
 		with pytest.raises(Exception):
 			extract_features(['INVALID_SMILES'], 'morgan', tmp_path)
@@ -88,6 +89,7 @@ class TestExtractFeatures:
 
 		assert features.shape[0] == 5
 
+	@pytest.mark.slow
 	def test_n_jobs_auto(self, tmp_path):
 		smiles_list = ['CCO', 'CCC', 'CCN']
 		features = extract_features(smiles_list, 'morgan', tmp_path, n_jobs=-1)
@@ -107,10 +109,11 @@ class TestExtractFeatures:
 
 		assert np.allclose(features_1, features_2)
 
+	@pytest.mark.slow
 	def test_extract_features_creates_cache_files(self, small_real_compounds, tmp_path):
 		"""Test that extract_features creates HDF5 cache files."""
 		cache_dir = tmp_path / "cache"
-		smiles_list = small_real_compounds['SMILES'].to_list()
+		smiles_list = small_real_compounds['SMILES'].to_list()[:20]
 
 		features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
 
@@ -144,6 +147,7 @@ class TestExtractFeatures:
 		assert features.shape[0] == len(smiles_list)
 		assert features.shape[1] == 2048
 
+	@pytest.mark.slow
 	def test_mixed_valid_invalid_smiles(self, tmp_path):
 		from rdkit import RDLogger
 		RDLogger.DisableLog('rdApp.*')

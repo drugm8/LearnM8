@@ -15,7 +15,6 @@ class MAP4Featurizer(SkfpFeaturizer):
         self,
         fp_size: int = 2048,
         radius: int = 2,
-        count: bool = False,
         n_jobs: int = -1
     ):
         """Initialize MAP4 fingerprinter.
@@ -23,7 +22,6 @@ class MAP4Featurizer(SkfpFeaturizer):
         Args:
             fp_size: Size of fingerprint bit vector (default: 2048)
             radius: Radius for atom pair extraction (default: 2)
-            count: Use count-based version (default: False, binary)
             n_jobs: Number of parallel jobs (-1 for all cores)
 
         Note:
@@ -32,7 +30,6 @@ class MAP4Featurizer(SkfpFeaturizer):
         fp = MAPFingerprint(
             fp_size=fp_size,
             radius=radius,
-            count=count,
             n_jobs=n_jobs
         )
 

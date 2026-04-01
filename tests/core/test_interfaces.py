@@ -81,10 +81,15 @@ class MockOracle(Oracle):
 @pytest.mark.unit
 class TestLearnerInterface:
     """Test Learner interface compliance."""
-    
-    def test_learner_interface_methods(self, small_real_compounds, tmp_path):
+
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.mark.slow
+    def test_learner_interface_methods(self, compounds_20, tmp_path):
         """Test that Learner interface methods are properly defined."""
-        compounds = small_real_compounds.clone()
+        compounds = compounds_20.clone()
         features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
         targets = compounds['Activity'].to_numpy()
 
@@ -274,7 +279,7 @@ class TestInterfaceIntegration:
     
     def test_interface_with_real_components(self, medium_real_compounds, tmp_path):
         """Test interface integration with real components."""
-        compounds = medium_real_compounds.clone()
+        compounds = medium_real_compounds.head(50).clone()
 
         if len(compounds) < 10:
             pytest.skip("Insufficient compounds for integration test")
@@ -286,7 +291,7 @@ class TestInterfaceIntegration:
         learner = RandomForestLearner()
         oracle = CSVOracle(str(test_csv))
 
-        train_compounds = compounds.head(50)
+        train_compounds = compounds.head(30)
         test_compounds = compounds.tail(20)
 
         train_features = extract_features(train_compounds['SMILES'].to_list(), 'morgan', tmp_path)

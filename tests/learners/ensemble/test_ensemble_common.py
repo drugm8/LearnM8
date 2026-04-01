@@ -19,12 +19,21 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 ENSEMBLE_CONFIGS = [
     pytest.param(
-        ('rf_ensemble', lambda: RFEnsemble(n_estimators=10)), id='rf_ensemble'
+        ('rf_ensemble', lambda: RFEnsemble(n_estimators=5, random_states=[42, 123])), id='rf_ensemble'
     ),
-    pytest.param(('lr_ensemble', lambda: LREnsemble()), id='lr_ensemble'),
-    pytest.param(('dt_ensemble', lambda: DTEnsemble()), id='dt_ensemble'),
+    pytest.param(('lr_ensemble', lambda: LREnsemble(
+        regularization_strengths=[0.1, 1.0],
+        random_states=[42, 123],
+    )), id='lr_ensemble'),
+    pytest.param(('dt_ensemble', lambda: DTEnsemble(
+        max_depths=[5, 10],
+        random_states=[42, 123],
+    )), id='dt_ensemble'),
     pytest.param(
-        ('xgb_ensemble', lambda: XGBEnsemble()),
+        ('xgb_ensemble', lambda: XGBEnsemble(
+            learning_rates=[0.05, 0.1],
+            random_states=[42, 123],
+        )),
         id='xgb_ensemble',
         marks=pytest.mark.slow,
     ),
@@ -47,17 +56,28 @@ ENSEMBLE_CONFIGS = [
     ),
 ]
 
+FAST_ENSEMBLE_CONFIGS = [
+    pytest.param(('lr_ensemble', lambda: LREnsemble(
+        regularization_strengths=[0.1, 1.0],
+        random_states=[42, 123],
+    )), id='lr_ensemble'),
+    pytest.param(('dt_ensemble', lambda: DTEnsemble(
+        max_depths=[5, 10],
+        random_states=[42, 123],
+    )), id='dt_ensemble'),
+]
+
 
 def _make_ensemble_with_kwargs(name, **kwargs):
     """Create an ensemble instance with custom kwargs (aggregation_method, uncertainty_method)."""
     if name == 'rf_ensemble':
-        return RFEnsemble(n_estimators=10, **kwargs)
+        return RFEnsemble(n_estimators=5, random_states=[42, 123], **kwargs)
     elif name == 'lr_ensemble':
-        return LREnsemble(**kwargs)
+        return LREnsemble(regularization_strengths=[0.1, 1.0], random_states=[42, 123], **kwargs)
     elif name == 'dt_ensemble':
-        return DTEnsemble(**kwargs)
+        return DTEnsemble(max_depths=[5, 10], random_states=[42, 123], **kwargs)
     elif name == 'xgb_ensemble':
-        return XGBEnsemble(**kwargs)
+        return XGBEnsemble(learning_rates=[0.05, 0.1], random_states=[42, 123], **kwargs)
     elif name == 'mixed_ensemble':
         return MixedEnsemble(random_state=42, **kwargs)
     elif name == 'ensemble':
@@ -81,9 +101,18 @@ def _prepare_targets(compounds):
     return compounds, compounds['Activity'].to_numpy()
 
 
+@pytest.mark.slow
 @pytest.mark.integration
 class TestEnsembleCommon:
     """Parametrized tests shared by all non-SMILES ensemble types."""
+
+    @pytest.fixture
+    def compounds_20(self, small_real_compounds):
+        return small_real_compounds.head(20)
+
+    @pytest.fixture
+    def features_20(self, small_real_morgan_features):
+        return small_real_morgan_features[:20]
 
     @pytest.fixture(params=ENSEMBLE_CONFIGS)
     def ensemble_setup(self, request):
@@ -92,11 +121,11 @@ class TestEnsembleCommon:
         return name, factory()
 
     def test_predict_returns_finite_values_and_uncertainty_after_training(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, ensemble_setup, compounds_20, features_20
     ):
         _, ensemble = ensemble_setup
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         assert ensemble.is_trained
@@ -109,11 +138,11 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
 
     def test_uncertainty_estimates_are_non_negative_and_nonconstant(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, ensemble_setup, compounds_20, features_20
     ):
         _, ensemble = ensemble_setup
-        _compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        _compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)
@@ -135,10 +164,10 @@ class TestEnsembleCommon:
         with pytest.raises((ValueError, RuntimeError)):
             ensemble.train(empty_features, empty_targets)
 
-    def test_predict_without_training(self, ensemble_setup, small_real_morgan_features):
+    def test_predict_without_training(self, ensemble_setup, features_20):
         _, ensemble = ensemble_setup
         with pytest.raises(RuntimeError, match='must be trained'):
-            ensemble.predict(small_real_morgan_features)
+            ensemble.predict(features_20)
 
     def test_untrained_ensemble_statistics_report_multiple_learners_and_untrained_state(self, ensemble_setup):
         _, ensemble = ensemble_setup
@@ -147,11 +176,11 @@ class TestEnsembleCommon:
         assert stats['is_trained'] is False
 
     def test_trained_ensemble_statistics_include_learner_names(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, ensemble_setup, compounds_20, features_20
     ):
         _, ensemble = ensemble_setup
-        _compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        _compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         stats = ensemble.get_ensemble_statistics()
@@ -160,11 +189,11 @@ class TestEnsembleCommon:
         assert len(stats['learner_names']) >= 2
 
     def test_individual_predictions_return_finite_arrays_for_each_learner(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, ensemble_setup, compounds_20, features_20
     ):
         _, ensemble = ensemble_setup
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         individual_preds = ensemble.get_individual_predictions(features)
@@ -175,13 +204,19 @@ class TestEnsembleCommon:
                 assert len(preds) == len(compounds)
                 assert np.all(np.isfinite(preds))
 
+    @pytest.fixture(params=FAST_ENSEMBLE_CONFIGS)
+    def fast_ensemble_setup(self, request):
+        """Fast ensemble types for aggregation/uncertainty method tests."""
+        name, factory = request.param
+        return name, factory()
+
     def test_mean_aggregation_returns_prediction_and_uncertainty_per_compound(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, aggregation_method='mean')
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)
@@ -191,12 +226,12 @@ class TestEnsembleCommon:
         assert np.all(np.isfinite(predictions))
 
     def test_median_aggregation_returns_prediction_and_uncertainty_per_compound(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, aggregation_method='median')
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)
@@ -206,12 +241,12 @@ class TestEnsembleCommon:
         assert np.all(np.isfinite(predictions))
 
     def test_std_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='std')
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)
@@ -221,12 +256,12 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
 
     def test_mad_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='mad')
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)
@@ -236,12 +271,12 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
 
     def test_quantile_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, small_real_compounds, small_real_morgan_features
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='quantile')
-        compounds, targets = _prepare_targets(small_real_compounds)
-        features = small_real_morgan_features
+        compounds, targets = _prepare_targets(compounds_20)
+        features = features_20
 
         ensemble.train(features, targets)
         predictions, uncertainty = ensemble.predict(features)

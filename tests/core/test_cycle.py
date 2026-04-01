@@ -170,6 +170,7 @@ class TestExecuteCycle:
 
         assert pred_count == unlabeled_count
 
+    @pytest.mark.slow
     def test_pruning_integration(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
         config = CycleConfig(
             'greedy',
@@ -555,6 +556,7 @@ class TestSelectCompounds:
 @pytest.mark.integration
 class TestEdgeCaseHandling:
 
+    @pytest.mark.slow
     def test_nan_predictions_handling(self, sample_master_df, mock_oracle, tmp_path):
         from learnm8.core.interfaces import Learner
 
