@@ -120,7 +120,7 @@ def test_training_size_warning_large(caplog):
     features = rng.random(size=(5001, 20)).astype(np.float64)
     targets = rng.random(5001).astype(np.float64)
     learner = GPyTorchGPLearner(device='cpu', max_train_size=10000, n_iterations=5)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING, logger='learnm8.learners.gpytorch.gpu_gp'):
         learner.train(features, targets)
     assert any('O(n^2)' in r.message or 'n^2' in r.message.lower() for r in caplog.records)
 
