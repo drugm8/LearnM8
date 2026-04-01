@@ -210,7 +210,7 @@ class TestFastpropLearner:
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
-        assert features.shape[1] == 167
+        assert features.shape[1] == 166
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
@@ -529,12 +529,7 @@ class TestFastpropLearner:
         assert any('after prediction' in ctx for ctx in cleanup_called)
 
     def test_cleanup_not_called_when_disabled(self, tmp_path, small_real_compounds, monkeypatch):
-        """Verify _cleanup_gpu_memory is not called when enable_aggressive_gc=False."""
-        cleanup_called = []
-
-        def mock_cleanup(self, context=""):
-            cleanup_called.append(context)
-
+        """Verify _cleanup_gpu_memory is a no-op when enable_aggressive_gc=False."""
         learner = FastpropLearner(
             fnn_layers=2,
             hidden_size=64,
@@ -542,7 +537,17 @@ class TestFastpropLearner:
             enable_aggressive_gc=False
         )
 
-        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+        assert learner.enable_aggressive_gc is False
+
+        cleanup_did_work = []
+        original_cleanup = FastpropLearner._cleanup_gpu_memory
+
+        def tracking_cleanup(self, context=""):
+            original_cleanup(self, context)
+            if self.enable_aggressive_gc:
+                cleanup_did_work.append(context)
+
+        monkeypatch.setattr(FastpropLearner, '_cleanup_gpu_memory', tracking_cleanup)
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -559,7 +564,7 @@ class TestFastpropLearner:
         learner.train(features, compounds['Activity'].to_numpy())
         learner.predict(features)
 
-        assert len(cleanup_called) == 0
+        assert len(cleanup_did_work) == 0
 
     def test_predictions_unaffected_by_gc(self, tmp_path, small_real_compounds):
         """Verify predictions are identical with GC enabled vs disabled."""

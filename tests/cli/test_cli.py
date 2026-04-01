@@ -28,26 +28,38 @@ from learnm8.exceptions import (
 
 @pytest.fixture
 def minimal_compounds(tmp_path):
-    """Create minimal valid compound pool CSV."""
+    """Create valid compound pool CSV with enough diversity for predefined schedules."""
     csv_path = tmp_path / "compounds.csv"
+    base_smiles = [
+        'CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC',
+        'c1ccccc1', 'CC(=O)O', 'CCN', 'CC(O)C', 'CCOC',
+        'C1CCCCC1', 'CC=CC', 'CC#N', 'CC(=O)N', 'CCCO',
+        'c1ccc(O)cc1', 'CC(C)O', 'CCOCC', 'CCNC', 'CC(=O)OC',
+        'CCCCCCC', 'CCCCCCCC', 'c1ccc(N)cc1', 'CC(=O)CC',
+        'CCCCN', 'CCC(O)CC', 'CC(C)(C)O', 'CCCOC', 'CC(=O)OCC',
+        'CCCCCO', 'c1ccc(C)cc1', 'CC(C)CC', 'CCCNC', 'CC(=O)NCC',
+        'CCCCCCCCC', 'CCCCCCCCCC', 'c1ccc(F)cc1', 'CC(=O)CCC',
+        'CCCCNC', 'CCC(O)CCC', 'CC(C)(C)CC', 'CCCCOC', 'CC(=O)OCCC',
+        'CCCCCCCO', 'c1ccc(Cl)cc1', 'CC(C)CCC', 'CCCCNCC', 'CCC(=O)N',
+        'CCCCCCCCCC', 'CCCCCCCCCCC',
+    ]
+    n = 200
+    smiles = (base_smiles * (n // len(base_smiles) + 1))[:n]
     df = pd.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
-        'SMILES': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
-        'Activity': [0.1, 0.3, 0.5, 0.7, 0.9]
+        'ID': [f'COMP_{i:04d}' for i in range(1, n + 1)],
+        'SMILES': smiles,
+        'Activity': [round(i * 0.005, 4) for i in range(1, n + 1)]
     })
     df.to_csv(csv_path, index=False)
     return csv_path
 
 
 @pytest.fixture
-def oracle_csv(tmp_path):
-    """Create oracle CSV file."""
+def oracle_csv(tmp_path, minimal_compounds):
+    """Create oracle CSV file matching the minimal_compounds fixture."""
     csv_path = tmp_path / "oracle.csv"
-    df = pd.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
-        'SMILES': ['CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC'],
-        'Activity': [0.15, 0.35, 0.55, 0.65, 0.85]
-    })
+    df = pd.read_csv(minimal_compounds)
+    df['Activity'] = [round(0.15 + 0.004*i, 4) for i in range(len(df))]
     df.to_csv(csv_path, index=False)
     return csv_path
 
@@ -155,7 +167,7 @@ class TestRunSubcommand:
         assert result.returncode == 0, f"CLI failed: {result.stderr}"
         assert output_dir.exists()
 
-        metrics = pd.read_csv(output_dir / 'cycle_metrics.csv')
+        metrics = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
         assert len(metrics) == 3
 
     def test_output_dir_creation(self, minimal_compounds, tmp_path):
@@ -255,6 +267,8 @@ class TestRunSubcommand:
         result = run_cli(
             'run',
             str(minimal_compounds),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
             '--config', str(config_yaml),
             '-o', str(output_dir)
         )
@@ -268,6 +282,8 @@ class TestRunSubcommand:
         result = run_cli(
             'run',
             str(minimal_compounds),
+            '--target', 'Activity',
+            '--featurizer', 'morgan',
             '--config', str(config_json),
             '-o', str(output_dir)
         )
@@ -392,8 +408,8 @@ class TestRunSubcommand:
         assert result1.returncode == 0
         assert result2.returncode == 0
 
-        df1 = pd.read_csv(output_dir1 / 'compounds_final.csv')
-        df2 = pd.read_csv(output_dir2 / 'compounds_final.csv')
+        df1 = pd.read_csv(output_dir1 / 'compounds_final.csv', comment='#')
+        df2 = pd.read_csv(output_dir2 / 'compounds_final.csv', comment='#')
 
         pd.testing.assert_frame_equal(
             df1.sort_values('ID').reset_index(drop=True),
@@ -659,7 +675,7 @@ class TestIntegration:
         assert (output_dir / 'cycle_metrics.csv').exists()
         assert (output_dir / 'selection_history.csv').exists()
 
-        final_df = pd.read_csv(output_dir / 'compounds_final.csv')
+        final_df = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
         assert 'ID' in final_df.columns
         assert 'SMILES' in final_df.columns
         assert 'status' in final_df.columns
@@ -710,7 +726,7 @@ random_state: 42
 
         assert result.returncode == 0
 
-        compounds_final = pd.read_csv(output_dir / 'compounds_final.csv')
+        compounds_final = pd.read_csv(output_dir / 'compounds_final.csv', comment='#')
         assert len(compounds_final) > 0
 
         config_used = json.loads((output_dir / 'config.json').read_text())

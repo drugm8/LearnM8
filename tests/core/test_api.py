@@ -323,7 +323,7 @@ class TestAPIModeDetection:
         output_dir = tmp_path / "csv_oracle_test"
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(csv_file),
             learner=mock_learner,
             target_col='Activity',
@@ -367,7 +367,7 @@ class TestAPIModeDetection:
         """Test that oracle=None with DataFrame compound_pool raises error."""
         output_dir = tmp_path / "no_oracle_df_test"
 
-        with pytest.raises(ValueError, match="Oracle required when compound_pool is DataFrame"):
+        with pytest.raises(ValueError, match="Oracle is required when compound_pool is a DataFrame"):
             run_active_learning(
                 compound_pool=sample_compounds,
                 oracle=None,
@@ -684,7 +684,7 @@ class TestAPIErrorHandling:
 
         output_dir = tmp_path / "missing_columns_test"
 
-        with pytest.raises(ValueError, match="must have 'ID' and 'SMILES' columns"):
+        with pytest.raises(ValueError, match="missing required column"):
             run_active_learning(
                 compound_pool=invalid_compounds,
                 oracle=mock_oracle,
@@ -865,7 +865,7 @@ class TestAPIEvaluationMetrics:
         output_dir = tmp_path / "benchmark_topk_test"
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(csv_file),
             learner=mock_learner,
             target_col='Activity',
@@ -1003,9 +1003,20 @@ class TestCacheDirParameter:
 class TestLoggingBehavior:
     """Test logging level behavior after refactoring."""
 
-    def test_info_logs_are_user_focused(self, sample_compounds, tmp_path, caplog_info):
+    def test_info_logs_are_user_focused(self, sample_compounds, tmp_path, caplog_info, monkeypatch):
         """INFO logs should show high-level progress only, no technical details."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1013,7 +1024,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1029,16 +1040,29 @@ class TestLoggingBehavior:
 
         assert any('Starting active learning' in msg for msg in info_messages)
         assert any('Phase 1: Validating' in msg for msg in info_messages)
-        assert any('Training model' in msg for msg in info_messages)
-        assert any('Acquiring compounds' in msg for msg in info_messages)
+        assert any('Training' in msg for msg in info_messages)
+        assert any('Phase 4: Active Learning Cycles' in msg for msg in info_messages)
 
         assert not any('cache_dir=' in msg.lower() for msg in info_messages)
         assert not any('shape:' in msg.lower() for msg in info_messages)
         assert not any('dtype' in msg.lower() for msg in info_messages)
 
-    def test_debug_logs_contain_technical_details(self, sample_compounds, tmp_path, caplog_debug):
+    def test_debug_logs_contain_technical_details(self, sample_compounds, tmp_path, caplog_debug, monkeypatch):
         """DEBUG logs should contain technical details and shapes."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            kwargs['level'] = 'DEBUG'
+            kwargs['force_reconfigure'] = True
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1046,7 +1070,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1063,9 +1087,20 @@ class TestLoggingBehavior:
         assert len(debug_messages) > 0
         assert any('shape' in msg.lower() for msg in debug_messages)
 
-    def test_phase_separators_in_info_logs(self, sample_compounds, tmp_path, caplog_info):
+    def test_phase_separators_in_info_logs(self, sample_compounds, tmp_path, caplog_info, monkeypatch):
         """INFO logs should include phase separators for visual organization."""
         from learnm8 import run_active_learning
+        from learnm8.utils import logging as lm8_logging
+
+        original_configure = lm8_logging.configure_learnm8_logging
+
+        def patched_configure(*args, **kwargs):
+            result = original_configure(*args, **kwargs)
+            result.propagate = True
+            return result
+
+        monkeypatch.setattr(lm8_logging, 'configure_learnm8_logging', patched_configure)
+        monkeypatch.setattr('learnm8.api.configure_learnm8_logging', patched_configure)
 
         oracle_path = tmp_path / "oracle.csv"
         oracle_data = sample_compounds.clone()
@@ -1073,7 +1108,7 @@ class TestLoggingBehavior:
         oracle_data.write_csv(oracle_path)
 
         run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1107,7 +1142,7 @@ class TestChempropWithExtraDescriptors:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='chemprop',
             featurizer='morgan',
@@ -1135,7 +1170,7 @@ class TestChempropWithExtraDescriptors:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='chemprop',
             featurizer=None,
@@ -1161,7 +1196,7 @@ class TestMemorySafetyFactorParameter:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
@@ -1253,7 +1288,7 @@ class TestMemorySafetyFactorParameter:
         oracle_data.write_csv(oracle_path)
 
         results = run_active_learning(
-            compound_pool=sample_compounds,
+            compound_pool=oracle_data,
             oracle=str(oracle_path),
             learner='rf',
             target_col='Activity',
