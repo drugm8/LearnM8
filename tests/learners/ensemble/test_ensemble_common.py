@@ -56,6 +56,17 @@ ENSEMBLE_CONFIGS = [
     ),
 ]
 
+FAST_ENSEMBLE_CONFIGS = [
+    pytest.param(('lr_ensemble', lambda: LREnsemble(
+        regularization_strengths=[0.1, 1.0],
+        random_states=[42, 123],
+    )), id='lr_ensemble'),
+    pytest.param(('dt_ensemble', lambda: DTEnsemble(
+        max_depths=[5, 10],
+        random_states=[42, 123],
+    )), id='dt_ensemble'),
+]
+
 
 def _make_ensemble_with_kwargs(name, **kwargs):
     """Create an ensemble instance with custom kwargs (aggregation_method, uncertainty_method)."""
@@ -193,10 +204,16 @@ class TestEnsembleCommon:
                 assert len(preds) == len(compounds)
                 assert np.all(np.isfinite(preds))
 
+    @pytest.fixture(params=FAST_ENSEMBLE_CONFIGS)
+    def fast_ensemble_setup(self, request):
+        """Fast ensemble types for aggregation/uncertainty method tests."""
+        name, factory = request.param
+        return name, factory()
+
     def test_mean_aggregation_returns_prediction_and_uncertainty_per_compound(
-        self, ensemble_setup, compounds_20, features_20
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, aggregation_method='mean')
         compounds, targets = _prepare_targets(compounds_20)
         features = features_20
@@ -209,9 +226,9 @@ class TestEnsembleCommon:
         assert np.all(np.isfinite(predictions))
 
     def test_median_aggregation_returns_prediction_and_uncertainty_per_compound(
-        self, ensemble_setup, compounds_20, features_20
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, aggregation_method='median')
         compounds, targets = _prepare_targets(compounds_20)
         features = features_20
@@ -224,9 +241,9 @@ class TestEnsembleCommon:
         assert np.all(np.isfinite(predictions))
 
     def test_std_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, compounds_20, features_20
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='std')
         compounds, targets = _prepare_targets(compounds_20)
         features = features_20
@@ -239,9 +256,9 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
 
     def test_mad_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, compounds_20, features_20
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='mad')
         compounds, targets = _prepare_targets(compounds_20)
         features = features_20
@@ -254,9 +271,9 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
 
     def test_quantile_uncertainty_method_returns_non_negative_uncertainty(
-        self, ensemble_setup, compounds_20, features_20
+        self, fast_ensemble_setup, compounds_20, features_20
     ):
-        name, _ = ensemble_setup
+        name, _ = fast_ensemble_setup
         ensemble = _make_ensemble_with_kwargs(name, uncertainty_method='quantile')
         compounds, targets = _prepare_targets(compounds_20)
         features = features_20
