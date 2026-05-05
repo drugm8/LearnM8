@@ -8,12 +8,12 @@ import logging
 import time
 
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg.lapack import dtrtri
 from sklearn.linear_model import LinearRegression, Ridge
 
 from learnm8.exceptions import LearnerError
 
-from ..base import SklearnLearner, _preprocess_features
+from ..base import SklearnLearner, _compute_leverages_cpu, _preprocess_features
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,12 @@ class LinearRegressionLearner(SklearnLearner):
                 f'Consider increasing alpha for regularization.'
             )
 
-        self._gram_chol = cho_factor(gram)
+        L = np.linalg.cholesky(gram)
+        self._L_inv, info = dtrtri(L, lower=1, unitdiag=0, overwrite_c=0)
+        if info != 0:
+            raise LearnerError(
+                f'Cholesky factor inversion failed for {self.get_name()} (dtrtri info={info})'
+            )
 
         residuals = targets - self.model.predict(preprocessed)
         rss = float(np.sum(residuals**2))
@@ -155,8 +160,7 @@ class LinearRegressionLearner(SklearnLearner):
 
             predictions = self.model.predict(preprocessed)
 
-            solved = cho_solve(self._gram_chol, preprocessed.T)
-            leverages = np.einsum('ij,ji->i', preprocessed, solved)
+            leverages = _compute_leverages_cpu(self._L_inv, preprocessed)
             variance = self._sigma_hat_sq * np.maximum(1.0 + leverages, 0.0)
             uncertainty = np.sqrt(variance)
 

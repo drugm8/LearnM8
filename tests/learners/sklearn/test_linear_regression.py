@@ -390,7 +390,6 @@ class TestLinearRegressionLearner:
     def test_leverage_formula_manual_validation(self):
         """Compare leverage uncertainty vs scipy.linalg.inv reference."""
         from scipy.linalg import inv
-
         from sklearn.preprocessing import StandardScaler
 
         rng = np.random.RandomState(42)
@@ -423,7 +422,7 @@ class TestLinearRegressionLearner:
         np.testing.assert_allclose(actual_unc, expected_unc, rtol=1e-6)
 
     def test_gram_computed_on_preprocessed_features(self):
-        """Zero-variance columns -> _gram_chol dims match filtered count."""
+        """Zero-variance columns -> _L_inv dims match filtered count."""
         rng = np.random.RandomState(42)
         X_good = rng.randn(30, 5)
         X_const = np.ones((30, 3)) * 7.0
@@ -433,8 +432,7 @@ class TestLinearRegressionLearner:
         learner = LinearRegressionLearner(alpha=1.0, random_state=42)
         learner.train(X, y)
 
-        chol_matrix = learner._gram_chol[0]
-        assert chol_matrix.shape == (5, 5)
+        assert learner._L_inv.shape == (5, 5)
 
         _, unc = learner.predict(X)
         assert unc is not None
