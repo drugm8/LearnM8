@@ -1,11 +1,17 @@
-import pytest
-import polars as pl
-import pandas as pd
-import numpy as np
 import json
-from pathlib import Path
 
-from learnm8.core.persistence import save_results, _add_csv_metadata, _organize_columns
+import numpy as np
+import pandas as pd
+import polars as pl
+import pytest
+
+from learnm8.core.persistence import (
+    _add_csv_metadata,
+    _organize_columns,
+    prediction_parquet_path,
+    save_results,
+    write_cycle_predictions,
+)
 from learnm8.core.validation import ValidationResult
 
 pytestmark = pytest.mark.unit
@@ -69,10 +75,6 @@ def test_save_results_basic(tmp_path):
         'selected_cycle': [-1, -1, -1] + [None] * 7,
         'pruned_cycle': [None] * 10,
         'Activity': [0.3, 0.6, 0.9] + [None] * 7,
-        'prediction_cycle_0': [None] * 3 + [0.4, 0.5, 0.6, 0.7] + [None] * 3,
-        'uncertainty_cycle_0': [None] * 3 + [0.1, 0.15, 0.2, 0.25] + [None] * 3,
-        'prediction_cycle_1': [None] * 5 + [0.65, 0.75] + [None] * 3,
-        'uncertainty_cycle_1': [None] * 5 + [0.12, 0.18] + [None] * 3
     })
 
     cycle_metrics = [
@@ -165,8 +167,6 @@ def test_save_results_compounds_final_structure(tmp_path):
         'selected_cycle': [-1, 0, None],
         'pruned_cycle': [None, None, None],
         'Activity': [0.3, 0.6, None],
-        'prediction_cycle_0': [None, None, 0.5],
-        'uncertainty_cycle_0': [None, None, 0.15]
     })
 
     cycle_metrics = [{
@@ -187,18 +187,15 @@ def test_save_results_compounds_final_structure(tmp_path):
 
     final_df = pd.read_csv(saved_files['compounds_final'], comment='#')
 
+    # The slim CSV holds only the narrow base columns + target; predictions
+    # live in per-cycle parquet files.
     assert 'ID' in final_df.columns
     assert 'SMILES' in final_df.columns
     assert 'status' in final_df.columns
     assert 'Activity' in final_df.columns
-    assert 'prediction_cycle_0' in final_df.columns
-    assert 'uncertainty_cycle_0' in final_df.columns
 
-    pred_cols = [c for c in final_df.columns if c.startswith('prediction_cycle_')]
-    unc_cols = [c for c in final_df.columns if c.startswith('uncertainty_cycle_')]
-
-    assert pred_cols == sorted(pred_cols, key=lambda x: int(x.split('_')[-1]))
-    assert unc_cols == sorted(unc_cols, key=lambda x: int(x.split('_')[-1]))
+    assert not any(c.startswith('prediction_cycle_') for c in final_df.columns)
+    assert not any(c.startswith('uncertainty_cycle_') for c in final_df.columns)
 
 
 def test_save_results_cycle_metrics_no_list_columns(tmp_path):
@@ -249,24 +246,31 @@ def test_save_results_selection_history(tmp_path):
         'selected_cycle': [-1, 0, 1],
         'pruned_cycle': [None, None, None],
         'Activity': [0.3, 0.6, 0.9],
-        'prediction_cycle_0': [None, 0.5, 0.7],
-        'uncertainty_cycle_0': [None, 0.15, 0.2],
-        'prediction_cycle_1': [None, None, 0.85],
-        'uncertainty_cycle_1': [None, None, 0.1]
     })
 
+    # Cycle-time captures replace the old prediction_cycle_N columns.
     cycle_metrics = [
         {
             'cycle': 0, 'strategy': 'random', 'batch_size': 1,
             'selected_count': 1, 'remaining_unlabeled': 1,
             'cumulative_labeled': 2, 'cumulative_pruned': 0,
-            'selected_ids': ['COMP_002'], 'pruned_ids': []
+            'selected_ids': ['COMP_002'], 'pruned_ids': [],
+            'selected_predictions': pl.DataFrame({
+                'ID': ['COMP_002'],
+                'prediction': [0.5],
+                'uncertainty': [0.15],
+            }),
         },
         {
             'cycle': 1, 'strategy': 'greedy', 'batch_size': 1,
             'selected_count': 1, 'remaining_unlabeled': 0,
             'cumulative_labeled': 3, 'cumulative_pruned': 0,
-            'selected_ids': ['COMP_003'], 'pruned_ids': []
+            'selected_ids': ['COMP_003'], 'pruned_ids': [],
+            'selected_predictions': pl.DataFrame({
+                'ID': ['COMP_003'],
+                'prediction': [0.85],
+                'uncertainty': [0.1],
+            }),
         }
     ]
 
@@ -383,3 +387,81 @@ def test_save_results_config_json(tmp_path):
         loaded_config = json.load(f)
 
     assert loaded_config == config
+
+
+def _make_predictions_df(n: int = 5, with_uncertainty: bool = True) -> pl.DataFrame:
+    data = {
+        'ID': [f'C{i}' for i in range(n)],
+        'prediction': [float(i) * 0.1 for i in range(n)],
+    }
+    if with_uncertainty:
+        data['uncertainty'] = [float(i) * 0.01 for i in range(n)]
+    return pl.DataFrame(data)
+
+
+def test_parquet_filename_convention(tmp_path):
+    """prediction_parquet_path() is the single source of truth for naming."""
+    p = prediction_parquet_path(tmp_path, 3)
+    assert p == tmp_path / 'prediction_cycle_3.parquet'
+    assert p.name == 'prediction_cycle_3.parquet'
+
+
+def test_parquet_schema_matches_spec(tmp_path):
+    """Written parquet has schema [ID: Utf8, prediction: Float64, uncertainty: Float64]."""
+    df = _make_predictions_df(n=4, with_uncertainty=True)
+    written = write_cycle_predictions(df, tmp_path, cycle=1)
+    assert written is not None
+    actual = pl.read_parquet(written)
+    assert actual.columns == ['ID', 'prediction', 'uncertainty']
+    assert actual.schema['ID'] == pl.Utf8
+    assert actual.schema['prediction'] == pl.Float64
+    assert actual.schema['uncertainty'] == pl.Float64
+
+
+def test_parquet_roundtrip_values(tmp_path):
+    """write_cycle_predictions then read returns identical values."""
+    df = _make_predictions_df(n=10, with_uncertainty=True)
+    path = write_cycle_predictions(df, tmp_path, cycle=2)
+    assert path is not None
+    actual = pl.read_parquet(path).sort('ID')
+    expected = df.sort('ID')
+    assert actual.equals(expected)
+
+
+def test_parquet_compression_is_zstd(tmp_path):
+    """Parquet files are zstd-compressed."""
+    import pyarrow.parquet as pq
+    df = _make_predictions_df(n=5)
+    path = write_cycle_predictions(df, tmp_path, cycle=0)
+    pf = pq.ParquetFile(path)
+    # Check compression of the first column chunk in row group 0.
+    rg = pf.metadata.row_group(0)
+    compressions = {rg.column(i).compression for i in range(rg.num_columns)}
+    assert compressions == {'ZSTD'}, f'expected only ZSTD, got {compressions}'
+
+
+def test_parquet_atomic_write_no_partial_file(tmp_path, monkeypatch):
+    """A failed write leaves no .parquet file (only the .tmp is touched, then cleaned)."""
+    df = _make_predictions_df(n=3)
+
+    def boom(self, path, *args, **kwargs):
+        # Simulate I/O error during write_parquet on the tmp path.
+        raise OSError('disk full')
+
+    monkeypatch.setattr(pl.DataFrame, 'write_parquet', boom)
+
+    final_path = prediction_parquet_path(tmp_path, 4)
+    tmp_file = final_path.with_suffix('.parquet.tmp')
+
+    with pytest.raises(OSError, match='disk full'):
+        write_cycle_predictions(df, tmp_path, cycle=4)
+
+    assert not final_path.exists(), 'final parquet should not exist after failed write'
+    assert not tmp_file.exists(), '.parquet.tmp should be cleaned up on failure'
+
+
+def test_write_cycle_predictions_returns_none_when_output_dir_none():
+    """output_dir=None short-circuits to no write and returns None."""
+    df = _make_predictions_df(n=2)
+    result = write_cycle_predictions(df, None, cycle=0)
+    assert result is None

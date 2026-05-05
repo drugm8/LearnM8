@@ -5,7 +5,6 @@ from pathlib import Path
 
 from learnm8.core.data_structures import (
     validate_master_dataframe,
-    get_prediction_columns,
     STATUS_LABELED,
     STATUS_UNLABELED,
     STATUS_PRUNED,
@@ -27,99 +26,9 @@ class TestConstants:
         assert len(VALID_STATUSES) == 3
 
 
-@pytest.mark.unit
-class TestGetPredictionColumns:
-
-    def test_get_prediction_columns_no_predictions(self, sample_master_df):
-        pred_cols, unc_cols = get_prediction_columns(sample_master_df)
-
-        assert pred_cols == []
-        assert unc_cols == []
-
-    def test_get_prediction_columns_with_predictions(self, master_df_with_predictions):
-        pred_cols, unc_cols = get_prediction_columns(master_df_with_predictions)
-
-        assert pred_cols == ['prediction_cycle_0']
-        assert unc_cols == ['uncertainty_cycle_0']
-
-    def test_get_prediction_columns_multiple_cycles(self, master_df_multi_cycle):
-        pred_cols, unc_cols = get_prediction_columns(master_df_multi_cycle)
-
-        assert pred_cols == ['prediction_cycle_0', 'prediction_cycle_1']
-        assert unc_cols == ['uncertainty_cycle_0', 'uncertainty_cycle_1']
-
-    def test_get_prediction_columns_with_uncertainties(self, sample_master_df):
-        from learnm8.core.dataframe_ops import add_predictions
-
-        master_df = sample_master_df.clone()
-        unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
-        unlabeled_ids = unlabeled['ID'].to_list()
-
-        predictions = np.random.uniform(0.5, 0.9, len(unlabeled_ids))
-        uncertainties = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
-
-        master_df = add_predictions(
-            df=master_df,
-            cycle=0,
-            compound_ids=unlabeled_ids,
-            predictions=predictions,
-            uncertainties=uncertainties
-        )
-
-        pred_cols, unc_cols = get_prediction_columns(master_df)
-
-        assert len(pred_cols) == 1
-        assert len(unc_cols) == 1
-        assert 'prediction_cycle_0' in master_df.columns
-        assert 'uncertainty_cycle_0' in master_df.columns
-
-    def test_get_prediction_columns_pattern_matching(self, sample_master_df):
-        master_df = sample_master_df.clone()
-
-        master_df = master_df.with_columns([
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_0'),
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_1'),
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_5'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_0'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_1'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_5'),
-            pl.lit(None).cast(pl.Float64).alias('other_prediction'),
-            pl.lit(None).cast(pl.Float64).alias('last_prediction'),
-        ])
-
-        pred_cols, unc_cols = get_prediction_columns(master_df)
-
-        assert pred_cols == ['prediction_cycle_0', 'prediction_cycle_1', 'prediction_cycle_5']
-        assert unc_cols == ['uncertainty_cycle_0', 'uncertainty_cycle_1', 'uncertainty_cycle_5']
-        assert 'other_prediction' not in pred_cols
-        assert 'last_prediction' not in pred_cols
-
-    def test_get_prediction_columns_sorted_by_cycle(self, sample_master_df):
-        master_df = sample_master_df.clone()
-
-        master_df = master_df.with_columns([
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_10'),
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_2'),
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_5'),
-            pl.lit(None).cast(pl.Float64).alias('prediction_cycle_1'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_10'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_2'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_5'),
-            pl.lit(None).cast(pl.Float64).alias('uncertainty_cycle_1'),
-        ])
-
-        pred_cols, unc_cols = get_prediction_columns(master_df)
-
-        assert pred_cols == ['prediction_cycle_1', 'prediction_cycle_2', 'prediction_cycle_5', 'prediction_cycle_10']
-        assert unc_cols == ['uncertainty_cycle_1', 'uncertainty_cycle_2', 'uncertainty_cycle_5', 'uncertainty_cycle_10']
-
-    def test_get_prediction_columns_empty_dataframe(self):
-        empty_df = pl.DataFrame()
-
-        pred_cols, unc_cols = get_prediction_columns(empty_df)
-
-        assert pred_cols == []
-        assert unc_cols == []
+# NOTE: TestGetPredictionColumns was removed because get_prediction_columns
+# itself was removed when the master DataFrame became narrow (constant 8 cols).
+# Predictions live in per-cycle parquet files; there is no equivalent helper.
 
 
 @pytest.mark.unit
@@ -292,7 +201,8 @@ class TestValidateMasterDataframe:
             validate_master_dataframe(master_df)
 
     def test_prediction_columns_validation(self, master_df_with_predictions):
-        result = validate_master_dataframe(master_df_with_predictions)
+        master_df, _ = master_df_with_predictions
+        result = validate_master_dataframe(master_df)
 
         assert result is True
 
@@ -352,7 +262,8 @@ class TestValidateMasterDataframe:
         assert result is True
 
     def test_valid_master_dataframe_with_multi_cycle(self, master_df_multi_cycle):
-        result = validate_master_dataframe(master_df_multi_cycle)
+        master_df, _ = master_df_multi_cycle
+        result = validate_master_dataframe(master_df)
 
         assert result is True
 

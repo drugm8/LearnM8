@@ -7,11 +7,9 @@ from learnm8.core.data_structures import (
     STATUS_LABELED,
     STATUS_PRUNED,
     STATUS_UNLABELED,
-    get_prediction_columns,
     validate_master_dataframe,
 )
 from learnm8.core.dataframe_ops import (
-    add_predictions,
     get_compounds_by_status,
     update_status,
 )
@@ -207,148 +205,11 @@ def test_update_compound_status_invalid_status(sample_master_df):
         )
 
 
-def test_add_predictions_to_master(sample_master_df):
-    """Test adding predictions."""
-    unlabeled_ids = (
-        sample_master_df.filter(pl.col('status') == STATUS_UNLABELED)
-        .get_column('ID')
-        .to_list()
-    )
-    labeled_ids = (
-        sample_master_df.filter(pl.col('status') == STATUS_LABELED)
-        .get_column('ID')
-        .to_list()
-    )
-    compound_ids = unlabeled_ids
-    predictions = np.array([0.6, 0.7, 0.8])
-
-    updated_df = add_predictions(
-        df=sample_master_df, cycle=0, compound_ids=compound_ids, predictions=predictions
-    )
-
-    # Verify prediction_cycle_0 column created
-    assert 'prediction_cycle_0' in updated_df.columns
-
-    # Verify values set correctly
-    for i, comp_id in enumerate(compound_ids):
-        pred_val = updated_df.filter(pl.col('ID') == comp_id)['prediction_cycle_0'][0]
-        assert pred_val == predictions[i]
-
-    # Verify NaN for compounds not predicted
-    other_compound = updated_df.filter(pl.col('ID') == labeled_ids[0])[
-        'prediction_cycle_0'
-    ][0]
-    assert pd.isna(other_compound)
-
-
-def test_add_predictions_with_uncertainties(sample_master_df):
-    """Test adding predictions and uncertainties."""
-    unlabeled_ids = (
-        sample_master_df.filter(pl.col('status') == STATUS_UNLABELED)
-        .get_column('ID')
-        .to_list()
-    )
-    compound_ids = unlabeled_ids[:2]
-    predictions = np.array([0.6, 0.7])
-    uncertainties = np.array([0.1, 0.15])
-
-    updated_df = add_predictions(
-        df=sample_master_df,
-        cycle=0,
-        compound_ids=compound_ids,
-        predictions=predictions,
-        uncertainties=uncertainties,
-    )
-
-    # Verify both columns created
-    assert 'prediction_cycle_0' in updated_df.columns
-    assert 'uncertainty_cycle_0' in updated_df.columns
-
-    # Verify uncertainty values set correctly
-    for i, comp_id in enumerate(compound_ids):
-        unc_val = updated_df.filter(pl.col('ID') == comp_id)['uncertainty_cycle_0'][0]
-        assert unc_val == uncertainties[i]
-
-
-def test_add_predictions_multiple_cycles(sample_master_df):
-    """Test adding predictions across multiple cycles."""
-    unlabeled_ids = (
-        sample_master_df.filter(pl.col('status') == STATUS_UNLABELED)
-        .get_column('ID')
-        .to_list()
-    )
-    target_id = unlabeled_ids[0]
-
-    # Add predictions for cycle 0
-    updated_df = add_predictions(
-        df=sample_master_df,
-        cycle=0,
-        compound_ids=[target_id],
-        predictions=np.array([0.5]),
-    )
-
-    # Add predictions for cycle 1
-    updated_df = add_predictions(
-        df=updated_df, cycle=1, compound_ids=[target_id], predictions=np.array([0.6])
-    )
-
-    # Add predictions for cycle 2
-    updated_df = add_predictions(
-        df=updated_df, cycle=2, compound_ids=[target_id], predictions=np.array([0.7])
-    )
-
-    # Verify all columns created
-    assert 'prediction_cycle_0' in updated_df.columns
-    assert 'prediction_cycle_1' in updated_df.columns
-    assert 'prediction_cycle_2' in updated_df.columns
-
-    # Verify prediction values for all cycles
-    assert updated_df.filter(pl.col('ID') == target_id)['prediction_cycle_0'][0] == 0.5
-    assert updated_df.filter(pl.col('ID') == target_id)['prediction_cycle_1'][0] == 0.6
-    assert updated_df.filter(pl.col('ID') == target_id)['prediction_cycle_2'][0] == 0.7
-
-
-def test_get_prediction_columns(sample_master_df):
-    """Test prediction column extraction."""
-    unlabeled_ids = (
-        sample_master_df.filter(pl.col('status') == STATUS_UNLABELED)
-        .get_column('ID')
-        .to_list()
-    )
-    target_id = unlabeled_ids[0]
-    # Add predictions for multiple cycles
-    updated_df = sample_master_df.clone()
-    for cycle in [0, 1, 2]:
-        updated_df = add_predictions(
-            df=updated_df,
-            cycle=cycle,
-            compound_ids=[target_id],
-            predictions=np.array([0.5]),
-            uncertainties=np.array([0.1]),
-        )
-
-    pred_cols, unc_cols = get_prediction_columns(updated_df)
-
-    # Verify correct columns returned
-    assert pred_cols == [
-        'prediction_cycle_0',
-        'prediction_cycle_1',
-        'prediction_cycle_2',
-    ]
-    assert unc_cols == [
-        'uncertainty_cycle_0',
-        'uncertainty_cycle_1',
-        'uncertainty_cycle_2',
-    ]
-
-
-def test_get_prediction_columns_no_predictions(sample_master_df):
-    """Test with no predictions."""
-    pred_cols, unc_cols = get_prediction_columns(sample_master_df)
-
-    # Verify empty lists returned
-    assert pred_cols == []
-    assert unc_cols == []
+# NOTE: tests for add_predictions / get_prediction_columns were removed
+# alongside the functions themselves. The master DataFrame is now narrow
+# (no per-cycle prediction columns); per-cycle predictions are exercised by
+# the parquet fixtures in tests/fixtures/master_dataframe.py and the cycle
+# integration tests in tests/core/test_cycle*.
 
 
 def test_validate_master_dataframe_valid(sample_master_df):
@@ -397,7 +258,8 @@ def test_immutability(sample_master_df):
     )
     target_id = unlabeled_ids[0]
 
-    # Call update functions
+    # Call update_status — verifies that immutable update pattern is preserved
+    # without mutating the input DataFrame.
     _ = update_status(
         df=sample_master_df,
         compound_ids=[target_id],
@@ -405,13 +267,6 @@ def test_immutability(sample_master_df):
         cycle=0,
         target_col='Activity',
         target_values=pd.Series([0.5], index=[target_id]),
-    )
-
-    _ = add_predictions(
-        df=sample_master_df,
-        cycle=0,
-        compound_ids=[target_id],
-        predictions=np.array([0.5]),
     )
 
     # Verify original DataFrame unchanged (compare column by column due to categorical dtype)
