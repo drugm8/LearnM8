@@ -7,7 +7,7 @@ channels:
 
 dependencies:
   # --- Python runtime ---
-  - python>=3.10,<3.13
+  - python=3.11
 
   # --- Core scientific computing ---
   - numpy>=1.24,<3.0
@@ -17,8 +17,9 @@ dependencies:
   - pyarrow>=15.0
 
   # --- Machine learning ---
-  - scikit-learn>=1.2,<2.0
+  - scikit-learn>=1.2,<1.8
   - xgboost>=1.7,<3.0
+  - statsmodels>=0.14
   - joblib>=1.2
 
   # --- Chemistry ---
