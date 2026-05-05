@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 import matplotlib.animation as animation
@@ -11,14 +12,35 @@ from .utils import detect_benchmark_mode
 logger = logging.getLogger(__name__)
 
 
-def load_csv_data(output_dir: str) -> dict[str, pl.DataFrame]:
-    """Load visualization data from CSV files.
+_PARQUET_PATTERN = re.compile(r'prediction_cycle_(\d+)\.parquet$')
+
+
+def _discover_prediction_parquets(output_dir: Path) -> list[tuple[int, Path]]:
+    """Discover all prediction parquet files in output_dir, sorted by cycle.
+
+    Returns a list of (cycle_number, path) tuples sorted by cycle number.
+    """
+    paths = []
+    for path in output_dir.glob('prediction_cycle_*.parquet'):
+        match = _PARQUET_PATTERN.search(path.name)
+        if match:
+            paths.append((int(match.group(1)), path))
+    paths.sort(key=lambda x: x[0])
+    return paths
+
+
+def load_csv_data(output_dir: str) -> dict:
+    """Load visualization data from CSV and parquet files.
 
     Args:
-        output_dir: Directory containing CSV output files
+        output_dir: Directory containing CSV output files and prediction parquets
 
     Returns:
-        Dictionary with 'predictions', 'metrics', and 'selections' DataFrames
+        Dictionary with:
+            - 'compounds': narrow master DataFrame from compounds_final.csv
+            - 'metrics': cycle_metrics DataFrame
+            - 'selections': selection_history DataFrame
+            - 'parquets': list of (cycle_number, Path) for prediction parquets
 
     Raises:
         FileNotFoundError: If required files are missing
@@ -27,11 +49,11 @@ def load_csv_data(output_dir: str) -> dict[str, pl.DataFrame]:
 
     data = {}
 
-    predictions_file = output_path / 'compounds_final.csv'
-    if predictions_file.exists():
-        data['predictions'] = pl.read_csv(predictions_file, comment_prefix='#')
+    compounds_file = output_path / 'compounds_final.csv'
+    if compounds_file.exists():
+        data['compounds'] = pl.read_csv(compounds_file, comment_prefix='#')
     else:
-        raise FileNotFoundError(f"Required file not found: {predictions_file}")
+        raise FileNotFoundError(f"Required file not found: {compounds_file}")
 
     metrics_file = output_path / 'cycle_metrics.csv'
     if metrics_file.exists():
@@ -45,6 +67,13 @@ def load_csv_data(output_dir: str) -> dict[str, pl.DataFrame]:
     else:
         logger.warning(f"Selection history not found: {selection_file}")
         data['selections'] = pl.DataFrame()
+
+    data['parquets'] = _discover_prediction_parquets(output_path)
+    if not data['parquets']:
+        raise FileNotFoundError(
+            f"No prediction parquet files found in {output_path}. "
+            f"Expected prediction_cycle_*.parquet (post-migration format)."
+        )
 
     return data
 
@@ -87,21 +116,19 @@ def create_dashboard_animation_from_csv(
 ) -> animation.Animation:
     data = load_csv_data(output_dir)
 
-    predictions_df = data['predictions']
+    compounds_df = data['compounds']
     metrics_df = data['metrics']
     selections_df = data['selections']
+    parquets: list[tuple[int, Path]] = data['parquets']
 
     is_benchmark = detect_benchmark_mode(metrics_df)
 
-    # Get prediction and uncertainty columns
-    pred_cols = [col for col in predictions_df.columns if col.startswith('prediction_cycle_')]
-    unc_cols = [col for col in predictions_df.columns if col.startswith('uncertainty_cycle_')]
-
-    # Detect target column (oracle values) by elimination
+    # Detect target column (oracle values) by elimination — narrow master DF
+    # has only the system columns plus the target column.
     system_cols = {'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle'}
     target_col = None
-    for col in predictions_df.columns:
-        if col not in system_cols and not col.startswith('prediction_cycle_') and not col.startswith('uncertainty_cycle_'):
+    for col in compounds_df.columns:
+        if col not in system_cols:
             target_col = col
             break
 
@@ -110,27 +137,38 @@ def create_dashboard_animation_from_csv(
     else:
         logger.info(f"Detected target column: {target_col}")
 
-    n_cycles = len(pred_cols)
+    n_cycles = len(parquets)
     if n_cycles == 0:
         raise ValueError("No prediction cycles found in data")
 
     logger.info(f"Creating animation for {n_cycles} cycles (benchmark mode: {is_benchmark})")
 
-    # Compute global ranges for consistent axis scaling
+    # Compute global axis ranges via lazy scan over each parquet, one at a time,
+    # so we never materialise all cycles' predictions at once.
     global_pred_min = float('inf')
     global_pred_max = float('-inf')
     global_unc_max = 0.0
 
-    for pred_col in pred_cols:
-        valid_preds = predictions_df.get_column(pred_col).drop_nulls().to_numpy()
-        if len(valid_preds) > 0:
-            global_pred_min = min(global_pred_min, valid_preds.min())
-            global_pred_max = max(global_pred_max, valid_preds.max())
-
-    for unc_col in unc_cols:
-        valid_uncs = predictions_df.get_column(unc_col).drop_nulls().to_numpy()
-        if len(valid_uncs) > 0:
-            global_unc_max = max(global_unc_max, valid_uncs.max())
+    for _, parquet_path in parquets:
+        agg = (
+            pl.scan_parquet(parquet_path)
+            .select([
+                pl.col('prediction').min().alias('pmin'),
+                pl.col('prediction').max().alias('pmax'),
+                pl.col('uncertainty').max().alias('umax')
+                if 'uncertainty' in pl.scan_parquet(parquet_path).collect_schema().names()
+                else pl.lit(None).alias('umax'),
+            ])
+            .collect()
+        )
+        if agg.height > 0:
+            row = agg.row(0, named=True)
+            if row['pmin'] is not None:
+                global_pred_min = min(global_pred_min, float(row['pmin']))
+            if row['pmax'] is not None:
+                global_pred_max = max(global_pred_max, float(row['pmax']))
+            if row.get('umax') is not None:
+                global_unc_max = max(global_unc_max, float(row['umax']))
 
     if global_pred_min == float('inf'):
         global_pred_min = 0.0
@@ -259,16 +297,20 @@ def create_dashboard_animation_from_csv(
     def update(cycle_idx):
         nonlocal metric_text, regression_line
 
-        cycle_col = pred_cols[cycle_idx]
-        cycle_num = int(cycle_col.split('_')[-1])
+        cycle_num, parquet_path = parquets[cycle_idx]
 
-        # Extract predictions to numpy
-        predictions = predictions_df.get_column(cycle_col).to_numpy()
+        # Lazy scan: load only this cycle's predictions, never all cycles at once.
+        cycle_lf = pl.scan_parquet(parquet_path)
+        cycle_schema = cycle_lf.collect_schema().names()
+        select_cols = ['prediction']
+        if 'uncertainty' in cycle_schema:
+            select_cols.append('uncertainty')
+        cycle_df = cycle_lf.select(select_cols).collect()
+        predictions = cycle_df.get_column('prediction').to_numpy()
 
         # Panel A: Uncertainty vs Prediction scatter
-        if cycle_idx < len(unc_cols):
-            unc_col = unc_cols[cycle_idx]
-            uncertainties = predictions_df.get_column(unc_col).to_numpy()
+        if 'uncertainty' in cycle_df.columns:
+            uncertainties = cycle_df.get_column('uncertainty').to_numpy()
 
             valid_mask = ~np.isnan(predictions) & ~np.isnan(uncertainties)
             pred_clean = predictions[valid_mask]
@@ -333,7 +375,7 @@ def create_dashboard_animation_from_csv(
         cumul_ratio_values = get_metric_values('cumulative_avg_score_ratio', 1.0)
 
         # Calculate percentage explored for x-axis coordinates
-        n_total = predictions_df.height
+        n_total = compounds_df.height
         pct_explored = []
         if 'cumulative_labeled' in metrics_df.columns:
             cumulative_values = metrics_df.head(cycle_idx + 1).get_column('cumulative_labeled').to_numpy()
@@ -380,8 +422,8 @@ def create_dashboard_animation_from_csv(
                 pct_range = pct_explored[:cycle_num + 1]
                 ax3.plot(pct_range, cumulative_best, 'b-', linewidth=2, marker='o', markersize=4, label='Best Found')
 
-                if target_col and target_col in predictions_df.columns:
-                    true_best = predictions_df.get_column(target_col).min()
+                if target_col and target_col in compounds_df.columns:
+                    true_best = compounds_df.get_column(target_col).min()
                     if true_best is not None and not np.isnan(true_best):
                         ax3.axhline(y=true_best, color='g', linestyle='--', linewidth=2, alpha=0.7, label='True Best')
 

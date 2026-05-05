@@ -349,39 +349,52 @@ def load_cached_results_for_models(data_dir, models_dict, models_to_skip):
 # ── Analysis ─────────────────────────────────────────────────────────────────
 
 def extract_predictions_uncertainties(results, target_col):
-    """Extract all predictions and uncertainties from experiment results."""
+    """Extract all predictions and uncertainties from experiment results.
+
+    Predictions live in per-cycle parquet files under ``results['output_dir']``;
+    we lazy-scan one cycle at a time and join with the master DataFrame to get
+    target values and selected_cycle, so we never materialise all predictions
+    at once.
+    """
     compounds_df = results['compounds_df']
-
-    pred_cols = [c for c in compounds_df.columns if c.startswith('prediction_cycle_')]
-    unc_cols = [c for c in compounds_df.columns if c.startswith('uncertainty_cycle_')]
-
-    if not pred_cols or not unc_cols:
+    output_dir = results.get('output_dir')
+    if output_dir is None:
         return None
+    output_dir = Path(output_dir)
 
-    cycles = sorted([int(c.split('_')[-1]) for c in pred_cols])
+    parquet_paths = sorted(
+        output_dir.glob('prediction_cycle_*.parquet'),
+        key=lambda p: int(p.stem.split('_')[-1]),
+    )
+    if not parquet_paths:
+        return None
 
     per_cycle = {}
 
-    for cycle in cycles:
-        pred_col = f'prediction_cycle_{cycle}'
-        unc_col = f'uncertainty_cycle_{cycle}'
+    for parquet_path in parquet_paths:
+        cycle = int(parquet_path.stem.split('_')[-1])
 
-        # Exclude compounds already in the training set at cycle N.
-        # selected_cycle < cycle means the compound was labeled before this cycle's
-        # predictions were made (i.e., it was in-sample). selected_cycle = None means
-        # never selected (unlabeled pool) — always out-of-sample.
-        cycle_df = compounds_df.filter(
-            pl.col(pred_col).is_not_null() &
-            pl.col(unc_col).is_not_null() &
-            pl.col(target_col).is_not_null() &
-            (pl.col('selected_cycle').is_null() | (pl.col('selected_cycle') >= cycle))
+        cycle_lf = pl.scan_parquet(parquet_path)
+        if 'uncertainty' not in cycle_lf.collect_schema().names():
+            continue
+
+        # Out-of-sample compounds at cycle N: selected_cycle is null or >= cycle.
+        oos_compounds = compounds_df.filter(
+            pl.col(target_col).is_not_null()
+            & (pl.col('selected_cycle').is_null() | (pl.col('selected_cycle') >= cycle))
+        ).select(['ID', target_col])
+
+        cycle_df = (
+            cycle_lf.collect()
+            .filter(pl.col('prediction').is_not_null() & pl.col('uncertainty').is_not_null())
+            .join(oos_compounds, on='ID', how='inner')
         )
 
         if len(cycle_df) == 0:
             continue
 
-        preds = cycle_df[pred_col].to_numpy().astype(float)
-        uncs = cycle_df[unc_col].to_numpy().astype(float)
+        preds = cycle_df['prediction'].to_numpy().astype(float)
+        uncs = cycle_df['uncertainty'].to_numpy().astype(float)
         truth = cycle_df[target_col].to_numpy().astype(float)
 
         mask = np.isfinite(preds) & np.isfinite(uncs) & np.isfinite(truth) & (uncs > 0)
