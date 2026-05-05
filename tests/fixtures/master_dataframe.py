@@ -1,10 +1,9 @@
 """Master DataFrame fixtures for LearnM8 tests.
 
-Provides fixtures representing different states of the master DataFrame
-during active learning cycles:
-- Initialized with initial labeled compounds
-- With predictions for unlabeled compounds
-- Multi-cycle simulations
+After the parquet migration, predictions live in per-cycle parquet files
+rather than columns on the master DataFrame. The fixtures here build the
+narrow master DataFrame and, where useful, write companion parquet files
+into a tmp_path so tests can exercise the parquet read path.
 
 CRITICAL: create_initialized_master_df() helper function is used by 50+ tests.
 Preserve exact signature and behavior during refactoring.
@@ -77,17 +76,32 @@ def sample_master_df(sample_compounds) -> pl.DataFrame:
     )
 
 
-@pytest.fixture
-def master_df_with_predictions(sample_master_df) -> pl.DataFrame:
-    """Create master DataFrame with cycle 0 predictions.
+def _write_predictions_parquet(
+    output_dir, cycle: int, compound_ids, predictions, uncertainties
+):
+    """Write a prediction parquet file using the production helper.
 
-    Adds predictions for unlabeled compounds (indices 3-10) with both
-    predictions and uncertainties.
-
-    Depends on: sample_master_df
+    Used by fixtures that previously added prediction columns to the master DF.
     """
-    from learnm8.core.dataframe_ops import add_predictions
+    from learnm8.core.persistence import write_cycle_predictions
 
+    cycle_predictions = pl.DataFrame({
+        'ID': list(compound_ids),
+        'prediction': predictions,
+        'uncertainty': uncertainties,
+    })
+    return write_cycle_predictions(cycle_predictions, output_dir, cycle)
+
+
+@pytest.fixture
+def master_df_with_predictions(sample_master_df, tmp_path):
+    """Master DataFrame plus a cycle-0 prediction parquet file.
+
+    Returns a (master_df, output_dir) tuple. The master DF is the narrow
+    post-migration shape; predictions live in ``output_dir/prediction_cycle_0.parquet``.
+
+    Depends on: sample_master_df, tmp_path
+    """
     master_df = sample_master_df.clone()
 
     unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
@@ -97,44 +111,32 @@ def master_df_with_predictions(sample_master_df) -> pl.DataFrame:
     predictions = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
     uncertainties = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
 
-    return add_predictions(
-        df=master_df,
-        cycle=0,
-        compound_ids=unlabeled_ids,
-        predictions=predictions,
-        uncertainties=uncertainties
-    )
+    _write_predictions_parquet(tmp_path, 0, unlabeled_ids, predictions, uncertainties)
+    return master_df, tmp_path
 
 
 @pytest.fixture
-def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
-    """Create master DataFrame with 3 cycles of predictions.
+def master_df_multi_cycle(sample_master_df, tmp_path):
+    """Master DataFrame plus prediction parquet files across two cycles.
 
-    Simulates 3 cycles with predictions, uncertainties, and status updates
-    for compounds labeled in cycles 0, 1, 2.
+    Returns a (master_df, output_dir) tuple. Each cycle's predictions are
+    written to ``output_dir/prediction_cycle_{N}.parquet`` and the master DF
+    captures the resulting status updates.
 
-    Depends on: sample_master_df
+    Depends on: sample_master_df, tmp_path
     """
-    from learnm8.core.dataframe_ops import add_predictions, update_status
+    from learnm8.core.dataframe_ops import update_status
 
     master_df = sample_master_df.clone()
 
     np.random.seed(42)
 
-    # Cycle 0: predict all unlabeled, label 1
     unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
     unlabeled_ids = unlabeled.get_column('ID').to_list()
 
     predictions_0 = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
     uncertainties_0 = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
-
-    master_df = add_predictions(
-        df=master_df,
-        cycle=0,
-        compound_ids=unlabeled_ids,
-        predictions=predictions_0,
-        uncertainties=uncertainties_0
-    )
+    _write_predictions_parquet(tmp_path, 0, unlabeled_ids, predictions_0, uncertainties_0)
 
     selected_ids_0 = unlabeled_ids[:1]
     target_values_0 = dict(zip(selected_ids_0, [0.45]))
@@ -147,21 +149,13 @@ def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
         target_values=target_values_0
     )
 
-    # Cycle 1: predict remaining unlabeled, label 1
     unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
     unlabeled_ids = unlabeled.get_column('ID').to_list()
 
     if len(unlabeled_ids) > 0:
         predictions_1 = np.random.uniform(0.3, 0.9, len(unlabeled_ids))
         uncertainties_1 = np.random.uniform(0.1, 0.25, len(unlabeled_ids))
-
-        master_df = add_predictions(
-            df=master_df,
-            cycle=1,
-            compound_ids=unlabeled_ids,
-            predictions=predictions_1,
-            uncertainties=uncertainties_1
-        )
+        _write_predictions_parquet(tmp_path, 1, unlabeled_ids, predictions_1, uncertainties_1)
 
         selected_ids_1 = unlabeled_ids[:1]
         target_values_1 = dict(zip(selected_ids_1, [0.65]))
@@ -174,4 +168,4 @@ def master_df_multi_cycle(sample_master_df) -> pl.DataFrame:
             target_values=target_values_1
         )
 
-    return master_df
+    return master_df, tmp_path

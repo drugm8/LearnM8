@@ -11,16 +11,12 @@ Key features:
 - Comprehensive logging for debugging
 
 Performance characteristics:
-- add_predictions: O(n) using join-based mapping
 - update_status: O(n) using vectorized expressions
 - get_compounds_by_status: O(n) filtering, returns view
-- batch_update: Single clone for multiple operations
 """
 
 import logging
-from typing import Any
 
-import numpy as np
 import pandas as pd
 import polars as pl
 
@@ -29,119 +25,6 @@ from learnm8.utils.polars_utils import map_values_via_join
 from .data_structures import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
-
-
-def _add_predictions_inplace(
-    df: pl.DataFrame,
-    cycle: int,
-    compound_ids: list[str],
-    predictions: np.ndarray,
-    uncertainties: np.ndarray | None = None
-) -> pl.DataFrame:
-    """Add predictions and uncertainties for a cycle in-place (modifies df).
-
-    Private helper for batch operations. Modifies df in-place without copying.
-
-    Args:
-        df: Master DataFrame to modify in-place
-        cycle: Current cycle number
-        compound_ids: List of compound IDs corresponding to predictions
-        predictions: Array of prediction values (same length as compound_ids)
-        uncertainties: Optional array of uncertainty values (same length as compound_ids)
-
-    Returns:
-        The same DataFrame (modified in-place)
-    """
-    if len(compound_ids) != len(predictions):
-        raise ValueError(
-            f"compound_ids and predictions must have the same length: "
-            f"{len(compound_ids)} IDs vs {len(predictions)} predictions. "
-            f"Ensure the learner returned predictions for all input compounds."
-        )
-    if uncertainties is not None and len(uncertainties) != len(compound_ids):
-        raise ValueError(
-            f"uncertainties length ({len(uncertainties)}) must match "
-            f"compound_ids length ({len(compound_ids)}). "
-            f"Ensure the learner returned uncertainties for all input compounds."
-        )
-    if len(set(compound_ids)) != len(compound_ids):
-        raise ValueError(
-            f"compound_ids contains {len(compound_ids) - len(set(compound_ids))} duplicates. "
-            f"Each compound ID must appear exactly once in the prediction batch."
-        )
-
-    logger.debug(f"Adding predictions for {len(compound_ids)} compounds in cycle {cycle}")
-
-    pred_col = f'prediction_cycle_{cycle}'
-    unc_col = f'uncertainty_cycle_{cycle}' if uncertainties is not None else None
-    logger.debug(f"Prediction column: {pred_col}, uncertainty column: {unc_col}")
-
-    if pred_col not in df.columns:
-        df = df.with_columns(pl.lit(None).cast(pl.Float64).alias(pred_col))
-
-    id_to_pred = dict(zip(compound_ids, predictions.tolist()))
-    df = map_values_via_join(df, id_to_pred, 'ID', pred_col)
-
-    if uncertainties is not None:
-        unc_col = f'uncertainty_cycle_{cycle}'
-        if unc_col not in df.columns:
-            df = df.with_columns(pl.lit(None).cast(pl.Float64).alias(unc_col))
-
-        id_to_unc = dict(zip(compound_ids, uncertainties.tolist()))
-        df = map_values_via_join(df, id_to_unc, 'ID', unc_col)
-
-    return df
-
-
-def add_predictions(
-    df: pl.DataFrame,
-    cycle: int,
-    compound_ids: list[str],
-    predictions: np.ndarray,
-    uncertainties: np.ndarray | None = None
-) -> pl.DataFrame:
-    """Add predictions and uncertainties for a cycle using vectorized operations.
-
-    Uses join-based mapping for 10-50x performance improvement over pandas,
-    especially for large DataFrames.
-
-    Args:
-        df: Master DataFrame to update
-        cycle: Current cycle number
-        compound_ids: List of compound IDs corresponding to predictions
-        predictions: Array of prediction values (same length as compound_ids)
-        uncertainties: Optional array of uncertainty values (same length as compound_ids)
-
-    Returns:
-        Updated DataFrame (new copy)
-
-    Raises:
-        ValueError: If compound_ids and predictions have different lengths
-        ValueError: If uncertainties length doesn't match compound_ids length
-        ValueError: If compound_ids contains duplicates
-
-    Performance:
-        - O(n) complexity using join-based mapping
-        - 10-50x faster than pandas .map() for large dictionaries
-        - Single pass through data for each column update
-
-    Note:
-        - Creates a single copy of the DataFrame
-        - Prediction/uncertainty columns are created with Float64 dtype
-        - Uncertainty column is only created when uncertainties are provided
-
-    Example:
-        >>> predictions = np.array([0.5, 0.6, 0.7])
-        >>> uncertainties = np.array([0.1, 0.15, 0.2])
-        >>> updated_df = add_predictions(
-        ...     df, cycle=0, compound_ids=['C1', 'C2', 'C3'],
-        ...     predictions=predictions, uncertainties=uncertainties
-        ... )
-        >>> print(updated_df.filter(pl.col('ID') == 'C1').get_column('prediction_cycle_0')[0])
-        0.5
-    """
-    df = df.clone()
-    return _add_predictions_inplace(df, cycle, compound_ids, predictions, uncertainties)
 
 
 def _update_status_inplace(
@@ -336,52 +219,3 @@ def get_compounds_by_status(
         return filtered.select(columns)
     else:
         return filtered
-
-
-def batch_update(
-    df: pl.DataFrame,
-    updates: dict[str, Any]
-) -> pl.DataFrame:
-    """Apply multiple updates to DataFrame in a single operation.
-
-    More efficient than separate calls - creates single DataFrame copy instead of
-    multiple copies for each update operation.
-
-    Args:
-        df: Master DataFrame to update
-        updates: Dictionary with update specifications:
-            - 'predictions': Tuple of (cycle, compound_ids, predictions, uncertainties)
-            - 'status': Tuple of (compound_ids, new_status, cycle, target_col, target_values)
-
-    Returns:
-        Updated DataFrame (new copy)
-
-    Performance:
-        - Creates only one DataFrame copy regardless of number of operations
-        - 2x+ efficiency gain for combined operations
-
-    Example:
-        >>> # Apply both prediction and status updates together
-        >>> updates = {
-        ...     'predictions': (0, ['C1', 'C2'], np.array([0.5, 0.6]), np.array([0.1, 0.15])),
-        ...     'status': (['C1', 'C2'], 'labeled', 0, 'Activity', pl.Series('ID', ['C1', 'C2']))
-        ... }
-        >>> updated_df = batch_update(df, updates)
-
-        >>> # Apply only predictions
-        >>> updates = {
-        ...     'predictions': (1, ['C3'], np.array([0.7]), None)
-        ... }
-        >>> updated_df = batch_update(df, updates)
-    """
-    df = df.clone()
-
-    if 'predictions' in updates:
-        cycle, compound_ids, predictions, uncertainties = updates['predictions']
-        df = _add_predictions_inplace(df, cycle, compound_ids, predictions, uncertainties)
-
-    if 'status' in updates:
-        compound_ids, new_status, cycle, target_col, target_values = updates['status']
-        df = _update_status_inplace(df, compound_ids, new_status, cycle, target_col, target_values)
-
-    return df

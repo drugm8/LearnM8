@@ -49,7 +49,8 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
         cycle_1_labeled = updated_df.filter(pl.col('labeled_cycle') == 1)
@@ -61,7 +62,10 @@ class TestExecuteCycle:
         total_labeled = (updated_df['status'] == 'labeled').sum()
         assert total_labeled == 2
 
-        assert 'prediction_cycle_1' in updated_df.columns
+        # Master DF stays narrow; predictions live in the cycle parquet.
+        assert 'prediction_cycle_1' not in updated_df.columns
+        assert metrics['parquet_path'] == tmp_path / 'prediction_cycle_1.parquet'
+        assert metrics['parquet_path'].exists()
         assert metrics['cycle'] == 1
         assert metrics['strategy'] == 'greedy'
 
@@ -110,11 +114,14 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
         assert len(updated_df) == len(master_df)
-        assert 'prediction_cycle_1' in updated_df.columns
+        assert 'prediction_cycle_1' not in updated_df.columns
+        assert metrics['parquet_path'] == tmp_path / 'prediction_cycle_1.parquet'
+        assert metrics['parquet_path'].exists()
         assert metrics['cycle'] == 1
         assert metrics['strategy'] == 'greedy'
         assert metrics['selected_count'] > 0
@@ -161,11 +168,13 @@ class TestExecuteCycle:
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
             mode='benchmark',
-            original_pool=sample_compounds
+            original_pool=sample_compounds,
+            output_dir=tmp_path,
         )
 
-        pred_col = 'prediction_cycle_0'
-        pred_count = (~updated_df[pred_col].is_null()).sum()
+        # Predictions are now in parquet, not on the master DF.
+        cycle_predictions = pl.read_parquet(metrics['parquet_path'])
+        pred_count = cycle_predictions.height
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         assert pred_count == unlabeled_count
@@ -619,11 +628,12 @@ class TestEdgeCaseHandling:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=100,
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
-        assert 'prediction_cycle_0' in updated_df.columns
-        pred_col = 'prediction_cycle_0'
-        pred_values = updated_df[pred_col].drop_nulls().to_numpy()
+        # Predictions are now persisted to parquet rather than the master DF.
+        cycle_predictions = pl.read_parquet(metrics['parquet_path'])
+        pred_values = cycle_predictions['prediction'].drop_nulls().to_numpy()
         assert np.all(np.isinf(pred_values))
         assert metrics['selected_count'] > 0

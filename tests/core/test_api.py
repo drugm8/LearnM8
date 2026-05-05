@@ -11,8 +11,8 @@ Validates results structure:
 - compounds_df
 - cycle_metrics
 - saved_files
-- labeled_data
-- unlabeled_data
+- prediction_files
+- labeled_count / unlabeled_count
 - validation_result
 """
 
@@ -52,18 +52,20 @@ class TestAPIBasicSimple:
         assert 'compounds_df' in results
         assert 'cycle_metrics' in results
         assert 'saved_files' in results
-        assert 'labeled_data' in results
-        assert 'unlabeled_data' in results
+        assert 'prediction_files' in results
+        assert 'labeled_count' in results
+        assert 'unlabeled_count' in results
         assert 'validation_result' in results
 
         assert isinstance(results['compounds_df'], pl.DataFrame)
         assert isinstance(results['cycle_metrics'], list)
         assert isinstance(results['saved_files'], dict)
-        assert isinstance(results['labeled_data'], pl.DataFrame)
-        assert isinstance(results['unlabeled_data'], pl.DataFrame)
+        assert isinstance(results['prediction_files'], list)
+        assert isinstance(results['labeled_count'], int)
+        assert isinstance(results['unlabeled_count'], int)
 
         assert len(results['cycle_metrics']) == 1
-        assert len(results['labeled_data']) > 0
+        assert results['labeled_count'] > 0
         assert output_dir.exists()
 
     def test_simple_api_runs_with_explicit_random_strategy(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
@@ -202,7 +204,7 @@ class TestAPIAdvancedCycleConfig:
         )
 
         assert len(results['cycle_metrics']) == 4
-        assert len(results['labeled_data']) > 0
+        assert results['labeled_count'] > 0
 
 
 @pytest.mark.slow
@@ -556,8 +558,8 @@ class TestAPIResultsStructure:
         assert 'has_uncertainty' in cycle_metrics[0]
         assert cycle_metrics[0]['has_uncertainty'] is False
 
-    def test_labeled_data_accessor_returns_only_labeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test labeled_data convenience accessor."""
+    def test_labeled_count_reflects_labeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        """Test labeled_count results-dict key matches the labeled rows in compounds_df."""
         output_dir = tmp_path / "labeled_accessor_test"
 
         results = run_active_learning(
@@ -573,13 +575,13 @@ class TestAPIResultsStructure:
             random_state=42
         )
 
-        labeled_data = results['labeled_data']
-        assert isinstance(labeled_data, pl.DataFrame)
-        assert len(labeled_data) > 0
-        assert all(labeled_data['status'] == 'labeled')
+        compounds_df = results['compounds_df']
+        labeled = compounds_df.filter(pl.col('status') == 'labeled')
+        assert results['labeled_count'] == labeled.height
+        assert results['labeled_count'] > 0
 
-    def test_unlabeled_data_accessor_returns_only_unlabeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
-        """Test unlabeled_data convenience accessor."""
+    def test_unlabeled_count_reflects_unlabeled_rows(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
+        """Test unlabeled_count results-dict key matches the unlabeled rows in compounds_df."""
         output_dir = tmp_path / "unlabeled_accessor_test"
 
         results = run_active_learning(
@@ -595,9 +597,9 @@ class TestAPIResultsStructure:
             random_state=42
         )
 
-        unlabeled_data = results['unlabeled_data']
-        assert isinstance(unlabeled_data, pl.DataFrame)
-        assert all(unlabeled_data['status'] == 'unlabeled')
+        compounds_df = results['compounds_df']
+        unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled')
+        assert results['unlabeled_count'] == unlabeled.height
 
     def test_results_include_validation_result_with_expected_attributes(self, tmp_path, sample_compounds, mock_learner, mock_oracle):
         """Test validation_result structure."""
