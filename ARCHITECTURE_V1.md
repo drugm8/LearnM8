@@ -6,6 +6,18 @@
 **Date:** 2025-10-31
 **Status:** Stable
 
+> **Note (feature 008-parquet-files, 2026-05-05):** Pseudocode examples in
+> sections 8 and 9 below were written for the original v1 design where
+> per-cycle predictions accumulated as `prediction_cycle_N` /
+> `uncertainty_cycle_N` columns on the master DataFrame. The current
+> implementation persists predictions to per-cycle parquet files
+> (`prediction_cycle_N.parquet`) under the output directory and joins them
+> in transiently during selection/evaluation; the master DataFrame stays at
+> a constant 8 columns regardless of cycle count. See
+> `specs/008-parquet-files/spec.md` for the canonical data flow. The
+> pseudocode in this document is retained as a historical reference and
+> should not be used as a literal template.
+
 ---
 
 ## Table of Contents
@@ -655,18 +667,14 @@ Columns:
 │   ├── selected_cycle: When first selected (Int64, nullable)
 │   └── pruned_cycle: When pruned (Int64, nullable)
 │
-├── Target Values
-│   └── {target_col}: Actual measurement (e.g., 'Activity', 'pIC50')
-│
-├── Predictions (added dynamically each cycle)
-│   ├── prediction_cycle_0
-│   ├── prediction_cycle_1
-│   └── ...
-│
-└── Uncertainties (added dynamically each cycle)
-    ├── uncertainty_cycle_0
-    ├── uncertainty_cycle_1
-    └── ...
+└── Target Values
+    └── {target_col}: Actual measurement (e.g., 'Activity', 'pIC50')
+
+Note: Master DataFrame width is constant at 8 columns (7 base + target).
+Per-cycle predictions and uncertainties are persisted to separate parquet
+files (`prediction_cycle_N.parquet`, schema `[ID: Utf8, prediction: Float64,
+uncertainty: Float64|null]`) under the experiment's output directory rather
+than added as DataFrame columns. See feature 008-parquet-files.
 ```
 
 **Initialization Code:**
@@ -1431,8 +1439,7 @@ def _save_compounds_df(compounds_df: pd.DataFrame, path: Path):
         f.write("# - ID, SMILES: Compound identifiers\n")
         f.write("# - status: labeled/unlabeled/pruned\n")
         f.write("# - *_cycle: Cycle when event occurred (0 = initial)\n")
-        f.write("# - prediction_cycle_N: Predictions from cycle N\n")
-        f.write("# - uncertainty_cycle_N: Uncertainties from cycle N\n")
+        f.write("# - Predictions: stored in prediction_cycle_N.parquet files\n")
         f.write("# \n")
 
         # Write DataFrame

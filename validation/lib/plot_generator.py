@@ -8,7 +8,25 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from learnm8.core.persistence import prediction_parquet_path
 from learnm8.visualization import create_dashboard_animation_from_csv
+
+logger = logging.getLogger(__name__)
+
+
+def _scan_cycle_predictions(
+    output_dir: Optional[Path], cycle: int
+) -> Optional[pl.DataFrame]:
+    """Lazy-scan a cycle's prediction parquet, returning the collected DataFrame.
+
+    Returns None if output_dir is None or the parquet does not exist.
+    """
+    if output_dir is None:
+        return None
+    path = prediction_parquet_path(Path(output_dir), cycle)
+    if not path.exists():
+        return None
+    return pl.scan_parquet(path).collect()
 
 
 def create_comprehensive_validation_plot(
@@ -25,14 +43,16 @@ def create_comprehensive_validation_plot(
 
     df = result['compounds_df']
     cycle_metrics_df = pl.DataFrame(result['cycle_metrics'])
+    output_dir = result.get('output_dir')
+    if output_dir is not None:
+        output_dir = Path(output_dir)
 
-    # Auto-detect learner capabilities from data
+    # Auto-detect learner capabilities from a sample cycle's parquet (lazy scan).
     has_uncertainty = False
     sample_cycle = 1
-    pred_col = f'prediction_cycle_{sample_cycle}'
-    unc_col = f'uncertainty_cycle_{sample_cycle}'
-    if pred_col in df.columns and unc_col in df.columns:
-        has_uncertainty = len(df[unc_col].drop_nulls()) > 0
+    sample_df = _scan_cycle_predictions(output_dir, sample_cycle)
+    if sample_df is not None and 'uncertainty' in sample_df.columns:
+        has_uncertainty = sample_df['uncertainty'].drop_nulls().len() > 0
 
     # Auto-detect pruning from metrics
     has_pruning = False
@@ -81,24 +101,21 @@ def create_comprehensive_validation_plot(
             row, col = subplot_positions[idx]
             ax = fig.add_subplot(gs[row, col])
 
-            pred_col = f'prediction_cycle_{cycle}'
-            unc_col = f'uncertainty_cycle_{cycle}'
-
-            if pred_col not in df.columns or unc_col not in df.columns:
+            cycle_predictions = _scan_cycle_predictions(output_dir, cycle)
+            if cycle_predictions is None or 'uncertainty' not in cycle_predictions.columns:
                 ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
                        ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(f'Cycle {cycle}')
                 continue
 
-            # Get all compounds with predictions at this cycle (labeled or unlabeled)
-            compounds_with_pred = df.filter(
-                pl.col(pred_col).is_not_null() & pl.col(unc_col).is_not_null()
+            compounds_with_pred = cycle_predictions.filter(
+                pl.col('prediction').is_not_null() & pl.col('uncertainty').is_not_null()
             )
 
             # Plot all compounds as density hexbin (no subsampling)
             hb = ax.hexbin(
-                compounds_with_pred[pred_col].to_numpy(),
-                compounds_with_pred[unc_col].to_numpy(),
+                compounds_with_pred['prediction'].to_numpy(),
+                compounds_with_pred['uncertainty'].to_numpy(),
                 gridsize=50,           # Balance between detail and performance
                 cmap='Greys',          # Neutral, shows density clearly
                 mincnt=1,              # Show even single points
@@ -109,14 +126,19 @@ def create_comprehensive_validation_plot(
                 zorder=1               # Behind selected points
             )
 
-            selected_this_cycle = df.filter(
-                (pl.col('status') == 'labeled') & (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+            selected_this_cycle = (
+                df.filter(
+                    (pl.col('status') == 'labeled')
+                    & (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+                )
+                .select(['ID'])
+                .join(cycle_predictions, on='ID', how='inner')
             )
 
             if len(selected_this_cycle) > 0:
                 ax.scatter(
-                    selected_this_cycle[pred_col].to_numpy(),
-                    selected_this_cycle[unc_col].to_numpy(),
+                    selected_this_cycle['prediction'].to_numpy(),
+                    selected_this_cycle['uncertainty'].to_numpy(),
                     c='#7e62df',
                     alpha=0.75,
                     s=35,
@@ -139,16 +161,14 @@ def create_comprehensive_validation_plot(
             row, col = subplot_positions[idx]
             ax = fig.add_subplot(gs[row, col])
 
-            pred_col = f'prediction_cycle_{cycle}'
-
-            if pred_col not in df.columns:
+            cycle_predictions = _scan_cycle_predictions(output_dir, cycle)
+            if cycle_predictions is None:
                 ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
                        ha='center', va='center', transform=ax.transAxes)
                 ax.set_title(f'Cycle {cycle}')
                 continue
 
-            # Get all compounds with predictions at this cycle
-            compounds_with_pred = df.filter(pl.col(pred_col).is_not_null())
+            compounds_with_pred = cycle_predictions.filter(pl.col('prediction').is_not_null())
 
             if len(compounds_with_pred) == 0:
                 ax.text(0.5, 0.5, f'No predictions\nfor cycle {cycle}',
@@ -156,12 +176,16 @@ def create_comprehensive_validation_plot(
                 ax.set_title(f'Cycle {cycle}')
                 continue
 
-            all_predictions = compounds_with_pred[pred_col].to_numpy()
+            all_predictions = compounds_with_pred['prediction'].to_numpy()
 
-            # Get selected compounds in this specific cycle
-            selected_this_cycle = df.filter(
-                (pl.col('status') == 'labeled') &
-                (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+            # Selected compounds in this cycle, joined to recover their predictions
+            selected_this_cycle = (
+                df.filter(
+                    (pl.col('status') == 'labeled')
+                    & (pl.col('selected_cycle').cast(pl.Int64) == cycle)
+                )
+                .select(['ID'])
+                .join(cycle_predictions.select(['ID', 'prediction']), on='ID', how='inner')
             )
 
             # Create horizontal violin plot
@@ -178,7 +202,7 @@ def create_comprehensive_validation_plot(
 
             # Show selected predictions as a rug plot or strip
             if len(selected_this_cycle) > 0:
-                selected_preds = selected_this_cycle[pred_col].to_numpy()
+                selected_preds = selected_this_cycle['prediction'].to_numpy()
 
                 # Add jitter to y-position for better visibility
                 n_selected = len(selected_preds)
@@ -322,7 +346,7 @@ def create_comprehensive_validation_plot(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Comprehensive validation plot saved: {output_path.resolve()}")
+    logger.info("Comprehensive validation plot saved: %s", output_path.resolve())
     return output_path
 
 
@@ -337,7 +361,7 @@ def create_animations(
     param_values = strategy_config['param_values']
     strategy_name = strategy_config['name']
 
-    print(f"\n  Creating animations for {strategy_name}...")
+    logger.info("Creating animations for %s...", strategy_name)
 
     animations_dir = output_dir / 'animations'
     animations_dir.mkdir(parents=True, exist_ok=True)
@@ -349,12 +373,12 @@ def create_animations(
         data_dir = Path(result['output_dir'])
 
         if not data_dir.exists():
-            print(f"    Warning: Data directory not found for {param_name}={param_value}")
+            logger.warning("Data directory not found for %s=%s", param_name, param_value)
             continue
 
         required_files = ['cycle_metrics.csv', 'compounds_final.csv']
         if not all((data_dir / f).exists() for f in required_files):
-            print(f"    Warning: Missing required files for {param_name}={param_value}")
+            logger.warning("Missing required files for %s=%s", param_name, param_value)
             continue
 
         anim_filename = f"{param_name}_{param_value}.gif"
@@ -370,17 +394,17 @@ def create_animations(
                 downsample_scatter=5000
             )
             animation_paths.append(anim_path)
-            print(f"    ✓ Animation created: {anim_path.resolve()}")
+            logger.info("Animation created: %s", anim_path.resolve())
 
         except FileNotFoundError as e:
-            print(f"    Warning: FFmpeg not found - skipping animation for {param_name}={param_value}")
+            logger.warning("FFmpeg not found - skipping animation for %s=%s", param_name, param_value)
         except Exception as e:
-            print(f"    Warning: Failed to create animation for {param_name}={param_value}: {e}")
+            logger.warning("Failed to create animation for %s=%s: %s", param_name, param_value, e)
 
     if animation_paths:
-        print(f"  ✓ Created {len(animation_paths)} animations")
+        logger.info("Created %d animations", len(animation_paths))
     else:
-        print(f"  Warning: No animations created")
+        logger.warning("No animations created")
 
     return animation_paths
 
@@ -392,7 +416,6 @@ def create_embedding_plots(
     method_name: str,
     output_dir: Path
 ) -> Path:
-    logger = logging.getLogger(__name__)
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -531,7 +554,7 @@ def create_pruning_efficiency_timeline(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Pruning efficiency timeline saved: {output_path.resolve()}")
+    logger.info("Pruning efficiency timeline saved: %s", output_path.resolve())
     return output_path
 
 
@@ -584,7 +607,7 @@ def create_discovery_efficiency_scatter(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Discovery efficiency scatter saved: {output_path.resolve()}")
+    logger.info("Discovery efficiency scatter saved: %s", output_path.resolve())
     return output_path
 
 
@@ -645,7 +668,7 @@ def create_model_quality_facets(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Model quality facets saved: {output_path.resolve()}")
+    logger.info("Model quality facets saved: %s", output_path.resolve())
     return output_path
 
 
@@ -659,13 +682,18 @@ def create_uncertainty_prediction_snapshots(
 ) -> Path:
     df = result['compounds_df']
     cycle_metrics = pl.DataFrame(result['cycle_metrics'])
+    output_dir = result.get('output_dir')
+    if output_dir is not None:
+        output_dir = Path(output_dir)
 
     final_cycle = cycle_metrics['cycle'].max()
     cycles_to_show = [c for c in cycles_to_show if c <= final_cycle]
 
-    unlabeled_bg = df.filter(pl.col('status') == 'unlabeled')
-    if len(unlabeled_bg) > 5000:
-        unlabeled_bg = unlabeled_bg.sample(n=5000, seed=123)
+    unlabeled_ids_full = df.filter(pl.col('status') == 'unlabeled').select(['ID'])
+    if len(unlabeled_ids_full) > 5000:
+        unlabeled_ids_sampled = unlabeled_ids_full.sample(n=5000, seed=123)
+    else:
+        unlabeled_ids_sampled = unlabeled_ids_full
 
     fig, axes = plt.subplots(2, 2, figsize=figsize)
     fig.suptitle(f'{strategy_label}: Prediction vs Uncertainty Evolution',
@@ -677,19 +705,20 @@ def create_uncertainty_prediction_snapshots(
         row, col = subplot_positions[idx]
         ax = axes[row, col]
 
-        pred_col = f'prediction_cycle_{cycle}'
-        unc_col = f'uncertainty_cycle_{cycle}'
-
-        if pred_col not in df.columns or unc_col not in df.columns:
+        cycle_predictions = _scan_cycle_predictions(output_dir, cycle)
+        if cycle_predictions is None or 'uncertainty' not in cycle_predictions.columns:
             ax.text(0.5, 0.5, f'Missing data\nfor cycle {cycle}',
                    ha='center', va='center', transform=ax.transAxes)
             ax.set_title(f'Cycle {cycle}')
             continue
 
-        if unc_col in unlabeled_bg.columns:
+        unlabeled_with_pred = unlabeled_ids_sampled.join(
+            cycle_predictions, on='ID', how='inner'
+        )
+        if len(unlabeled_with_pred) > 0:
             ax.scatter(
-                unlabeled_bg[pred_col],
-                unlabeled_bg[unc_col],
+                unlabeled_with_pred['prediction'].to_numpy(),
+                unlabeled_with_pred['uncertainty'].to_numpy(),
                 c='#CCCCCC',
                 alpha=0.25,
                 s=8,
@@ -697,13 +726,16 @@ def create_uncertainty_prediction_snapshots(
                 label='Unlabeled'
             )
 
-        pruned_at_cycle = df.filter((pl.col('status') == 'pruned') & (pl.col('pruned_cycle') == cycle))
+        pruned_ids = df.filter(
+            (pl.col('status') == 'pruned') & (pl.col('pruned_cycle') == cycle)
+        ).select(['ID'])
+        if len(pruned_ids) > 2000:
+            pruned_ids = pruned_ids.sample(n=2000, seed=123)
+        pruned_at_cycle = pruned_ids.join(cycle_predictions, on='ID', how='inner')
         if len(pruned_at_cycle) > 0:
-            if len(pruned_at_cycle) > 2000:
-                pruned_at_cycle = pruned_at_cycle.sample(n=2000, seed=123)
             ax.scatter(
-                pruned_at_cycle[pred_col],
-                pruned_at_cycle[unc_col],
+                pruned_at_cycle['prediction'].to_numpy(),
+                pruned_at_cycle['uncertainty'].to_numpy(),
                 c='#d89ba5',
                 alpha=0.5,
                 s=20,
@@ -712,11 +744,17 @@ def create_uncertainty_prediction_snapshots(
                 label=f'Pruned this cycle (n={len(pruned_at_cycle)})'
             )
 
-        selected_up_to = df.filter((pl.col('status') == 'labeled') & (pl.col('selected_cycle') <= cycle))
+        selected_up_to = (
+            df.filter(
+                (pl.col('status') == 'labeled') & (pl.col('selected_cycle') <= cycle)
+            )
+            .select(['ID'])
+            .join(cycle_predictions, on='ID', how='inner')
+        )
         if len(selected_up_to) > 0:
             ax.scatter(
-                selected_up_to[pred_col],
-                selected_up_to[unc_col],
+                selected_up_to['prediction'].to_numpy(),
+                selected_up_to['uncertainty'].to_numpy(),
                 c='#7e62df',
                 alpha=0.75,
                 s=35,
@@ -737,7 +775,7 @@ def create_uncertainty_prediction_snapshots(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Uncertainty-prediction snapshots saved: {output_path.resolve()}")
+    logger.info("Uncertainty-prediction snapshots saved: %s", output_path.resolve())
     return output_path
 
 
@@ -788,5 +826,5 @@ def create_score_ratio_evolution(
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
     plt.close()
 
-    print(f"  ✓ Score ratio evolution saved: {output_path.resolve()}")
+    logger.info("Score ratio evolution saved: %s", output_path.resolve())
     return output_path
