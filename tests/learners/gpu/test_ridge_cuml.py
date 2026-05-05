@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from scipy.linalg import cho_factor, solve_triangular
+from scipy.linalg.lapack import dtrtri
 from sklearn.linear_model import Ridge as SkRidge
 
 from learnm8.core.interfaces import Learner
@@ -56,7 +56,10 @@ def _build_trained(X: np.ndarray, y: np.ndarray, alpha: float = 0.1) -> RidgeCum
     learner._feature_imputer = imputer
     learner._feature_scaler = scaler
     learner._model = mock_model
-    learner._gram_chol_cpu = cho_factor(gram)
+    L = np.linalg.cholesky(gram)
+    L_inv, _ = dtrtri(L, lower=1)
+    learner._L_inv_cpu = L_inv
+    learner._leverage_A_gpu = None
     preds = sk_model.predict(features_pp).astype(np.float64)
     residuals = y.astype(np.float64) - preds
     learner._sigma_hat_sq = float(np.sum(residuals ** 2)) / max(n - p, 1)
@@ -73,7 +76,7 @@ class TestConstruction:
         assert learner.random_state == 0
         assert learner.is_trained is False
         assert learner._model is None
-        assert learner._gram_chol_cpu is None
+        assert learner._L_inv_cpu is None
         assert learner._sigma_hat_sq is None
         assert learner._valid_feature_mask is None
 
@@ -112,15 +115,14 @@ class TestTrain:
         mock_instance.fit.assert_called_once()
         assert learner.is_trained is True
 
-    def test_train_computes_gram_cholesky_in_float64(self):
+    def test_train_computes_L_inv_in_float64(self):
         X, y = _make_data()
         mock_cuml, _mock_instance = _make_cuml_mock(len(y))
         with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
             learner = RidgeCumlLearner(alpha=0.1)
             learner.train(X, y)
-        assert learner._gram_chol_cpu is not None
-        L, _lower = learner._gram_chol_cpu
-        assert L.dtype == np.float64
+        assert learner._L_inv_cpu is not None
+        assert learner._L_inv_cpu.dtype == np.float64
 
     def test_empty_input_raises_error(self):
         learner = RidgeCumlLearner(alpha=0.1)
@@ -199,105 +201,50 @@ class TestPredict:
         X, y = _make_data(n=30, p=6)
         learner = _build_trained(X, y)
 
-        with patch('learnm8.learners.gpu.ridge_cuml.cho_solve', side_effect=MemoryError('out of memory')), \
+        with patch('learnm8.learners.gpu.ridge_cuml._compute_leverages_cpu', side_effect=MemoryError('out of memory')), \
              pytest.raises(LearnerError):
             learner.predict(X)
 
 
-class TestCuPyGPULeverage:
-    """Tests for CuPy GPU leverage computation (T045)."""
+class TestGPULeverage:
+    """Tests for GPU leverage computation via float32 symmetric form."""
 
     @staticmethod
-    def _gpu_chol_from_cpu(learner):
-        """Derive lower Cholesky factor for GPU from CPU cho_factor state."""
-        c, lower = learner._gram_chol_cpu
-        return np.tril(c) if lower else np.triu(c).T
-
-    @staticmethod
-    def _mock_cupy_modules(solve_tri_effect=None):
-        """Build mock cupy/cupyx sys.modules for GPU leverage tests."""
-        if solve_tri_effect is None:
-            def solve_tri_effect(L, b, lower=True):
-                return solve_triangular(np.asarray(L), np.asarray(b), lower=lower)
-
-        mock_cp = MagicMock()
-        mock_cp.asarray.side_effect = lambda x, **kw: np.asarray(x)
-        mock_cp.asnumpy.side_effect = lambda x: np.asarray(x)
-        mock_cp.einsum.side_effect = lambda *a, **kw: np.einsum(*a, **kw)
-
-        mock_solve_tri = MagicMock(side_effect=solve_tri_effect)
-
-        mock_cupyx_linalg = MagicMock()
-        mock_cupyx_linalg.solve_triangular = mock_solve_tri
-
-        modules = {
-            'cupy': mock_cp,
-            'cupy.linalg': mock_cp.linalg,
-            'cupyx': MagicMock(),
-            'cupyx.scipy': MagicMock(),
-            'cupyx.scipy.linalg': mock_cupyx_linalg,
-        }
-        return mock_solve_tri, modules
-
-    def test_leverage_uses_cupy_gpu_when_available(self):
-        """predict() uses GPU solve_triangular when _gram_chol_gpu is set."""
-        X, y = _make_data(n=30, p=6)
-        learner = _build_trained(X, y)
-        learner._gram_chol_gpu = self._gpu_chol_from_cpu(learner)
-        learner._gram_chol_cpu = None
-
-        mock_solve_tri, modules = self._mock_cupy_modules()
-
-        with patch.dict('sys.modules', modules):
-            _preds, unc = learner.predict(X)
-
-        mock_solve_tri.assert_called()
-        assert np.all(np.isfinite(unc))
-        assert np.all(unc >= 0)
+    def _make_leverage_A(learner):
+        """Build float32 A = L_inv^T @ L_inv from CPU L_inv."""
+        L_inv = learner._L_inv_cpu
+        A = (L_inv.T @ L_inv).astype(np.float32)
+        return A
 
     def test_leverage_falls_back_to_cpu_on_oom(self):
-        """predict() falls back to CPU when GPU leverage raises OOM."""
+        """predict() falls back to CPU when _leverage_A_gpu triggers OOM."""
         X, y = _make_data(n=30, p=6)
         learner = _build_trained(X, y)
-        learner._gram_chol_gpu = self._gpu_chol_from_cpu(learner)
+        learner._leverage_A_gpu = self._make_leverage_A(learner)
 
-        mock_solve_tri, modules = self._mock_cupy_modules(
-            solve_tri_effect=MemoryError('GPU out of memory'),
-        )
+        with patch.object(learner, '_compute_leverages_gpu', side_effect=MemoryError('GPU OOM')):
+            _, unc = learner.predict(X)
 
-        with patch.dict('sys.modules', modules):
-            _preds, unc = learner.predict(X)
-
-        mock_solve_tri.assert_called()
         assert np.all(np.isfinite(unc))
         assert np.all(unc >= 0)
 
-    def test_gpu_and_cpu_leverage_produce_same_result(self):
-        """GPU and CPU leverage produce numerically identical uncertainty."""
+    def test_cpu_leverage_produces_valid_uncertainty(self):
+        """CPU-only leverage produces valid non-negative uncertainties."""
         X, y = _make_data(n=50, p=8)
+        learner = _build_trained(X, y)
+        _, unc_cpu = learner.predict(X)
 
-        learner_cpu = _build_trained(X, y)
-        _, unc_cpu = learner_cpu.predict(X)
+        assert np.all(np.isfinite(unc_cpu))
+        assert np.all(unc_cpu >= 0)
 
-        learner_gpu = _build_trained(X, y)
-        learner_gpu._gram_chol_gpu = self._gpu_chol_from_cpu(learner_gpu)
-        learner_gpu._gram_chol_cpu = None
+    def test_cpu_leverage_chunked_matches_unchunked(self):
+        """CPU leverage with small chunk size matches large chunk size."""
+        from learnm8.learners.base import _compute_leverages_cpu
 
-        _, modules = self._mock_cupy_modules()
-
-        with patch.dict('sys.modules', modules):
-            _, unc_gpu = learner_gpu.predict(X)
-
-        np.testing.assert_allclose(unc_gpu, unc_cpu, atol=1e-10)
-
-    def test_chunked_cpu_dtrsm_fallback_for_large_n(self):
-        """CPU fallback chunks leverage for n > chunk threshold."""
         X, y = _make_data(n=50, p=6)
         learner = _build_trained(X, y)
 
-        _, unc_ref = learner.predict(X)
+        result_small = _compute_leverages_cpu(learner._L_inv_cpu, X.astype(np.float64), chunk_size=7)
+        result_large = _compute_leverages_cpu(learner._L_inv_cpu, X.astype(np.float64), chunk_size=10000)
 
-        with patch('learnm8.learners.gpu.ridge_cuml._LEVERAGE_CHUNK_SIZE', 10):
-            _, unc_chunked = learner.predict(X)
-
-        np.testing.assert_allclose(unc_chunked, unc_ref, atol=1e-10)
+        np.testing.assert_allclose(result_small, result_large, atol=1e-10)

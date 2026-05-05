@@ -9,11 +9,12 @@ import time
 import warnings
 
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
+from scipy.linalg.lapack import dtrtri
 
 from learnm8.core.interfaces import Learner
 from learnm8.exceptions import LearnerError
 from learnm8.learners.base import (
+    _compute_leverages_cpu,
     _preprocess_features,
     _validate_predict_inputs,
     _validate_train_inputs,
@@ -21,7 +22,6 @@ from learnm8.learners.base import (
 
 logger = logging.getLogger(__name__)
 
-_LEVERAGE_CHUNK_SIZE = 10_000
 
 
 class RidgeCumlLearner(Learner):
@@ -71,6 +71,7 @@ class RidgeCumlLearner(Learner):
                 'Use LinearRegressionLearner with alpha=None for unregularized regression.'
             )
 
+        self.device = 'cuda'
         self.alpha = alpha
         self.fit_intercept = fit_intercept
         self.solver = solver
@@ -79,8 +80,8 @@ class RidgeCumlLearner(Learner):
 
         self._model = None
         self._feature_scaler = None
-        self._gram_chol_cpu = None
-        self._gram_chol_gpu = None
+        self._L_inv_cpu = None
+        self._leverage_A_gpu = None
         self._sigma_hat_sq = None
         self.is_trained = False
         self._valid_feature_mask = None
@@ -180,19 +181,31 @@ class RidgeCumlLearner(Learner):
             )
 
         t6 = time.perf_counter_ns()
-        self._gram_chol_cpu = cho_factor(gram)
+        L = np.linalg.cholesky(gram)
+        self._L_inv_cpu, info = dtrtri(L, lower=1, unitdiag=0, overwrite_c=0)
+        if info != 0:
+            raise LearnerError(
+                f'Cholesky factor inversion failed for {self.get_name()} (dtrtri info={info})'
+            )
         t7 = time.perf_counter_ns()
-        logger.debug('CPU cholesky: %.3f ms', (t7 - t6) / 1e6)
+        logger.debug('CPU cholesky + dtrtri: %.3f ms', (t7 - t6) / 1e6)
 
         try:
             import cupy as cp
+            import cupyx.scipy.linalg as cpla
+
             gram_gpu = cp.asarray(gram)
-            self._gram_chol_gpu = cp.linalg.cholesky(gram_gpu)
+            L_gpu = cp.linalg.cholesky(gram_gpu)
+            L_inv_gpu = cpla.solve_triangular(
+                L_gpu, cp.eye(p, dtype=cp.float64), lower=True, check_finite=False,
+            )
+            self._leverage_A_gpu = (L_inv_gpu.T @ L_inv_gpu).astype(cp.float32)
+            del L_gpu, L_inv_gpu, gram_gpu
             t8 = time.perf_counter_ns()
-            logger.debug('GPU cholesky: %.3f ms', (t8 - t7) / 1e6)
+            logger.debug('GPU leverage A: %.3f ms', (t8 - t7) / 1e6)
         except (ImportError, Exception) as exc:
-            self._gram_chol_gpu = None
-            logger.debug('GPU cholesky unavailable: %s', exc)
+            self._leverage_A_gpu = None
+            logger.debug('GPU leverage A unavailable: %s', exc)
 
         try:
             preds_train = np.asarray(self._model.predict(features)).ravel()
@@ -273,29 +286,20 @@ class RidgeCumlLearner(Learner):
     def _compute_leverages(self, X: np.ndarray) -> np.ndarray:
         """Compute leverage scores h_ii, GPU-first with CPU fallback.
 
-        Tries CuPy GPU cho_solve when ``_gram_chol_gpu`` is available.
-        Falls back to CPU scipy cho_solve on GPU OOM, with chunked
-        DTRSM for n > ``_LEVERAGE_CHUNK_SIZE`` rows.
+        GPU path uses float32 symmetric quadratic form: h = (X @ A * X).sum(1)
+        where A = L_inv^T @ L_inv. CPU fallback uses dtrmm-based helper.
         """
-        if self._gram_chol_gpu is not None:
+        if self._leverage_A_gpu is not None:
             try:
-                import cupy as cp
-                from cupyx.scipy.linalg import solve_triangular as cp_solve_triangular
-
-                t0 = time.perf_counter_ns()
-                L = self._gram_chol_gpu
-                X_gpu = cp.asarray(X)
-                tmp = cp_solve_triangular(L, X_gpu.T, lower=True)
-                leverages = cp.asnumpy(cp.einsum('ij,ij->j', tmp, tmp))
-                t1 = time.perf_counter_ns()
-                logger.debug('GPU leverage: %.3f ms', (t1 - t0) / 1e6)
-                return leverages
+                return self._compute_leverages_gpu(X)
             except (MemoryError, Exception) as exc:
                 if isinstance(exc, MemoryError) or 'out of memory' in str(exc).lower():
                     logger.warning(
                         'GPU OOM during leverage for %s; falling back to CPU.',
                         self.get_name(),
                     )
+                elif isinstance(exc, LearnerError):
+                    raise
                 else:
                     raise LearnerError(
                         f'GPU leverage computation failed for {self.get_name()}: {exc}.'
@@ -303,12 +307,7 @@ class RidgeCumlLearner(Learner):
 
         try:
             t0 = time.perf_counter_ns()
-            n = X.shape[0]
-            if n > _LEVERAGE_CHUNK_SIZE:
-                leverages = self._compute_leverages_chunked(X)
-            else:
-                solved = cho_solve(self._gram_chol_cpu, X.T)
-                leverages = np.einsum('ij,ji->i', X, solved)
+            leverages = _compute_leverages_cpu(self._L_inv_cpu, X)
             t1 = time.perf_counter_ns()
             logger.debug('CPU leverage: %.3f ms', (t1 - t0) / 1e6)
             return leverages
@@ -317,15 +316,45 @@ class RidgeCumlLearner(Learner):
                 f'Leverage computation failed for {self.get_name()}: {exc}.'
             ) from exc
 
-    def _compute_leverages_chunked(self, X: np.ndarray) -> np.ndarray:
-        """Compute leverages in chunks for large sample counts."""
+    def _compute_leverages_gpu(self, X: np.ndarray) -> np.ndarray:
+        """Compute leverages on GPU via float32 symmetric quadratic form."""
+        import cupy as cp
+
+        from learnm8.core.batching import MIN_BATCH_GPU
+
+        A_gpu = self._leverage_A_gpu
         n = X.shape[0]
+        p = X.shape[1]
+
+        try:
+            free_mem, _ = cp.cuda.Device().mem_info
+        except Exception:
+            free_mem = 2 * 1024**3
+        bytes_per_row = p * 4 * 3
+        chunk_size = max(MIN_BATCH_GPU, int(free_mem * 0.7 / bytes_per_row))
+        chunk_size = min(chunk_size, n)
+
+        t0 = time.perf_counter_ns()
         leverages = np.empty(n, dtype=np.float64)
-        for start in range(0, n, _LEVERAGE_CHUNK_SIZE):
-            end = min(start + _LEVERAGE_CHUNK_SIZE, n)
-            chunk = X[start:end]
-            solved = cho_solve(self._gram_chol_cpu, chunk.T)
-            leverages[start:end] = np.einsum('ij,ji->i', chunk, solved)
+        start = 0
+        while start < n:
+            end = min(start + chunk_size, n)
+            try:
+                X_chunk = cp.asarray(X[start:end].astype(np.float32))
+                XA = X_chunk @ A_gpu
+                h_chunk = cp.sum(XA * X_chunk, axis=1)
+                leverages[start:end] = cp.asnumpy(h_chunk).astype(np.float64)
+                del X_chunk, XA, h_chunk
+                start = end
+            except (MemoryError, Exception) as exc:
+                is_oom = isinstance(exc, MemoryError) or 'out of memory' in str(exc).lower()
+                if not is_oom:
+                    raise
+                cp.get_default_memory_pool().free_all_blocks()
+                chunk_size = max(MIN_BATCH_GPU, chunk_size // 2)
+                logger.warning('GPU OOM in leverage, retrying chunk_size=%d', chunk_size)
+        t1 = time.perf_counter_ns()
+        logger.debug('GPU leverage (float32): %.3f ms', (t1 - t0) / 1e6)
         return leverages
 
     def get_name(self) -> str:

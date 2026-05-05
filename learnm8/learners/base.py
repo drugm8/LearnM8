@@ -10,7 +10,10 @@ import time
 from abc import abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import torch
 
 import numpy as np
 from sklearn.base import BaseEstimator
@@ -139,6 +142,38 @@ def _validate_predict_inputs(
             f'Call train() with labeled data first. If using the active learning API, '
             f'ensure at least one training cycle has completed before predicting.'
         )
+
+
+def _compute_leverages_cpu(
+    L_inv: np.ndarray,
+    X: np.ndarray,
+    chunk_size: int = 16384,
+) -> np.ndarray:
+    """Compute leverage scores h_ii = ||L^{-1} x_i||^2 via BLAS dtrmm.
+
+    Uses triangular matrix-matrix multiply (dtrmm) which exploits the
+    lower-triangular structure of L_inv to skip ~half the multiplications
+    vs general DGEMM. Processes X in chunks to bound memory usage.
+
+    Args:
+        L_inv: Inverse of the lower-triangular Cholesky factor, shape (p, p).
+        X: Feature matrix, shape (n, p). Will be cast to float64.
+        chunk_size: Number of samples per chunk.
+
+    Returns:
+        Leverage scores, shape (n,), dtype float64.
+    """
+    from scipy.linalg.blas import dtrmm
+
+    n = X.shape[0]
+    leverages = np.empty(n, dtype=np.float64)
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        b = np.asfortranarray(X[start:end].astype(np.float64).T)
+        Z = dtrmm(alpha=1.0, a=L_inv, b=b, side=0, lower=1, trans_a=0, diag=0, overwrite_b=1)
+        np.multiply(Z, Z, out=Z)
+        leverages[start:end] = Z.sum(axis=0)
+    return leverages
 
 
 def _predict_with_oom_retry(
