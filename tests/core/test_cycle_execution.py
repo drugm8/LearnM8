@@ -69,12 +69,16 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
         # Validate master DataFrame updated
         assert len(updated_master_df) == len(compounds)
-        assert 'prediction_cycle_0' in updated_master_df.columns
+        # Master DF stays narrow; predictions are in the cycle parquet.
+        assert 'prediction_cycle_0' not in updated_master_df.columns
+        assert metrics.get('parquet_path') is not None
+        assert (tmp_path / 'prediction_cycle_0.parquet').exists()
         assert 'status' in updated_master_df.columns
 
         # Validate status changes
@@ -114,11 +118,13 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
-        # Validate master DataFrame structure
-        assert 'prediction_cycle_1' in updated_master_df.columns
+        # Master DF stays narrow.
+        assert 'prediction_cycle_1' not in updated_master_df.columns
+        assert (tmp_path / 'prediction_cycle_1.parquet').exists()
         assert (updated_master_df['status'] == 'labeled').sum() > 2
 
         # Validate metrics
@@ -162,14 +168,14 @@ class TestCycleExecution:
             original_pool_size=len(compounds),
             score_direction='higher',
             mode='benchmark',
-            original_pool=compounds
+            original_pool=compounds,
+            output_dir=tmp_path,
         )
 
-        # Validate full dataset predictions (benchmark mode specific)
-        assert 'prediction_cycle_0' in updated_master_df.columns
-        # In benchmark mode, predictions should exist for more compounds (full dataset)
-        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
-        assert pred_count > 0
+        # Predictions are persisted to parquet, not the master DF.
+        assert 'prediction_cycle_0' not in updated_master_df.columns
+        cycle_predictions = pl.read_parquet(metrics['parquet_path'])
+        assert cycle_predictions.height > 0
 
         assert metrics['strategy'] == 'greedy'
     
@@ -321,13 +327,15 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
-        assert 'prediction_cycle_0' in updated_master_df.columns
+        assert 'prediction_cycle_0' not in updated_master_df.columns
+        assert metrics.get('parquet_path') is not None
         assert metrics['selected_count'] > 0
         assert metrics['strategy'] == 'random'
-    
+
     def test_learner_training_failure(self, tmp_path, mock_oracle, mock_learner):
         """Test handling of cycle with no labeled compounds raises error."""
         from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
@@ -462,22 +470,24 @@ class TestCycleExecution:
 class TestMasterDataFrameCycleIntegration:
     """Test master DataFrame integration in cycle execution."""
 
-    def test_master_df_prediction_columns(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
-        """Test prediction columns created in master DataFrame."""
+    def test_master_df_prediction_parquets(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
+        """Test that per-cycle prediction parquets are written to output_dir.
+
+        Replaces the old test that asserted prediction_cycle_N columns on the
+        master DF — those columns no longer exist.
+        """
         compounds = pl.DataFrame({
             'ID': [f'COMP_{i:03d}' for i in range(10)],
             'SMILES': ['CCO'] * 10
         })
 
-        # Create master DataFrame
         master_df = create_test_master_df(compounds, initial_labeled_count=2)
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
 
-        # Execute 2 cycles
         config_0 = CycleConfig(strategy='random', batch_fraction=0.2)
-        master_df_after_0, _ = execute_cycle(
+        master_df_after_0, metrics_0 = execute_cycle(
             compounds_df=master_df,
             cycle=0,
             config=config_0,
@@ -488,11 +498,12 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
         config_1 = CycleConfig(strategy='greedy', batch_fraction=0.2)
-        master_df_after_1, _ = execute_cycle(
+        master_df_after_1, metrics_1 = execute_cycle(
             compounds_df=master_df_after_0,
             cycle=1,
             config=config_1,
@@ -503,18 +514,19 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
-        # Verify prediction_cycle_0 and prediction_cycle_1 columns exist
-        assert 'prediction_cycle_0' in master_df_after_1.columns
-        assert 'prediction_cycle_1' in master_df_after_1.columns
+        # Master DF stays narrow — no prediction_cycle_* columns at any time.
+        assert 'prediction_cycle_0' not in master_df_after_1.columns
+        assert 'prediction_cycle_1' not in master_df_after_1.columns
 
-        # Check that predictions are NaN for labeled compounds
-        labeled_data = master_df_after_1.filter(pl.col('status') == 'labeled')
-
-        # Initially labeled compounds should have NaN in cycle 0 predictions
-        assert labeled_data['prediction_cycle_0'].is_null().any()
+        # Each cycle wrote a parquet file; metrics carries the path.
+        assert metrics_0.get('parquet_path') is not None
+        assert metrics_1.get('parquet_path') is not None
+        assert (tmp_path / 'prediction_cycle_0.parquet').exists()
+        assert (tmp_path / 'prediction_cycle_1.parquet').exists()
 
     def test_master_df_status_updates(self, tmp_path, mock_oracle, mock_learner):
         """Test status updates in master DataFrame."""
@@ -640,11 +652,13 @@ class TestMasterDataFrameCycleIntegration:
             original_pool_size=len(compounds),
             score_direction='higher',
             mode='benchmark',
-            original_pool=compounds
+            original_pool=compounds,
+            output_dir=tmp_path,
         )
 
-        # Verify unlabeled-only predictions are stored
-        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
+        # Predictions are stored in the cycle parquet, not on the master DF.
+        cycle_predictions = pl.read_parquet(tmp_path / 'prediction_cycle_0.parquet')
+        pred_count = cycle_predictions.height
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         # Benchmark mode now predicts on unlabeled only (same as run mode)
@@ -697,11 +711,13 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=tmp_path,
         )
 
         # Verify predictions only exist for unlabeled compounds (run mode behavior)
-        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
+        cycle_predictions = pl.read_parquet(tmp_path / 'prediction_cycle_0.parquet')
+        pred_count = cycle_predictions.height
         assert pred_count == unlabeled_count, \
             f"Run mode should predict only {unlabeled_count} unlabeled compounds, got {pred_count} predictions"
 
@@ -752,11 +768,13 @@ class TestMasterDataFrameCycleIntegration:
             original_pool_size=len(compounds),
             score_direction='higher',
             mode='benchmark',
-            original_pool=compounds
+            original_pool=compounds,
+            output_dir=tmp_path,
         )
 
         # Verify predictions exist only for unlabeled (same as run mode)
-        pred_count = updated_master_df['prediction_cycle_0'].is_not_null().sum()
+        cycle_predictions = pl.read_parquet(tmp_path / 'prediction_cycle_0.parquet')
+        pred_count = cycle_predictions.height
         assert pred_count == unlabeled_count, \
             f"Benchmark mode should predict {unlabeled_count} unlabeled (same as run mode), got {pred_count} predictions"
 
@@ -794,6 +812,12 @@ class TestMasterDataFrameCycleIntegration:
 
         config = CycleConfig(strategy='greedy', batch_fraction=0.2)
 
+        # Each mode writes its parquet to its own subdir to avoid collision.
+        run_dir = tmp_path / 'run'
+        run_dir.mkdir()
+        benchmark_dir = tmp_path / 'benchmark'
+        benchmark_dir.mkdir()
+
         # Execute run mode cycle
         updated_df_run, metrics_run = execute_cycle(
             compounds_df=master_df_run,
@@ -806,7 +830,8 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            mode='run',
+            output_dir=run_dir,
         )
 
         # Execute benchmark mode cycle
@@ -822,12 +847,13 @@ class TestMasterDataFrameCycleIntegration:
             original_pool_size=len(compounds),
             score_direction='higher',
             mode='benchmark',
-            original_pool=compounds
+            original_pool=compounds,
+            output_dir=benchmark_dir,
         )
 
         # Verify both modes predicted on the same number of compounds
-        pred_count_run = updated_df_run['prediction_cycle_0'].is_not_null().sum()
-        pred_count_benchmark = updated_df_benchmark['prediction_cycle_0'].is_not_null().sum()
+        pred_count_run = pl.read_parquet(run_dir / 'prediction_cycle_0.parquet').height
+        pred_count_benchmark = pl.read_parquet(benchmark_dir / 'prediction_cycle_0.parquet').height
 
         assert pred_count_run == pred_count_benchmark, \
             f"Run and benchmark modes should predict on same compounds: run={pred_count_run}, benchmark={pred_count_benchmark}"

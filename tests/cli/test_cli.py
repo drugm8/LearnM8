@@ -1009,8 +1009,9 @@ class TestColumnArgsForwarding:
         mock_run.return_value = {
             'output_dir': tmp_path / 'output',
             'cycle_metrics': [{}],
-            'labeled_data': pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
-            'unlabeled_data': pl.DataFrame({'ID': [], 'SMILES': []}),
+            'labeled_count': 1,
+            'unlabeled_count': 0,
+            'prediction_files': [],
             'validation_result': type('R', (), {
                 'valid_compounds': pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
                 'invalid_compounds': pl.DataFrame({'ID': [], 'SMILES': []}),
