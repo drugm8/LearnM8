@@ -1,5 +1,6 @@
 import logging
 
+import pandas as pd
 import polars as pl
 
 logger = logging.getLogger(__name__)
@@ -88,31 +89,6 @@ def initialize_master_dataframe(
     return master_df
 
 
-
-
-def get_prediction_columns(
-    master_df: 'pl.DataFrame'
-) -> tuple[list[str], list[str]]:
-    """Extract prediction and uncertainty column names.
-
-    Args:
-        master_df: Master DataFrame
-
-    Returns:
-        Tuple of (prediction_columns, uncertainty_columns) sorted by cycle number
-
-    Example:
-        >>> pred_cols, unc_cols = get_prediction_columns(master_df)
-        >>> print(pred_cols)
-        ['prediction_cycle_0', 'prediction_cycle_1', 'prediction_cycle_2']
-    """
-    pred_cols = [col for col in master_df.columns if col.startswith('prediction_cycle_')]
-    unc_cols = [col for col in master_df.columns if col.startswith('uncertainty_cycle_')]
-
-    pred_cols.sort(key=lambda x: int(x.split('_')[-1]))
-    unc_cols.sort(key=lambda x: int(x.split('_')[-1]))
-
-    return pred_cols, unc_cols
 
 
 def validate_master_dataframe(

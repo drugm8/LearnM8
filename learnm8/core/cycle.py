@@ -71,7 +71,8 @@ def execute_cycle(
     cumulative_selected_ids: set | None = None,
     memory_safety_factor: float = 0.7,
     previous_metrics: dict[str, Any] | None = None,
-    n_jobs: int = -1
+    n_jobs: int = -1,
+    output_dir: Path | None = None,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -124,10 +125,10 @@ def execute_cycle(
         )
     """
     from learnm8.core.dataframe_ops import (
-        add_predictions,
         get_compounds_by_status,
         update_status,
     )
+    from learnm8.core.persistence import write_cycle_predictions
 
     # Step 1: Setup and Validation
     if mode not in ['run', 'benchmark']:
@@ -262,6 +263,9 @@ def execute_cycle(
 
     if len(prediction_pool) == 0:
         logger.warning(f"No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.")
+        empty_predictions = pl.DataFrame(
+            schema={'ID': pl.Utf8, 'prediction': pl.Float64, 'uncertainty': pl.Float64}
+        )
         metrics = {
             'cycle': cycle,
             'strategy': config.strategy,
@@ -270,7 +274,9 @@ def execute_cycle(
             'remaining_unlabeled': 0,
             'cumulative_labeled': int(compounds_df.filter(pl.col('status') == 'labeled').height),
             'cumulative_pruned': 0,
-            'pruned_count': 0
+            'pruned_count': 0,
+            'parquet_path': None,
+            'selected_predictions': empty_predictions,
         }
         return compounds_df, metrics
 
@@ -306,20 +312,25 @@ def execute_cycle(
             f"featurizer produces valid features for your compound pool."
         )
 
-    compounds_df = add_predictions(
-        compounds_df, cycle, valid_compound_ids, predictions, uncertainties
+    pred_data: dict[str, Any] = {
+        'ID': list(valid_compound_ids),
+        'prediction': predictions,
+    }
+    if uncertainties is not None:
+        pred_data['uncertainty'] = uncertainties
+    cycle_predictions = pl.DataFrame(pred_data)
+
+    parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
+
+    selection_pool_cols = ['ID', 'prediction'] + (
+        ['uncertainty'] if uncertainties is not None else []
     )
-
-    pred_col = f'prediction_cycle_{cycle}'
-    unc_col = f'uncertainty_cycle_{cycle}' if uncertainties is not None else None
-    cols_to_select = ['ID', 'SMILES', pred_col] + ([unc_col] if unc_col else [])
-    rename_map = {pred_col: 'prediction'} | ({unc_col: 'uncertainty'} if unc_col else {})
-
     selection_pool = (
         compounds_df
-        .filter((pl.col('status') == 'unlabeled') & (pl.col(pred_col).is_not_null()))
-        .select(cols_to_select)
-        .rename(rename_map)
+        .filter(pl.col('status') == 'unlabeled')
+        .select(['ID', 'SMILES'])
+        .join(cycle_predictions, on='ID', how='inner')
+        .select(['ID', 'SMILES'] + [c for c in selection_pool_cols if c != 'ID'])
     )
 
     if len(selection_pool) == 0:
@@ -427,6 +438,10 @@ def execute_cycle(
 
     logger.debug(f"Selected {len(selected_ids)}/{len(selection_pool)} compounds using {config.strategy.upper()} (batch_size={batch_size})")
 
+    # Capture selected predictions at cycle time so save_results() can build
+    # selection_history.csv without re-reading the parquet file at save time.
+    selected_predictions = cycle_predictions.filter(pl.col('ID').is_in(selected_ids))
+
     # Step 12: Measure Selected Compounds
     oracle_start_time = time.time()
     # Create temporary mapping to preserve selected_ids order
@@ -495,54 +510,57 @@ def execute_cycle(
     )
 
     # Step 14b: Enhance with evaluation metrics (mode-aware)
+    # Predictions are joined from cycle_predictions (temp DF) rather than read
+    # from prediction_cycle_N columns, which no longer exist on the master DF.
     try:
-        pred_col = f'prediction_cycle_{cycle}'
-
-        if pred_col in compounds_df.columns:
-            labeled_with_pred = compounds_df.filter(
-                (pl.col('status') == 'labeled') & (pl.col(pred_col).is_not_null())
+        labeled_with_pred = (
+            compounds_df.filter(pl.col('status') == 'labeled')
+            .select(['ID', 'SMILES', target_col])
+            .join(
+                cycle_predictions.select(['ID', 'prediction']),
+                on='ID',
+                how='inner',
             )
+        )
 
-            if len(labeled_with_pred) > 0:
-                labeled_for_eval = labeled_with_pred.select(['ID', 'SMILES', target_col, pred_col])
+        if len(labeled_with_pred) > 0:
+            eval_predictions = labeled_with_pred['prediction'].to_numpy()
+            eval_ground_truth = labeled_with_pred[target_col].to_numpy()
 
-                eval_predictions = labeled_for_eval[pred_col].to_numpy()
-                eval_ground_truth = labeled_for_eval[target_col].to_numpy()
+            valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
 
-                valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
+            if np.sum(valid_mask) > 0:
+                selected_for_eval = compounds_df.filter(
+                    pl.col('ID').is_in(selected_ids)
+                ).select(['ID', 'SMILES', target_col])
 
-                if np.sum(valid_mask) > 0:
-                    selected_for_eval = compounds_df.filter(
-                        pl.col('ID').is_in(selected_ids)
-                    ).select(['ID', 'SMILES', target_col])
+                pool_df_for_eval = None
+                original_pool_for_eval = None
 
-                    pool_df_for_eval = None
-                    original_pool_for_eval = None
+                if mode == 'benchmark' and original_pool is not None:
+                    pool_df_for_eval = cycle_predictions.select(['ID', 'prediction'])
+                    original_pool_for_eval = original_pool
 
-                    if mode == 'benchmark' and original_pool is not None:
-                        pool_df_for_eval = pl.DataFrame({'ID': valid_compound_ids, 'prediction': predictions})
-                        original_pool_for_eval = original_pool
+                eval_metrics = evaluate_cycle(
+                    cycle=cycle,
+                    predictions=eval_predictions[valid_mask],
+                    ground_truth=eval_ground_truth[valid_mask],
+                    labeled_data=labeled_with_pred.select(['ID', 'SMILES', target_col]),
+                    selected_compounds=selected_for_eval,
+                    target_col=target_col,
+                    oracle_type=mode,
+                    ground_truth_data=original_pool_for_eval,
+                    pool_df=pool_df_for_eval,
+                    uncertainties=uncertainties if uncertainties is not None else None,
+                    previously_selected=None,
+                    advanced_metrics=False,
+                    disable_molecular_similarity=True,
+                    score_direction=score_direction,
+                    cumulative_selected_ids=cumulative_selected_ids,
+                    cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height)
+                )
 
-                    eval_metrics = evaluate_cycle(
-                        cycle=cycle,
-                        predictions=eval_predictions[valid_mask],
-                        ground_truth=eval_ground_truth[valid_mask],
-                        labeled_data=labeled_for_eval,
-                        selected_compounds=selected_for_eval,
-                        target_col=target_col,
-                        oracle_type=mode,
-                        ground_truth_data=original_pool_for_eval,
-                        pool_df=pool_df_for_eval,
-                        uncertainties=uncertainties if uncertainties is not None else None,
-                        previously_selected=None,
-                        advanced_metrics=False,
-                        disable_molecular_similarity=True,
-                        score_direction=score_direction,
-                        cumulative_selected_ids=cumulative_selected_ids,
-                        cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height)
-                    )
-
-                    metrics.update(eval_metrics)
+                metrics.update(eval_metrics)
     except (ValueError, RuntimeError, TypeError, ArithmeticError, KeyError, pl.exceptions.ColumnNotFoundError) as e:
         logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
 
@@ -558,6 +576,12 @@ def execute_cycle(
     metrics['oracle_time'] = oracle_time
     metrics['evaluation_time'] = evaluation_time
     metrics['total_time'] = total_time
+
+    # Parquet path and cycle-time prediction capture for selected compounds.
+    # selected_predictions is a tiny DF (~batch_size rows) used by save_results()
+    # to build selection_history.csv without re-reading the parquet file.
+    metrics['parquet_path'] = parquet_path
+    metrics['selected_predictions'] = selected_predictions
 
     # Step 15: Display Rich Metrics Table
     try:

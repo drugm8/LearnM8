@@ -535,13 +535,15 @@ def run_active_learning(
 
     Returns:
         Dictionary with:
-            - compounds_df: Final master DataFrame
+            - compounds_df: Final master DataFrame (narrow: 7 base columns + target)
             - cycle_metrics: List of metrics per cycle
+            - aggregate_metrics: Aggregated metrics across cycles
             - validation_result: ValidationResult object
             - output_dir: Path to output directory
             - saved_files: Dictionary of saved file paths
-            - labeled_data: Convenience accessor for labeled compounds
-            - unlabeled_data: Convenience accessor for unlabeled compounds
+            - prediction_files: list[Path] of per-cycle parquet files
+            - labeled_count: int, count of labeled compounds at end
+            - unlabeled_count: int, count of remaining unlabeled compounds
 
     Raises:
         FileNotFoundError: If compound_pool file not found
@@ -909,6 +911,7 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
 
         cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+        prediction_files: list[Path] = []
 
         for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
             logger.info("─────────────────────────────────────────────────────────────")
@@ -935,9 +938,14 @@ def run_active_learning(
                     cumulative_selected_ids=cumulative_selected_ids,
                     memory_safety_factor=memory_safety_factor,
                     previous_metrics=previous_metrics,
-                    n_jobs=n_jobs
+                    n_jobs=n_jobs,
+                    output_dir=output_dir,
                 )
                 all_metrics.append(metrics)
+
+                cycle_parquet_path = metrics.get('parquet_path')
+                if cycle_parquet_path is not None:
+                    prediction_files.append(cycle_parquet_path)
 
                 # Update cumulative_selected_ids after cycle
                 cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
@@ -1012,8 +1020,9 @@ def run_active_learning(
             'validation_result': validation_result,
             'output_dir': output_dir,
             'saved_files': saved_files,
-            'labeled_data': compounds_df.filter(pl.col('status') == 'labeled'),
-            'unlabeled_data': compounds_df.filter(pl.col('status') == 'unlabeled')
+            'prediction_files': prediction_files,
+            'labeled_count': int(compounds_df.filter(pl.col('status') == 'labeled').height),
+            'unlabeled_count': int(compounds_df.filter(pl.col('status') == 'unlabeled').height),
         }
 
     except Exception as e:
