@@ -2,11 +2,14 @@
 CSV-based persistence for active learning results.
 
 Saves all experiment data to organized CSV files with metadata comments:
-- compounds_final.csv: Master DataFrame with all compound data
+- compounds_final.csv: Master DataFrame with all compound data (narrow: 8 cols)
 - cycle_metrics.csv: Per-cycle performance metrics
-- selection_history.csv: Detailed selection records
+- selection_history.csv: Detailed selection records (from cycle-time captures)
 - validation_report.csv: Invalid compounds (if any)
 - config.json: Experiment configuration
+
+Per-cycle predictions are persisted as separate parquet files:
+- prediction_cycle_N.parquet: ID, prediction, uncertainty (atomic write)
 
 All CSV files include metadata comments for self-documentation.
 No query classes - files are directly usable with pandas, Excel, etc.
@@ -24,6 +27,51 @@ from learnm8.exceptions import PersistenceError
 from .validation import ValidationResult
 
 logger = logging.getLogger(__name__)
+
+
+def prediction_parquet_path(output_dir: Path, cycle: int) -> Path:
+    """Return canonical parquet path for a cycle's predictions.
+
+    Single source of truth for parquet naming convention. All writers
+    and readers MUST use this function to avoid naming drift.
+    """
+    return output_dir / f'prediction_cycle_{cycle}.parquet'
+
+
+def write_cycle_predictions(
+    cycle_predictions: pl.DataFrame,
+    output_dir: Path | None,
+    cycle: int,
+) -> Path | None:
+    """Write cycle predictions to parquet with atomic temp-file-then-rename.
+
+    Writes to ``<path>.parquet.tmp`` first, then renames to the final path
+    on success. On exception, the ``.tmp`` file is removed before re-raising
+    so partial writes never appear as completed parquet files.
+
+    Args:
+        cycle_predictions: DataFrame with columns ID, prediction,
+            and optionally uncertainty.
+        output_dir: Output directory. If None, no parquet is written.
+        cycle: Cycle number for naming.
+
+    Returns:
+        Path to the written parquet, or None if output_dir is None.
+
+    Raises:
+        OSError: If writing or renaming fails (after cleanup).
+    """
+    if output_dir is None:
+        return None
+    parquet_path = prediction_parquet_path(output_dir, cycle)
+    tmp_path = parquet_path.with_suffix('.parquet.tmp')
+    try:
+        cycle_predictions.write_parquet(tmp_path, compression='zstd')
+        tmp_path.rename(parquet_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    return parquet_path
 
 
 def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
@@ -173,18 +221,14 @@ def save_results(
 
     target_col = config.get('target_col', 'target')
     featurizer = config.get('featurizer', 'unknown')
-    n_cycles = config.get('n_cycles', len([c for c in compounds_df.columns if c.startswith('prediction_cycle_')]))
-    mode = config.get('mode', 'run')
+    n_cycles = config.get('n_cycles', len(cycle_metrics))
     score_direction = config.get('score_direction', 'higher')
 
     try:
-        compounds_final = compounds_df.clone()
-        base_cols = ['ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle', target_col]
-        pred_cols = sorted([c for c in compounds_df.columns if c.startswith('prediction_cycle_')],
-                          key=lambda x: int(x.split('_')[-1]))
-        unc_cols = sorted([c for c in compounds_df.columns if c.startswith('uncertainty_cycle_')],
-                         key=lambda x: int(x.split('_')[-1]))
-        compounds_final = _organize_columns(compounds_final, [base_cols, pred_cols, unc_cols])
+        base_cols = [
+            'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle', target_col,
+        ]
+        compounds_final = _organize_columns(compounds_df.clone(), [base_cols])
 
         final_path = output_dir / 'compounds_final.csv'
         compounds_final.write_csv(final_path)
@@ -212,8 +256,7 @@ def save_results(
             'selected_cycle': 'Cycle when selected for measurement',
             'pruned_cycle': 'Cycle when pruned (-1 if not pruned)',
             target_col: 'Measured target value',
-            'prediction_cycle_N': 'Model prediction at cycle N',
-            'uncertainty_cycle_N': 'Model uncertainty at cycle N (if available)'
+            'Predictions': 'Per-cycle predictions stored in prediction_cycle_N.parquet files',
         }
         _add_csv_metadata(final_path, metadata)
 
@@ -226,7 +269,17 @@ def save_results(
         raise PersistenceError(f"Failed to save compounds_final.csv: {e}") from e
 
     try:
-        metrics_df = pl.DataFrame(cycle_metrics)
+        # Drop non-serializable values before constructing the DataFrame:
+        # selected_predictions is a Polars DataFrame, parquet_path is a Path,
+        # and the *_ids lists are dropped by the existing logic below.
+        sanitized_metrics = []
+        for cm in cycle_metrics:
+            cm_copy = {
+                k: v for k, v in cm.items()
+                if k not in ('selected_predictions', 'parquet_path')
+            }
+            sanitized_metrics.append(cm_copy)
+        metrics_df = pl.DataFrame(sanitized_metrics)
         list_cols = ['selected_ids', 'pruned_ids']
         cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
         if cols_to_drop:
@@ -277,25 +330,27 @@ def save_results(
             strategy = cycle_data['strategy']
 
             selected_compounds = compounds_df.filter(pl.col('selected_cycle') == cycle)
+            if selected_compounds.height == 0:
+                continue
+
+            cycle_selected_preds = cycle_data.get('selected_predictions')
+            if cycle_selected_preds is not None and cycle_selected_preds.height > 0:
+                pred_lookup = {
+                    row['ID']: row for row in cycle_selected_preds.iter_rows(named=True)
+                }
+            else:
+                pred_lookup = {}
 
             for compound in selected_compounds.iter_rows(named=True):
-                sel = int(compound['selected_cycle'])
-                pred_col = f'prediction_cycle_{sel}'
-                unc_col = f'uncertainty_cycle_{sel}'
-
-                # Design invariant: In execute_cycle(), compounds are selected and labeled
-                # within the same cycle, so selected_cycle equals the cycle whose predictions
-                # were used for selection. This ensures we always look up the correct
-                # prediction/uncertainty values that informed the selection decision.
-
+                pred_row = pred_lookup.get(compound['ID'], {})
                 record = {
                     'cycle': cycle,
                     'strategy': strategy,
                     'ID': compound['ID'],
                     'SMILES': compound['SMILES'],
                     'measured_value': compound.get(target_col, None),
-                    'prediction_at_selection': compound.get(pred_col, None),
-                    'uncertainty_at_selection': compound.get(unc_col, None)
+                    'prediction_at_selection': pred_row.get('prediction'),
+                    'uncertainty_at_selection': pred_row.get('uncertainty'),
                 }
                 selection_history.append(record)
 

@@ -592,8 +592,8 @@ def cmd_run(args: argparse.Namespace):
 
         result_table.add_row("Output Directory", str(results['output_dir']))
         result_table.add_row("Total Cycles", str(len(results['cycle_metrics'])))
-        result_table.add_row("Compounds Labeled", str(len(results['labeled_data'])))
-        result_table.add_row("Compounds Remaining", str(len(results['unlabeled_data'])))
+        result_table.add_row("Compounds Labeled", str(results['labeled_count']))
+        result_table.add_row("Compounds Remaining", str(results['unlabeled_count']))
         result_table.add_row(
             "Valid Compounds",
             f"{len(results['validation_result'].valid_compounds)} "

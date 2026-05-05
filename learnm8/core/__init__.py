@@ -13,14 +13,16 @@ Modular architecture with clear separation of concerns:
 from .config import CycleConfig, parse_cycle_schedule, parse_cycle_spec
 from .cycle import execute_cycle
 from .dataframe_ops import (
-    add_predictions,
-    batch_update,
     get_compounds_by_status,
     update_status,
 )
 from .initialization import initialize_master_dataframe_empty
 from .interfaces import Learner, Oracle
-from .persistence import save_results
+from .persistence import (
+    prediction_parquet_path,
+    save_results,
+    write_cycle_predictions,
+)
 
 # Modular core functions
 from .validation import ValidationResult, validate_compound_pool
@@ -32,9 +34,6 @@ __all__ = [
     # Core interfaces
     'Oracle',
     'ValidationResult',
-    # DataFrame operations
-    'add_predictions',
-    'batch_update',
     # Cycle execution
     'execute_cycle',
     'get_compounds_by_status',
@@ -43,8 +42,10 @@ __all__ = [
     'parse_cycle_schedule',
     'parse_cycle_spec',
     # Persistence
+    'prediction_parquet_path',
     'save_results',
     'update_status',
     # Validation
     'validate_compound_pool',
+    'write_cycle_predictions',
 ]
