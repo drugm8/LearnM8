@@ -72,6 +72,7 @@ class RfFilLearner(SklearnLearner):
             n_jobs=n_jobs,
         )
         super().__init__(model, random_state=random_state, **kwargs)
+        self.device = 'cuda'
         self.n_estimators = n_estimators
         self._fil_model = None
         self._fil_tmp_dir: str | None = None
