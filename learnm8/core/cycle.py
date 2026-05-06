@@ -32,7 +32,7 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 import numpy as np
 import polars as pl
@@ -40,7 +40,7 @@ import polars as pl
 from learnm8.core.batching import predict_with_batching
 from learnm8.core.config import CycleConfig
 from learnm8.core.interfaces import Learner, Oracle
-from learnm8.evaluation import evaluate_cycle
+from learnm8.evaluation import RunCache, evaluate_cycle
 from learnm8.exceptions import (
     AcquisitionError,
     ConfigurationError,
@@ -73,6 +73,10 @@ def execute_cycle(
     previous_metrics: dict[str, Any] | None = None,
     n_jobs: int = -1,
     output_dir: Path | None = None,
+    run_cache: RunCache | None = None,
+    featurizer_obj: Any = None,
+    disable_molecular_similarity: bool | Iterable[str] = False,
+    random_state: int | None = None,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -541,6 +545,10 @@ def execute_cycle(
                     pool_df_for_eval = cycle_predictions.select(['ID', 'prediction'])
                     original_pool_for_eval = original_pool
 
+                cumulative_selected_compounds = compounds_df.filter(
+                    pl.col('status') == 'labeled'
+                ).select(['ID', 'SMILES'])
+
                 eval_metrics = evaluate_cycle(
                     cycle=cycle,
                     predictions=eval_predictions[valid_mask],
@@ -552,12 +560,16 @@ def execute_cycle(
                     ground_truth_data=original_pool_for_eval,
                     pool_df=pool_df_for_eval,
                     uncertainties=uncertainties if uncertainties is not None else None,
-                    previously_selected=None,
+                    cumulative_selected_compounds=cumulative_selected_compounds,
                     advanced_metrics=False,
-                    disable_molecular_similarity=True,
+                    disable_molecular_similarity=disable_molecular_similarity,
                     score_direction=score_direction,
                     cumulative_selected_ids=cumulative_selected_ids,
-                    cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height)
+                    cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height),
+                    run_cache=run_cache,
+                    featurizer=featurizer_obj,
+                    cache_dir=cache_dir,
+                    random_state=random_state,
                 )
 
                 metrics.update(eval_metrics)
