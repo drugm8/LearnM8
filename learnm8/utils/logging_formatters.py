@@ -130,8 +130,8 @@ def format_cycle_metrics_table(
 	cumulative_labeled = metrics.get('cumulative_labeled', '?')
 	is_benchmark = (oracle_type == 'benchmark')
 
-	# Metrics where lower is better (error metrics, similarity to previous)
-	bad_metrics = {'rmse', 'mae', 'mse', 'inter_cycle_similarity'}
+	# Metrics where lower is better (error metrics).
+	bad_metrics = {'rmse', 'mae', 'mse'}
 	# Add avg_score_selected to bad_metrics if score_direction is 'lower'
 	if score_direction == 'lower':
 		bad_metrics = bad_metrics | {'avg_score_selected'}
@@ -208,10 +208,6 @@ def format_cycle_metrics_table(
 
 	if metrics.get('uncertainty_mean') is not None:
 		selection_parts.append(format_metric('uncertainty_mean', 'Unc', 3, False))
-	if metrics.get('intra_batch_diversity') is not None:
-		selection_parts.append(format_metric('intra_batch_diversity', 'Div', 2, False))
-	if metrics.get('batch_novelty_score') is not None:
-		selection_parts.append(format_metric('batch_novelty_score', 'Nov', 2, False))
 
 	lines.append(f"Selection │ {' '.join(selection_parts)}")
 
