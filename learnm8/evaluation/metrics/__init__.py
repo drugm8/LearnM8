@@ -3,10 +3,10 @@
 This package organizes metrics into logical categories:
 - performance: ML model performance metrics
 - enrichment: Virtual screening enrichment metrics
-- similarity: Molecular similarity and diversity metrics
+- similarity: Diversity metrics (the inverse of pairwise similarity);
+  filename retained for git-history continuity.
 """
 
-# Import all metric functions for easy access
 from .enrichment import (
     calculate_average_score_ratio,
     calculate_batch_average_score_ratio,
@@ -31,30 +31,33 @@ from .performance import (
     calculate_mape,
     calculate_spearman_correlation,
 )
-from .similarity import calculate_molecular_similarity_metrics
+from .similarity import (
+    DIVERSITY_KEYS,
+    RunCache,
+    compute_diversity_metrics,
+)
 
 __all__ = [
+    # Diversity (feature 013)
+    'DIVERSITY_KEYS',
+    'RunCache',
+    'compute_diversity_metrics',
+    # Performance metrics
     'calculate_average_score',
     'calculate_average_score_ratio',
     'calculate_batch_average_score_ratio',
     'calculate_batch_enrichment_factor',
     'calculate_batch_hit_rate',
     'calculate_cumulative_enrichment_factor',
-    # Existing enrichment metrics
     'calculate_enrichment_factor',
     'calculate_ground_truth_enrichment_factors',
-    # Performance metrics
     'calculate_mape',
-    # Similarity metrics
-    'calculate_molecular_similarity_metrics',
     'calculate_multiple_enrichment_factors',
-    # Discovery metrics
     'calculate_multiple_top_k_discovery_rates',
     'calculate_multiple_top_k_overlaps',
     'calculate_multiple_unlabeled_enrichment_factors',
-    # Ranking metrics
     'calculate_multiple_unlabeled_top_k_overlaps',
     'calculate_spearman_correlation',
     'calculate_top_k_overlap',
-    'calculate_unlabeled_ranking_correlation'
+    'calculate_unlabeled_ranking_correlation',
 ]

@@ -8,7 +8,7 @@ initial batch before active learning cycles begin.
 import logging
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -18,6 +18,9 @@ from learnm8.exceptions import AcquisitionError, OracleError
 
 from .data_structures import STATUS_UNLABELED, VALID_STATUSES
 from .interfaces import Oracle
+
+if TYPE_CHECKING:
+    from learnm8.evaluation.metrics.similarity import RunCache
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,12 @@ def calculate_initialization_metrics(
     score_direction: str,
     mode: str,
     original_pool: pl.DataFrame | None = None,
-    cumulative_selected_ids: set[str] | None = None
+    cumulative_selected_ids: set[str] | None = None,
+    run_cache: 'RunCache | None' = None,
+    featurizer_obj: Any = None,
+    disable_molecular_similarity: bool | Iterable[str] = False,
+    cache_dir: Path | None = None,
+    random_state: int | None = None,
 ) -> dict[str, Any]:
     """Calculate metrics for initialization phase (cycle 0).
 
@@ -168,8 +176,11 @@ def calculate_initialization_metrics(
         metrics['best_so_far'] = None
         metrics['avg_score_selected'] = None
 
-    # Enhanced metrics from evaluation framework (if benchmark mode)
-    if mode == 'benchmark' and original_pool is not None:
+    # Enhanced metrics from evaluation framework. Note: diversity metrics
+    # (FR-004 / FR-012) are mode-agnostic so the metric path runs in BOTH
+    # benchmark and run modes; the benchmark-only metrics (discovery, EFs)
+    # remain inside the inner conditional in evaluate_cycle.
+    if original_pool is not None or mode != 'benchmark':
         try:
             from learnm8.evaluation import evaluate_cycle
 
@@ -186,6 +197,9 @@ def calculate_initialization_metrics(
             if cumulative_selected_ids is None:
                 cumulative_selected_ids = set(selected_ids)
 
+            # FR-004a: at cycle 0 the cumulative set IS the batch.
+            cumulative_selected_compounds = selected_for_eval.select(['ID', 'SMILES'])
+
             eval_metrics = evaluate_cycle(
                 cycle=0,
                 predictions=None,
@@ -193,15 +207,19 @@ def calculate_initialization_metrics(
                 labeled_data=labeled_for_eval,
                 selected_compounds=selected_for_eval,
                 target_col=target_col,
-                oracle_type='benchmark',
+                oracle_type=mode,
                 ground_truth_data=original_pool,
                 uncertainties=None,
-                previously_selected=None,
+                cumulative_selected_compounds=cumulative_selected_compounds,
                 advanced_metrics=False,
-                disable_molecular_similarity=True,
+                disable_molecular_similarity=disable_molecular_similarity,
                 score_direction=score_direction,
                 cumulative_selected_ids=cumulative_selected_ids,
-                cumulative_labeled_count=len(selected_ids)
+                cumulative_labeled_count=len(selected_ids),
+                run_cache=run_cache,
+                featurizer=featurizer_obj,
+                cache_dir=cache_dir,
+                random_state=random_state,
             )
 
             metrics.update(eval_metrics)
@@ -226,7 +244,10 @@ def select_initial_batch(
     acquisition_params: dict | None = None,
     score_direction: str = 'higher',
     mode: str = 'run',
-    original_pool: pl.DataFrame | None = None
+    original_pool: pl.DataFrame | None = None,
+    run_cache: 'RunCache | None' = None,
+    featurizer_obj: Any = None,
+    disable_molecular_similarity: bool | Iterable[str] = False,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """Select and measure initial batch before active learning cycles.
 
@@ -395,7 +416,12 @@ def select_initial_batch(
         score_direction=score_direction,
         mode=mode,
         original_pool=original_pool,
-        cumulative_selected_ids=cumulative_selected_ids
+        cumulative_selected_ids=cumulative_selected_ids,
+        run_cache=run_cache,
+        featurizer_obj=featurizer_obj,
+        disable_molecular_similarity=disable_molecular_similarity,
+        cache_dir=cache_dir,
+        random_state=random_state,
     )
 
     return compounds_df, metrics

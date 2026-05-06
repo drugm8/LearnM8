@@ -6,7 +6,8 @@ metrics based on mode (benchmark vs run) and data availability.
 
 import logging
 import threading
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterable
 from weakref import finalize
 
 import numpy as np
@@ -28,7 +29,11 @@ from .metrics.enrichment import (
 
 # Import specialized metric functions from modular metrics package
 from .metrics.performance import calculate_average_score
-from .metrics.similarity import calculate_molecular_similarity_metrics
+from .metrics.similarity import (
+	DIVERSITY_KEYS,
+	RunCache,
+	compute_diversity_metrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,12 +106,16 @@ def evaluate_cycle(
 	ground_truth_data: pl.DataFrame | None = None,
 	pool_df: pl.DataFrame | None = None,
 	uncertainties: np.ndarray | None = None,
-	previously_selected: pl.DataFrame | None = None,
+	cumulative_selected_compounds: pl.DataFrame | None = None,
 	advanced_metrics: bool = False,
-	disable_molecular_similarity: bool = False,
+	disable_molecular_similarity: bool | Iterable[str] = False,
 	score_direction: str = 'higher',
 	cumulative_selected_ids: set | None = None,
-	cumulative_labeled_count: int | None = None
+	cumulative_labeled_count: int | None = None,
+	run_cache: 'RunCache | None' = None,
+	featurizer: Any = None,
+	cache_dir: Path | None = None,
+	random_state: int | None = None,
 ) -> dict[str, Any]:
 	"""
 	Comprehensive evaluation with adaptive metrics based on available data.
@@ -186,30 +195,38 @@ def evaluate_cycle(
 		metrics['uncertainty_mean'] = None
 		metrics['uncertainty_std'] = None
 
-	# Molecular similarity metrics (when SMILES available and not disabled)
-	if not disable_molecular_similarity and 'SMILES' in selected_compounds.columns:
+	# Diversity metrics (FR-001..FR-013b). Always emit all six DIVERSITY_KEYS
+	# plus the fingerprint_used provenance column (None when fully disabled or
+	# SMILES missing) so cycle_metrics.csv schema is stable across runs.
+	default_diversity = {key: None for key in DIVERSITY_KEYS}
+	default_diversity['fingerprint_used'] = None
+	if (run_cache is not None
+			and 'SMILES' in selected_compounds.columns):
+		cumulative_for_diversity = (
+			cumulative_selected_compounds
+			if cumulative_selected_compounds is not None
+			else selected_compounds
+		)
 		try:
-			molecular_metrics = calculate_molecular_similarity_metrics(
+			diversity_metrics = compute_diversity_metrics(
 				newly_selected_df=selected_compounds,
-				previously_selected_df=previously_selected
+				cumulative_selected_df=cumulative_for_diversity,
+				cycle=cycle,
+				run_cache=run_cache,
+				random_state=random_state,
+				featurizer=featurizer,
+				cache_dir=cache_dir,
+				disable=disable_molecular_similarity,
 			)
-			metrics.update(molecular_metrics)
+			metrics.update(diversity_metrics)
 		except (ValueError, TypeError, RuntimeError) as e:
 			logger.warning(
-				f"Could not calculate molecular similarity metrics: {e}. "
+				f"Could not calculate diversity metrics: {e}. "
 				f"Setting to None. Check input data quality."
 			)
-			metrics.update({
-				'intra_batch_diversity': None,
-				'inter_cycle_similarity': None,
-				'batch_novelty_score': None
-			})
+			metrics.update(default_diversity)
 	else:
-		metrics.update({
-			'intra_batch_diversity': None,
-			'inter_cycle_similarity': None,
-			'batch_novelty_score': None
-		})
+		metrics.update(default_diversity)
 
 	# Benchmark mode specific metrics (when ground truth available)
 	# Auto mode: enable benchmark mode when ground_truth_data and pool_df are available
@@ -399,9 +416,9 @@ def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', p
 	cumulative_labeled = metrics.get('cumulative_labeled', '?')
 	is_benchmark = (oracle_type == 'benchmark')
 
-	# Metrics where lower is better (error metrics, similarity to previous)
+	# Metrics where lower is better (error metrics).
 	# Note: avg_score_selected follows score_direction which defaults to 'higher is better'
-	bad_metrics = {'rmse', 'mae', 'mse', 'inter_cycle_similarity'}
+	bad_metrics = {'rmse', 'mae', 'mse'}
 
 	def get_change_symbol(key: str, current_val: float, is_pct: bool = False) -> str:
 		"""Return change indicator symbol: ↑ (improved), ↓ (worsened), → (stagnant), or empty."""
@@ -482,10 +499,6 @@ def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', p
 
 	if metrics.get('uncertainty_mean') is not None:
 		selection_parts.append(format_metric('uncertainty_mean', 'Unc', 3, False))
-	if metrics.get('intra_batch_diversity') is not None:
-		selection_parts.append(format_metric('intra_batch_diversity', 'Div', 2, False))
-	if metrics.get('batch_novelty_score') is not None:
-		selection_parts.append(format_metric('batch_novelty_score', 'Nov', 2, False))
 
 	lines.append(f"Selection │ {' '.join(selection_parts)}")
 

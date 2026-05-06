@@ -51,7 +51,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Iterable, Literal
 
 import polars as pl
 
@@ -62,6 +62,7 @@ from learnm8.core.initialization import (
     select_initial_batch,
 )
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
+from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
@@ -397,6 +398,8 @@ def run_active_learning(
     # Resource control
     n_jobs: int = -1,
     device: str = 'auto',
+    # Diversity metrics (feature 013)
+    disable_molecular_similarity: bool | Iterable[str] = False,
     **kwargs
 ) -> dict[str, Any]:
     """Execute active learning experiment.
@@ -565,6 +568,11 @@ def run_active_learning(
     """
 
     start_time = time.time()
+
+    # FR-026: per-run diversity-metric cache, lifetime owned here. The
+    # try/finally below guarantees prompt eviction independent of GC timing
+    # so cumulative buffers never bleed across runs in long-lived processes.
+    run_cache = RunCache()
 
     try:
         n_jobs = validate_n_jobs(n_jobs)
@@ -880,7 +888,10 @@ def run_active_learning(
             acquisition_params=init_config.acquisition_params,
             score_direction=score_direction,
             mode=mode,
-            original_pool=original_pool
+            original_pool=original_pool,
+            run_cache=run_cache,
+            featurizer_obj=featurizer_obj,
+            disable_molecular_similarity=disable_molecular_similarity,
         )
 
         # Initialize metrics list with cycle 0
@@ -937,6 +948,10 @@ def run_active_learning(
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
                     memory_safety_factor=memory_safety_factor,
+                    run_cache=run_cache,
+                    featurizer_obj=featurizer_obj,
+                    disable_molecular_similarity=disable_molecular_similarity,
+                    random_state=random_state,
                     previous_metrics=previous_metrics,
                     n_jobs=n_jobs,
                     output_dir=output_dir,
@@ -1028,3 +1043,6 @@ def run_active_learning(
     except Exception as e:
         logger.error(f"Active learning failed: {e}", exc_info=True)
         raise
+    finally:
+        # Release diversity-metric caches even on success/failure paths.
+        run_cache.clear()
