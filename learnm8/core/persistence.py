@@ -22,6 +22,7 @@ from typing import Any
 
 import polars as pl
 
+from learnm8.evaluation.metrics.similarity import DIVERSITY_KEYS
 from learnm8.exceptions import PersistenceError
 
 from .validation import ValidationResult
@@ -279,7 +280,20 @@ def save_results(
                 if k not in ('selected_predictions', 'parquet_path')
             }
             sanitized_metrics.append(cm_copy)
-        metrics_df = pl.DataFrame(sanitized_metrics)
+
+        # FR-013 / FR-013b: schema_overrides forces stable dtypes for the
+        # six diversity numeric columns and the fingerprint_used provenance
+        # column even when every value is null (e.g., when
+        # disable_molecular_similarity=True). Without this, an all-null
+        # column would be inferred as Null dtype and break downstream
+        # readers that expect Float64.
+        schema_overrides: dict[str, pl.PolarsDataType] = {
+            key: pl.Float64 for key in DIVERSITY_KEYS
+        }
+        if any('fingerprint_used' in cm for cm in sanitized_metrics):
+            schema_overrides['fingerprint_used'] = pl.Utf8
+
+        metrics_df = pl.DataFrame(sanitized_metrics, schema_overrides=schema_overrides)
         list_cols = ['selected_ids', 'pruned_ids']
         cols_to_drop = [c for c in list_cols if c in metrics_df.columns]
         if cols_to_drop:

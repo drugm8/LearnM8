@@ -422,11 +422,12 @@ class TestSpecificExceptionHandling:
         assert result['uncertainty_mean'] is None
         assert result['uncertainty_std'] is None
 
-    def test_molecular_similarity_catches_runtime_error(self, caplog):
+    def test_diversity_metrics_catches_runtime_error(self, caplog):
+        from learnm8.evaluation.metrics.similarity import RunCache
         labeled, selected, predictions, ground_truth = self._make_base_args()
 
         with patch(
-            'learnm8.evaluation.core.calculate_molecular_similarity_metrics',
+            'learnm8.evaluation.core.compute_diversity_metrics',
             side_effect=RuntimeError('RDKit internal error'),
         ):
             with caplog.at_level(logging.WARNING):
@@ -434,9 +435,12 @@ class TestSpecificExceptionHandling:
                     cycle=1, predictions=predictions, ground_truth=ground_truth,
                     labeled_data=labeled, selected_compounds=selected,
                     target_col='Activity',
+                    run_cache=RunCache(),
                 )
-            assert result['intra_batch_diversity'] is None
-            assert 'molecular similarity' in caplog.text.lower()
+            assert result['mean_tanimoto_similarity_sampled_batch'] is None
+            assert result['scaffold_diversity_index_batch'] is None
+            assert result['shannon_entropy_diversity_batch'] is None
+            assert 'diversity' in caplog.text.lower()
 
     def test_discovery_metrics_catches_zero_division(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()

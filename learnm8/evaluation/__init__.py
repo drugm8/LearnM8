@@ -10,27 +10,30 @@ from .core import evaluate_cycle, export_metrics_csv, format_progress_output
 
 # Import specialized metric functions from modular metrics package
 from .metrics import (
+    DIVERSITY_KEYS,
+    RunCache,
     calculate_average_score,
     calculate_enrichment_factor,
     calculate_mape,
-    calculate_molecular_similarity_metrics,
     calculate_multiple_enrichment_factors,
     calculate_multiple_top_k_overlaps,
     calculate_spearman_correlation,
     calculate_top_k_overlap,
+    compute_diversity_metrics,
 )
 
-# Public API exports for backward compatibility
+# Public API exports
 __all__ = [
+    'DIVERSITY_KEYS',
+    'RunCache',
     'calculate_average_score',
     'calculate_enrichment_factor',
     'calculate_mape',
-    'calculate_molecular_similarity_metrics',
     'calculate_multiple_enrichment_factors',
     'calculate_multiple_top_k_overlaps',
-    # Specialized metric functions (sklearn basics not exported)
     'calculate_spearman_correlation',
     'calculate_top_k_overlap',
+    'compute_diversity_metrics',
     # Main evaluation functions
     'evaluate_cycle',
     'export_metrics_csv',
