@@ -87,6 +87,10 @@ class CSVOracle(Oracle):
                 self.ground_truth = self.ground_truth.drop('ID')
             self.ground_truth = self.ground_truth.rename({id_column: 'ID'})
 
+    def known_ids(self) -> set:
+        """IDs the oracle can measure (rows with invalid/null targets are dropped at init)."""
+        return set(self.ground_truth['ID'].to_list())
+
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
         Look up property values for given compounds.

@@ -813,6 +813,38 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
+        oracle_ids = oracle.known_ids()
+        if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
+            valid_pool = validation_result.valid_compounds
+            keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
+            n_unmeasurable = int((~keep_mask).sum())
+            if n_unmeasurable > 0:
+                unmeasurable = valid_pool.filter(~keep_mask)
+                kept = valid_pool.filter(keep_mask)
+                reason = "Not present in oracle ground truth (missing target value)"
+                for cid in unmeasurable['ID'].to_list():
+                    validation_result.validation_errors[str(cid)] = reason
+                if len(validation_result.invalid_compounds) > 0:
+                    validation_result.invalid_compounds = pl.concat(
+                        [validation_result.invalid_compounds, unmeasurable], how='vertical'
+                    )
+                else:
+                    validation_result.invalid_compounds = unmeasurable
+                validation_result.valid_compounds = kept
+                logger.warning(
+                    f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
+                    f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
+                    f"Pool size: {len(kept)} measurable compounds."
+                )
+
+            if (
+                target_col in validation_result.valid_compounds.columns
+                and validation_result.valid_compounds[target_col].dtype == pl.Utf8
+            ):
+                validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
+                    pl.col(target_col).cast(pl.Float64, strict=False)
+                )
+
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
         logger.info("═══════════════════════════════════════════════════════════════")

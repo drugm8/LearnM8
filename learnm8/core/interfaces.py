@@ -46,6 +46,21 @@ class Oracle(ABC):
         """
         pass
 
+    def known_ids(self) -> set[Any] | None:
+        """Return the set of compound IDs this oracle can measure, if known.
+
+        Lookup-style oracles (e.g. ``CSVOracle``) drop ground-truth rows that
+        carry invalid/null target values during construction. Returning the
+        surviving ID set lets the API filter the AL pool to match, so random
+        selection in cycle 0 cannot pick a compound the oracle silently
+        discarded. Oracles that cannot enumerate measurable IDs ahead of time
+        (e.g. an experimental ``PythonOracle``) return ``None``.
+
+        Returns:
+            Set of IDs available for measurement, or ``None`` when unknown.
+        """
+        return None
+
 
 class Learner(ABC):
     """Base class for all machine learning models.
