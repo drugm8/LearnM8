@@ -22,49 +22,74 @@ ENV CUDA_HOME=/usr/local/cuda
 ENV PATH=$CUDA_HOME/bin:$PATH
 ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
-# Configure conda channels
+# Configure conda channels (order matches environment.yml: rapidsai, pytorch, conda-forge, nvidia)
 RUN conda config --set channel_priority flexible && \
-    conda config --add channels pytorch && \
     conda config --add channels nvidia && \
-    conda config --add channels conda-forge
+    conda config --add channels conda-forge && \
+    conda config --add channels pytorch && \
+    conda config --add channels rapidsai
 
 WORKDIR /app
 
 RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
     conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
 
-# Install conda packages into base env
-RUN conda install -y python=3.11 \
-    numpy=2.4.2 \
-    pandas=3.0.1 \
-    matplotlib=3.10.8 \
-    scipy=1.17.1 \
-    seaborn=0.13.2 \
-    h5py=3.15.1 \
-    joblib=1.5.3 \
-    tqdm=4.67.3 \
-    pyyaml=6.0.3 \
-    xgboost=3.2.0 \
+# Install core scientific + ML stack into base env
+RUN conda install -y \
+    python=3.11 \
+    "numpy>=1.24,<3.0" \
+    "scipy>=1.10,<2.0" \
+    "pandas>=1.5,<3.0" \
+    "polars>=1.0" \
+    "pyarrow>=15.0" \
+    "scikit-learn>=1.2,<1.8" \
+    "xgboost>=1.7,<3.0" \
+    "statsmodels>=0.14" \
+    "joblib>=1.2" \
+    "rdkit>=2023.03" \
+    "datamol>=0.12" \
+    mordredcommunity \
+    "h5py>=3.0" \
+    "hdf5plugin>=3.0" \
+    "matplotlib-base>=3.5" \
+    "rich>=10.0" \
+    "pyyaml>=5.0" \
+    "pytest>=7.0" \
+    "ruff>=0.4" \
+    "mypy>=1.0" \
     ipython \
-    ipykernel=7.2.0 \
-    setuptools=82.0.0 \
+    ipykernel \
+    setuptools \
     -c conda-forge && \
     conda clean -afy
 
-# Install pip packages
+# Install GPU stack: PyTorch + CUDA, gpytorch, RAPIDS cuml, cupy, treelite
+# pytorch-cuda is a metapackage pinning the CUDA runtime PyTorch was built against.
+RUN conda install -y \
+    "pytorch>=2.0,<3.0" \
+    "pytorch-cuda>=12.4" \
+    "pytorch-lightning>=2.0,<3.0" \
+    "gpytorch>=1.11" \
+    "treelite>=4.4,<5.0" \
+    cupy \
+    -c pytorch -c nvidia -c conda-forge && \
+    conda clean -afy
+
+# RAPIDS cuML (GPU-accelerated scikit-learn) installed separately
+# from rapidsai channel to avoid solver conflicts with the pytorch stack above.
+RUN conda install -y \
+    "cuml>=25.04" \
+    -c rapidsai -c conda-forge -c nvidia && \
+    conda clean -afy
+
+# Install pip-only packages (chemprop, fastprop, scikit-fingerprints, gauche, bitbirch)
 RUN pip install --no-cache-dir \
-    chemprop==2.2.2 \
-    datamol==0.12.5 \
-    fastprop==1.2.2 \
-    hdf5plugin==6.0.0 \
-    lightning==2.6.1 \
-    meeko==0.7.1 \
-    polars==1.38.1 \
-    pytest==9.0.2 \
-    pytorch_lightning==2.6.1 \
-    rich==14.3.3 \
-    xgboost==3.2.0 \
-    scikit-fingerprints
+    chemprop \
+    fastprop \
+    scikit-fingerprints \
+    "gauche>=0.1.6" \
+    "pytest-xdist>=3.5" \
+    git+https://github.com/mqcomplab/bitbirch.git
 
 # Copy project and install in editable mode
 COPY . .
