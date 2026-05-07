@@ -316,11 +316,12 @@ class TestPredictWithBatching:
             patch("learnm8.core.batching.get_available_memory", return_value=large_memory),
             patch("learnm8.core.batching.extract_features", return_value=fake_features),
         ):
-            preds, uncerts, ids = predict_with_batching(pool, learner, "morgan", tmp_path)
+            preds, uncerts, ids, feat_time = predict_with_batching(pool, learner, "morgan", tmp_path)
 
         assert len(preds) == n
         assert uncerts is None
         assert len(ids) == n
+        assert feat_time >= 0.0
 
     def test_multi_batch_concatenation(self, tmp_path):
         n = 50
@@ -342,7 +343,7 @@ class TestPredictWithBatching:
             patch("learnm8.core.batching.get_available_memory", return_value=small_memory),
             patch("learnm8.core.batching.extract_features", side_effect=lambda smiles, *a, **kw: np.ones((len(smiles), 2048))),
         ):
-            preds, _uncerts, ids = predict_with_batching(pool, learner, "morgan", tmp_path)
+            preds, _uncerts, ids, _feat_time = predict_with_batching(pool, learner, "morgan", tmp_path)
 
         assert len(preds) == n
         assert len(ids) == n
@@ -359,7 +360,7 @@ class TestPredictWithBatching:
             patch("learnm8.core.batching.get_available_memory", return_value=large_memory),
             patch("learnm8.core.batching.extract_features", return_value=np.ones((n, 2048))),
         ):
-            _preds, uncerts, _ids = predict_with_batching(pool, learner, "morgan", tmp_path)
+            _preds, uncerts, _ids, _feat_time = predict_with_batching(pool, learner, "morgan", tmp_path)
 
         assert uncerts is not None
         assert len(uncerts) == n
@@ -386,7 +387,7 @@ class TestPredictWithBatching:
             patch("learnm8.core.batching.get_available_memory", return_value=large_memory),
             patch("learnm8.core.batching.extract_features", side_effect=lambda smiles, *a, **kw: np.ones((len(smiles), 2048))),
         ):
-            preds, _uncerts, _ids = predict_with_batching(pool, learner, "morgan", tmp_path)
+            preds, _uncerts, _ids, _feat_time = predict_with_batching(pool, learner, "morgan", tmp_path)
 
         assert len(preds) == n
         assert call_count[0] > 1

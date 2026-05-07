@@ -5,8 +5,14 @@ This package organizes metrics into logical categories:
 - enrichment: Virtual screening enrichment metrics
 - similarity: Diversity metrics (the inverse of pairwise similarity);
   filename retained for git-history continuity.
+- diagnostics: Cycle diagnostic metrics — selected_percentile and
+  prediction_entropy (feature 014).
 """
 
+from .diagnostics import (
+    compute_prediction_entropy,
+    compute_selected_percentile,
+)
 from .enrichment import (
     calculate_average_score_ratio,
     calculate_batch_average_score_ratio,
@@ -38,11 +44,8 @@ from .similarity import (
 )
 
 __all__ = [
-    # Diversity (feature 013)
     'DIVERSITY_KEYS',
     'RunCache',
-    'compute_diversity_metrics',
-    # Performance metrics
     'calculate_average_score',
     'calculate_average_score_ratio',
     'calculate_batch_average_score_ratio',
@@ -60,4 +63,7 @@ __all__ = [
     'calculate_spearman_correlation',
     'calculate_top_k_overlap',
     'calculate_unlabeled_ranking_correlation',
+    'compute_diversity_metrics',
+    'compute_prediction_entropy',
+    'compute_selected_percentile',
 ]

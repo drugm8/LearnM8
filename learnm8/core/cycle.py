@@ -194,20 +194,26 @@ def execute_cycle(
         else:
             learner._feature_type = 'binary'
 
-        # Extract features and train learner
+        # Extract features and train learner.
+        # Feature-extraction time is tracked separately from learner-side
+        # training time so that `feature_extraction_time` (HDF5 cache speedup)
+        # can be reported independently in cycle metrics.
         training_start_time = time.time()
+        train_feature_time = 0.0
         try:
             training_targets = labeled_df[target_col].to_numpy()
             training_smiles = labeled_df['SMILES'].to_list()
 
             if learner.requires_smiles():
                 if featurizer is not None:
+                    _t0 = time.time()
                     training_features = extract_features(
                         training_smiles,
                         featurizer,
                         cache_dir=cache_dir,
                         n_jobs=n_jobs
                     )
+                    train_feature_time += time.time() - _t0
                     logger.info(
                         f"Training {learner.get_name()} on {len(labeled_df)} compounds "
                         f"(SMILES + {training_features.shape[1]}-D descriptors)"
@@ -233,12 +239,14 @@ def execute_cycle(
                         f"a featurizer (featurizer=None)."
                     )
 
+                _t0 = time.time()
                 training_features = extract_features(
                     training_smiles,
                     featurizer,
                     cache_dir=cache_dir,
                     n_jobs=n_jobs
                 )
+                train_feature_time += time.time() - _t0
                 logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
 
                 logger.info(f"Training {learner.get_name()} on {len(labeled_df)} compounds ({featurizer})")
@@ -256,7 +264,9 @@ def execute_cycle(
             err.add_note(f"Failed during cycle {cycle} with {len(labeled_df)} labeled compounds")
             raise err from e
 
-        training_time = time.time() - training_start_time
+        # Carve feature-extraction time out of training_time so the two metrics
+        # are mutually exclusive (required for stacked-bar compute breakdowns).
+        training_time = max(0.0, (time.time() - training_start_time) - train_feature_time)
         logger.info(f"Training complete ({training_time:.2f}s)")
 
     # Step 4: Prediction on unlabeled compounds (unified always-batch approach)
@@ -285,7 +295,12 @@ def execute_cycle(
         return compounds_df, metrics
 
     try:
-        predictions, uncertainties, valid_compound_ids = predict_with_batching(
+        (
+            predictions,
+            uncertainties,
+            valid_compound_ids,
+            predict_feature_time,
+        ) = predict_with_batching(
             prediction_pool,
             learner,
             featurizer,
@@ -305,7 +320,9 @@ def execute_cycle(
         err.add_note(f"Failed during cycle {cycle}")
         raise err from e
 
-    prediction_time = time.time() - prediction_start_time
+    # Carve feature-extraction time out of prediction_time so the two metrics
+    # are mutually exclusive (required for stacked-bar compute breakdowns).
+    prediction_time = max(0.0, (time.time() - prediction_start_time) - predict_feature_time)
     logger.info(f"Prediction complete: {len(predictions)} predictions (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s")
 
     if len(predictions) == 0:
@@ -581,12 +598,18 @@ def execute_cycle(
     # Calculate total cycle time
     total_time = time.time() - cycle_start_time
 
-    # Add timing metrics
+    # Add timing metrics. `feature_extraction_time` is the wall-clock seconds
+    # spent in `extract_features` across both training-side and prediction-side
+    # calls; it is carved out of `training_time` and `prediction_time` so the
+    # four compute-component metrics can be summed for stacked-bar breakdowns
+    # (publication Fig. 5 panel C, HDF5 cache speedup).
+    feature_extraction_time = train_feature_time + predict_feature_time
     metrics['training_time'] = training_time
     metrics['prediction_time'] = prediction_time
     metrics['acquisition_time'] = acquisition_time
     metrics['oracle_time'] = oracle_time
     metrics['evaluation_time'] = evaluation_time
+    metrics['feature_extraction_time'] = feature_extraction_time
     metrics['total_time'] = total_time
 
     # Parquet path and cycle-time prediction capture for selected compounds.

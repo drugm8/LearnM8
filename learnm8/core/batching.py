@@ -16,6 +16,7 @@ import gc
 import logging
 import math
 import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -183,12 +184,19 @@ def _predict_chunk(
     cache_dir: Path,
     show_progress: bool = False,
     n_jobs: int = -1,
-) -> tuple[np.ndarray, np.ndarray | None]:
-    """Generate predictions for a chunk of compounds."""
+) -> tuple[np.ndarray, np.ndarray | None, float]:
+    """Generate predictions for a chunk of compounds.
+
+    Returns a 3-tuple ``(predictions, uncertainties, feature_extraction_time)``.
+    The third element is the wall-clock seconds spent inside ``extract_features``
+    so callers can report it separately from learner-side prediction time.
+    """
     chunk_smiles = chunk_df["SMILES"].to_list()
+    feature_time = 0.0
 
     if learner.requires_smiles():
         if featurizer is not None:
+            t0 = time.time()
             chunk_features = extract_features(
                 chunk_smiles,
                 featurizer,
@@ -196,9 +204,11 @@ def _predict_chunk(
                 show_progress=show_progress,
                 n_jobs=n_jobs,
             )
+            feature_time = time.time() - t0
         else:
             chunk_features = None
-        return learner.predict(features=chunk_features, smiles=chunk_smiles)
+        preds, uncerts = learner.predict(features=chunk_features, smiles=chunk_smiles)
+        return preds, uncerts, feature_time
     else:
         if featurizer is None:
             raise ValueError(
@@ -207,6 +217,7 @@ def _predict_chunk(
                 f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
                 f"a featurizer (featurizer=None)."
             )
+        t0 = time.time()
         chunk_features = extract_features(
             chunk_smiles,
             featurizer,
@@ -214,7 +225,9 @@ def _predict_chunk(
             show_progress=show_progress,
             n_jobs=n_jobs,
         )
-        return learner.predict(chunk_features)
+        feature_time = time.time() - t0
+        preds, uncerts = learner.predict(chunk_features)
+        return preds, uncerts, feature_time
 
 
 def _get_n_features(featurizer: str | None) -> int:
@@ -239,7 +252,7 @@ def predict_with_batching(
     cache_dir: Path,
     memory_safety_factor: float = DEFAULT_SAFETY_FACTOR,
     n_jobs: int = 1,
-) -> tuple[np.ndarray, np.ndarray | None, list]:
+) -> tuple[np.ndarray, np.ndarray | None, list, float]:
     """Memory-safe batched prediction with OOM recovery.
 
     Args:
@@ -251,7 +264,11 @@ def predict_with_batching(
         n_jobs: Number of parallel workers.
 
     Returns:
-        Tuple of (predictions, uncertainties_or_none, valid_ids).
+        Tuple of ``(predictions, uncertainties_or_none, valid_ids,
+        feature_extraction_time)``. The fourth element is the wall-clock seconds
+        spent in ``extract_features`` summed across all chunks (including
+        OOM-retry sub-chunks), so the caller can report it independently of
+        learner-side prediction time.
 
     Raises:
         LearnerError: If OOM persists at minimum batch size.
@@ -282,6 +299,7 @@ def predict_with_batching(
     all_uncertainties: list[np.ndarray] = []
     has_uncertainty = learner.supports_uncertainty()
     all_valid_ids: list = []
+    feature_extraction_time = 0.0
 
     chunks = list(_chunk_dataframe(prediction_pool, batch_size))
 
@@ -292,9 +310,10 @@ def predict_with_batching(
         while not succeeded:
             oom_occurred = False
             try:
-                chunk_preds, chunk_uncerts = _predict_chunk(
+                chunk_preds, chunk_uncerts, chunk_feat_time = _predict_chunk(
                     chunk_df, learner, featurizer, cache_dir, n_jobs=n_jobs
                 )
+                feature_extraction_time += chunk_feat_time
                 succeeded = True
             except (RuntimeError, MemoryError) as e:
                 is_oom = isinstance(e, MemoryError) or (
@@ -336,9 +355,10 @@ def predict_with_batching(
                 sub_preds = []
                 sub_uncerts = []
                 for sub_chunk in sub_chunks:
-                    sp, su = _predict_chunk(
+                    sp, su, sft = _predict_chunk(
                         sub_chunk, learner, featurizer, cache_dir, n_jobs=n_jobs
                     )
+                    feature_extraction_time += sft
                     sub_preds.append(sp)
                     if su is not None:
                         sub_uncerts.append(su)
@@ -366,4 +386,4 @@ def predict_with_batching(
             else np.concatenate(all_uncertainties)
         )
 
-    return predictions, uncertainties, all_valid_ids
+    return predictions, uncertainties, all_valid_ids, feature_extraction_time

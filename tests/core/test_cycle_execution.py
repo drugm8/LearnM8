@@ -418,7 +418,60 @@ class TestCycleExecution:
 
         assert 0 <= metrics['prediction_mean'] <= 1
         assert metrics['prediction_std'] >= 0
-    
+
+    def test_feature_extraction_time_metric(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
+        """`feature_extraction_time` is reported separately from training/prediction time.
+
+        Used by the publication compute-bottleneck breakdown (Fig. 5) to isolate
+        HDF5 cache speedup. Must be mutually exclusive with training_time and
+        prediction_time so stacked bars do not exceed total_time.
+        """
+        from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
+
+        compounds = pl.DataFrame({
+            'ID': [f'COMP_{i:03d}' for i in range(10)],
+            'SMILES': ['CCO'] * 10,
+        })
+        initial_ids = compounds['ID'].head(3).to_list()
+        initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
+        master_df = initialize_master_dataframe(
+            valid_compounds=compounds,
+            target_col='Activity',
+            initial_labeled_ids=initial_ids,
+            initial_measurements=initial_values,
+        )
+
+        config = CycleConfig(strategy='random', batch_fraction=0.2)
+        _updated_df, metrics = execute_cycle(
+            compounds_df=master_df,
+            cycle=0,
+            config=config,
+            learner=mock_learner_with_uncertainty,
+            oracle=mock_oracle,
+            target_col='Activity',
+            featurizer='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(compounds),
+            score_direction='higher',
+            mode='run',
+        )
+
+        assert 'feature_extraction_time' in metrics
+        assert isinstance(metrics['feature_extraction_time'], float)
+        assert metrics['feature_extraction_time'] >= 0.0
+        # When a real featurizer ('morgan') runs, some non-zero time is expected.
+        assert metrics['feature_extraction_time'] > 0.0
+        # Mutual exclusivity: feature time must not double-count training/prediction.
+        component_sum = (
+            metrics['training_time']
+            + metrics['prediction_time']
+            + metrics['acquisition_time']
+            + metrics['feature_extraction_time']
+        )
+        # Allow small slack for un-instrumented work (oracle, evaluation, bookkeeping)
+        # but components must not exceed total_time.
+        assert component_sum <= metrics['total_time'] + 1e-3
+
     def test_multiple_strategies(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
         """Test cycle execution with different acquisition strategies."""
         from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
