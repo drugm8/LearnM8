@@ -28,6 +28,10 @@ from .metrics.enrichment import (
 )
 
 # Import specialized metric functions from modular metrics package
+from .metrics.diagnostics import (
+	compute_prediction_entropy,
+	compute_selected_percentile,
+)
 from .metrics.performance import calculate_average_score
 from .metrics.similarity import (
 	DIVERSITY_KEYS,
@@ -380,6 +384,24 @@ def evaluate_cycle(
 	# Ground truth EF metrics — served from cache populated above
 	if ground_truth_data is not None:
 		metrics.update(gt_stats['gt_ef_metrics'])
+
+	# Diagnostic metrics (feature 014). Each function returns None when its
+	# inputs are unavailable so the schema stays stable across modes.
+	try:
+		metrics['selected_percentile'] = compute_selected_percentile(
+			selected_compounds, ground_truth_data, target_col, score_direction,
+		)
+	except (ValueError, TypeError, KeyError) as e:
+		logger.warning("Could not calculate selected_percentile: %s. Setting to None.", e)
+		metrics['selected_percentile'] = None
+	try:
+		metrics['prediction_entropy'] = compute_prediction_entropy(
+			pool_df, cumulative_selected_ids,
+		)
+	except (ValueError, TypeError, KeyError) as e:
+		logger.warning("Could not calculate prediction_entropy: %s. Setting to None.", e)
+		metrics['prediction_entropy'] = None
+	metrics['pool_size_after_prune'] = len(pool_df) if pool_df is not None else None
 
 	# Round numeric values for cleaner output
 	for key, value in metrics.items():

@@ -67,12 +67,13 @@ class TestPredictChunk:
         with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)
 
-            predictions, uncertainties = _predict_chunk(
+            predictions, uncertainties, feat_time = _predict_chunk(
                 chunk_df, mock_learner, 'morgan', tmp_path, show_progress=False
             )
 
             assert predictions.shape == (5,)
             assert uncertainties is None
+            assert feat_time >= 0.0
             mock_extract.assert_called_once()
             mock_learner.predict.assert_called_once()
 
@@ -98,12 +99,13 @@ class TestPredictChunk:
             np.array([0.1, 0.2, 0.3, 0.4, 0.5])
         )
 
-        predictions, uncertainties = _predict_chunk(
+        predictions, uncertainties, feat_time = _predict_chunk(
             chunk_df, mock_learner, None, tmp_path, show_progress=False
         )
 
         assert predictions.shape == (5,)
         assert uncertainties.shape == (5,)
+        assert feat_time == 0.0  # No featurizer → no feature extraction time
         mock_learner.predict.assert_called_once()
         call_kwargs = mock_learner.predict.call_args[1]
         assert call_kwargs['features'] is None
@@ -123,12 +125,13 @@ class TestPredictChunk:
         with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)
 
-            predictions, uncertainties = _predict_chunk(
+            predictions, uncertainties, feat_time = _predict_chunk(
                 chunk_df, mock_learner, 'morgan', tmp_path, show_progress=False
             )
 
             assert predictions.shape == (5,)
             assert uncertainties is None
+            assert feat_time >= 0.0
             mock_extract.assert_called_once()
             mock_learner.predict.assert_called_once()
             call_kwargs = mock_learner.predict.call_args[1]
