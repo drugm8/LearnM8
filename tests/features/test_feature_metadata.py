@@ -1,4 +1,5 @@
 import pytest
+
 from learnm8.features import FEATURIZER_REGISTRY
 
 pytestmark = pytest.mark.unit
@@ -7,12 +8,13 @@ BINARY_FEATURIZERS = [
     'morgan', 'ecfp', 'ecfp6', 'morgan_feat', 'secfp',
     'maccs', 'pubchem', 'klekota_roth', 'laggner',
     'avalon', 'atom_pair', 'topological_torsion', 'rdkit', 'pattern', 'layered',
-    'map4', 'mhfp', 'lingo', 'erg', 'e3fp',
+    'map4', 'mhfp', 'lingo', 'e3fp',
 ]
 
 CONTINUOUS_FEATURIZERS = [
     'mordred', 'descriptors', 'rdkit_2d_descriptors', 'estate', 'ghose_crippen',
     'mqns', 'vsa', 'bcut2d', 'physiochemical', 'pharmacophore', 'functional_groups',
+    'erg',
     'whim', 'usr', 'usrcat', 'getaway', 'morse', 'rdf', 'autocorr', 'electroshape',
 ]
 

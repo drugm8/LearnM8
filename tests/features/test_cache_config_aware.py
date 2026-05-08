@@ -1,8 +1,9 @@
 """Test configuration-aware HDF5 caching for featurizers."""
 
-import pytest
+
 import numpy as np
-from pathlib import Path
+import pytest
+
 from learnm8.features.extraction import extract_features
 from learnm8.features.skfp_2d.morgan import MorganFeaturizer
 from learnm8.features.skfp_3d.usr import USRFeaturizer
@@ -13,45 +14,37 @@ class TestConfigurationAwareCaching:
     """Test cache keys include featurizer configuration hash."""
 
     def test_different_configs_use_different_cache_keys(self, small_real_compounds, tmp_path):
-        """Different featurizer configs create separate cache entries (keys within same file)."""
+        """Different featurizer radii share the v2 cache file with distinct uint64 hash keys."""
         import h5py
-        from learnm8.features.cache import _generate_cache_key
+
+        from learnm8.features.cache import _cache_keys_uint64
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
-        test_smiles = smiles[0]  # Use first SMILES for key checking
+        test_smiles = smiles[0]
 
         featurizer1 = MorganFeaturizer(radius=2)
         featurizer2 = MorganFeaturizer(radius=3)
 
         features1 = extract_features(
-            smiles,
-            featurizer=featurizer1,
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=featurizer1, cache_dir=tmp_path, n_jobs=1
         )
-
         features2 = extract_features(
-            smiles,
-            featurizer=featurizer2,
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=featurizer2, cache_dir=tmp_path, n_jobs=1
         )
 
         assert not np.array_equal(features1, features2)
 
-        # Both configs stored in same file with different keys
         cache_files = list(tmp_path.glob("*.h5"))
         assert len(cache_files) == 1
 
-        # Verify different cache keys for same SMILES with different configs
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
-            features_group = h5f['features']
-            key1 = _generate_cache_key(test_smiles, featurizer1)
-            key2 = _generate_cache_key(test_smiles, featurizer2)
+            hash_index = h5f['hash_index'][:]
+            key1 = int(_cache_keys_uint64([test_smiles], featurizer1)[0])
+            key2 = int(_cache_keys_uint64([test_smiles], featurizer2)[0])
             assert key1 != key2
-            assert key1 in features_group
-            assert key2 in features_group
+            assert key1 in hash_index
+            assert key2 in hash_index
 
     def test_same_config_reuses_cache(self, small_real_compounds, tmp_path):
         """Identical configs reuse same cache entry."""
@@ -80,14 +73,14 @@ class TestConfigurationAwareCaching:
         """Cache keys include featurizer name to prevent collisions."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
-        features1 = extract_features(
+        extract_features(
             smiles,
             featurizer=MorganFeaturizer(),
             cache_dir=tmp_path,
             n_jobs=1
         )
 
-        features2 = extract_features(
+        extract_features(
             smiles,
             featurizer=USRFeaturizer(),
             cache_dir=tmp_path,
@@ -162,51 +155,38 @@ class TestCacheWithDifferentParameters:
     """Test caching with various parameter combinations."""
 
     def test_cache_fp_size_variations(self, small_real_compounds, tmp_path):
-        """Different fp_size creates separate cache entries (keys within same file)."""
+        """Different fp_size = different bit_count = old v2 file gets renamed."""
         import h5py
-        from learnm8.features.cache import _generate_cache_key
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
-        test_smiles = smiles[0]
 
         feat1 = MorganFeaturizer(fp_size=2048)
         feat2 = MorganFeaturizer(fp_size=4096)
 
         feat_2048 = extract_features(
-            smiles,
-            featurizer=feat1,
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=feat1, cache_dir=tmp_path, n_jobs=1
         )
-
         feat_4096 = extract_features(
-            smiles,
-            featurizer=feat2,
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=feat2, cache_dir=tmp_path, n_jobs=1
         )
 
         assert feat_2048.shape[1] == 2048
         assert feat_4096.shape[1] == 4096
 
-        # Both configs stored in same file with different keys
-        cache_files = list(tmp_path.glob("*.h5"))
-        assert len(cache_files) == 1
+        # Active cache reflects the latest bit_count; previous file lives at .dim<N>.bak
+        active = tmp_path / 'features_morgan.h5'
+        backup = tmp_path / 'features_morgan.h5.dim2048.bak'
+        assert active.exists()
+        assert backup.exists()
 
-        # Verify different cache keys
-        cache_file = cache_files[0]
-        with h5py.File(cache_file, 'r') as h5f:
-            features_group = h5f['features']
-            key1 = _generate_cache_key(test_smiles, feat1)
-            key2 = _generate_cache_key(test_smiles, feat2)
-            assert key1 != key2
-            assert key1 in features_group
-            assert key2 in features_group
+        with h5py.File(active, 'r') as h5f:
+            assert int(h5f.attrs['bit_count']) == 4096
 
     def test_cache_3d_conformer_params(self, small_real_compounds, tmp_path):
-        """Different conformer params create separate cache entries (keys within same file)."""
+        """Different USR conformer params share file with distinct uint64 hash keys."""
         import h5py
-        from learnm8.features.cache import _generate_cache_key
+
+        from learnm8.features.cache import _cache_keys_uint64
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:3]
         test_smiles = smiles[0]
@@ -217,19 +197,17 @@ class TestCacheWithDifferentParameters:
         extract_features(smiles, featurizer=feat1, cache_dir=tmp_path, n_jobs=1)
         extract_features(smiles, featurizer=feat2, cache_dir=tmp_path, n_jobs=1)
 
-        # Both configs stored in same file with different keys
         cache_files = list(tmp_path.glob("*.h5"))
         assert len(cache_files) == 1
 
-        # Verify different cache keys
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
-            features_group = h5f['features']
-            key1 = _generate_cache_key(test_smiles, feat1)
-            key2 = _generate_cache_key(test_smiles, feat2)
+            hash_index = h5f['hash_index'][:]
+            key1 = int(_cache_keys_uint64([test_smiles], feat1)[0])
+            key2 = int(_cache_keys_uint64([test_smiles], feat2)[0])
             assert key1 != key2
-            assert key1 in features_group
-            assert key2 in features_group
+            assert key1 in hash_index
+            assert key2 in hash_index
 
 
 @pytest.mark.integration
@@ -251,16 +229,15 @@ class TestCacheFileStructure:
         assert cache_file.name == 'features_morgan.h5'
 
     def test_multiple_featurizers_separate_files(self, small_real_compounds, tmp_path):
-        """Multiple featurizers create separate cache files (different featurizer types only)."""
+        """Same-name featurizer configs with same bit_count share file; different
+        featurizer types or different bit_counts create separate active files."""
         from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
-        # Different MorganFeaturizer configs share same file
+        # Same bit_count (radius differs only) → single file
         extract_features(smiles, MorganFeaturizer(radius=2), tmp_path, n_jobs=1)
         extract_features(smiles, MorganFeaturizer(radius=3), tmp_path, n_jobs=1)
-        extract_features(smiles, MorganFeaturizer(fp_size=4096), tmp_path, n_jobs=1)
 
-        # Only one file for all Morgan configs
         cache_files = list(tmp_path.glob("*.h5"))
         assert len(cache_files) == 1
         assert cache_files[0].name == 'features_morgan.h5'
