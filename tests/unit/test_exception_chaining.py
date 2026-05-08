@@ -30,6 +30,8 @@ class TestFeatureExtractionChaining:
         mock_featurizer.get_name.return_value = 'MockFP'
         mock_featurizer.get_dimension.return_value = 2048
         mock_featurizer.get_config.return_value = {'test': True}
+        mock_featurizer.get_config_hash.return_value = 'mockconfig'
+        mock_featurizer.get_storage_dtype.return_value = 'packed_uint8'
         mock_featurizer.transform.side_effect = RuntimeError('skfp internal error')
 
         with pytest.raises(FeatureExtractionError) as exc_info:
@@ -48,6 +50,8 @@ class TestFeatureExtractionChaining:
         mock_featurizer.get_name.return_value = 'MockFP'
         mock_featurizer.get_dimension.return_value = 2048
         mock_featurizer.get_config.return_value = {'test': True}
+        mock_featurizer.get_config_hash.return_value = 'mockconfig'
+        mock_featurizer.get_storage_dtype.return_value = 'packed_uint8'
         mock_featurizer.transform.side_effect = ValueError('RDKit parse error')
 
         with pytest.raises(FeatureExtractionError) as exc_info:

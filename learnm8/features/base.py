@@ -196,6 +196,14 @@ class SkfpFeaturizer(Featurizer):
     def feature_type(self) -> str:
         return 'binary'
 
+    def get_storage_dtype(self) -> str:
+        # WHY: SkfpFeaturizer subclasses set feature_type at class level
+        # (binary fingerprints vs continuous descriptors). Routing through
+        # this attribute means binary featurizers get packed storage automatically;
+        # custom non-skfp Featurizer subclasses producing binary output must
+        # override get_storage_dtype() directly to opt in.
+        return 'packed_uint8' if self.feature_type == 'binary' else 'float32'
+
     def requires_3d(self) -> bool:
         """Check if fingerprint requires 3D conformers.
 
