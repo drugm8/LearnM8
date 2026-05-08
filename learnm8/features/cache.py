@@ -35,6 +35,7 @@ from typing import Any, TypeVar
 import h5py
 import hdf5plugin
 import numpy as np
+import scipy.sparse
 
 from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import (
@@ -55,6 +56,10 @@ ATTR_BIT_COUNT = 'bit_count'
 ATTR_STORAGE_DTYPE = 'storage_dtype'
 ATTR_FEATURIZER_NAME = 'featurizer_name'
 ATTR_WRITE_EPOCH = 'write_epoch'
+ATTR_STORAGE_LAYOUT = 'storage_layout'
+
+LAYOUT_DENSE = 'dense'
+LAYOUT_CSR = 'csr'
 
 REQUIRED_ATTRS: tuple[str, ...] = (
     ATTR_SCHEMA_VERSION,
@@ -67,14 +72,30 @@ REQUIRED_ATTRS: tuple[str, ...] = (
 DSET_FEATURES = 'features'
 DSET_HASH_INDEX = 'hash_index'
 DSET_ROW_INDEX = 'row_index'
+DSET_CSR_DATA = 'csr_data'
+DSET_CSR_INDICES = 'csr_indices'
+DSET_CSR_INDPTR = 'csr_indptr'
 
 STORAGE_PACKED = 'packed_uint8'
 STORAGE_FLOAT32 = 'float32'
-ALLOWED_STORAGE_DTYPES = frozenset({STORAGE_FLOAT32, STORAGE_PACKED})
+STORAGE_UINT8 = 'uint8'
+STORAGE_CSR_UINT16 = 'csr_uint16'
+ALLOWED_STORAGE_DTYPES = frozenset(
+    {STORAGE_FLOAT32, STORAGE_PACKED, STORAGE_UINT8, STORAGE_CSR_UINT16}
+)
 
 # Chunk shapes target ~1 MiB chunks (HDF5 sweet spot per microbench).
 CHUNK_ROWS_PACKED = 4096
 CHUNK_ROWS_FLOAT32 = 1024
+CHUNK_ROWS_UINT8 = 4096
+CHUNK_ROWS_CSR_DATA = 65536
+CHUNK_ROWS_CSR_INDPTR = 4096
+
+# Above this density, packed_uint8 is strictly better than CSR (3 B/nonzero).
+CSR_DENSITY_HARD_LIMIT = 0.50
+
+# uint16 column indices cap the per-row dimension at 2**16.
+CSR_MAX_DIM = 65536
 
 # HDF5 chunk cache: 16 MiB / ~1M slots — microbench winner at 1M rows.
 RDCC_NBYTES = 16 * 1024 * 1024
@@ -144,6 +165,23 @@ def _normalize_storage_dtype(dtype_str: str) -> str:
     return dtype_str
 
 
+def _validate_uint8_range(features: np.ndarray) -> None:
+    if features.size == 0:
+        return
+    arr_min = float(features.min())
+    arr_max = float(features.max())
+    if arr_min < 0.0 or arr_max > 255.0:
+        offenders = np.argwhere((features < 0) | (features > 255))
+        row, col = (int(offenders[0, 0]), int(offenders[0, 1])) if offenders.size else (-1, -1)
+        bad_value = float(features[row, col]) if row >= 0 else arr_max
+        raise FeatureExtractionError(
+            f"uint8 storage out of range: row={row} col={col} value={bad_value} "
+            f"(observed min={arr_min}, max={arr_max}; uint8 admits [0, 255]). "
+            f"Either set this featurizer's get_storage_dtype() to 'float32' or "
+            f"contact maintainers about a wider int dtype."
+        )
+
+
 def to_storage(features: np.ndarray, storage_dtype: str) -> np.ndarray:
     """Encode a feature batch for on-disk storage."""
     storage_dtype = _normalize_storage_dtype(storage_dtype)
@@ -152,6 +190,15 @@ def to_storage(features: np.ndarray, storage_dtype: str) -> np.ndarray:
             np.ascontiguousarray(features, dtype=np.uint8),
             axis=1,
             bitorder='big',
+        )
+    if storage_dtype == STORAGE_UINT8:
+        _validate_uint8_range(features)
+        return np.ascontiguousarray(features, dtype=np.uint8)
+    if storage_dtype == STORAGE_CSR_UINT16:
+        raise FeatureExtractionError(
+            f"to_storage() does not encode {STORAGE_CSR_UINT16!r}; "
+            f"the cache writer dispatches CSR rows directly. "
+            f"This call indicates a bug in the cache write path."
         )
     return np.ascontiguousarray(features, dtype=np.float32)
 
@@ -172,6 +219,14 @@ def from_storage(
     storage_dtype = _normalize_storage_dtype(storage_dtype)
     if storage_dtype == STORAGE_FLOAT32:
         return stored if stored.dtype == np.float32 else stored.astype(np.float32, copy=False)
+    if storage_dtype == STORAGE_UINT8:
+        return stored.astype(np.float32, copy=False)
+    if storage_dtype == STORAGE_CSR_UINT16:
+        raise FeatureExtractionError(
+            f"from_storage() does not decode {STORAGE_CSR_UINT16!r}; "
+            f"the cache reader dispatches CSR rows directly. "
+            f"This call indicates a bug in the cache read path."
+        )
 
     n = stored.shape[0]
     out = np.empty((n, bit_count), dtype=np.float32)
@@ -397,6 +452,8 @@ def _chunk_shape(bit_count: int, storage_dtype: str) -> tuple[int, int]:
     width = _packed_width(bit_count, storage_dtype)
     if storage_dtype == STORAGE_PACKED:
         return (CHUNK_ROWS_PACKED, max(1, width))
+    if storage_dtype == STORAGE_UINT8:
+        return (CHUNK_ROWS_UINT8, max(1, width))
     return (CHUNK_ROWS_FLOAT32, max(1, width))
 
 
@@ -410,15 +467,87 @@ def _h5_open(path: Path, mode: str) -> h5py.File:
     )
 
 
+def _dense_np_dtype(storage_dtype: str) -> Any:
+    if storage_dtype == STORAGE_PACKED:
+        return np.uint8
+    if storage_dtype == STORAGE_UINT8:
+        return np.uint8
+    return np.float32
+
+
+def _initialize_v2_csr_datasets(
+    f: h5py.File, featurizer: Featurizer, storage_dtype: str
+) -> None:
+    """Create CSR-layout datasets (csr_data/csr_indices/csr_indptr + hash/row indices)."""
+    bit_count = int(featurizer.get_dimension())
+    if bit_count > CSR_MAX_DIM - 1:
+        raise ConfigurationError(
+            f"csr_uint16 storage requires dim <= {CSR_MAX_DIM - 1} (uint16 column "
+            f"indices), got dim={bit_count} for featurizer "
+            f"{featurizer.get_name()!r}. Either reduce dim or set "
+            f"get_storage_dtype() to 'packed_uint8' / 'float32'."
+        )
+
+    f.create_dataset(
+        DSET_CSR_DATA,
+        shape=(0,),
+        maxshape=(None,),
+        dtype=np.uint8,
+        chunks=(CHUNK_ROWS_CSR_DATA,),
+        **_BLOSC_KWARGS,
+    )
+    f.create_dataset(
+        DSET_CSR_INDICES,
+        shape=(0,),
+        maxshape=(None,),
+        dtype=np.uint16,
+        chunks=(CHUNK_ROWS_CSR_DATA,),
+        **_BLOSC_KWARGS,
+    )
+    indptr = f.create_dataset(
+        DSET_CSR_INDPTR,
+        shape=(1,),
+        maxshape=(None,),
+        dtype=np.uint64,
+        chunks=(CHUNK_ROWS_CSR_INDPTR,),
+        **_BLOSC_KWARGS,
+    )
+    indptr[0] = 0
+    f.create_dataset(
+        DSET_HASH_INDEX,
+        shape=(0,),
+        maxshape=(None,),
+        dtype=np.uint64,
+    )
+    f.create_dataset(
+        DSET_ROW_INDEX,
+        shape=(0,),
+        maxshape=(None,),
+        dtype=np.uint64,
+    )
+
+    f.attrs[ATTR_SCHEMA_VERSION] = np.uint8(SCHEMA_VERSION)
+    f.attrs[ATTR_BIT_COUNT] = np.uint32(bit_count)
+    f.attrs[ATTR_STORAGE_DTYPE] = storage_dtype
+    f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
+    f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
+    f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_CSR
+    f.flush()
+
+
 def _initialize_v2_datasets(
     f: h5py.File, featurizer: Featurizer, storage_dtype: str
 ) -> None:
-    """Create empty v2 datasets and write root attrs (T010)."""
+    """Create empty v2 datasets and write root attrs (T010, T014)."""
     storage_dtype = _normalize_storage_dtype(storage_dtype)
+    if storage_dtype == STORAGE_CSR_UINT16:
+        _initialize_v2_csr_datasets(f, featurizer, storage_dtype)
+        return
+
     bit_count = int(featurizer.get_dimension())
     width = _packed_width(bit_count, storage_dtype)
     chunks = _chunk_shape(bit_count, storage_dtype)
-    np_dtype = np.uint8 if storage_dtype == STORAGE_PACKED else np.float32
+    np_dtype = _dense_np_dtype(storage_dtype)
 
     f.create_dataset(
         DSET_FEATURES,
@@ -446,6 +575,7 @@ def _initialize_v2_datasets(
     f.attrs[ATTR_STORAGE_DTYPE] = storage_dtype
     f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
+    f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_DENSE
     f.flush()
 
 
@@ -482,15 +612,19 @@ def _open_or_create_h5(
 
     schema_version: int | None
     bit_count: int | None
+    file_storage_dtype: str | None
     try:
         with _h5_open(cache_path, 'r') as probe:
             sv = probe.attrs.get(ATTR_SCHEMA_VERSION, None)
             bc = probe.attrs.get(ATTR_BIT_COUNT, None)
+            sd = probe.attrs.get(ATTR_STORAGE_DTYPE, None)
             schema_version = int(sv) if sv is not None else None
             bit_count = int(bc) if bc is not None else None
+            file_storage_dtype = str(sd) if sd is not None else None
     except (OSError, KeyError):
         schema_version = None
         bit_count = None
+        file_storage_dtype = None
 
     if schema_version != SCHEMA_VERSION:
         suffix_tag = (
@@ -518,12 +652,39 @@ def _open_or_create_h5(
         _create_fresh_v2(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
+    if file_storage_dtype is not None and file_storage_dtype != storage_dtype:
+        # Distinguish legitimate stale cache (user flipped get_storage_dtype()) from
+        # genuine corruption (attr tampered or partial write). Validate against the
+        # file's own recorded dtype: if the file is internally consistent, it's just
+        # stale → rename to .bak. If inconsistent, propagate the validation error.
+        with _h5_open(cache_path, 'r') as probe:
+            _validate_v2_file_integrity(probe, featurizer, cache_path)
+        tag = f'dim{bit_count}'
+        backup = cache_path.with_suffix(cache_path.suffix + f'.{tag}.bak')
+        _atomic_rename(cache_path, backup)
+        logger.warning(
+            "Renamed cache with mismatched storage_dtype (%s vs expected %s) "
+            "to %s; starting fresh v2 cache.",
+            file_storage_dtype,
+            storage_dtype,
+            backup,
+        )
+        _create_fresh_v2(cache_path, featurizer, storage_dtype)
+        return _h5_open(cache_path, 'a')
+
     return _h5_open(cache_path, 'a')
 
 
 # ---------------------------------------------------------------------------
 # Integrity validation (T022)
 # ---------------------------------------------------------------------------
+
+
+_DENSE_EXPECTED_FEATURES_DTYPE: dict[str, Any] = {
+    STORAGE_PACKED: np.uint8,
+    STORAGE_FLOAT32: np.float32,
+    STORAGE_UINT8: np.uint8,
+}
 
 
 def _validate_v2_file_integrity(
@@ -548,31 +709,99 @@ def _validate_v2_file_integrity(
         )
 
     storage_dtype = _normalize_storage_dtype(str(f.attrs[ATTR_STORAGE_DTYPE]))
+    layout = str(f.attrs.get(ATTR_STORAGE_LAYOUT, LAYOUT_DENSE))
 
-    for dset in (DSET_FEATURES, DSET_HASH_INDEX, DSET_ROW_INDEX):
+    for dset in (DSET_HASH_INDEX, DSET_ROW_INDEX):
         if dset not in f:
             raise FeatureExtractionError(
                 f"v2 cache missing dataset {dset!r}." + msg_suffix
             )
-
-    features = f[DSET_FEATURES]
     hash_index = f[DSET_HASH_INDEX]
     row_index = f[DSET_ROW_INDEX]
 
-    expected_features_dtype = np.uint8 if storage_dtype == STORAGE_PACKED else np.float32
-    if features.dtype != np.dtype(expected_features_dtype):
-        raise FeatureExtractionError(
-            f"v2 cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} "
-            f"but /features.dtype={features.dtype!r}." + msg_suffix
-        )
+    if layout == LAYOUT_DENSE:
+        if DSET_FEATURES not in f:
+            raise FeatureExtractionError(
+                f"v2 cache missing dataset {DSET_FEATURES!r}." + msg_suffix
+            )
+        features = f[DSET_FEATURES]
 
-    bit_count = int(f.attrs[ATTR_BIT_COUNT])
-    expected_width = _packed_width(bit_count, storage_dtype)
-    if features.ndim != 2 or features.shape[1] != expected_width:
+        expected_features_dtype = _DENSE_EXPECTED_FEATURES_DTYPE[storage_dtype]
+        if features.dtype != np.dtype(expected_features_dtype):
+            raise FeatureExtractionError(
+                f"v2 cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} "
+                f"but /features.dtype={features.dtype!r}." + msg_suffix
+            )
+
+        bit_count = int(f.attrs[ATTR_BIT_COUNT])
+        expected_width = _packed_width(bit_count, storage_dtype)
+        if features.ndim != 2 or features.shape[1] != expected_width:
+            raise FeatureExtractionError(
+                f"v2 cache /features shape mismatch: expected (*, {expected_width}) "
+                f"for bit_count={bit_count} storage_dtype={storage_dtype!r}, "
+                f"got {features.shape}." + msg_suffix
+            )
+
+        if len(row_index) > 0:
+            max_row = int(row_index[:].max())
+            if max_row >= features.shape[0]:
+                raise FeatureExtractionError(
+                    f"v2 cache row_index points past /features rows "
+                    f"(max={max_row}, /features rows={features.shape[0]})." + msg_suffix
+                )
+    elif layout == LAYOUT_CSR:
+        if storage_dtype != STORAGE_CSR_UINT16:
+            raise FeatureExtractionError(
+                f"v2 cache storage_layout='csr' requires storage_dtype='csr_uint16', "
+                f"got {storage_dtype!r}." + msg_suffix
+            )
+        for dset, expected_dtype in (
+            (DSET_CSR_DATA, np.uint8),
+            (DSET_CSR_INDICES, np.uint16),
+            (DSET_CSR_INDPTR, np.uint64),
+        ):
+            if dset not in f:
+                raise FeatureExtractionError(
+                    f"v2 cache missing dataset {dset!r}." + msg_suffix
+                )
+            if f[dset].dtype != np.dtype(expected_dtype):
+                raise FeatureExtractionError(
+                    f"v2 cache {dset!r} dtype mismatch: expected {np.dtype(expected_dtype)!r}, "
+                    f"got {f[dset].dtype!r}." + msg_suffix
+                )
+
+        indptr = f[DSET_CSR_INDPTR]
+        csr_data = f[DSET_CSR_DATA]
+        csr_indices = f[DSET_CSR_INDICES]
+
+        if indptr.shape[0] != row_index.shape[0] + 1:
+            raise FeatureExtractionError(
+                f"v2 cache csr_indptr length mismatch: expected {row_index.shape[0] + 1} "
+                f"(row_index + 1), got {indptr.shape[0]}." + msg_suffix
+            )
+
+        if indptr.shape[0] >= 1 and int(indptr[0]) != 0:
+            raise FeatureExtractionError(
+                f"v2 cache csr_indptr[0] must be 0, got {int(indptr[0])}." + msg_suffix
+            )
+
+        if indptr.shape[0] > 0:
+            last = int(indptr[-1])
+            if last != csr_data.shape[0] or last != csr_indices.shape[0]:
+                raise FeatureExtractionError(
+                    f"v2 cache csr_indptr[-1]={last} disagrees with csr_data "
+                    f"({csr_data.shape[0]}) / csr_indices ({csr_indices.shape[0]})." + msg_suffix
+                )
+
+        if indptr.shape[0] > 1:
+            diffs = np.diff(np.asarray(indptr[:], dtype=np.int64))
+            if np.any(diffs < 0):
+                raise FeatureExtractionError(
+                    "v2 cache csr_indptr is not monotone non-decreasing." + msg_suffix
+                )
+    else:
         raise FeatureExtractionError(
-            f"v2 cache /features shape mismatch: expected (*, {expected_width}) "
-            f"for bit_count={bit_count} storage_dtype={storage_dtype!r}, "
-            f"got {features.shape}." + msg_suffix
+            f"v2 cache has unknown storage_layout {layout!r}." + msg_suffix
         )
 
     if len(hash_index) != len(row_index):
@@ -580,14 +809,6 @@ def _validate_v2_file_integrity(
             f"v2 cache hash_index/row_index length mismatch "
             f"({len(hash_index)} vs {len(row_index)})." + msg_suffix
         )
-
-    if len(row_index) > 0:
-        max_row = int(row_index[:].max())
-        if max_row >= features.shape[0]:
-            raise FeatureExtractionError(
-                f"v2 cache row_index points past /features rows "
-                f"(max={max_row}, /features rows={features.shape[0]})." + msg_suffix
-            )
 
     if len(hash_index) > 1:
         diffs = np.diff(hash_index[:])
@@ -646,6 +867,57 @@ def _lookup_cache(
     return found, target_rows
 
 
+def _read_cache_hits_csr(
+    f: h5py.File,
+    target_rows: np.ndarray,
+    bit_count: int,
+) -> np.ndarray:
+    """Gather hit rows from CSR datasets and materialize a dense float32 matrix.
+
+    Reads csr_indptr in full (small: uint64 * (n_rows+1) ≈ 800 KB at 100k rows),
+    then issues a single contiguous slab read per dense run of unique rows so
+    Blosc chunk decompression is amortized across many rows rather than
+    re-decompressed per row. At 0.7% density and 100k unique rows that drops
+    HDF5 slice ops from 200k (one slice per row per dataset) to O(runs) — at
+    least 100x for a fully-dense sweep.
+    """
+    if target_rows.size == 0:
+        return np.empty((0, bit_count), dtype=np.float32)
+
+    unique_rows, inverse_unique = np.unique(target_rows, return_inverse=True)
+    n_unique = unique_rows.size
+    out_unique = np.zeros((n_unique, bit_count), dtype=np.float32)
+
+    indptr_dset = f[DSET_CSR_INDPTR]
+    data_dset = f[DSET_CSR_DATA]
+    indices_dset = f[DSET_CSR_INDICES]
+    indptr_full = np.asarray(indptr_dset[:], dtype=np.uint64)
+
+    diffs = np.diff(unique_rows.astype(np.int64))
+    run_starts = np.concatenate(([0], np.where(diffs != 1)[0] + 1, [n_unique]))
+    for run_idx in range(run_starts.size - 1):
+        run_lo = int(run_starts[run_idx])
+        run_hi = int(run_starts[run_idx + 1])
+        first_row = int(unique_rows[run_lo])
+        last_row = int(unique_rows[run_hi - 1])
+        slab_start = int(indptr_full[first_row])
+        slab_end = int(indptr_full[last_row + 1])
+        if slab_end == slab_start:
+            continue
+        cols_slab = np.asarray(indices_dset[slab_start:slab_end], dtype=np.uint16)
+        vals_slab = np.asarray(data_dset[slab_start:slab_end], dtype=np.uint8)
+        run_unique = unique_rows[run_lo:run_hi].astype(np.int64)
+        run_starts_local = indptr_full[run_unique].astype(np.int64) - slab_start
+        run_ends_local = indptr_full[run_unique + 1].astype(np.int64) - slab_start
+        per_row_counts = (run_ends_local - run_starts_local).astype(np.int64)
+        row_for_each_nnz = np.repeat(
+            np.arange(run_lo, run_hi, dtype=np.int64), per_row_counts
+        )
+        out_unique[row_for_each_nnz, cols_slab] = vals_slab.astype(np.float32, copy=False)
+
+    return out_unique[inverse_unique]
+
+
 def _read_cache_hits(
     f: h5py.File,
     target_rows: np.ndarray,
@@ -658,13 +930,15 @@ def _read_cache_hits(
     caller's query (same SMILES twice) collapse to a single read and re-expand.
     """
     if target_rows.size == 0:
-        out_dim = bit_count
-        return np.empty((0, out_dim), dtype=np.float32)
+        return np.empty((0, bit_count), dtype=np.float32)
+
+    if storage_dtype == STORAGE_CSR_UINT16:
+        return _read_cache_hits_csr(f, target_rows, bit_count)
 
     unique_rows, inverse_unique = np.unique(target_rows, return_inverse=True)
     n_unique = unique_rows.size
     width = _packed_width(bit_count, storage_dtype)
-    np_dtype = np.uint8 if storage_dtype == STORAGE_PACKED else np.float32
+    np_dtype = _dense_np_dtype(storage_dtype)
     raw = np.empty((n_unique, width), dtype=np_dtype)
     features = f[DSET_FEATURES]
     for start in range(0, n_unique, H5_FANCY_INDEX_CHUNK):
@@ -676,6 +950,83 @@ def _read_cache_hits(
     return decoded_unique[inverse_unique]
 
 
+def _write_csr_misses(
+    f: h5py.File,
+    miss_features: np.ndarray,
+    miss_hashes: np.ndarray,
+) -> None:
+    """Append CSR-encoded miss rows. Validates density + uint8 bounds BEFORE any HDF5 writes."""
+    new_n = int(miss_features.shape[0])
+    dim = int(miss_features.shape[1])
+
+    density = float((miss_features != 0).mean()) if miss_features.size > 0 else 0.0
+    if density > CSR_DENSITY_HARD_LIMIT:
+        raise FeatureExtractionError(
+            f"observed density {density:.4f} exceeds {CSR_DENSITY_HARD_LIMIT} "
+            f"hard limit on csr_uint16 storage. CSR overhead exceeds dense storage "
+            f"above 50% density; switch this featurizer's get_storage_dtype() to "
+            f"'packed_uint8'."
+        )
+
+    if miss_features.size > 0:
+        arr_min = float(miss_features.min())
+        arr_max = float(miss_features.max())
+        if arr_min < 0.0 or arr_max > 255.0:
+            offenders = np.argwhere((miss_features < 0) | (miss_features > 255))
+            row, col = (int(offenders[0, 0]), int(offenders[0, 1])) if offenders.size else (-1, -1)
+            bad_value = float(miss_features[row, col]) if row >= 0 else arr_max
+            raise FeatureExtractionError(
+                f"csr_uint16 nonzero out of range: row={row} col={col} value={bad_value} "
+                f"(observed min={arr_min}, max={arr_max}; uint8 csr_data admits [0, 255]). "
+                f"Either reduce the value range or switch storage to 'float32'."
+            )
+
+    csr = scipy.sparse.csr_matrix(miss_features.astype(np.uint8))
+    new_indices = np.asarray(csr.indices, dtype=np.uint16)
+    new_data = np.asarray(csr.data, dtype=np.uint8)
+    new_indptr = np.asarray(csr.indptr, dtype=np.uint64)
+
+    if new_indices.size > 0 and int(new_indices.max()) >= dim:
+        raise FeatureExtractionError(
+            f"csr_uint16 column index {int(new_indices.max())} >= dim {dim}; "
+            f"this indicates a featurizer bug or dim mismatch."
+        )
+
+    indptr_dset = f[DSET_CSR_INDPTR]
+    data_dset = f[DSET_CSR_DATA]
+    indices_dset = f[DSET_CSR_INDICES]
+
+    prev_nnz = int(indptr_dset[-1])
+    prev_n_rows = int(indptr_dset.shape[0]) - 1
+
+    nnz = int(new_data.shape[0])
+    data_dset.resize((prev_nnz + nnz,))
+    data_dset[prev_nnz : prev_nnz + nnz] = new_data
+    indices_dset.resize((prev_nnz + nnz,))
+    indices_dset[prev_nnz : prev_nnz + nnz] = new_indices
+
+    indptr_offsets = (new_indptr[1:].astype(np.uint64) + np.uint64(prev_nnz)).astype(np.uint64)
+    indptr_dset.resize((prev_n_rows + 1 + new_n,))
+    indptr_dset[prev_n_rows + 1 : prev_n_rows + 1 + new_n] = indptr_offsets
+
+    new_row_index = np.arange(prev_n_rows, prev_n_rows + new_n, dtype=np.uint64)
+    new_hash_index = np.asarray(miss_hashes, dtype=np.uint64)
+
+    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    r_old = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
+    merged_h, merged_r = _merge_sorted_indices(h_old, r_old, new_hash_index, new_row_index)
+
+    hash_dset = f[DSET_HASH_INDEX]
+    row_dset = f[DSET_ROW_INDEX]
+    hash_dset.resize((merged_h.size,))
+    hash_dset[:] = merged_h
+    row_dset.resize((merged_r.size,))
+    row_dset[:] = merged_r
+
+    f.attrs[ATTR_WRITE_EPOCH] = np.uint64(int(f.attrs.get(ATTR_WRITE_EPOCH, 0)) + 1)
+    f.flush()
+
+
 def _write_cache_misses(
     f: h5py.File,
     miss_smiles: list[str],
@@ -683,11 +1034,15 @@ def _write_cache_misses(
     miss_hashes: np.ndarray,
     storage_dtype: str,
 ) -> None:
-    """Append miss rows to ``/features``/``/hash_index``/``/row_index`` (T015)."""
+    """Append miss rows; dispatches dense vs CSR by storage_dtype (T015)."""
     if len(miss_smiles) == 0:
         return
 
     storage_dtype = _normalize_storage_dtype(storage_dtype)
+    if storage_dtype == STORAGE_CSR_UINT16:
+        _write_csr_misses(f, miss_features, miss_hashes)
+        return
+
     encoded = to_storage(miss_features, storage_dtype)
 
     features = f[DSET_FEATURES]
@@ -769,7 +1124,14 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                         try:
                             sv = f_ro.attrs.get(ATTR_SCHEMA_VERSION, None)
                             bc = f_ro.attrs.get(ATTR_BIT_COUNT, None)
-                            if sv is not None and int(sv) == SCHEMA_VERSION and bc == dim:
+                            sd = f_ro.attrs.get(ATTR_STORAGE_DTYPE, None)
+                            sd_match = sd is not None and str(sd) == storage_dtype
+                            if (
+                                sv is not None
+                                and int(sv) == SCHEMA_VERSION
+                                and bc == dim
+                                and sd_match
+                            ):
                                 _validate_v2_file_integrity(f_ro, featurizer, cache_path)
                                 t_open = time.perf_counter()
 
