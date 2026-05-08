@@ -14,8 +14,8 @@ newly-selected batch, once for the cumulative selected set):
     * shannon_entropy_diversity         - base-2 entropy of fingerprint
       bit-activation frequencies (online accumulator)
 
-All metrics operate ONLY on the selected compounds (bounded by n_cycles ×
-batch_size), never on the full pool — this is the key to scaling the metric
+All metrics operate ONLY on the selected compounds (bounded by n_cycles x
+batch_size), never on the full pool - this is the key to scaling the metric
 path to 100M-compound libraries.
 
 The filename ``similarity.py`` is retained for git-history continuity even
@@ -26,9 +26,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import polars as pl
@@ -62,7 +63,7 @@ DIVERSITY_KEYS: tuple[str, ...] = (
 # Module-level constants (FR-025)
 # ============================================================================
 
-N_PILOT_PAIRS: int = 500          # pilot draw for σ̂ estimation
+N_PILOT_PAIRS: int = 500          # pilot draw for sigma-hat estimation
 TARGET_EPSILON: float = 0.005     # 95% CI half-width target
 N_PAIRS_MIN: int = 1_000          # adaptive lower clamp
 N_PAIRS_MAX: int = 100_000        # adaptive upper clamp (perf safety)
@@ -183,7 +184,7 @@ def _bulk_tanimoto_for_pairs(
     for i, entries in by_left.items():
         right_fps = [fps[j] for _, j in entries]
         sims = DataStructs.BulkTanimotoSimilarity(fps[i], right_fps)
-        for (idx, _), sim in zip(entries, sims):
+        for (idx, _), sim in zip(entries, sims, strict=True):
             out[idx] = sim
     return out
 
@@ -194,8 +195,8 @@ def _mean_tanimoto_adaptive_sampled(
 ) -> float | None:
     """Adaptive mean Tanimoto via pilot-then-scale sampling (FR-001).
 
-    1. Pilot: draw ``N_PILOT_PAIRS`` distinct pairs and compute σ̂.
-    2. Size: ``n_pairs = ceil(Z_95² · σ̂² / TARGET_EPSILON²)``,
+    1. Pilot: draw ``N_PILOT_PAIRS`` distinct pairs and compute sigma-hat.
+    2. Size: ``n_pairs = ceil(Z_95**2 * sigma-hat**2 / TARGET_EPSILON**2)``,
        clamped to ``[N_PAIRS_MIN, N_PAIRS_MAX]``.
     3. Exhaustive shortcut: if the total pair space ``N(N-1)/2`` ≤ n_pairs,
        compute the exact mean over all pairs.
@@ -365,7 +366,7 @@ def _fp_to_packed(fp: ExplicitBitVect, n_bits: int) -> np.ndarray:
 
 def _get_or_build_fps(
     smiles_list: list[str],
-    featurizer: "SkfpFeaturizer | None",
+    featurizer: SkfpFeaturizer | None,
     cache_dir: Path | None,
     fp_cache: dict[str, ExplicitBitVect],
 ) -> tuple[list[ExplicitBitVect], np.ndarray, str, list[int]]:
@@ -399,17 +400,27 @@ def _get_or_build_fps(
     is_binary_featurizer = bool(
         featurizer is not None and getattr(featurizer, "feature_type", None) == "binary"
     )
+    # FR-013: append storage dtype token. uint8packed is intentionally one
+    # positional token under naive _-splitting parsers.
+    storage_dtype = (
+        getattr(featurizer, "get_storage_dtype", lambda: "float32")()
+        if featurizer is not None
+        else "float32"
+    )
+    dtype_token = "uint8packed" if storage_dtype == "packed_uint8" else "float32"
+
     label_base = "morgan_2_2048"
     if featurizer is not None and is_binary_featurizer:
         try:
             fp_name = featurizer.get_name()
         except Exception:  # pragma: no cover - defensive
             fp_name = "morgan"
-        fingerprint_used_label = f"{fp_name}_2_2048" if fp_name == "morgan" else f"{fp_name}"
+        head = f"{fp_name}_2_2048" if fp_name == "morgan" else f"{fp_name}"
+        fingerprint_used_label = f"{head}_{dtype_token}"
     elif featurizer is not None and not is_binary_featurizer:
-        fingerprint_used_label = f"{label_base}_fallback"
+        fingerprint_used_label = f"{label_base}_{dtype_token}_fallback"
     else:
-        fingerprint_used_label = label_base
+        fingerprint_used_label = f"{label_base}_{dtype_token}"
 
     rdkit_fps: list[ExplicitBitVect] = []
     valid_idx: list[int] = []
@@ -474,7 +485,7 @@ def compute_diversity_metrics(
     cycle: int,
     run_cache: RunCache,
     random_state: int | None = None,
-    featurizer: "SkfpFeaturizer | None" = None,
+    featurizer: SkfpFeaturizer | None = None,
     cache_dir: Path | None = None,
     disable: bool | Iterable[str] = False,
 ) -> dict[str, float | str | None]:
@@ -615,11 +626,11 @@ def compute_diversity_metrics(
 
 __all__ = [
     "DIVERSITY_KEYS",
-    "RunCache",
-    "compute_diversity_metrics",
+    "N_PAIRS_MAX",
+    "N_PAIRS_MIN",
     "N_PILOT_PAIRS",
     "TARGET_EPSILON",
-    "N_PAIRS_MIN",
-    "N_PAIRS_MAX",
     "Z_95",
+    "RunCache",
+    "compute_diversity_metrics",
 ]

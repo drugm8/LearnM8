@@ -21,9 +21,9 @@ from learnm8.evaluation.metrics.similarity import (
     N_PAIRS_MAX,
     N_PAIRS_MIN,
     N_PILOT_PAIRS,
-    RunCache,
     TARGET_EPSILON,
     Z_95,
+    RunCache,
     _derive_rng,
     _get_or_build_fps,
     _mean_tanimoto_adaptive_sampled,
@@ -31,7 +31,6 @@ from learnm8.evaluation.metrics.similarity import (
     _shannon_entropy_from_bit_sum,
     compute_diversity_metrics,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -86,7 +85,7 @@ class TestModuleConstants:
         assert TARGET_EPSILON == 0.005
         assert N_PAIRS_MIN == 1_000
         assert N_PAIRS_MAX == 100_000
-        assert Z_95 == pytest.approx(1.96)
+        assert pytest.approx(1.96) == Z_95
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +125,6 @@ class TestMeanTanimotoAdaptive:
     def test_both_empty_fp_tanimoto_one(self):
         # RDKit edge case: BulkTanimotoSimilarity on two all-zero fps is 1.0.
         rng = _derive_rng(42, 0)
-        gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=FALLBACK_FP_SIZE)
         # Helium has no atoms in RDKit's standard parsing so we fabricate
         # an all-zero ExplicitBitVect by computing an atom-less mol's fp;
         # if RDKit produces non-empty bits, fall back to a minimal acyclic
@@ -238,7 +236,7 @@ class TestFingerprintSourcing:
     def test_morgan_fallback_label_when_featurizer_none(self):
         cache: dict[str, object] = {}
         fps, packed, label, valid = _get_or_build_fps(SMILES_DRUGLIKE, None, None, cache)  # type: ignore[arg-type]
-        assert label == "morgan_2_2048"
+        assert label == "morgan_2_2048_float32"
         assert len(fps) == len(SMILES_DRUGLIKE)
         assert packed.shape == (len(SMILES_DRUGLIKE), FALLBACK_FP_SIZE)
         assert valid == list(range(len(SMILES_DRUGLIKE)))
@@ -246,7 +244,7 @@ class TestFingerprintSourcing:
     def test_invalid_smiles_skipped(self):
         cache: dict[str, object] = {}
         smis = ["c1ccccc1", "NOT_A_SMILES", "CCO"]
-        fps, packed, label, valid = _get_or_build_fps(smis, None, None, cache)  # type: ignore[arg-type]
+        fps, packed, _label, valid = _get_or_build_fps(smis, None, None, cache)  # type: ignore[arg-type]
         assert len(fps) == 2
         assert packed.shape == (2, FALLBACK_FP_SIZE)
         assert valid == [0, 2]
@@ -276,7 +274,7 @@ class TestComputeDiversityMetricsPublic:
         assert set(result.keys()) == set(DIVERSITY_KEYS) | {"fingerprint_used"}
         for k in DIVERSITY_KEYS:
             assert result[k] is None or isinstance(result[k], float)
-        assert result["fingerprint_used"] == "morgan_2_2048"
+        assert result["fingerprint_used"] == "morgan_2_2048_float32"
 
     def test_cycle_zero_batch_equals_cumulative(self, run_cache):
         # FR-004a: at cycle 0 the cumulative set IS the batch, so the two
@@ -321,7 +319,7 @@ class TestComputeDiversityMetricsPublic:
         # Other keys should be computed.
         assert result["scaffold_diversity_index_cumulative"] is not None
         assert result["shannon_entropy_diversity_batch"] is not None
-        assert result["fingerprint_used"] == "morgan_2_2048"
+        assert result["fingerprint_used"] == "morgan_2_2048_float32"
 
     def test_disable_unknown_key_raises(self, run_cache):
         df = _df_with_smiles(SMILES_DRUGLIKE[:2])
