@@ -40,3 +40,47 @@ def test_no_featurizer_label_is_default_with_dtype_suffix():
         ['CCO'], None, None, fp_cache
     )
     assert label == 'morgan_2_2048_float32', f"got {label!r}"
+
+
+@pytest.mark.unit
+def test_mqns_label_has_uint8_suffix():
+    """016: mqns featurizer emits the raw uint8 dtype token."""
+    from learnm8.evaluation.metrics.similarity import _get_or_build_fps
+    from learnm8.features import MQNsFeaturizer
+
+    feat = MQNsFeaturizer(n_jobs=1)
+    fp_cache: dict = {}
+    _, _, label, _ = _get_or_build_fps(
+        ['CCO'], feat, None, fp_cache
+    )
+    assert '_uint8' in label and '_uint8packed' not in label and '_float32' not in label, (
+        f"got {label!r}"
+    )
+
+
+@pytest.mark.unit
+def test_pharmacophore_label_has_csruint16_suffix():
+    """016: pharmacophore featurizer emits the csruint16 dtype token."""
+    from learnm8.evaluation.metrics.similarity import _get_or_build_fps
+    from learnm8.features import PharmacophoreFeaturizer
+
+    feat = PharmacophoreFeaturizer(n_jobs=1)
+    fp_cache: dict = {}
+    _, _, label, _ = _get_or_build_fps(
+        ['CCO'], feat, None, fp_cache
+    )
+    assert '_csruint16' in label, f"got {label!r}"
+
+
+@pytest.mark.unit
+def test_physiochemical_label_has_csruint16_suffix():
+    """016: physiochemical featurizer emits the csruint16 dtype token."""
+    from learnm8.evaluation.metrics.similarity import _get_or_build_fps
+    from learnm8.features import PhysiochemicalPropertiesFeaturizer
+
+    feat = PhysiochemicalPropertiesFeaturizer(n_jobs=1)
+    fp_cache: dict = {}
+    _, _, label, _ = _get_or_build_fps(
+        ['CCO'], feat, None, fp_cache
+    )
+    assert '_csruint16' in label, f"got {label!r}"

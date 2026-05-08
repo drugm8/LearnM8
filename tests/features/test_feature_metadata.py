@@ -4,6 +4,12 @@ from learnm8.features import FEATURIZER_REGISTRY
 
 pytestmark = pytest.mark.unit
 
+# These partitions reflect the `feature_type` property only. As of spec 016,
+# `feature_type` no longer determines on-disk storage for mqns / pharmacophore /
+# physiochemical: they override `get_storage_dtype()` (see test_storage_dtype.py)
+# while keeping `feature_type='continuous'` here. Storage routing is the
+# featurizer's `get_storage_dtype()` contract; the test below stays consistent
+# with the unchanged property.
 BINARY_FEATURIZERS = [
     'morgan', 'ecfp', 'ecfp6', 'morgan_feat', 'secfp',
     'maccs', 'pubchem', 'klekota_roth', 'laggner',
