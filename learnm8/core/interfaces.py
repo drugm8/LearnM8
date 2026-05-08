@@ -357,6 +357,25 @@ class Featurizer(ABC):
         """
         return {}
 
+    def get_storage_dtype(self) -> str:
+        """Return the on-disk encoding name for this featurizer.
+
+        Used by the v2 HDF5 cache to dispatch between packed-binary storage
+        (32x compression for binary fingerprints) and plain float32 storage
+        (continuous-valued descriptors).
+
+        Returns:
+            One of:
+                'float32'        -- store features as float32 (default)
+                'packed_uint8'   -- store as uint8 after np.packbits(axis=1)
+
+        Note:
+            Default returns 'float32' so existing custom featurizers are
+            unaffected. Subclasses producing strictly binary output should
+            override to return 'packed_uint8'.
+        """
+        return 'float32'
+
     def get_config_hash(self) -> str:
         """Get a hash of the featurizer configuration.
 
