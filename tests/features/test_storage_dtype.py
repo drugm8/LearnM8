@@ -16,8 +16,10 @@ from learnm8.features import (
 )
 from learnm8.features.cache import (
     ALLOWED_STORAGE_DTYPES,
+    STORAGE_CSR_UINT16,
     STORAGE_FLOAT32,
     STORAGE_PACKED,
+    STORAGE_UINT8,
     _normalize_storage_dtype,
 )
 from learnm8.features.extraction import extract_features
@@ -31,14 +33,18 @@ BINARY_FEATURIZER_NAMES = {
     'e3fp',
 }
 
-# Continuous-by-design featurizers (skfp default + ones overriding feature_type='continuous').
-# All others in the registry default to 'binary' via SkfpFeaturizer.feature_type.
+# 016: mqns moves out of CONTINUOUS into UINT8 (raw uint8 storage; observed max 26 ≤ 255).
+# pharmacophore + physiochemical move out of CONTINUOUS into SPARSE_BINARY (CSR storage; ≤2% density).
 CONTINUOUS_FEATURIZER_NAMES = {
     'mordred', 'descriptors', 'rdkit_2d_descriptors',
-    'estate', 'ghose_crippen', 'mqns', 'vsa', 'bcut2d',
-    'physiochemical', 'pharmacophore', 'functional_groups',
+    'estate', 'ghose_crippen', 'vsa', 'bcut2d',
+    'functional_groups',
     'erg',
 }
+
+UINT8_FEATURIZER_NAMES = {'mqns'}
+
+SPARSE_BINARY_FEATURIZER_NAMES = {'pharmacophore', 'physiochemical'}
 
 THREE_D_FEATURIZER_NAMES = {
     'whim', 'usr', 'usrcat', 'getaway',
@@ -92,9 +98,32 @@ def test_continuous_and_3d_subclasses_return_float32(name):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize('name', sorted(UINT8_FEATURIZER_NAMES))
+def test_uint8_subclasses_return_uint8(name):
+    cls = FEATURIZER_REGISTRY[name]
+    feat = cls(n_jobs=1)
+    assert feat.get_storage_dtype() == STORAGE_UINT8, (
+        f"Expected {STORAGE_UINT8!r} for {name}, got {feat.get_storage_dtype()!r}"
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('name', sorted(SPARSE_BINARY_FEATURIZER_NAMES))
+def test_sparse_binary_subclasses_return_csr_uint16(name):
+    cls = FEATURIZER_REGISTRY[name]
+    feat = cls(n_jobs=1)
+    assert feat.get_storage_dtype() == STORAGE_CSR_UINT16, (
+        f"Expected {STORAGE_CSR_UINT16!r} for {name}, got {feat.get_storage_dtype()!r}"
+    )
+
+
+@pytest.mark.unit
 def test_normalize_rejects_unknown_dtype():
-    with pytest.raises(ConfigurationError, match=r"unknown storage_dtype"):
+    with pytest.raises(ConfigurationError, match=r"unknown storage_dtype") as exc_info:
         _normalize_storage_dtype('float16')
+    msg = str(exc_info.value)
+    for token in (STORAGE_FLOAT32, STORAGE_PACKED, STORAGE_UINT8, STORAGE_CSR_UINT16):
+        assert token in msg, f"error message does not list {token!r}: {msg!r}"
 
 
 @pytest.mark.unit
@@ -117,5 +146,9 @@ def test_full_registry_dispatch_yields_allowed_values():
         )
         if name in BINARY_FEATURIZER_NAMES:
             assert dtype == STORAGE_PACKED
+        elif name in UINT8_FEATURIZER_NAMES:
+            assert dtype == STORAGE_UINT8
+        elif name in SPARSE_BINARY_FEATURIZER_NAMES:
+            assert dtype == STORAGE_CSR_UINT16
         elif name in CONTINUOUS_FEATURIZER_NAMES | THREE_D_FEATURIZER_NAMES:
             assert dtype == STORAGE_FLOAT32

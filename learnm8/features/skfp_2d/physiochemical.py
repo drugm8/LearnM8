@@ -33,6 +33,10 @@ class PhysiochemicalPropertiesFeaturizer(SkfpFeaturizer):
     def feature_type(self) -> str:
         return 'continuous'
 
+    def get_storage_dtype(self) -> str:
+        # 2048 dim x ~1.8% density at 100k; CSR cuts 100M from ~25 GB to ~10 GB.
+        return 'csr_uint16'
+
     def get_name(self) -> str:
         return 'physiochemical'
 

@@ -33,6 +33,11 @@ class PharmacophoreFeaturizer(SkfpFeaturizer):
     def feature_type(self) -> str:
         return 'continuous'
 
+    def get_storage_dtype(self) -> str:
+        # 39972 dim x ~0.7% density at 100k; CSR cuts 100M from ~500 GB to ~80 GB.
+        # 39972 < 65536 -> uint16 column indices fit.
+        return 'csr_uint16'
+
     def get_name(self) -> str:
         return 'pharmacophore'
 

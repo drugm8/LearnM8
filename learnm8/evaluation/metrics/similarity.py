@@ -400,14 +400,20 @@ def _get_or_build_fps(
     is_binary_featurizer = bool(
         featurizer is not None and getattr(featurizer, "feature_type", None) == "binary"
     )
-    # FR-013: append storage dtype token. uint8packed is intentionally one
-    # positional token under naive _-splitting parsers.
+    # FR-013 + 016: append storage dtype token. Each token is one positional
+    # element under naive _-splitting parsers (uint8packed, csruint16, uint8, float32).
     storage_dtype = (
         getattr(featurizer, "get_storage_dtype", lambda: "float32")()
         if featurizer is not None
         else "float32"
     )
-    dtype_token = "uint8packed" if storage_dtype == "packed_uint8" else "float32"
+    _DTYPE_TOKEN_BY_STORAGE = {
+        "packed_uint8": "uint8packed",
+        "csr_uint16": "csruint16",
+        "uint8": "uint8",
+        "float32": "float32",
+    }
+    dtype_token = _DTYPE_TOKEN_BY_STORAGE.get(storage_dtype, "float32")
 
     label_base = "morgan_2_2048"
     if featurizer is not None and is_binary_featurizer:
