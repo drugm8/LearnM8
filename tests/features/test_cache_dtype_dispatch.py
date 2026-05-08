@@ -30,7 +30,7 @@ def test_binary_featurizer_packed_storage_returns_float32(tmp_path: Path, name: 
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize('name', ['mordred', 'rdkit_2d_descriptors', 'estate', 'mqns'])
+@pytest.mark.parametrize('name', ['mordred', 'rdkit_2d_descriptors', 'estate'])
 def test_continuous_featurizer_float32_storage(tmp_path: Path, name: str):
     cls = FEATURIZER_REGISTRY[name]
     feat = cls(n_jobs=1)
@@ -42,6 +42,19 @@ def test_continuous_featurizer_float32_storage(tmp_path: Path, name: str):
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'float32'
         assert f['features'].dtype == np.float32
+
+
+@pytest.mark.unit
+def test_mqns_uses_uint8_storage(tmp_path: Path):
+    """016: mqns opts into raw uint8 storage (small-int counts, max ~26)."""
+    feat = FEATURIZER_REGISTRY['mqns'](n_jobs=1)
+    out = extract_features(['CCO'], feat, cache_dir=tmp_path)
+    assert out.dtype == np.float32
+
+    cache_file = tmp_path / 'features_mqns.h5'
+    with h5py.File(cache_file, 'r') as f:
+        assert str(f.attrs['storage_dtype']) == 'uint8'
+        assert f['features'].dtype == np.uint8
 
 
 @pytest.mark.unit

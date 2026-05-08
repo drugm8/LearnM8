@@ -33,6 +33,11 @@ class MQNsFeaturizer(SkfpFeaturizer):
     def feature_type(self) -> str:
         return 'continuous'
 
+    def get_storage_dtype(self) -> str:
+        # Max observed value at 100k AmpC is 26 (10x headroom in uint8);
+        # float32 over-allocates 4x for what is in practice an integer alphabet.
+        return 'uint8'
+
     def get_name(self) -> str:
         return 'mqns'
 
