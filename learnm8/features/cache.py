@@ -923,16 +923,23 @@ def _read_cache_hits(
     target_rows: np.ndarray,
     storage_dtype: str,
     bit_count: int,
+    output_dtype: str = 'float32',
 ) -> np.ndarray:
     """Gather + dispatch-decode hit rows. Maintains caller order.
+
+    ``output_dtype='uint8'`` short-circuits the float32 inflation for
+    ``packed_uint8`` / ``uint8`` storage (REQ-9). CSR storage always returns
+    float32 regardless (REQ-10).
 
     h5py fancy indexing requires strictly-increasing indices; duplicates in the
     caller's query (same SMILES twice) collapse to a single read and re-expand.
     """
+    out_np_dtype = np.uint8 if output_dtype == 'uint8' else np.float32
     if target_rows.size == 0:
-        return np.empty((0, bit_count), dtype=np.float32)
+        return np.empty((0, bit_count), dtype=out_np_dtype)
 
     if storage_dtype == STORAGE_CSR_UINT16:
+        # CSR materialises float32; uint8 callers were diverted upstream.
         return _read_cache_hits_csr(f, target_rows, bit_count)
 
     unique_rows, inverse_unique = np.unique(target_rows, return_inverse=True)
@@ -946,7 +953,10 @@ def _read_cache_hits(
         idx = unique_rows[start:end].tolist()
         raw[start:end] = features[idx, :]
 
-    decoded_unique = from_storage(raw, storage_dtype, bit_count)
+    if output_dtype == 'uint8':
+        decoded_unique = from_storage_uint8(raw, storage_dtype, bit_count)
+    else:
+        decoded_unique = from_storage(raw, storage_dtype, bit_count)
     return decoded_unique[inverse_unique]
 
 
@@ -1082,6 +1092,63 @@ def _resolve_cache_dir(default_cache_dir: Path, kwargs: dict[str, Any]) -> Path:
     return Path(cache_dir)
 
 
+def _resolve_uint8_output(
+    preferred_dtype: str,
+    storage_dtype: str,
+    featurizer_name: str,
+) -> bool:
+    """Decide whether to allocate a uint8 output buffer (REQ-9, REQ-10).
+
+    Returns True only when caller asked for uint8 AND storage actually has the
+    bits handy (packed_uint8 / uint8). For float32 / csr_uint16 storage we
+    must materialise float32 — log once and fall back.
+    """
+    if preferred_dtype != 'uint8':
+        return False
+    if storage_dtype in (STORAGE_PACKED, STORAGE_UINT8):
+        return True
+    logger.debug(
+        "preferred_dtype='uint8' incompatible with storage_dtype=%r for "
+        "featurizer %r; falling back to float32 output",
+        storage_dtype,
+        featurizer_name,
+    )
+    return False
+
+
+def from_storage_uint8(
+    stored: np.ndarray,
+    storage_dtype: str,
+    bit_count: int,
+    max_chunk_rows: int = MAX_UNPACK_CHUNK_ROWS,
+) -> np.ndarray:
+    """Decode an on-disk batch directly to ``uint8``.
+
+    Mirrors :func:`from_storage` but skips the float32 inflation. Only valid
+    for ``packed_uint8`` (np.unpackbits) and ``uint8`` (already-packed)
+    storage layouts; raises :class:`FeatureExtractionError` otherwise.
+    """
+    if storage_dtype == STORAGE_UINT8:
+        return stored if stored.dtype == np.uint8 else stored.astype(np.uint8, copy=False)
+    if storage_dtype == STORAGE_PACKED:
+        n = stored.shape[0]
+        out = np.empty((n, bit_count), dtype=np.uint8)
+        if n == 0:
+            return out
+        chunk = max(1, max_chunk_rows)
+        for start in range(0, n, chunk):
+            end = min(start + chunk, n)
+            out[start:end] = np.unpackbits(
+                stored[start:end], axis=1, count=bit_count, bitorder='big'
+            )
+        return out
+    raise FeatureExtractionError(
+        f"from_storage_uint8() does not decode {storage_dtype!r}; "
+        f"caller must use the float32 path for non-binary storage. "
+        f"This call indicates a bug in the cache read dispatcher."
+    )
+
+
 def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
     """Decorator factory: v2 bit-packed HDF5 cache around a featurizer call.
 
@@ -1095,21 +1162,28 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
             smiles_list: list[str], featurizer: Featurizer, *args: Any, **kwargs: Any
         ) -> np.ndarray:
             cache_dir = _resolve_cache_dir(default_cache_dir, kwargs)
+            preferred_dtype = kwargs.pop('preferred_dtype', 'float32')
             dim = int(featurizer.get_dimension())
 
+            featurizer_name = featurizer.get_name()
+            storage_dtype = _normalize_storage_dtype(featurizer.get_storage_dtype())
+            use_uint8_output = _resolve_uint8_output(
+                preferred_dtype, storage_dtype, featurizer_name
+            )
+            out_np_dtype = np.uint8 if use_uint8_output else np.float32
+            output_decode_dtype = 'uint8' if use_uint8_output else 'float32'
+
             if len(smiles_list) == 0:
-                return np.empty((0, dim), dtype=np.float32)
+                return np.empty((0, dim), dtype=out_np_dtype)
 
             cache_dir.mkdir(parents=True, exist_ok=True)
-            featurizer_name = featurizer.get_name()
             cache_path = cache_dir / f"features_{featurizer_name}.h5"
-            storage_dtype = _normalize_storage_dtype(featurizer.get_storage_dtype())
 
             query_hashes = _cache_keys_uint64(smiles_list, featurizer)
 
             # Phase 1: read-only attempt under LOCK_SH (lets concurrent readers run).
             found = np.zeros(len(smiles_list), dtype=bool)
-            hit_features = np.empty((0, dim), dtype=np.float32)
+            hit_features = np.empty((0, dim), dtype=out_np_dtype)
             t_lock = time.perf_counter()
             t_open = t_lock
             t_read = t_lock
@@ -1140,7 +1214,11 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                                         f_ro, query_hashes, cache_path
                                     )
                                     hit_features_local = _read_cache_hits(
-                                        f_ro, target_rows_local, storage_dtype, dim
+                                        f_ro,
+                                        target_rows_local,
+                                        storage_dtype,
+                                        dim,
+                                        output_dtype=output_decode_dtype,
                                     )
                                     return found_local, hit_features_local
 
@@ -1153,7 +1231,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
             n_hits = int(found.sum())
             n_misses = int(miss_idx.size)
 
-            out = np.empty((len(smiles_list), dim), dtype=np.float32)
+            out = np.empty((len(smiles_list), dim), dtype=out_np_dtype)
             if n_hits:
                 hit_idx = np.where(found)[0]
                 out[hit_idx] = hit_features
@@ -1171,7 +1249,8 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
 
                         found, target_rows = _lookup_cache(f, query_hashes, cache_path)
                         hit_features = _read_cache_hits(
-                            f, target_rows, storage_dtype, dim
+                            f, target_rows, storage_dtype, dim,
+                            output_dtype=output_decode_dtype,
                         )
                         if found.any():
                             out[np.where(found)[0]] = hit_features
@@ -1189,7 +1268,12 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                                     f"Featurizer returned shape {miss_features.shape}, "
                                     f"expected ({n_misses}, {dim})."
                                 )
-                            out[miss_idx] = miss_features
+                            if use_uint8_output:
+                                # Cache write still records float32 → packed/uint8 via
+                                # to_storage; user-facing `out` keeps the compact dtype.
+                                out[miss_idx] = miss_features.astype(np.uint8, copy=False)
+                            else:
+                                out[miss_idx] = miss_features
                             miss_hashes = query_hashes[miss_idx]
                             # Dedupe within the miss batch — same SMILES appearing
                             # twice produces identical hashes; the strict-ascending
