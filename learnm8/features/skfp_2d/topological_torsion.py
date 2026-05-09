@@ -36,5 +36,12 @@ class TopologicalTorsionFeaturizer(SkfpFeaturizer):
     def get_name(self) -> str:
         return 'topological_torsion'
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous' if self.fingerprint.count else 'binary'
+
+    def get_storage_dtype(self) -> str:
+        return 'csr_uint16' if self.fingerprint.count else 'packed_uint8'
+
     def get_description(self) -> str:
         return f'Topological torsion fingerprints ({self.fp_size}-bit)'
