@@ -52,7 +52,13 @@ def _preprocess_features(
         - During training: returns computed mask and fitted imputer (or None)
         - During prediction: returns the input mask unchanged and input imputer unchanged
     """
-    if feature_type == 'continuous':
+    is_uint8_input = features.dtype == np.uint8
+    if is_uint8_input:
+        # uint8 admits no NaN/Inf; skip the float-only sanitisation so we
+        # avoid TypeError from np.isnan and preserve the compact dtype on
+        # output (REQ-11).
+        pass
+    elif feature_type == 'continuous':
         features = np.where(np.isinf(features), np.nan, features)
         if is_training:
             from sklearn.impute import SimpleImputer

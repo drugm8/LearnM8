@@ -141,6 +141,9 @@ class XGBoostLearner(SklearnLearner):
         """Return a descriptive name for this learner."""
         return f'XGBoost(n_estimators={self.n_estimators},lr={self.learning_rate},depth={self.max_depth})'
 
+    def preferred_feature_dtype(self) -> str:
+        return 'uint8' if self._feature_type == 'binary' else 'float32'
+
     def get_feature_importance(self) -> np.ndarray | None:
         """Get feature importance scores from the trained model.
 

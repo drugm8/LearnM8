@@ -75,6 +75,9 @@ class RandomForestLearner(SklearnLearner):
         depth_str = f'depth={self.max_depth}' if self.max_depth else 'unlimited_depth'
         return f'RandomForest(n_estimators={self.n_estimators},{depth_str})'
 
+    def preferred_feature_dtype(self) -> str:
+        return 'uint8' if self._feature_type == 'binary' else 'float32'
+
     def supports_uncertainty(self) -> bool:
         """Return True — RF provides tree-level uncertainty estimates."""
         return True
