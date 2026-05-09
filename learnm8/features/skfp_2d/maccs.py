@@ -25,5 +25,12 @@ class MACCSFeaturizer(SkfpFeaturizer):
     def get_name(self) -> str:
         return 'maccs'
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous' if self.fingerprint.count else 'binary'
+
+    def get_storage_dtype(self) -> str:
+        return 'uint8' if self.fingerprint.count else 'packed_uint8'
+
     def get_description(self) -> str:
         return 'MACCS structural keys (167 predefined patterns)'

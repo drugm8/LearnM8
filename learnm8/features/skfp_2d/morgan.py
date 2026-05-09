@@ -64,6 +64,13 @@ class MorganFeaturizer(SkfpFeaturizer):
     def get_name(self) -> str:
         return 'morgan' if not self.use_features else 'morgan_feat'
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous' if self.fingerprint.count else 'binary'
+
+    def get_storage_dtype(self) -> str:
+        return 'csr_uint16' if self.fingerprint.count else 'packed_uint8'
+
     def get_description(self) -> str:
         mode = "FCFP" if self.use_features else "ECFP"
         diameter = self.radius * 2

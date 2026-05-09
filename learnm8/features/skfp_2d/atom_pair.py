@@ -45,5 +45,12 @@ class AtomPairFeaturizer(SkfpFeaturizer):
     def get_name(self) -> str:
         return 'atom_pair'
 
+    @property
+    def feature_type(self) -> str:
+        return 'continuous' if self.fingerprint.count else 'binary'
+
+    def get_storage_dtype(self) -> str:
+        return 'csr_uint16' if self.fingerprint.count else 'packed_uint8'
+
     def get_description(self) -> str:
         return f'Atom pair fingerprints ({self.fp_size}-bit)'
