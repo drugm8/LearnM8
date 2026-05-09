@@ -124,7 +124,7 @@ def estimate_batch_size(
         n_features: Feature dimension.
         device: Target device for memory query.
         memory_safety_factor: Fraction of available memory to use (0.0, 1.0].
-        n_jobs: Number of parallel workers (divides CPU memory budget).
+        n_jobs: Number of parallel workers used by feature extraction.
 
     Returns:
         Optimal batch size (>= min_batch, <= n_samples, GPU-aligned if applicable).
@@ -145,16 +145,18 @@ def estimate_batch_size(
         )
 
     available = get_available_memory(device)
-    n_jobs_effective = max(1, os.cpu_count() or 1) if n_jobs == -1 else max(1, n_jobs)
-    usable = available * memory_safety_factor / n_jobs_effective - fixed_overhead
+    # n_jobs controls parallel featurization inside one chunk. It should not
+    # divide the learner prediction budget: LearnM8 materializes one prediction
+    # chunk at a time, not one full chunk per worker.
+    usable = available * memory_safety_factor - fixed_overhead
     cost_per_sample = bytes_per_sample * working_multiplier
 
     if usable < cost_per_sample:
         raise LearnerError(
             f"Insufficient memory for even 1 sample. "
             f"Available: {available} bytes, cost per sample: {cost_per_sample:.0f} bytes, "
-            f"n_jobs: {n_jobs_effective}, safety_factor: {memory_safety_factor}. "
-            f"Free up memory or reduce n_jobs."
+            f"safety_factor: {memory_safety_factor}. "
+            f"Free up memory or reduce model complexity."
         )
 
     batch_size = int(usable / cost_per_sample)
@@ -233,6 +235,90 @@ def _predict_chunk(
         return preds, uncerts, feature_time
 
 
+def _is_oom_error(error: BaseException) -> bool:
+    return isinstance(error, MemoryError) or (
+        isinstance(error, RuntimeError) and "out of memory" in str(error).lower()
+    )
+
+
+def _release_memory_after_oom() -> None:
+    gc.collect()
+    try:
+        import torch.cuda
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+def _predict_chunk_with_oom_retry(
+    chunk_df: pl.DataFrame,
+    learner: Learner,
+    featurizer: str | None,
+    cache_dir: Path,
+    n_jobs: int,
+    min_batch: int,
+    n_samples: int,
+    n_features: int,
+    device: str,
+) -> tuple[np.ndarray, np.ndarray | None, float]:
+    try:
+        return _predict_chunk(
+            chunk_df,
+            learner,
+            featurizer,
+            cache_dir,
+            n_jobs=n_jobs,
+        )
+    except (RuntimeError, MemoryError) as e:
+        if not _is_oom_error(e):
+            raise
+
+    _release_memory_after_oom()
+
+    retry_batch_size = len(chunk_df) // 2
+    effective_min = min(min_batch, n_samples)
+    if retry_batch_size < effective_min:
+        raise LearnerError(
+            f"OOM at minimum batch size ({effective_min}). "
+            f"Cannot predict with available memory. "
+            f"Samples: {n_samples}, features: {n_features}, "
+            f"available memory: {get_available_memory(device)} bytes. "
+            f"Free GPU/CPU memory or reduce model complexity."
+        )
+
+    logger.warning(
+        "OOM during prediction, retrying with batch_size=%d (was %d)",
+        retry_batch_size,
+        len(chunk_df),
+    )
+
+    sub_preds = []
+    sub_uncerts = []
+    feature_time = 0.0
+    for sub_chunk in _chunk_dataframe(chunk_df, retry_batch_size):
+        sp, su, sft = _predict_chunk_with_oom_retry(
+            sub_chunk,
+            learner,
+            featurizer,
+            cache_dir,
+            n_jobs,
+            min_batch,
+            n_samples,
+            n_features,
+            device,
+        )
+        feature_time += sft
+        sub_preds.append(sp)
+        if su is not None:
+            sub_uncerts.append(su)
+
+    chunk_preds = np.concatenate(sub_preds)
+    chunk_uncerts = np.concatenate(sub_uncerts) if sub_uncerts else None
+    return chunk_preds, chunk_uncerts, feature_time
+
+
 def _get_n_features(featurizer: str | None) -> int:
     """Get feature dimension from featurizer name."""
     if featurizer is None:
@@ -304,72 +390,19 @@ def predict_with_batching(
     all_valid_ids: list = []
     feature_extraction_time = 0.0
 
-    chunks = list(_chunk_dataframe(prediction_pool, batch_size))
-
-    for _chunk_idx, chunk_df in enumerate(chunks):
-        current_batch_size = len(chunk_df)
-        succeeded = False
-
-        while not succeeded:
-            oom_occurred = False
-            try:
-                chunk_preds, chunk_uncerts, chunk_feat_time = _predict_chunk(
-                    chunk_df, learner, featurizer, cache_dir, n_jobs=n_jobs
-                )
-                feature_extraction_time += chunk_feat_time
-                succeeded = True
-            except (RuntimeError, MemoryError) as e:
-                is_oom = isinstance(e, MemoryError) or (
-                    isinstance(e, RuntimeError) and "out of memory" in str(e).lower()
-                )
-                if is_oom:
-                    oom_occurred = True
-                else:
-                    raise
-
-            if oom_occurred:
-                gc.collect()
-                try:
-                    import torch.cuda
-
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                except Exception:
-                    pass
-
-                current_batch_size = current_batch_size // 2
-                effective_min = min(min_batch, n_samples)
-                if current_batch_size < effective_min:
-                    raise LearnerError(
-                        f"OOM at minimum batch size ({effective_min}). "
-                        f"Cannot predict with available memory. "
-                        f"Samples: {n_samples}, features: {n_features}, "
-                        f"available memory: {get_available_memory(device)} bytes. "
-                        f"Free GPU/CPU memory or reduce model complexity."
-                    )
-
-                logger.warning(
-                    "OOM during prediction, retrying with batch_size=%d (was %d)",
-                    current_batch_size,
-                    len(chunk_df),
-                )
-
-                sub_chunks = list(_chunk_dataframe(chunk_df, current_batch_size))
-                sub_preds = []
-                sub_uncerts = []
-                for sub_chunk in sub_chunks:
-                    sp, su, sft = _predict_chunk(
-                        sub_chunk, learner, featurizer, cache_dir, n_jobs=n_jobs
-                    )
-                    feature_extraction_time += sft
-                    sub_preds.append(sp)
-                    if su is not None:
-                        sub_uncerts.append(su)
-                chunk_preds = np.concatenate(sub_preds)
-                chunk_uncerts = (
-                    np.concatenate(sub_uncerts) if sub_uncerts else None
-                )
-                succeeded = True
+    for _chunk_idx, chunk_df in enumerate(_chunk_dataframe(prediction_pool, batch_size)):
+        chunk_preds, chunk_uncerts, chunk_feat_time = _predict_chunk_with_oom_retry(
+            chunk_df,
+            learner,
+            featurizer,
+            cache_dir,
+            n_jobs,
+            min_batch,
+            n_samples,
+            n_features,
+            device,
+        )
+        feature_extraction_time += chunk_feat_time
 
         all_predictions.append(chunk_preds)
         all_valid_ids.extend(chunk_df["ID"].to_list())
