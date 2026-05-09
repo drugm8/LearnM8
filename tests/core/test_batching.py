@@ -204,17 +204,16 @@ class TestEstimateBatchSize:
         expected = int(available * 0.7 / bytes_per_sample)
         assert result == expected
 
-    def test_n_jobs_divides_memory(self):
+    def test_cpu_n_jobs_does_not_shrink_prediction_batch_budget(self):
         n_features = 512
         learner = self._make_learner(n_features * 8, 1.3)
         available = 8 * 1024**3
         with patch("learnm8.core.batching.get_available_memory", return_value=available):
             batch_1 = estimate_batch_size(learner, n_samples=10**6, n_features=n_features, device="cpu", memory_safety_factor=0.7, n_jobs=1)
             batch_8 = estimate_batch_size(learner, n_samples=10**6, n_features=n_features, device="cpu", memory_safety_factor=0.7, n_jobs=8)
-        assert batch_1 > batch_8
-        assert abs(batch_1 / batch_8 - 8) < 2
+        assert batch_1 == batch_8
 
-    def test_n_jobs_minus_one_uses_cpu_count(self):
+    def test_n_jobs_minus_one_does_not_shrink_prediction_batch_budget(self):
         n_features = 512
         learner = self._make_learner(n_features * 8, 1.3)
         available = 8 * 1024**3
@@ -226,6 +225,27 @@ class TestEstimateBatchSize:
             batch_minus1 = estimate_batch_size(learner, n_samples=10**6, n_features=n_features, device="cpu", memory_safety_factor=0.7, n_jobs=-1)
             batch_explicit = estimate_batch_size(learner, n_samples=10**6, n_features=n_features, device="cpu", memory_safety_factor=0.7, n_jobs=cpu_count)
         assert batch_minus1 == batch_explicit
+
+    def test_80gb_32_threads_gp_profile_is_not_over_partitioned(self):
+        n_features = 2048
+        n_train = 5000
+        bytes_per_sample = n_features * 8 + n_train * 8 * 2
+        learner = self._make_learner(bytes_per_sample, 1.0)
+        available = 80 * 1024**3
+
+        with patch("learnm8.core.batching.get_available_memory", return_value=available):
+            batch_size = estimate_batch_size(
+                learner,
+                n_samples=10**6,
+                n_features=n_features,
+                device="cpu",
+                memory_safety_factor=0.7,
+                n_jobs=32,
+            )
+
+        expected = int(available * 0.7 / bytes_per_sample)
+        assert batch_size == expected
+        assert batch_size > 500_000
 
     def test_gpu_alignment_to_32(self):
         n_features = 2048
@@ -391,6 +411,34 @@ class TestPredictWithBatching:
 
         assert len(preds) == n
         assert call_count[0] > 1
+
+    def test_oom_recovery_keeps_halving_subchunks_until_success(self, tmp_path):
+        n = 4000
+        pool = self._make_pool(n)
+        learner = self._make_learner()
+        call_sizes = []
+
+        def predict_side_effect(features):
+            batch_n = len(features)
+            call_sizes.append(batch_n)
+            if batch_n > MIN_BATCH_CPU:
+                raise RuntimeError("CUDA out of memory. Tried to allocate ...")
+            return np.ones(batch_n), None
+
+        learner.predict.side_effect = predict_side_effect
+
+        large_memory = 100 * 1024**3
+
+        with (
+            patch("learnm8.core.batching.get_available_memory", return_value=large_memory),
+            patch("learnm8.core.batching.extract_features", side_effect=lambda smiles, *a, **kw: np.ones((len(smiles), 2048))),
+        ):
+            preds, _uncerts, ids, _feat_time = predict_with_batching(pool, learner, "morgan", tmp_path)
+
+        assert len(preds) == n
+        assert len(ids) == n
+        assert max(call_sizes) == n
+        assert call_sizes.count(MIN_BATCH_CPU) == 4
 
     def test_oom_at_min_batch_raises(self, tmp_path):
         n = 5
