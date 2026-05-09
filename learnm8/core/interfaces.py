@@ -145,6 +145,19 @@ class Learner(ABC):
         """
         return False
 
+    def preferred_feature_dtype(self) -> str:
+        """Return the preferred input dtype for this learner.
+
+        Returns:
+            ``'float32'`` (default) or ``'uint8'``. Tree learners override
+            to ``'uint8'`` for binary features so the cache decoder skips
+            the float32 inflation (4x RAM saving on a 2048-bit Morgan matrix).
+
+            Concrete (non-abstract) so existing third-party Learner subclasses
+            keep working unchanged (REQ-14).
+        """
+        return 'float32'
+
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         """Return memory cost estimate for prediction batch sizing.
 

@@ -62,6 +62,9 @@ class DecisionTreeLearner(SklearnLearner):
         depth_str = f'depth={self.max_depth}' if self.max_depth else 'unlimited_depth'
         return f'DecisionTree({depth_str},min_split={self.min_samples_split})'
 
+    def preferred_feature_dtype(self) -> str:
+        return 'uint8' if self._feature_type == 'binary' else 'float32'
+
     def supports_uncertainty(self) -> bool:
         """Return True if uncertainty is available (requires squared_error criterion)."""
         if not self.is_trained:
