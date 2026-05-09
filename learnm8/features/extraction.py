@@ -104,7 +104,8 @@ def extract_features(
     featurizer: str | Featurizer,
     cache_dir: Path | None = None,
     n_jobs: int = -1,
-    show_progress: bool = False
+    show_progress: bool = False,
+    preferred_dtype: str = 'float32',
 ) -> np.ndarray:
     """
     Extract molecular features with caching and parallel processing.
@@ -190,5 +191,6 @@ def extract_features(
         featurizer_obj,
         n_jobs=n_jobs,
         show_progress=show_progress,
-        cache_dir=cache_dir
+        cache_dir=cache_dir,
+        preferred_dtype=preferred_dtype,
     )
