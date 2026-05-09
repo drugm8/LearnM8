@@ -31,8 +31,9 @@ All other logic is identical, eliminating code duplication.
 import logging
 import math
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
@@ -211,7 +212,8 @@ def execute_cycle(
                         training_smiles,
                         featurizer,
                         cache_dir=cache_dir,
-                        n_jobs=n_jobs
+                        n_jobs=n_jobs,
+                        preferred_dtype=learner.preferred_feature_dtype(),
                     )
                     train_feature_time += time.time() - _t0
                     logger.info(
@@ -244,7 +246,8 @@ def execute_cycle(
                     training_smiles,
                     featurizer,
                     cache_dir=cache_dir,
-                    n_jobs=n_jobs
+                    n_jobs=n_jobs,
+                    preferred_dtype=learner.preferred_feature_dtype(),
                 )
                 train_feature_time += time.time() - _t0
                 logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")

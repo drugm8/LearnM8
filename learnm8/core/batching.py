@@ -194,6 +194,7 @@ def _predict_chunk(
     chunk_smiles = chunk_df["SMILES"].to_list()
     feature_time = 0.0
 
+    preferred_dtype = learner.preferred_feature_dtype()
     if learner.requires_smiles():
         if featurizer is not None:
             t0 = time.time()
@@ -203,6 +204,7 @@ def _predict_chunk(
                 cache_dir=cache_dir,
                 show_progress=show_progress,
                 n_jobs=n_jobs,
+                preferred_dtype=preferred_dtype,
             )
             feature_time = time.time() - t0
         else:
@@ -224,6 +226,7 @@ def _predict_chunk(
             cache_dir=cache_dir,
             show_progress=show_progress,
             n_jobs=n_jobs,
+            preferred_dtype=preferred_dtype,
         )
         feature_time = time.time() - t0
         preds, uncerts = learner.predict(chunk_features)
