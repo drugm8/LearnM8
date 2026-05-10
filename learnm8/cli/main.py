@@ -63,10 +63,6 @@ Examples:
   # From config file
   learnm8 run --config experiment.yaml
 
-  # Predefined schedule
-  learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf \\
-    --schedule intensive
-
   # Validate compounds
   learnm8 validate compounds.csv --featurizer morgan -o validation_results/
 
@@ -124,74 +120,11 @@ def load_config_file(config_path: Path) -> dict:
         raise ConfigurationError(f"Failed to parse config file: {e}") from e
 
 
-def get_predefined_schedule(name: str) -> list:
-    """Return predefined cycle schedules.
-
-    Available schedules:
-    - quick: 5 cycles - fast exploration
-    - standard: 10 cycles - balanced approach
-    - intensive: 20 cycles - thorough screening
-    - diverse: 10 cycles - mixed diversity methods
-
-    Args:
-        name: Schedule name
-
-    Returns:
-        List of CycleConfig objects
-
-    Raises:
-        ValueError: If schedule name not recognized
-    """
-    available_acquisitions = set(list_acquisition_functions())
-
-    schedules = {
-        'quick': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('greedy', n_cycles=4, batch_fraction=0.01)
-        ],
-        'standard': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('greedy', n_cycles=9, batch_fraction=0.01)
-        ],
-        'intensive': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=19, batch_fraction=0.005)
-        ],
-    }
-
-    if 'bitbirch' in available_acquisitions:
-        schedules['diverse'] = [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('bitbirch', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=3, batch_fraction=0.01),
-            CycleConfig('ucb', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)
-        ]
-    else:
-        console.print("[yellow]Warning:[/yellow] BitBIRCH not available; using random sampling in 'diverse' schedule")
-        schedules['diverse'] = [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('random', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=3, batch_fraction=0.01),
-            CycleConfig('ucb', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)
-        ]
-
-    if name not in schedules:
-        available = ', '.join(sorted(schedules.keys()))
-        raise ValueError(
-            f"Unknown schedule '{name}'. Available schedules: {available}"
-        )
-
-    return schedules[name]
-
-
 def create_parser() -> argparse.ArgumentParser:
-    """Create argument parser with three subcommands.
+    """Create argument parser with two subcommands.
 
     Subcommands:
     - run: Execute active learning experiment
-    - list: List available components
     - validate: Validate compound pool
 
     Returns:
@@ -274,11 +207,6 @@ def create_parser() -> argparse.ArgumentParser:
         '--cycles',
         type=str,
         help='Cycle specification: string format "random:0.02 greedy:0.01*5" or list of dicts/CycleConfig from config file'
-    )
-    cycle_group.add_argument(
-        '--schedule',
-        choices=['quick', 'standard', 'intensive', 'diverse'],
-        help='Predefined schedule'
     )
     cycle_group.add_argument(
         '--config',
@@ -521,9 +449,6 @@ def cmd_run(args: argparse.Namespace):
             else:
                 console.print("[red]Error:[/red] Unsupported cycles type. Must be string spec or list.")
                 sys.exit(1)
-        elif args.schedule:
-            console.print(f"[cyan]Using predefined schedule:[/cyan] {args.schedule}")
-            cycles = get_predefined_schedule(args.schedule)
         else:
             console.print(f"[cyan]Using simple mode[/cyan] ({args.n_cycles} cycles)")
             cycles = None
