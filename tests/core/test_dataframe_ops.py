@@ -1,17 +1,16 @@
-import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
 
-from learnm8.core.data_structures import (
+from learnm8.core.dataframe_ops import (
+    get_compounds_by_status,
+    update_status,
+)
+from learnm8.core.initialization import (
     STATUS_LABELED,
     STATUS_PRUNED,
     STATUS_UNLABELED,
     validate_master_dataframe,
-)
-from learnm8.core.dataframe_ops import (
-    get_compounds_by_status,
-    update_status,
 )
 from tests.fixtures.master_dataframe import create_initialized_master_df
 

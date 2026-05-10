@@ -22,7 +22,7 @@ import polars as pl
 
 from learnm8.utils.polars_utils import map_values_via_join
 
-from .data_structures import VALID_STATUSES
+from .initialization import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def _update_status_inplace(
                 id_to_value = target_values
             elif isinstance(target_values, pl.Series):
                 # For Series, zip IDs with values
-                id_to_value = dict(zip(compound_ids, target_values.to_list()))
+                id_to_value = dict(zip(compound_ids, target_values.to_list(), strict=True))
             elif isinstance(target_values, pd.Series):
                 # For pandas Series, use to_dict() for index-value mapping
                 id_to_value = target_values.to_dict()
