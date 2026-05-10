@@ -1,14 +1,13 @@
-import pytest
-import polars as pl
-import numpy as np
-from pathlib import Path
 
-from learnm8.core.data_structures import (
-    validate_master_dataframe,
+import polars as pl
+import pytest
+
+from learnm8.core.initialization import (
     STATUS_LABELED,
-    STATUS_UNLABELED,
     STATUS_PRUNED,
-    VALID_STATUSES
+    STATUS_UNLABELED,
+    VALID_STATUSES,
+    validate_master_dataframe,
 )
 from tests.fixtures.master_dataframe import create_initialized_master_df
 
@@ -333,7 +332,7 @@ class TestValidateMasterDataframe:
         )
 
         # Enable propagation on all learnm8 loggers
-        for logger_name in ['learnm8', 'learnm8.core', 'learnm8.core.data_structures']:
+        for logger_name in ['learnm8', 'learnm8.core', 'learnm8.core.initialization']:
             logger = logging.getLogger(logger_name)
             logger.propagate = True
             logger.setLevel(logging.WARNING)
@@ -353,6 +352,8 @@ class TestValidateMasterDataframe:
                 pass
             else:
                 # Categories are wrong but no warning was captured - this is the actual failure
-                assert False, f"Expected warning about categories {current_cats} != {expected_cats}, but got no caplog records"
+                raise AssertionError(
+                    f"Expected warning about categories {current_cats} != {expected_cats}, but got no caplog records"
+                )
         else:
             assert any('incorrect categories' in record.message for record in caplog.records)

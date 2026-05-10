@@ -1,10 +1,13 @@
-import pytest
-import polars as pl
-import numpy as np
-from pathlib import Path
 
-from learnm8.core.initialization import initialize_master_dataframe_empty
-from learnm8.core.data_structures import STATUS_LABELED, STATUS_UNLABELED
+import numpy as np
+import polars as pl
+import pytest
+
+from learnm8.core.initialization import (
+    STATUS_LABELED,
+    STATUS_UNLABELED,
+    initialize_master_dataframe_empty,
+)
 
 
 @pytest.mark.integration
@@ -145,7 +148,7 @@ class TestSelectInitialBatch:
         for fraction, expected in test_cases:
             master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
 
-            updated_df, metrics = select_initial_batch(
+            updated_df, _metrics = select_initial_batch(
                 compounds_df=master_df,
                 oracle=mock_oracle,
                 target_col='Activity',
@@ -174,7 +177,7 @@ class TestSelectInitialBatch:
 
         master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
 
-        updated_df, metrics = select_initial_batch(
+        updated_df, _metrics = select_initial_batch(
             compounds_df=master_df,
             oracle=oracle,
             target_col='Activity',
@@ -195,13 +198,14 @@ class TestSelectInitialBatch:
 
     def test_unsupported_strategy_fallback(self, sample_compounds, mock_oracle, tmp_path):
         """Test that unsupported strategy falls back to random with warning."""
-        from learnm8.core.initialization import select_initial_batch
         import warnings
+
+        from learnm8.core.initialization import select_initial_batch
 
         master_df = initialize_master_dataframe_empty(sample_compounds, 'Activity')
 
         with warnings.catch_warnings(record=True):
-            updated_df, metrics = select_initial_batch(
+            updated_df, _metrics = select_initial_batch(
                 compounds_df=master_df,
                 oracle=mock_oracle,
                 target_col='Activity',

@@ -7,8 +7,9 @@ initial batch before active learning cycles begin.
 
 import logging
 import math
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -16,13 +17,18 @@ import polars as pl
 
 from learnm8.exceptions import AcquisitionError, OracleError
 
-from .data_structures import STATUS_UNLABELED, VALID_STATUSES
 from .interfaces import Oracle
+
+STATUS_UNLABELED = 'unlabeled'
+STATUS_LABELED = 'labeled'
+STATUS_PRUNED = 'pruned'
+VALID_STATUSES = [STATUS_UNLABELED, STATUS_LABELED, STATUS_PRUNED]
+
+logger = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
     from learnm8.evaluation.metrics.similarity import RunCache
-
-logger = logging.getLogger(__name__)
 
 
 def initialize_master_dataframe_empty(
@@ -425,3 +431,80 @@ def select_initial_batch(
     )
 
     return compounds_df, metrics
+
+
+def validate_master_dataframe(
+    master_df: 'pl.DataFrame'
+) -> bool:
+    """Validate master DataFrame schema.
+
+    Validates core columns required for compound tracking. Does not validate:
+    - Target column name (varies by experiment)
+    - Prediction columns (added dynamically per cycle)
+    - Deprecated columns (last_prediction, last_uncertainty removed in v0.5.0)
+
+    Args:
+        master_df: Master DataFrame to validate
+
+    Returns:
+        True if valid
+
+    Raises:
+        ValueError: If schema is invalid
+
+    Note:
+        Target column name varies by experiment (e.g., 'Activity', 'pIC50'),
+        so it is not validated here. Prediction columns are added dynamically
+        per cycle (e.g., 'prediction_cycle_0'), so they are not required at
+        initialization.
+
+    Example:
+        >>> validate_master_dataframe(master_df)
+        True
+    """
+    required_columns = [
+        'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle'
+    ]
+
+    missing_cols = [col for col in required_columns if col not in master_df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"Master DataFrame missing required columns: {missing_cols}. "
+            f"Available columns: {list(master_df.columns)}. "
+            f"Required columns are: {required_columns}. "
+            f"This may indicate the DataFrame was not properly initialized."
+        )
+
+    if master_df['ID'].is_duplicated().any():
+        dupes = master_df.filter(pl.col('ID').is_duplicated())['ID'].unique().to_list()
+        from learnm8.exceptions import _truncate_list
+        raise ValueError(
+            f"Duplicate compound IDs found in master DataFrame: {_truncate_list(dupes)}. "
+            f"Each compound must have a unique ID. Check your input data for duplicate entries."
+        )
+
+    if master_df['status'].dtype == pl.Categorical:
+        current_categories = master_df['status'].cat.get_categories().to_list()
+        if set(current_categories) != set(VALID_STATUSES):
+            logger.warning(f"Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}")
+    elif master_df['status'].dtype == pl.Enum:
+        current_categories = master_df['status'].dtype.categories
+        if set(current_categories) != set(VALID_STATUSES):
+            logger.warning(f"Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}")
+    elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
+        raise ValueError(
+            f"Status column must be categorical, enum, or string type, "
+            f"got {master_df['status'].dtype}. "
+            f"This may indicate the DataFrame was not properly initialized."
+        )
+
+    invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(VALID_STATUSES)
+    if invalid_statuses:
+        raise ValueError(
+            f"Invalid status values found: {invalid_statuses}. "
+            f"Valid status values are: {VALID_STATUSES}. "
+            f"Check that compound statuses are set correctly during initialization."
+        )
+
+    logger.debug("Master DataFrame validation passed")
+    return True
