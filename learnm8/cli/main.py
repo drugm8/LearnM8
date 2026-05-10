@@ -298,11 +298,6 @@ def create_parser() -> argparse.ArgumentParser:
         help='Random seed (default: 42)'
     )
     advanced_group.add_argument(
-        '--mode',
-        choices=['run', 'benchmark'],
-        help='Execution mode (auto-detected if not specified)'
-    )
-    advanced_group.add_argument(
         '--memory-safety-factor',
         type=float,
         default=0.7,
@@ -380,7 +375,6 @@ def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None,
         strategy=args.strategy,
         initial_strategy=args.initial_strategy,
         score_direction=args.score_direction,
-        mode=args.mode,
         output_dir=args.output,
         cache_dir=getattr(args, 'cache_dir', None),
         random_state=args.random_state,
@@ -466,7 +460,7 @@ def cmd_run(args: argparse.Namespace):
         table.add_row("Total Cycles", str(len(cycles) if cycles else args.n_cycles))
         pruning_text = f"{args.pruning_fraction:.1%} per cycle" if args.pruning_fraction else "Disabled"
         table.add_row("Pruning", pruning_text)
-        table.add_row("Mode", args.mode or "Auto-detect")
+        table.add_row("Oracle Type", "Derived from oracle")
 
         console.print(table)
 

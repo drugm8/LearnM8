@@ -50,7 +50,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -89,7 +89,7 @@ class TestExecuteCycle:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=len(sample_compounds),
-                mode='run'
+                oracle_type='run'
             )
 
     def test_run_mode_basic_execution(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
@@ -115,7 +115,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -141,7 +141,7 @@ class TestExecuteCycle:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=100,
-                mode='benchmark',
+                oracle_type='benchmark',
                 original_pool=None
             )
 
@@ -168,7 +168,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=sample_compounds,
             output_dir=tmp_path,
         )
@@ -200,7 +200,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=100,
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['pruned_count'] >= 0
@@ -219,7 +219,7 @@ class TestExecuteCycle:
             cache_dir=tmp_path,
             original_pool_size=100,
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['best_so_far'] is not None
@@ -238,7 +238,7 @@ class TestExecuteCycle:
             cache_dir=tmp_path,
             original_pool_size=100,
             score_direction='lower',
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['best_so_far'] is not None
@@ -258,7 +258,7 @@ class TestExecuteCycle:
                 cache_dir=tmp_path,
                 original_pool_size=100,
                 score_direction='invalid',
-                mode='run'
+                oracle_type='run'
             )
 
     def test_batch_size_computation_with_fraction(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
@@ -274,7 +274,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=5,
-            mode='run'
+            oracle_type='run'
         )
 
         expected_batch_size = int(5 * 0.4)
@@ -309,7 +309,7 @@ class TestExecuteCycle:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=100,
-                mode='run'
+                oracle_type='run'
             )
 
     def test_no_unlabeled_compounds_returns_unchanged(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
@@ -335,7 +335,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['selected_count'] == 0
@@ -597,7 +597,7 @@ class TestEdgeCaseHandling:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=100,
-                mode='run'
+                oracle_type='run'
             )
 
     def test_infinite_predictions_handling(self, sample_master_df, mock_oracle, tmp_path):
@@ -629,7 +629,7 @@ class TestEdgeCaseHandling:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=100,
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 

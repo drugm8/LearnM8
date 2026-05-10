@@ -747,6 +747,8 @@ def run_active_learning(
                 featurizer_obj = featurizer
                 logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
 
+        feature_type = featurizer_obj.feature_type if featurizer_obj else 'binary'
+
         if not (0.0 < memory_safety_factor <= 1.0):
             raise ConfigurationError(
                 f"memory_safety_factor must be in (0.0, 1.0], got {memory_safety_factor}. "
@@ -942,7 +944,7 @@ def run_active_learning(
                     cache_dir=cache_dir,
                     original_pool_size=original_pool_size,
                     score_direction=score_direction,
-            oracle_type=oracle_type,
+                    oracle_type=oracle_type,
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
                     memory_safety_factor=memory_safety_factor,
@@ -953,6 +955,7 @@ def run_active_learning(
                     previous_metrics=previous_metrics,
                     n_jobs=n_jobs,
                     output_dir=output_dir,
+                    feature_type=feature_type,
                 )
                 all_metrics.append(metrics)
 

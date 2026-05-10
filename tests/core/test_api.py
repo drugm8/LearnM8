@@ -395,7 +395,6 @@ class TestAPIModeDetection:
             featurizer='morgan',
             n_cycles=1,
             batch_fraction=0.05,
-            mode='run',
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
             random_state=42
@@ -874,7 +873,6 @@ class TestAPIEvaluationMetrics:
             featurizer='morgan',
             n_cycles=1,
             batch_fraction=0.05,
-            mode='benchmark',
             output_dir=output_dir,
             cache_dir=tmp_path / "cache",
             random_state=42

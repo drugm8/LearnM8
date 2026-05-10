@@ -71,7 +71,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -120,7 +120,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -169,7 +169,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -206,7 +206,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=1,
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Validate returned master_df unchanged
@@ -249,7 +249,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
 
             assert metrics['selected_count'] == expected_selected
@@ -288,7 +288,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='lower',
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['selected_count'] == 2
@@ -329,7 +329,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -373,7 +373,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
     
     def test_prediction_statistics_calculation(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
@@ -410,7 +410,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         assert 'prediction_mean' in metrics
@@ -455,7 +455,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
         )
 
         assert 'feature_extraction_time' in metrics
@@ -512,7 +512,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
 
             assert metrics['strategy'] == strategy
@@ -553,7 +553,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -569,7 +569,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -609,7 +609,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify status changed from 'unlabeled' to 'labeled' for selected compounds
@@ -652,7 +652,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify original master_df unchanged (functional update)
@@ -706,7 +706,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -766,7 +766,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -822,7 +822,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -885,7 +885,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=run_dir,
         )
 
@@ -901,7 +901,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=benchmark_dir,
         )
@@ -960,7 +960,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Get compounds selected in cycle 0 (newly labeled, excluding initially labeled)
@@ -993,7 +993,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify compounds from cycle 0 still have their original selected_cycle and labeled_cycle
