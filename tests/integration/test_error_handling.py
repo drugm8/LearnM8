@@ -95,16 +95,19 @@ class TestDataValidationErrors:
               .alias('Activity')
         )
         
+        from learnm8.exceptions import LearnerError
+
         acq = GreedyAcquisition()
-        
-        # Should handle NaN values gracefully or raise appropriate error
+
+        # Should handle NaN values gracefully or raise appropriate error.
+        # 019 US2 secondary guard raises LearnerError on direct .select() with NaN.
         try:
             selected = acq.select(compounds, n_select=3)
-            
+
             # If it succeeds, should not include NaN predictions
             assert not selected['prediction'].is_null().any()
-            
-        except (ValueError, RuntimeError):
+
+        except (ValueError, RuntimeError, LearnerError):
             # This is also acceptable behavior for NaN values
             pass
 

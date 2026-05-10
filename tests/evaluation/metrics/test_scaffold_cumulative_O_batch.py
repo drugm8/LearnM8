@@ -69,8 +69,8 @@ def test_scaffold_cumulative_per_cycle_time_constant() -> None:
         disable = (
             "mean_tanimoto_similarity_sampled_batch",
             "mean_tanimoto_similarity_sampled_cumulative",
-            "shannon_entropy_diversity_batch",
-            "shannon_entropy_diversity_cumulative",
+            "bit_marginal_entropy_batch",
+            "bit_marginal_entropy_cumulative",
         )
         t0 = time.perf_counter()
         compute_diversity_metrics(

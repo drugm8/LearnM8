@@ -439,7 +439,7 @@ class TestSpecificExceptionHandling:
                 )
             assert result['mean_tanimoto_similarity_sampled_batch'] is None
             assert result['scaffold_diversity_index_batch'] is None
-            assert result['shannon_entropy_diversity_batch'] is None
+            assert result['bit_marginal_entropy_batch'] is None
             assert 'diversity' in caplog.text.lower()
 
     def test_discovery_metrics_catches_zero_division(self, caplog):
@@ -608,10 +608,12 @@ class TestEvaluateCycleRegression:
         assert_allclose(r['top_1_pct_discovery'], 100.0, atol=1e-8)
         assert_allclose(r['top_10_pct_discovery'], 50.0, atol=1e-8)
         assert_allclose(r['cumulative_ef'], 10.0, atol=1e-8)
-        assert_allclose(r['cumulative_avg_score_ratio'], 10.0, atol=1e-8)
+        # Feature 019: sign-aware score_improvement_ratio replaces the abs() trick.
+        # selected_mean=1.0, pop_mean=0.1 → (1.0 - 0.1)/0.1 = 9.0 for higher_better.
+        assert_allclose(r['cumulative_score_improvement_ratio'], 9.0, atol=1e-8)
         assert_allclose(r['batch_ef'], 10.0, atol=1e-8)
         assert_allclose(r['batch_hit_rate'], 1.0, atol=1e-8)
-        assert_allclose(r['batch_avg_score_ratio'], 10.0, atol=1e-8)
+        assert_allclose(r['batch_score_improvement_ratio'], 9.0, atol=1e-8)
         assert_allclose(r['unlabeled_top_100_overlap'], 4.0, atol=1e-8)
         assert_allclose(r['unlabeled_top_1000_overlap'], 17.5, atol=1e-8)
         assert_allclose(r['unlabeled_ef_1_0'], 4.2, atol=1e-8)
@@ -648,7 +650,9 @@ class TestEvaluateCycleRegression:
         assert_allclose(r['top_1_pct_discovery'], 0.0, atol=1e-8)
         assert_allclose(r['top_10_pct_discovery'], 0.0, atol=1e-8)
         assert r['cumulative_ef'] is None
-        assert_allclose(r['cumulative_avg_score_ratio'], 1.0, atol=1e-8)
+        # Feature 019 FR-013: empty selection now raises ValueError; evaluate_cycle
+        # catches and sets to None (replaces silent magic 1.0 of legacy formula).
+        assert r['cumulative_score_improvement_ratio'] is None
         assert_allclose(r['unlabeled_spearman_correlation'], 0.1441, atol=1e-4)
 
     def test_no_activity_column_ef_metrics_are_none(self, fd):

@@ -14,16 +14,16 @@ import numpy as np
 import polars as pl
 
 from .metrics.enrichment import (
-	calculate_average_score_ratio,
-	calculate_batch_average_score_ratio,
 	calculate_batch_enrichment_factor,
 	calculate_batch_hit_rate,
+	calculate_batch_score_improvement_ratio,
 	calculate_cumulative_enrichment_factor,
 	calculate_ground_truth_enrichment_factors,
 	# NEW IMPORTS
 	calculate_multiple_top_k_discovery_rates,
 	calculate_multiple_unlabeled_enrichment_factors,
 	calculate_multiple_unlabeled_top_k_overlaps,
+	calculate_score_improvement_ratio,
 	calculate_unlabeled_ranking_correlation,
 )
 
@@ -272,22 +272,32 @@ def evaluate_cycle(
 			)
 			metrics['batch_ef'] = batch_ef
 
-			# Average Score Ratios (always available with continuous data)
-			cumulative_score_ratio = calculate_average_score_ratio(
-				cumulative_selected_ids,
-				ground_truth_data,
-				target_col,
-				score_direction
-			)
-			metrics['cumulative_avg_score_ratio'] = cumulative_score_ratio
-
-			batch_avg_score_ratio = calculate_batch_average_score_ratio(
-				selected_compounds,
-				ground_truth_data,
-				target_col,
-				score_direction
-			)
-			metrics['batch_avg_score_ratio'] = batch_avg_score_ratio
+			# Sign-aware Score Improvement Ratios (always available with continuous data).
+			# Replaces the legacy abs()-trick `*_avg_score_ratio` columns (feature 019).
+			try:
+				metrics['cumulative_score_improvement_ratio'] = calculate_score_improvement_ratio(
+					cumulative_selected_ids,
+					ground_truth_data,
+					target_col,
+					score_direction=score_direction,
+				)
+			except ValueError as exc:
+				logger.debug(
+					"cumulative_score_improvement_ratio not computed (%s); leaving None.", exc
+				)
+				metrics['cumulative_score_improvement_ratio'] = None
+			try:
+				metrics['batch_score_improvement_ratio'] = calculate_batch_score_improvement_ratio(
+					selected_compounds,
+					ground_truth_data,
+					target_col,
+					score_direction=score_direction,
+				)
+			except ValueError as exc:
+				logger.debug(
+					"batch_score_improvement_ratio not computed (%s); leaving None.", exc
+				)
+				metrics['batch_score_improvement_ratio'] = None
 
 		except (ValueError, TypeError, ZeroDivisionError, KeyError) as e:
 			logger.warning(
@@ -304,8 +314,8 @@ def evaluate_cycle(
 				'cumulative_ef': None,
 				'batch_hit_rate': None,
 				'batch_ef': None,
-				'cumulative_avg_score_ratio': None,
-				'batch_avg_score_ratio': None
+				'cumulative_score_improvement_ratio': None,
+				'batch_score_improvement_ratio': None,
 			})
 
 	# Ranking Metrics (Category B) - UNLABELED ONLY

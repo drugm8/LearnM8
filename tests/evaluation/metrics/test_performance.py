@@ -55,15 +55,19 @@ class TestPerformanceMetrics:
         assert result == 0.0
 
     def test_average_score_calculation(self):
-        """Test average score calculation."""
+        """Test average score calculation.
+
+        Feature 019: NaN values now propagate (no silent np.nanmean filter).
+        Predictions are guaranteed to be NaN-free upstream by cycle.py FR-005.
+        """
         scores = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         result = calculate_average_score(scores)
         assert_allclose(result, 3.0)
 
-        # With NaN values
+        # With NaN values, mean propagates NaN (silent filter removed in feature 019).
         scores_with_nan = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
         result = calculate_average_score(scores_with_nan)
-        assert_allclose(result, 3.0)  # Should ignore NaN
+        assert np.isnan(result)
 
     def test_mape_calculation(self):
         """Test Mean Absolute Percentage Error calculation."""
