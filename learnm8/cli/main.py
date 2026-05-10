@@ -1,15 +1,13 @@
 """Comprehensive CLI for LearnM8 active learning.
 
-Provides three subcommands:
+Provides two subcommands:
 - run: Execute active learning experiment
-- list: List available components (learners, acquisition, featurizers, schedules)
 - validate: Validate compound pool before running
 
 Supports multiple input modes:
 - Simple: Basic parameters (n_cycles, batch_fraction)
 - Advanced: Cycle specification string ("random:0.02 greedy:0.01*5")
 - Config file: YAML or JSON configuration
-- Predefined schedules: quick, standard, intensive, diverse
 
 Features:
 - Rich output with tables and progress bars
@@ -30,7 +28,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.traceback import install
 
-from learnm8.acquisition import list_acquisition_functions
 from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig, parse_cycle_spec
 from learnm8.core.validation import validate_compound_pool
@@ -69,10 +66,6 @@ Examples:
   # Predefined schedule
   learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf \\
     --schedule intensive
-
-  # List available components
-  learnm8 list learners
-  learnm8 list acquisition
 
   # Validate compounds
   learnm8 validate compounds.csv --featurizer morgan -o validation_results/
@@ -388,13 +381,6 @@ def create_parser() -> argparse.ArgumentParser:
         help='Fraction of available memory to use for prediction batching (default: 0.7)'
     )
 
-    list_parser = subparsers.add_parser('list', help='List available components')
-    list_parser.add_argument(
-        'component',
-        choices=['learners', 'acquisition', 'featurizers', 'schedules'],
-        help='Component type'
-    )
-
     validate_parser = subparsers.add_parser('validate', help='Validate compound pool using datamol SMILES validation')
     validate_parser.add_argument(
         'compound_pool',
@@ -629,98 +615,6 @@ def cmd_run(args: argparse.Namespace):
         _print_learnm8_error(e)
 
 
-def cmd_list(args: argparse.Namespace):
-    """Handle list subcommand.
-
-    Args:
-        args: Parsed command-line arguments
-    """
-    if args.component == 'learners':
-        from learnm8.api import list_available_learners
-        learners = list_available_learners()
-        console.print("[bold cyan]Available Learners:[/bold cyan]")
-        if not learners:
-            console.print("  [yellow]No learners available (check dependencies)[/yellow]")
-        for learner in learners:
-            console.print(f"  • {learner}")
-
-    elif args.component == 'acquisition':
-        strategies = list_acquisition_functions()
-        console.print("[bold cyan]Available Acquisition Strategies:[/bold cyan]")
-        for strategy in strategies:
-            console.print(f"  • {strategy}")
-
-    elif args.component == 'featurizers':
-        from rich.table import Table
-
-        from learnm8.features import FEATURIZER_REGISTRY, list_available_featurizers
-
-        available = list_available_featurizers()
-
-        table = Table(title="Available Molecular Featurizers", show_header=True, header_style="bold cyan")
-        table.add_column("Name", style="blue", no_wrap=True)
-        table.add_column("Type", style="green")
-        table.add_column("Dimension", justify="right", style="yellow")
-        table.add_column("Feature Type", style="magenta")
-        table.add_column("Description", style="white")
-
-        # Add 2D featurizers
-        for name in available['2d']:
-            if name in FEATURIZER_REGISTRY:
-                featurizer_class = FEATURIZER_REGISTRY[name]
-                try:
-                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
-                    dim = temp_feat.get_dimension()
-                    feature_type = temp_feat.feature_type
-                    desc = {
-                        'morgan': 'Circular fingerprints (ECFP4)',
-                        'ecfp': 'Circular fingerprints (ECFP4)',
-                        'ecfp6': 'Extended circular fingerprints (radius=3)',
-                        'morgan_feat': 'Morgan with feature vectors',
-                        'maccs': 'MACCS structural keys',
-                        'avalon': 'Avalon fingerprints',
-                        'atom_pair': 'Atom pair fingerprints',
-                        'topological_torsion': 'Topological torsion fingerprints',
-                        'rdkit': 'RDKit fingerprints',
-                        'pubchem': 'PubChem fingerprints',
-                        'mordred': 'Mordred molecular descriptors',
-                        'descriptors': 'Mordred molecular descriptors'
-                    }.get(name, '')
-                    table.add_row(name, "2D", str(dim), feature_type, desc)
-                except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "2D", "N/A", "N/A", "")
-
-        # Add 3D featurizers
-        for name in available['3d']:
-            if name in FEATURIZER_REGISTRY:
-                featurizer_class = FEATURIZER_REGISTRY[name]
-                try:
-                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
-                    dim = temp_feat.get_dimension()
-                    feature_type = temp_feat.feature_type
-                    desc = {
-                        'whim': 'WHIM 3D molecular descriptors',
-                        'usr': 'USR 3D shape descriptors',
-                        'e3fp': 'Extended 3D fingerprints'
-                    }.get(name, '')
-                    table.add_row(name, "3D", str(dim), feature_type, desc)
-                except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "3D", "N/A", "N/A", "")
-
-        console.print(table)
-
-    elif args.component == 'schedules':
-        schedules = {
-            'quick': '5 cycles - fast exploration',
-            'standard': '10 cycles - balanced',
-            'intensive': '20 cycles - thorough',
-            'diverse': '10 cycles - mixed diversity methods'
-        }
-        console.print("[bold cyan]Available Schedules:[/bold cyan]")
-        for name, desc in schedules.items():
-            console.print(f"  • [blue]{name}:[/blue] {desc}")
-
-
 def cmd_validate(args: argparse.Namespace):
     """Handle validate subcommand.
 
@@ -815,8 +709,6 @@ def main():
 
     if args.command == 'run':
         cmd_run(args)
-    elif args.command == 'list':
-        cmd_list(args)
     elif args.command == 'validate':
         cmd_validate(args)
     else:

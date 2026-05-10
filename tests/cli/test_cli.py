@@ -105,11 +105,6 @@ def make_validate_namespace(compound_pool, **overrides):
     return argparse.Namespace(**defaults)
 
 
-def make_list_namespace(component):
-    """Build argparse.Namespace for cmd_list."""
-    return argparse.Namespace(component=component)
-
-
 @pytest.fixture
 def minimal_compounds(tmp_path):
     """Create valid compound pool CSV with enough diversity for predefined schedules."""
@@ -426,49 +421,6 @@ class TestRunSubcommand:
 
 
 @pytest.mark.slow
-class TestListSubcommand:
-    """Test 'list' subcommand functionality."""
-
-    def test_list_learners(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('learners')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'rf' in result.stdout or 'gp' in result.stdout
-
-    def test_list_acquisition(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('acquisition')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'greedy' in result.stdout or 'random' in result.stdout
-
-    def test_list_featurizers(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('featurizers')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'morgan' in result.stdout
-        assert 'maccs' in result.stdout
-
-    def test_list_schedules(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('schedules')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'quick' in result.stdout
-        assert 'standard' in result.stdout
-        assert 'intensive' in result.stdout
-
-    def test_list_invalid_component(self):
-        from learnm8.cli.main import create_parser
-        parser = create_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(['list', 'invalid'])
-        assert exc_info.value.code != 0
-
-
-@pytest.mark.slow
 class TestValidateSubcommand:
     """Test 'validate' subcommand functionality."""
 
@@ -518,13 +470,6 @@ class TestHelpAndErrors:
         parser = create_parser()
         with pytest.raises(SystemExit) as exc_info:
             parser.parse_args(['run', '-h'])
-        assert exc_info.value.code == 0
-
-    def test_list_help(self):
-        from learnm8.cli.main import create_parser
-        parser = create_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(['list', '-h'])
         assert exc_info.value.code == 0
 
     def test_validate_help(self):
