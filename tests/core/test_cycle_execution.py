@@ -6,7 +6,6 @@ Tests execute_cycle function with real molecular data, focusing on integration a
 
 import pytest
 import numpy as np
-import pandas as pd
 import polars as pl
 
 from learnm8.exceptions import LearnerError
@@ -22,10 +21,7 @@ def create_test_master_df(compounds, initial_labeled_count=3):
 
     initial_compounds = compounds.slice(0, initial_labeled_count)
     initial_ids = initial_compounds['ID'].to_list()
-    initial_values = pd.Series(
-        np.random.uniform(0.1, 0.9, initial_labeled_count),
-        index=initial_ids
-    )
+    initial_values = dict(zip(initial_ids, np.random.uniform(0.1, 0.9, initial_labeled_count)))
 
     return initialize_master_dataframe(
         valid_compounds=compounds,
@@ -264,7 +260,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.9, 0.1], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.9, 0.1]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -305,7 +301,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.3, 0.7], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -352,7 +348,7 @@ class TestCycleExecution:
         target_col='Activity'
         ,
         initial_labeled_ids=[],
-        initial_measurements=pd.Series(dtype='float64')
+        initial_measurements={}
     )
 
         oracle = mock_oracle
@@ -386,7 +382,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -435,7 +431,7 @@ class TestCycleExecution:
             'SMILES': ['CCO'] * 10,
         })
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -484,7 +480,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -681,7 +677,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -739,7 +735,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -795,7 +791,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -851,7 +847,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 5 labeled
         initial_ids = compounds['ID'].head(5).to_list()
-        initial_values = pd.Series([0.2, 0.4, 0.6, 0.8, 1.0], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.4, 0.6, 0.8, 1.0]))
         master_df_run = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -935,7 +931,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 2 labeled initially
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.3, 0.7], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'

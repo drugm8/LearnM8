@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-import pandas as pd
 import polars as pl
 
 from learnm8.exceptions import AcquisitionError, OracleError
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
 
 
 def initialize_master_dataframe_empty(
-    valid_compounds: 'pl.DataFrame | pd.DataFrame',
+    valid_compounds: 'pl.DataFrame',
     target_col: str
 ) -> pl.DataFrame:
     """Create master DataFrame with all compounds unlabeled.
@@ -41,7 +40,7 @@ def initialize_master_dataframe_empty(
     and measure the initial batch as part of normal cycle execution.
 
     Args:
-        valid_compounds: Polars or Pandas DataFrame with 'ID' and 'SMILES' columns (already validated)
+        valid_compounds: Polars DataFrame with 'ID' and 'SMILES' columns (already validated)
         target_col: Name of target column for measurements
 
     Returns:
@@ -57,10 +56,6 @@ def initialize_master_dataframe_empty(
         ... )
         >>> # All compounds unlabeled, cycle 0 will select initial batch
     """
-    # Convert pandas DataFrame to Polars for backward compatibility
-    if isinstance(valid_compounds, pd.DataFrame):
-        valid_compounds = pl.from_pandas(valid_compounds)
-
     if 'ID' not in valid_compounds.columns or 'SMILES' not in valid_compounds.columns:
         missing = [c for c in ['ID', 'SMILES'] if c not in valid_compounds.columns]
         raise ValueError(

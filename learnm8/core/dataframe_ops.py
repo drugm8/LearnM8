@@ -17,7 +17,6 @@ Performance characteristics:
 
 import logging
 
-import pandas as pd
 import polars as pl
 
 from .initialization import VALID_STATUSES
@@ -83,20 +82,15 @@ def _update_status_inplace(
         )
 
         if target_values is not None:
-            # Handle both dict and Series input for backward compatibility
             if isinstance(target_values, dict):
                 id_to_value = target_values
             elif isinstance(target_values, pl.Series):
-                # For Series, zip IDs with values
                 id_to_value = dict(zip(compound_ids, target_values.to_list(), strict=True))
-            elif isinstance(target_values, pd.Series):
-                # For pandas Series, use to_dict() for index-value mapping
-                id_to_value = target_values.to_dict()
             else:
                 raise TypeError(
-                    f"target_values must be dict, pl.Series, or pd.Series, "
+                    f"target_values must be dict or pl.Series, "
                     f"got {type(target_values).__name__}. "
-                    f"Pass measured values as a Polars Series, pandas Series, or dict mapping ID → value."
+                    f"Pass measured values as a Polars Series or dict mapping ID → value."
                 )
 
             lookup_df = pl.DataFrame({
@@ -133,7 +127,7 @@ def update_status(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: pl.Series | pd.Series | dict | None = None
+    target_values: pl.Series | dict | None = None
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
@@ -146,7 +140,7 @@ def update_status(
         new_status: New status ('labeled', 'unlabeled', or 'pruned')
         cycle: Current cycle number
         target_col: Name of target column (e.g., 'Activity')
-        target_values: Optional Series (Polars or Pandas) or dict with target values indexed by compound ID
+        target_values: Optional Series (Polars) or dict with target values indexed by compound ID
 
     Returns:
         Updated DataFrame (new copy)
