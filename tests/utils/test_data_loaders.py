@@ -1,10 +1,7 @@
-import logging
-
 import pytest
 import polars as pl
 from learnm8.utils.data_loaders import (
     validate_csv_columns,
-    load_benchmark_data,
     load_run_data,
     detect_score_direction_from_data,
 )
@@ -45,71 +42,6 @@ class TestValidateCsvColumns:
         df = pl.DataFrame({'ID': ['A']})
         with pytest.raises(ValueError, match="my_description"):
             validate_csv_columns(df, ['SMILES'], "my_description")
-
-
-@pytest.mark.unit
-class TestLoadBenchmarkData:
-
-    def test_returns_tuple(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES,Activity\nCOMP_001,CCO,1.5\nCOMP_002,CCC,2.3\n")
-        result = load_benchmark_data(str(csv_file), 'Activity')
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-
-    def test_compound_pool_has_id_and_smiles(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES,Activity\nCOMP_001,CCO,1.5\nCOMP_002,CCC,2.3\n")
-        compound_pool, _ = load_benchmark_data(str(csv_file), 'Activity')
-        assert 'ID' in compound_pool.columns
-        assert 'SMILES' in compound_pool.columns
-        assert 'Activity' not in compound_pool.columns
-
-    def test_ground_truth_has_all_columns(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES,Activity\nCOMP_001,CCO,1.5\nCOMP_002,CCC,2.3\n")
-        _, ground_truth = load_benchmark_data(str(csv_file), 'Activity')
-        assert 'ID' in ground_truth.columns
-        assert 'SMILES' in ground_truth.columns
-        assert 'Activity' in ground_truth.columns
-
-    def test_file_not_found(self, tmp_path):
-        with pytest.raises(FileNotFoundError):
-            load_benchmark_data(str(tmp_path / "nonexistent.csv"), 'Activity')
-
-    def test_missing_target_column_raises(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES\nCOMP_001,CCO\n")
-        with pytest.raises(ValueError, match="missing required columns"):
-            load_benchmark_data(str(csv_file), 'Activity')
-
-    def test_missing_id_column_auto_generated(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("SMILES,Activity\nCCO,1.5\n")
-        compound_pool, ground_truth = load_benchmark_data(str(csv_file), 'Activity')
-        assert 'ID' in compound_pool.columns
-
-    def test_correct_row_count(self, tmp_path):
-        csv_file = tmp_path / "data.csv"
-        rows = "\n".join(f"COMP_{i:03d},CCO,{float(i)}" for i in range(5))
-        csv_file.write_text(f"ID,SMILES,Activity\n{rows}\n")
-        compound_pool, ground_truth = load_benchmark_data(str(csv_file), 'Activity')
-        assert compound_pool.height == 5
-        assert ground_truth.height == 5
-
-    def test_with_activity_binary_column(self, tmp_path, caplog):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES,Activity\nCOMP_001,CCO,1\nCOMP_002,CCC,0\n")
-        with caplog.at_level(logging.INFO):
-            load_benchmark_data(str(csv_file), 'Activity')
-        assert 'Activity' in caplog.text
-
-    def test_without_activity_column(self, tmp_path, caplog):
-        csv_file = tmp_path / "data.csv"
-        csv_file.write_text("ID,SMILES,Score\nCOMP_001,CCO,1.5\nCOMP_002,CCC,2.3\n")
-        with caplog.at_level(logging.INFO):
-            load_benchmark_data(str(csv_file), 'Score')
-        assert 'Activity' in caplog.text or 'No Activity column' in caplog.text
 
 
 @pytest.mark.unit
