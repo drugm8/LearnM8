@@ -156,7 +156,7 @@ def test_lock_holder_pid_message_when_proc_locks_unavailable(
     assert holder_started.wait(timeout=1.0)
 
     feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
-    with pytest.raises(FeatureExtractionError, match=r"PID unknown|holder PID"):
+    with pytest.raises(FeatureExtractionError, match=r"Another process is likely using this cache"):
         extract_features(['XXXNEW'], feat, cache_dir=tmp_path)
 
     holder_release.set()

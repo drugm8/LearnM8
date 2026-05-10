@@ -19,7 +19,6 @@ recoverable by deleting the cache file.
 from __future__ import annotations
 
 import contextlib
-import errno
 import fcntl
 import hashlib
 import logging
@@ -30,7 +29,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import h5py
 import hdf5plugin
@@ -249,40 +248,6 @@ def _lock_path(cache_path: Path) -> Path:
     return cache_path.with_suffix(cache_path.suffix + '.lock')
 
 
-def _read_lock_holder_pid(lock_path: Path) -> str:
-    """Best-effort PID lookup via /proc/locks; degrade gracefully."""
-    proc_locks = Path('/proc/locks')
-    if not proc_locks.exists():
-        return 'PID unknown'
-    try:
-        st = lock_path.stat()
-        target_inode = st.st_ino
-        target_dev = st.st_dev
-        # /proc/locks format: id: type kind access pid major:minor:inode start end
-        major = os.major(target_dev)
-        minor = os.minor(target_dev)
-        with proc_locks.open('r') as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) < 8:
-                    continue
-                pid = parts[4]
-                location = parts[5]
-                try:
-                    maj_str, min_str, inode_str = location.split(':')
-                except ValueError:
-                    continue
-                if (
-                    int(inode_str) == target_inode
-                    and int(maj_str, 16) == major
-                    and int(min_str, 16) == minor
-                ):
-                    return pid
-    except (OSError, ValueError):
-        return 'PID unknown'
-    return 'PID unknown'
-
-
 @contextmanager
 def _acquire_lock(
     cache_path: Path,
@@ -319,12 +284,10 @@ def _acquire_lock(
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    holder = _read_lock_holder_pid(lock_path)
                     raise FeatureExtractionError(
                         f"Failed to acquire {mode} lock on {lock_path} within "
-                        f"{timeout:.2f}s (holder PID: {holder}). "
-                        f"Another LearnM8 process is using this cache; wait or "
-                        f"set LEARNM8_LOCK_TIMEOUT_S to a larger value."
+                        f"{timeout:.2f}s. "
+                        f"Another process is likely using this cache."
                     ) from None
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 0.5)
@@ -335,34 +298,6 @@ def _acquire_lock(
                 fcntl.flock(fd, fcntl.LOCK_UN)
     finally:
         os.close(fd)
-
-
-# ---------------------------------------------------------------------------
-# Retry seam (T013)
-# ---------------------------------------------------------------------------
-
-T = TypeVar('T')
-
-_TRANSIENT_ERRNOS = frozenset({errno.EAGAIN, errno.EINTR, errno.EIO})
-
-
-def _read_with_one_retry(reader_callable: Callable[[], T]) -> T:
-    """Call ``reader_callable``; on transient ``OSError`` retry exactly once.
-
-    FR-010: transient errnos (EAGAIN, EINTR, EIO) get one retry with a single
-    WARNING; persistent or non-transient errors propagate immediately.
-    """
-    try:
-        return reader_callable()
-    except OSError as exc:
-        if getattr(exc, 'errno', None) not in _TRANSIENT_ERRNOS:
-            raise
-        logger.warning(
-            "Transient OSError (errno=%s) on cache read; retrying once: %s",
-            exc.errno,
-            exc,
-        )
-        return reader_callable()
 
 
 # ---------------------------------------------------------------------------
@@ -392,9 +327,6 @@ def _cache_keys_uint64(smiles_list: list[str], featurizer: Featurizer) -> np.nda
     return out
 
 
-def get_smiles_hash(smiles: str) -> str:
-    """Legacy SMILES-only MD5 (kept for backward compatibility in tests)."""
-    return hashlib.md5(smiles.encode('utf-8'), usedforsecurity=False).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -1222,7 +1154,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                                     )
                                     return found_local, hit_features_local
 
-                                found, hit_features = _read_with_one_retry(_lookup_and_read)
+                                found, hit_features = _lookup_and_read()
                                 t_read = time.perf_counter()
                         finally:
                             f_ro.close()
@@ -1245,7 +1177,6 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                 with _acquire_lock(cache_path, mode='exclusive'):
                     f = _open_or_create_h5(cache_path, featurizer)
                     try:
-                        _validate_v2_file_integrity(f, featurizer, cache_path)
 
                         found, target_rows = _lookup_cache(f, query_hashes, cache_path)
                         hit_features = _read_cache_hits(
