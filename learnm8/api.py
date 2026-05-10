@@ -51,7 +51,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 import polars as pl
 
@@ -668,7 +668,7 @@ def run_active_learning(
                 f"or pass an Oracle instance."
             )
 
-        oracle_type: str = 'benchmark' if isinstance(oracle, CSVOracle) else 'run'
+        oracle_type: Literal['run', 'benchmark'] = 'benchmark' if isinstance(oracle, CSVOracle) else 'run'
 
         if isinstance(learner, str):
             learner_str = learner
