@@ -77,6 +77,7 @@ def execute_cycle(
     featurizer_obj: Any = None,
     disable_molecular_similarity: bool | Iterable[str] = False,
     random_state: int | None = None,
+    feature_type: str = 'binary',
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -105,6 +106,7 @@ def execute_cycle(
         memory_safety_factor: Fraction of available memory to use for prediction
             batching (0.0, 1.0]. Default 0.7. Higher values use more memory.
         previous_metrics: Optional metrics from previous cycle for change indicators
+        feature_type: Feature dtype classification ('binary', 'count', 'continuous').
 
     Returns:
         (updated_compounds_df, metrics_dict)
@@ -183,16 +185,7 @@ def execute_cycle(
             f"measurements, and that batch_fraction is large enough to select at least 1 compound."
         )
     else:
-        # Propagate feature_type from featurizer to learner
-        if featurizer is not None:
-            from learnm8.features import FEATURIZER_REGISTRY
-            if featurizer in FEATURIZER_REGISTRY:
-                featurizer_instance = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
-                learner._feature_type = featurizer_instance.feature_type
-            else:
-                learner._feature_type = 'binary'
-        else:
-            learner._feature_type = 'binary'
+        learner._feature_type = feature_type
 
         # Extract features and train learner.
         # Feature-extraction time is tracked separately from learner-side
