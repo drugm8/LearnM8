@@ -14,10 +14,10 @@ from .diagnostics import (
     compute_selected_percentile,
 )
 from .enrichment import (
-    calculate_average_score_ratio,
-    calculate_batch_average_score_ratio,
     calculate_batch_enrichment_factor,
     calculate_batch_hit_rate,
+    # Sign-aware score improvement (replaces calculate_*_average_score_ratio in feature 019)
+    calculate_batch_score_improvement_ratio,
     calculate_cumulative_enrichment_factor,
     # Existing functions (kept for compatibility)
     calculate_enrichment_factor,
@@ -29,6 +29,7 @@ from .enrichment import (
     calculate_multiple_unlabeled_enrichment_factors,
     # Ranking metrics (Category B) - unlabeled only
     calculate_multiple_unlabeled_top_k_overlaps,
+    calculate_score_improvement_ratio,
     calculate_top_k_overlap,
     calculate_unlabeled_ranking_correlation,
 )
@@ -47,10 +48,9 @@ __all__ = [
     'DIVERSITY_KEYS',
     'RunCache',
     'calculate_average_score',
-    'calculate_average_score_ratio',
-    'calculate_batch_average_score_ratio',
     'calculate_batch_enrichment_factor',
     'calculate_batch_hit_rate',
+    'calculate_batch_score_improvement_ratio',
     'calculate_cumulative_enrichment_factor',
     'calculate_enrichment_factor',
     'calculate_ground_truth_enrichment_factors',
@@ -60,6 +60,7 @@ __all__ = [
     'calculate_multiple_top_k_overlaps',
     'calculate_multiple_unlabeled_enrichment_factors',
     'calculate_multiple_unlabeled_top_k_overlaps',
+    'calculate_score_improvement_ratio',
     'calculate_spearman_correlation',
     'calculate_top_k_overlap',
     'calculate_unlabeled_ranking_correlation',

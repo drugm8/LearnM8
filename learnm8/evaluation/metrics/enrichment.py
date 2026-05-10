@@ -1,9 +1,16 @@
 """Enrichment metrics for virtual screening evaluation."""
 
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Literal
+
 import numpy as np
 import polars as pl
 
 from learnm8.utils.logging import get_logger, log_warning
+
+ScoreDirection = Literal["higher", "lower"]
 
 
 def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
@@ -475,100 +482,108 @@ def calculate_batch_enrichment_factor(
     return round(batch_ef, 3)
 
 
-def calculate_average_score_ratio(
-    selected_ids: set,
+def _validate_score_direction(score_direction: str) -> ScoreDirection:
+    if score_direction not in ("higher", "lower"):
+        raise ValueError(
+            f"score_direction must be 'higher' or 'lower', got {score_direction!r}."
+        )
+    return score_direction  # type: ignore[return-value]
+
+
+def _improvement_ratio(
+    selected_mean: float,
+    pop_mean: float,
+    score_direction: ScoreDirection,
+) -> float:
+    """Sign-aware improvement ratio formula (FR-012, FR-013).
+
+    Neutral baseline is ``0.0`` ("no improvement") in both finite and degenerate
+    pop_mean cases; ``± inf`` only when the improvement is genuinely unbounded
+    (selected != 0 but pop == 0).
+    """
+    delta = selected_mean - pop_mean if score_direction == "higher" else pop_mean - selected_mean
+
+    if pop_mean == 0.0:
+        if selected_mean == 0.0:
+            return 0.0
+        return float(np.copysign(np.inf, delta))
+    return delta / abs(pop_mean)
+
+
+def calculate_score_improvement_ratio(
+    selected_ids: set | Sequence[str],
     ground_truth_df: pl.DataFrame,
     target_column: str,
-    score_direction: str = 'higher'
+    *,
+    score_direction: ScoreDirection,
 ) -> float:
-    """
-    Calculate ratio of average scores between all selections and population.
+    """Sign-aware improvement of selected mean over population mean.
 
-    Alternative to enrichment factor when only continuous scores available
-    (no binary Activity labels).
+    Introduced in feature 019 (no backward-compat alias for the legacy
+    abs()-trick implementation). Formula::
 
-    The ratio compares the magnitude of selected compounds' average score
-    to the population average. For score_direction='lower', uses absolute
-    values to correctly handle negative scores (e.g., docking energies where
-    more negative values indicate better binding).
+      higher:  (selected_mean - pop_mean) / |pop_mean|
+      lower:   (pop_mean - selected_mean) / |pop_mean|
+
+    Sign convention:
+      ``> 0`` means selection improves on population in the desired direction.
+      ``> 1`` means > 100% relative improvement (selected mean ≥ 2 × pop_mean
+      for ``higher``, or ≥ 2× more-negative for ``lower``). Neutral baseline
+      is ``0`` (NOT ``1``; breaks from classical Enrichment Factor convention).
+
+    Edge cases:
+      - ``pop_mean == 0`` and ``selected_mean == 0`` → returns ``0.0`` (parity).
+      - ``pop_mean == 0`` and ``selected_mean != 0`` → returns signed ``inf``.
+      - Empty ``selected_ids`` → raises ``ValueError`` (fail-fast per FR-013).
 
     Args:
-        selected_ids: Set of all compound IDs selected so far (cumulative)
-        ground_truth_df: DataFrame with ground truth target values
-        target_column: Column name for target property
-        score_direction: 'higher' or 'lower' for score interpretation
+        selected_ids: Set or sequence of compound IDs selected so far.
+        ground_truth_df: DataFrame with ``ID`` and ``target_column``.
+        target_column: Column name for target property.
+        score_direction: ``'higher'`` or ``'lower'`` (kw-only, no default).
 
     Returns:
-        Score ratio (>1.0 means selections better than average)
+        Improvement ratio (finite or signed ``inf``, never NaN).
     """
-    # Selected compounds
-    selected_df = ground_truth_df.filter(pl.col('ID').is_in(selected_ids))
+    direction = _validate_score_direction(score_direction)
+    if len(selected_ids) == 0:
+        raise ValueError(
+            "score_improvement_ratio called with empty selected_ids; "
+            "short-circuit at the call site instead."
+        )
+
+    selected_df = ground_truth_df.filter(pl.col("ID").is_in(selected_ids))
     if len(selected_df) == 0:
-        return 1.0
-
-    avg_score_selected = selected_df.get_column(target_column).mean()
-
-    # Population
-    avg_score_population = ground_truth_df.get_column(target_column).mean()
-
-    # Calculate ratio based on direction
-    if score_direction == 'higher':
-        # Higher scores are better
-        if avg_score_population == 0:
-            return 1.0 if avg_score_selected == 0 else float('inf')
-        score_ratio = avg_score_selected / avg_score_population
-    else:
-        # Lower scores are better (e.g., docking scores, energies)
-        # Use absolute values for magnitude comparison to handle negative scores
-        if abs(avg_score_population) == 0:
-            return 1.0 if abs(avg_score_selected) == 0 else float('inf')
-        score_ratio = abs(avg_score_selected) / abs(avg_score_population)
-
-    return round(score_ratio, 3)
+        raise ValueError(
+            "score_improvement_ratio called with selected_ids that do not match "
+            "any rows in ground_truth_df; check ID consistency across pool and selection."
+        )
+    selected_mean = float(selected_df.get_column(target_column).mean())  # type: ignore[arg-type]
+    pop_mean = float(ground_truth_df.get_column(target_column).mean())  # type: ignore[arg-type]
+    return _improvement_ratio(selected_mean, pop_mean, direction)
 
 
-def calculate_batch_average_score_ratio(
+def calculate_batch_score_improvement_ratio(
     newly_selected_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
     target_column: str,
-    score_direction: str = 'higher'
+    *,
+    score_direction: ScoreDirection,
 ) -> float:
+    """Per-batch sign-aware improvement ratio (introduced in feature 019).
+
+    Same contract as :func:`calculate_score_improvement_ratio`, but operates on
+    an already-filtered ``newly_selected_df`` instead of an ID set.
     """
-    Calculate score ratio for current batch only.
-
-    The ratio compares the magnitude of batch average score to population
-    average. For score_direction='lower', uses absolute values to correctly
-    handle negative scores (e.g., docking energies where more negative values
-    indicate better binding).
-
-    Args:
-        newly_selected_df: DataFrame of newly selected compounds this cycle
-        ground_truth_df: Full ground truth DataFrame
-        target_column: Column name for target property
-        score_direction: 'higher' or 'lower' for score interpretation
-
-    Returns:
-        Batch score ratio (>1.0 means batch better than average)
-    """
+    direction = _validate_score_direction(score_direction)
     if len(newly_selected_df) == 0:
-        return 1.0
-
-    avg_score_batch = newly_selected_df.get_column(target_column).mean()
-    avg_score_population = ground_truth_df.get_column(target_column).mean()
-
-    # Calculate ratio based on direction
-    if score_direction == 'higher':
-        if avg_score_population == 0:
-            return 1.0 if avg_score_batch == 0 else float('inf')
-        score_ratio = avg_score_batch / avg_score_population
-    else:
-        # Lower scores are better (e.g., docking scores, energies)
-        # Use absolute values for magnitude comparison to handle negative scores
-        if abs(avg_score_population) == 0:
-            return 1.0 if abs(avg_score_batch) == 0 else float('inf')
-        score_ratio = abs(avg_score_batch) / abs(avg_score_population)
-
-    return round(score_ratio, 3)
+        raise ValueError(
+            "batch_score_improvement_ratio called with empty newly_selected_df; "
+            "short-circuit at the call site instead."
+        )
+    selected_mean = float(newly_selected_df.get_column(target_column).mean())  # type: ignore[arg-type]
+    pop_mean = float(ground_truth_df.get_column(target_column).mean())  # type: ignore[arg-type]
+    return _improvement_ratio(selected_mean, pop_mean, direction)
 
 
 def calculate_multiple_unlabeled_top_k_overlaps(

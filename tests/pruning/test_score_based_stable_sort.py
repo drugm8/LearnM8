@@ -1,4 +1,12 @@
-"""Spec 021 / US5 / FR-010 — score-based pruning uses stable argsort."""
+"""Tests for stable sort in ScoreBasedPruner (feature 019).
+
+Covers FR-015 (US8). Determinism + tie-break on input order.
+"""
+
+from __future__ import annotations
+
+import inspect
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -6,90 +14,81 @@ import pytest
 
 from learnm8.pruning.score_based import ScoreBasedPruner
 
+
 pytestmark = pytest.mark.unit
 
 
-def _make_compounds(n: int) -> pl.DataFrame:
-    return pl.DataFrame(
-        {
-            "ID": [f"C{i:06d}" for i in range(n)],
-            "SMILES": ["CCO"] * n,
-        }
-    )
+def _compounds(predictions: np.ndarray) -> pl.DataFrame:
+    n = len(predictions)
+    return pl.DataFrame({
+        "ID": [f"C{i:06d}" for i in range(n)],
+        "SMILES": ["c1ccccc1"] * n,
+    })
 
 
-def _make_predictions_with_ties(n: int = 10_000) -> np.ndarray:
-    """Build a prediction array with deliberate float32 ties.
-
-    Half the entries are 0.5 (exact tie); the other half are interleaved
-    distinct values. Stable sort must preserve original input order among ties.
-    """
-    preds = np.empty(n, dtype=np.float32)
-    for i in range(n):
-        preds[i] = 0.5 if i % 2 == 0 else np.float32(0.1 + i / n)
-    return preds
+def test_pruning_deterministic_within_process() -> None:
+    rng = np.random.default_rng(19_2026)
+    predictions = rng.choice(np.array([1.0, 5.0, 10.0]), size=10_000).astype(np.float32)
+    compounds = _compounds(predictions)
+    pruner = ScoreBasedPruner(pruning_fraction=0.5, score_direction="higher")
+    out1 = pruner.prune(compounds, predictions).get_column("ID").to_list()
+    out2 = pruner.prune(compounds, predictions).get_column("ID").to_list()
+    assert out1 == out2
 
 
-def test_score_based_pruning_is_bit_identical_across_runs_with_ties():
-    n = 10_000
-    compounds = _make_compounds(n)
-    predictions = _make_predictions_with_ties(n)
-
-    pruner = ScoreBasedPruner(pruning_fraction=0.5, score_direction='higher')
-
-    out1 = pruner.prune(compounds, predictions)
-    out2 = pruner.prune(compounds, predictions)
-
-    ids1 = out1["ID"].to_list()
-    ids2 = out2["ID"].to_list()
-
-    assert ids1 == ids2
-
-
-def test_score_based_pruning_breaks_ties_in_input_order():
-    n = 100
-    compounds = _make_compounds(n)
-    predictions = np.full(n, 0.5, dtype=np.float32)
-
-    pruner = ScoreBasedPruner(pruning_fraction=0.5, score_direction='higher')
+def test_pruning_tied_predictions_stable_input_order_higher() -> None:
+    """For score_direction='higher', kind='stable' picks lowest input indices among ties for the kept set."""
+    predictions = np.array([5.0, 5.0, 5.0, 1.0, 1.0])
+    compounds = _compounds(predictions)
+    pruner = ScoreBasedPruner(pruning_fraction=0.4, score_direction="higher")
     out = pruner.prune(compounds, predictions)
+    kept_ids = sorted(out.get_column("ID").to_list())
+    assert kept_ids == ["C000000", "C000001", "C000002"]
 
-    kept_ids = out["ID"].to_list()
-    expected_indices = sorted(
-        [int(cid[1:]) for cid in kept_ids]
+
+def test_pruning_tied_predictions_lower_direction() -> None:
+    predictions = np.array([5.0, 1.0, 1.0, 1.0, 9.0])
+    compounds = _compounds(predictions)
+    pruner = ScoreBasedPruner(pruning_fraction=0.4, score_direction="lower")
+    out = pruner.prune(compounds, predictions)
+    kept_ids = sorted(out.get_column("ID").to_list())
+    assert kept_ids == ["C000001", "C000002", "C000003"]
+
+
+def test_pruning_uses_argpartition_for_hot_path() -> None:
+    """Static check: prune() uses argpartition (O(n)) rather than argsort (O(n log n))."""
+    src = inspect.getsource(ScoreBasedPruner)
+    assert "np.argpartition" in src, (
+        "ScoreBasedPruner.prune should use np.argpartition for the O(n) hot-path; "
+        "stable secondary sort within the kept slice preserves input-order stability."
     )
-    assert expected_indices == list(range(n // 2, n)) or expected_indices == list(range(n // 2))
-
-
-def test_score_based_pruning_lower_direction_with_ties_is_deterministic():
-    n = 5_000
-    compounds = _make_compounds(n)
-    predictions = _make_predictions_with_ties(n)
-
-    pruner = ScoreBasedPruner(pruning_fraction=0.3, score_direction='lower')
-
-    ids1 = pruner.prune(compounds, predictions)["ID"].to_list()
-    ids2 = pruner.prune(compounds, predictions)["ID"].to_list()
-    assert ids1 == ids2
+    for line in src.splitlines():
+        stripped = line.strip()
+        if "np.argsort(" in stripped and not stripped.startswith("#"):
+            assert "kind=" in stripped, f"argsort without kind=: {line}"
 
 
 @pytest.mark.slow
-def test_score_based_pruning_1m_predictions_with_ties_bit_identical():
-    """SC-005 literal: 1M predictions with ties → bit-identical pruned ID sets.
+def test_pruning_property_no_change_in_kept_set_across_runs() -> None:
+    rng = np.random.default_rng(19_2026)
+    predictions = rng.choice(np.array([1.0, 5.0, 10.0]), size=1_000_000).astype(np.float32)
+    compounds = _compounds(predictions)
+    pruner = ScoreBasedPruner(pruning_fraction=0.5, score_direction="higher")
+    baseline = pruner.prune(compounds, predictions).get_column("ID").to_list()
+    for _ in range(9):
+        repeat = pruner.prune(compounds, predictions).get_column("ID").to_list()
+        assert repeat == baseline
 
-    Spec asks for "two fresh interpreter invocations"; here we approximate by
-    constructing two independent ``ScoreBasedPruner`` instances within the same
-    interpreter. ``np.argsort(kind='stable')`` is deterministic given identical
-    input arrays, so single-process replay is sufficient evidence for the
-    cross-process invariant.
-    """
-    n = 1_000_000
-    compounds = _make_compounds(n)
-    predictions = _make_predictions_with_ties(n)
 
-    pruner_a = ScoreBasedPruner(pruning_fraction=0.5, score_direction='higher')
-    pruner_b = ScoreBasedPruner(pruning_fraction=0.5, score_direction='higher')
-
-    ids_a = pruner_a.prune(compounds, predictions)["ID"].to_list()
-    ids_b = pruner_b.prune(compounds, predictions)["ID"].to_list()
-    assert ids_a == ids_b
+def test_pruning_matches_golden_fixture_when_available() -> None:
+    """Cross-machine determinism via committed golden fixture."""
+    fixture = Path(__file__).parent / "fixtures" / "golden_stable_sort.npz"
+    if not fixture.exists():
+        pytest.skip("golden_stable_sort.npz not available; skipping")
+    data = np.load(fixture)
+    predictions = data["predictions"]
+    expected_kept = data["kept_ids"]
+    compounds = _compounds(predictions)
+    pruner = ScoreBasedPruner(pruning_fraction=0.5, score_direction="higher")
+    actual = pruner.prune(compounds, predictions).get_column("ID").to_numpy()
+    np.testing.assert_array_equal(actual, expected_kept)

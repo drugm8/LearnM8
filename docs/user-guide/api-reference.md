@@ -245,7 +245,7 @@ Per-cycle metrics. Each dictionary contains:
 | `top_10_discovery` | Fraction of top 10 compounds discovered |
 | `top_100_discovery` | Fraction of top 100 compounds discovered |
 | `cumulative_ef` | Cumulative enrichment factor |
-| `batch_avg_score_ratio` | Ratio of batch average to pool average |
+| `batch_score_improvement_ratio` | Sign-aware improvement of batch mean over population mean (`>0` = better; see feature 019 CHANGELOG) |
 | `unlabeled_spearman_correlation` | Spearman correlation on unlabeled set |
 | `unlabeled_top_100_overlap` | Top 100 overlap on unlabeled set |
 | `unlabeled_ef_1_0` | Enrichment factor (1%) on unlabeled set |

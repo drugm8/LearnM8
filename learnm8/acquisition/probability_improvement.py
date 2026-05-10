@@ -5,10 +5,16 @@ the probability that a compound will improve over the current best observed valu
 """
 
 import logging
+import warnings
 
-import numpy as np
 import polars as pl
 from scipy.stats import norm
+
+from learnm8.utils.numerical import (
+    assert_no_inf_uncertainty,
+    assert_no_nan,
+    clamp_sigma,
+)
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
@@ -37,7 +43,6 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         """
         # Handle backward compatibility with minimize parameter
         if minimize is not None:
-            import warnings
             warnings.warn(
                 "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
                 DeprecationWarning, stacklevel=2
@@ -81,24 +86,24 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
         logger.debug(f"PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement")
 
+        # FR-004: defence-in-depth NaN/Inf guards. ID list is materialised only
+        # on the error path inside numerical.py, not on every clean call.
+        ids = compounds.get_column("ID")
+        assert_no_nan(predictions, ids, "predictions")
+        assert_no_nan(uncertainties, ids, "uncertainties")
+        assert_no_inf_uncertainty(uncertainties, ids)
+
         # Calculate improvement based on score direction
         if self.maximize:
             improvement = predictions - current_best - self.xi
         else:
             improvement = current_best - predictions - self.xi
 
-        # Use uncertainties directly (already standard deviations, not variances)
-        std_devs = uncertainties
-
-        # Calculate Probability of Improvement
-        with np.errstate(divide="ignore"):
-            z_scores = improvement / std_devs
-
+        # FR-001: clamp σ at 1e-9 (float64-promoted). Φ(±∞) ∈ {0, 1}, so the
+        # PI formula reduces to the deterministic-best limits at σ → 0.
+        sigma_clamped = clamp_sigma(uncertainties)
+        z_scores = improvement / sigma_clamped
         pi_scores = norm.cdf(z_scores)
-
-        # Handle zero variance case
-        zero_var_mask = uncertainties == 0
-        pi_scores[zero_var_mask] = np.where(improvement[zero_var_mask] > 0, 1.0, 0.0)
 
         # Select top compounds
         selected = self._safe_select_top_k(

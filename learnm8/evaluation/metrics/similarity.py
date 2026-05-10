@@ -11,8 +11,11 @@ newly-selected batch, once for the cumulative selected set):
       pair sampling (pilot-then-scale, target 95% CI half-width 0.005)
     * scaffold_diversity_index          - unique Bemis-Murcko scaffolds /
       valid compounds
-    * shannon_entropy_diversity         - base-2 entropy of fingerprint
-      bit-activation frequencies (online accumulator)
+    * bit_marginal_entropy              - entropy of fingerprint bit-position
+      activation-frequency distribution (online accumulator). Renamed from
+      ``shannon_entropy_diversity`` in feature 019 to honestly describe what
+      this metric computes — the entropy of the marginal bit distribution,
+      not the Shannon entropy of compound sets.
 
 All metrics operate ONLY on the selected compounds (bounded by n_cycles x
 batch_size), never on the full pool - this is the key to scaling the metric
@@ -55,9 +58,34 @@ DIVERSITY_KEYS: tuple[str, ...] = (
     "mean_tanimoto_similarity_sampled_cumulative",
     "scaffold_diversity_index_batch",
     "scaffold_diversity_index_cumulative",
-    "shannon_entropy_diversity_batch",
-    "shannon_entropy_diversity_cumulative",
+    "bit_marginal_entropy_batch",
+    "bit_marginal_entropy_cumulative",
 )
+
+
+# Renamed identifiers (feature 019). Accessed via the module-level
+# ``__getattr__`` hint below; emits a clear AttributeError / ImportError
+# rather than silently breaking. NO backward-compat alias is provided.
+_RENAMED_SYMBOLS: dict[str, str] = {
+    "_shannon_entropy_from_bit_sum": (
+        "Renamed to '_bit_marginal_entropy_from_bit_sum' (feature 019); "
+        "the new name reflects that this is the entropy of the bit-position "
+        "activation-frequency distribution, not the Shannon entropy of compound "
+        "sets. No backward-compat alias is provided (alpha clean break)."
+    ),
+    "shannon_entropy_diversity_batch": (
+        "Renamed to 'bit_marginal_entropy_batch' (feature 019). No alias provided."
+    ),
+    "shannon_entropy_diversity_cumulative": (
+        "Renamed to 'bit_marginal_entropy_cumulative' (feature 019). No alias provided."
+    ),
+}
+
+
+def __getattr__(name: str):
+    if name in _RENAMED_SYMBOLS:
+        raise AttributeError(_RENAMED_SYMBOLS[name])
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # ============================================================================
 # Module-level constants (FR-025)
@@ -309,11 +337,11 @@ def _scaffold_diversity_index(
     return float(len(unique) / valid_count)
 
 
-def _shannon_entropy_from_bit_sum(
+def _bit_marginal_entropy_from_bit_sum(
     bit_sum: np.ndarray | None,
     n_compounds: int,
 ) -> float | None:
-    """Shannon entropy of the per-bit activation-frequency distribution (FR-003).
+    """Entropy of the per-bit activation-frequency distribution (renamed feature 019).
 
     Operates on an online accumulator: ``bit_sum[k]`` is the count of
     compounds with bit k = 1 across the cumulative set; ``n_compounds`` is
@@ -323,11 +351,13 @@ def _shannon_entropy_from_bit_sum(
     ``log₂(n_bits)``).
 
     Returns ``None`` if no compounds are supplied or all bit-frequencies are
-    zero.
+    zero. Was previously misnamed ``_shannon_entropy_from_bit_sum`` —
+    feature 019 renames it to honestly describe the metric (this is the
+    entropy of bit-position marginals, not Shannon entropy of compound sets).
     """
     if n_compounds <= 0 or bit_sum is None:
         return None
-    bit_frequencies = bit_sum.astype(np.float64) / float(n_compounds)
+    bit_frequencies = bit_sum / float(n_compounds)  # int64 / float → float64, no copy of int data
     if not np.any(bit_frequencies > 0):
         return None
     try:
@@ -589,28 +619,28 @@ def compute_diversity_metrics(
         metrics["scaffold_diversity_index_cumulative"] = None
     scaffold_ms = (time.perf_counter() - scaffold_start) * 1000.0
 
-    # ----- Shannon entropy (online accumulator + per-batch direct sum) -----
+    # ----- Bit-marginal entropy (online accumulator + per-batch direct sum) -----
     shannon_start = time.perf_counter()
     try:
-        if "shannon_entropy_diversity_batch" not in disabled_set:
+        if "bit_marginal_entropy_batch" not in disabled_set:
             if batch_packed.shape[0] > 0:
                 batch_bit_sum = batch_packed.sum(axis=0).astype(np.int64)
-                metrics["shannon_entropy_diversity_batch"] = _shannon_entropy_from_bit_sum(
+                metrics["bit_marginal_entropy_batch"] = _bit_marginal_entropy_from_bit_sum(
                     batch_bit_sum, batch_packed.shape[0]
                 )
             else:
-                metrics["shannon_entropy_diversity_batch"] = None
-        if "shannon_entropy_diversity_cumulative" not in disabled_set:
-            metrics["shannon_entropy_diversity_cumulative"] = _shannon_entropy_from_bit_sum(
+                metrics["bit_marginal_entropy_batch"] = None
+        if "bit_marginal_entropy_cumulative" not in disabled_set:
+            metrics["bit_marginal_entropy_cumulative"] = _bit_marginal_entropy_from_bit_sum(
                 run_cache.bit_sum_buffer, len(run_cache.cumulative_fp_buffer)
             )
     except Exception as exc:
         logger.warning(
-            "diversity cycle=%d Shannon failed (%s); setting to None",
+            "diversity cycle=%d bit-marginal entropy failed (%s); setting to None",
             cycle, type(exc).__name__,
         )
-        metrics["shannon_entropy_diversity_batch"] = None
-        metrics["shannon_entropy_diversity_cumulative"] = None
+        metrics["bit_marginal_entropy_batch"] = None
+        metrics["bit_marginal_entropy_cumulative"] = None
     shannon_ms = (time.perf_counter() - shannon_start) * 1000.0
 
     logger.debug(

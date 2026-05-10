@@ -5,10 +5,16 @@ the expected improvement over the current best observed value.
 """
 
 import logging
+import warnings
 
-import numpy as np
 import polars as pl
 from scipy.stats import norm
+
+from learnm8.utils.numerical import (
+    assert_no_inf_uncertainty,
+    assert_no_nan,
+    clamp_sigma,
+)
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
@@ -37,7 +43,6 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         """
         # Handle backward compatibility with minimize parameter
         if minimize is not None:
-            import warnings
             warnings.warn(
                 "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
                 DeprecationWarning, stacklevel=2
@@ -81,25 +86,27 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
 
         logger.debug(f"EIAcquisition: current_best={current_best:.3f}, calculating expected improvement")
 
+        # FR-004: defence-in-depth — cycle.py is the canonical guard, but this
+        # acquisition can also be invoked directly (notebook / test harness).
+        # The numerical helpers materialise IDs only on the error path, so the
+        # clean path pays no `.to_list()` cost per call.
+        ids = compounds.get_column("ID")
+        assert_no_nan(predictions, ids, "predictions")
+        assert_no_nan(uncertainties, ids, "uncertainties")
+        assert_no_inf_uncertainty(uncertainties, ids)
+
         # Calculate improvement based on score direction
         if self.maximize:
             improvement = predictions - current_best - self.xi
         else:
             improvement = current_best - predictions - self.xi
 
-        # Use uncertainties directly (already standard deviations, not variances)
-        std_devs = uncertainties
-
-        # Calculate Expected Improvement
-        with np.errstate(divide="ignore", invalid="ignore"):
-            z_scores = improvement / std_devs
-
-        # Calculate EI using normal distribution
-        ei_scores = improvement * norm.cdf(z_scores) + std_devs * norm.pdf(z_scores)
-
-        # Handle zero variance case
-        zero_var_mask = uncertainties == 0
-        ei_scores[zero_var_mask] = np.maximum(improvement[zero_var_mask], 0)
+        # FR-001: clamp σ at 1e-9 (float64-promoted) to avoid 0/0 → NaN.
+        # Φ(±∞) ∈ {0, 1} and σ_clamped · φ(±∞) = 0, so the formula naturally
+        # delivers the analytic limits at the σ → 0 boundary.
+        sigma_clamped = clamp_sigma(uncertainties)
+        z_scores = improvement / sigma_clamped
+        ei_scores = improvement * norm.cdf(z_scores) + sigma_clamped * norm.pdf(z_scores)
 
         logger.debug(f"EI statistics: {(ei_scores > 0).sum()} compounds with positive EI")
 

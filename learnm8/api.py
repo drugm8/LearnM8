@@ -624,9 +624,13 @@ def _calculate_aggregate_metrics(
             agg['final_cumulative_ef'] = cumulative_ef_values[-1]
             agg['avg_cumulative_ef'] = float(np.mean(cumulative_ef_values))
 
-        batch_avg_ratio_values = [m.get('batch_avg_score_ratio') for m in all_metrics if m.get('batch_avg_score_ratio') is not None]
-        if batch_avg_ratio_values:
-            agg['avg_batch_score_ratio'] = float(np.mean(batch_avg_ratio_values))
+        batch_improvement_values = [
+            m.get('batch_score_improvement_ratio')
+            for m in all_metrics
+            if m.get('batch_score_improvement_ratio') is not None
+        ]
+        if batch_improvement_values:
+            agg['avg_batch_score_improvement_ratio'] = float(np.mean(batch_improvement_values))
 
         unlabeled_spearman_values = [m.get('unlabeled_spearman_correlation') for m in all_metrics if m.get('unlabeled_spearman_correlation') is not None]
         if unlabeled_spearman_values:
