@@ -10,6 +10,7 @@ Authoritative reference:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -18,11 +19,10 @@ import h5py
 import polars as pl
 import pytest
 
-from learnm8.core.cycle import _resolve_feature_type, execute_cycle
 from learnm8.core.config import CycleConfig
+from learnm8.core.cycle import _resolve_feature_type, execute_cycle
 from learnm8.core.interfaces import Featurizer
 from learnm8.features import MorganFeaturizer
-
 
 # ---------------------------------------------------------------------------
 # T032 — behavior matrix tests for _resolve_feature_type
@@ -234,15 +234,14 @@ def test_morgan_count_true_propagates_through_cycle_to_csr_uint16_storage(
         produced by the cycle, because the cycle's prediction-batching path
         also writes its own miss rows and we want a deterministic assertion.
     """
+    from learnm8.features.extraction import extract_features
     from tests.fixtures.master_dataframe import (
         create_initialized_master_df as initialize_master_dataframe,
     )
 
-    from learnm8.features.extraction import extract_features
-
     # ---- Phase A: feature_type propagation through execute_cycle ----------
     initial_ids = sample_compounds['ID'].head(2).to_list()
-    initial_values = dict(zip(initial_ids, [0.3, 0.6]))
+    initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=True))
 
     master_df = initialize_master_dataframe(
         valid_compounds=sample_compounds,
@@ -257,7 +256,11 @@ def test_morgan_count_true_propagates_through_cycle_to_csr_uint16_storage(
     cycle_cache = tmp_path / 'cycle_cache'
     cycle_cache.mkdir()
 
-    try:
+    # We only need _feature_type to be set before any downstream work runs;
+    # the cycle may still raise from unrelated paths in this minimal
+    # mock-driven setup. The propagation assertion below is the authoritative
+    # SC-003 check for this phase.
+    with contextlib.suppress(Exception):
         execute_cycle(
             compounds_df=master_df,
             cycle=1,
@@ -272,12 +275,6 @@ def test_morgan_count_true_propagates_through_cycle_to_csr_uint16_storage(
             output_dir=tmp_path,
             n_jobs=1,
         )
-    except Exception:
-        # We only need _feature_type to be set before any downstream work
-        # runs; the cycle may still raise from unrelated paths in this
-        # minimal mock-driven setup. The propagation assertion below is the
-        # authoritative SC-003 check for this phase.
-        pass
 
     assert getattr(mock_learner_with_uncertainty, '_feature_type', None) == 'continuous', (
         'execute_cycle must propagate the user-supplied Featurizer instance ' "'s "

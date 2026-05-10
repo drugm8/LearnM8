@@ -80,7 +80,9 @@ def test_same_smiles_different_featurizer_config_differs() -> None:
 
     # Featurizer-name buckets may overlap (both 'morgan'), but the config_hash
     # MUST diverge, so every row must differ between the two arrays.
-    for binary_digest, count_digest in zip(binary_keys.tolist(), count_keys.tolist()):
+    for binary_digest, count_digest in zip(
+        binary_keys.tolist(), count_keys.tolist(), strict=True
+    ):
         assert binary_digest != count_digest
 
 

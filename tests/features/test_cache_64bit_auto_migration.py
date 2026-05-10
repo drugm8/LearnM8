@@ -40,7 +40,6 @@ from learnm8.features.cache import (
 )
 from learnm8.features.skfp_2d.morgan import MorganFeaturizer
 
-
 # ---------------------------------------------------------------------------
 # Helper: synthesize a v2 (64-bit hash) cache file
 # ---------------------------------------------------------------------------
@@ -297,7 +296,7 @@ def test_concurrent_v2_migration_race(tmp_path: Path) -> None:
             outcome['error'] = None
         except PersistenceError as exc:
             outcome['error'] = ('PersistenceError', str(exc))
-        except Exception as exc:  # noqa: BLE001 - explicitly re-recorded for assertion
+        except Exception as exc:
             outcome['error'] = (type(exc).__name__, str(exc))
         with results_lock:
             results.append(outcome)

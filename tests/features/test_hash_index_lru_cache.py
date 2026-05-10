@@ -19,10 +19,10 @@ import pytest
 
 from learnm8.exceptions import LearnM8Warning
 from learnm8.features.cache import (
+    _HASH_INDEX_CACHE,
     DEFAULT_HASH_INDEX_LRU_MAX,
     ENV_HASH_INDEX_LRU_MAX,
     HASH_DTYPE,
-    _HASH_INDEX_CACHE,
     _hash_index_cache_clear,
     _hash_index_cache_get,
     _hash_index_cache_put,

@@ -22,7 +22,6 @@ import pytest
 from learnm8.exceptions import LearnM8Warning
 from learnm8.features.base import DEFAULT_3D_RANDOM_STATE
 
-
 CANONICAL_SMILES: list[str] = [
     'CCO',
     'c1ccccc1',
