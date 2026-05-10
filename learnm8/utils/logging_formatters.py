@@ -15,6 +15,8 @@ from typing import Any
 
 import polars as pl
 
+from learnm8.utils.logging import format_change_indicator
+
 logger = logging.getLogger(__name__)
 
 
@@ -150,20 +152,19 @@ def format_cycle_metrics_table(
 		except (ValueError, TypeError):
 			return ""
 
-		# Determine stagnation threshold
 		if is_pct or 'discovery' in key or 'overlap' in key:
 			stagnation_threshold = 1.0
 		else:
 			stagnation_threshold = 0.01
 
-		# Check for stagnation
-		if abs(diff) < stagnation_threshold:
-			return "[yellow]→[/yellow]"
-
 		is_higher_better = key not in bad_metrics
 		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
 
-		return "[green]↑[/green]" if is_improvement else "[red]↓[/red]"
+		symbol, color = format_change_indicator(
+			diff, is_improvement, style='arrow',
+			stagnation_threshold=stagnation_threshold
+		)
+		return f"[{color}]{symbol}[/{color}]"
 
 	def format_metric(key: str, label: str, digits: int = 1, is_pct: bool = False) -> str:
 		"""Format a single metric with optional change indicator."""
