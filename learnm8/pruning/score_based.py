@@ -101,10 +101,10 @@ class ScoreBasedPruner(DesignSpacePruner):
         # Sort compounds by score based on optimization direction
         if self.score_direction == 'higher':
             # Keep compounds with highest scores (remove lowest)
-            keep_indices = np.argsort(predictions)[-n_to_keep:]
+            keep_indices = np.argsort(predictions, kind='stable')[-n_to_keep:]
         else:
             # Keep compounds with lowest scores (remove highest)
-            keep_indices = np.argsort(predictions)[:n_to_keep]
+            keep_indices = np.argsort(predictions, kind='stable')[:n_to_keep]
 
         # Create pruned dataset
         pruned_compounds = self._safe_prune_by_indices(compounds, keep_indices)

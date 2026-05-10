@@ -1,7 +1,7 @@
 """Decision Tree ensemble learner for LearnM8 framework."""
 
 from ..sklearn.decision_tree import DecisionTreeLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class DTEnsemble(EnsembleLearner):
@@ -10,18 +10,24 @@ class DTEnsemble(EnsembleLearner):
     def __init__(self,
                  max_depths: list[int] | None = None,
                  random_states: list[int] | None = None,
+                 random_state: int = 42,
                  **kwargs):
         """Initialize DT ensemble.
 
         Args:
             max_depths: List of max depths for diversity (default: [5, 10, 15])
-            random_states: List of random states for diversity (default: [42, 123, 456])
+            random_states: Explicit list of member seeds. When None (default),
+                seeds are derived from ``random_state`` via the unified offset
+                scheme ``[base, base+81, base+314, ...]``.
+            random_state: Base seed for member-seed derivation (default: 42).
+                Ignored when ``random_states`` is provided explicitly.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if max_depths is None:
             max_depths = [5, 10, 15]
-        if random_states is None:
-            random_states = [42, 123, 456]
+        random_states = _derive_random_states(
+            random_state, len(max_depths), override=random_states
+        )
 
         learners = []
         for depth, rs in zip(max_depths, random_states):

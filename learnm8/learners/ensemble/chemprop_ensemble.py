@@ -7,7 +7,7 @@ import numpy as np
 from learnm8.exceptions import LearnerError
 
 from ..torch.chemprop_learner import ChempropLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class ChempropEnsemble(EnsembleLearner):
@@ -53,6 +53,7 @@ class ChempropEnsemble(EnsembleLearner):
 				 pin_memory: bool = True,
 				 learning_rate: float = 1e-4,
 				 random_states: list[int] | None = None,
+				 random_state: int = 42,
 				 accelerator: str = 'auto',
 				 device: str = 'auto',
 				 early_stopping: bool = True,
@@ -81,7 +82,9 @@ class ChempropEnsemble(EnsembleLearner):
 			precision: Precision mode for all members - 'auto', '16-mixed', '32-true', 'bf16-mixed' (default: 'auto')
 			pin_memory: Enable pinned memory for all members (default: True)
 			learning_rate: Learning rate per learner (default: 1e-4)
-			random_states: List of random states for diversity (default: [42, 123, 456])
+			random_states: Explicit list of member seeds. When None (default),
+				seeds are derived from `random_state` via the unified offset
+				scheme `[base, base+81, base+314]` (see `_derive_random_states`).
 			accelerator: PyTorch Lightning accelerator (default: 'auto')
 			early_stopping: Enable early stopping (default: True)
 			early_stopping_patience: Early stopping patience (default: 10)
@@ -93,8 +96,7 @@ class ChempropEnsemble(EnsembleLearner):
 				ensemble members and at ensemble level (default: True)
 			**kwargs: Additional arguments passed to EnsembleLearner
 		"""
-		if random_states is None:
-			random_states = [42, 123, 456]
+		random_states = _derive_random_states(random_state, 3, override=random_states)
 
 		# Validate fine-tuning parameters
 		if enable_fine_tuning and checkpoint_dir is None:

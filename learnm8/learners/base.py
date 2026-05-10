@@ -585,8 +585,8 @@ class TorchLearner(Learner):
             n_val = n_samples - 1
 
         # Random indices for validation
-        np.random.seed(self.random_state)
-        val_indices = np.random.choice(n_samples, n_val, replace=False)
+        rng = np.random.default_rng(self.random_state)
+        val_indices = rng.choice(n_samples, n_val, replace=False)
         train_indices = np.setdiff1d(np.arange(n_samples), val_indices)
 
         return X[train_indices], X[val_indices], y[train_indices], y[val_indices]
