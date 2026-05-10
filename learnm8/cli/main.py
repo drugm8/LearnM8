@@ -428,6 +428,34 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None, cycles: list | None) -> dict:
+    return dict(
+        compound_pool=args.compound_pool,
+        oracle=args.oracle,
+        learner=args.learner,
+        target_col=args.target_col,
+        featurizer=args.featurizer,
+        smiles_column=getattr(args, 'smiles_col', None),
+        id_column=getattr(args, 'id_col', None),
+        cycles=cycles,
+        n_cycles=args.n_cycles,
+        batch_fraction=args.batch_fraction,
+        strategy=args.strategy,
+        initial_strategy=args.initial_strategy,
+        score_direction=args.score_direction,
+        mode=args.mode,
+        output_dir=args.output,
+        cache_dir=getattr(args, 'cache_dir', None),
+        random_state=args.random_state,
+        pruning_fraction=args.pruning_fraction,
+        pruning_strategy=args.pruning_strategy,
+        acquisition_params=acquisition_params,
+        memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
+        n_jobs=getattr(args, 'n_jobs', -1),
+        device=getattr(args, 'device', 'auto'),
+    )
+
+
 def cmd_run(args: argparse.Namespace):
     """Handle run subcommand.
 
@@ -516,6 +544,8 @@ def cmd_run(args: argparse.Namespace):
                 console.print(f"[red]Error:[/red] Invalid JSON in --acquisition-params: {e}")
                 sys.exit(1)
 
+        run_kwargs = _build_run_kwargs(args, acquisition_params, cycles)
+
         if not args.quiet:
             with Progress(
                 SpinnerColumn(),
@@ -525,31 +555,7 @@ def cmd_run(args: argparse.Namespace):
                 task = progress.add_task("Running active learning...", total=None)
 
                 try:
-                    results = run_active_learning(
-                        compound_pool=args.compound_pool,
-                        oracle=args.oracle,
-                        learner=args.learner,
-                        target_col=args.target_col,
-                        featurizer=args.featurizer,
-                        smiles_column=getattr(args, 'smiles_col', None),
-                        id_column=getattr(args, 'id_col', None),
-                        cycles=cycles,
-                        n_cycles=args.n_cycles,
-                        batch_fraction=args.batch_fraction,
-                        strategy=args.strategy,
-                        initial_strategy=args.initial_strategy,
-                        score_direction=args.score_direction,
-                        mode=args.mode,
-                        output_dir=args.output,
-                        cache_dir=getattr(args, 'cache_dir', None),
-                        random_state=args.random_state,
-                        pruning_fraction=args.pruning_fraction,
-                        pruning_strategy=args.pruning_strategy,
-                        acquisition_params=acquisition_params,
-                        memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
-                        n_jobs=getattr(args, 'n_jobs', -1),
-                        device=getattr(args, 'device', 'auto')
-                    )
+                    results = run_active_learning(**run_kwargs)
                     progress.update(task, completed=True, description="[green]✓ Complete")
                 except KeyboardInterrupt:
                     progress.stop()
@@ -557,31 +563,7 @@ def cmd_run(args: argparse.Namespace):
                     sys.exit(1)
         else:
             try:
-                results = run_active_learning(
-                    compound_pool=args.compound_pool,
-                    oracle=args.oracle,
-                    learner=args.learner,
-                    target_col=args.target_col,
-                    featurizer=args.featurizer,
-                    smiles_column=getattr(args, 'smiles_col', None),
-                    id_column=getattr(args, 'id_col', None),
-                    cycles=cycles,
-                    n_cycles=args.n_cycles,
-                    batch_fraction=args.batch_fraction,
-                    strategy=args.strategy,
-                    initial_strategy=args.initial_strategy,
-                    score_direction=args.score_direction,
-                    mode=args.mode,
-                    output_dir=args.output,
-                    cache_dir=getattr(args, 'cache_dir', None),
-                    random_state=args.random_state,
-                    pruning_fraction=args.pruning_fraction,
-                    pruning_strategy=args.pruning_strategy,
-                    acquisition_params=acquisition_params,
-                    memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
-                    n_jobs=getattr(args, 'n_jobs', -1),
-                    device=getattr(args, 'device', 'auto')
-                )
+                results = run_active_learning(**run_kwargs)
             except KeyboardInterrupt:
                 console.print("\n[yellow]Experiment interrupted by user[/yellow]")
                 sys.exit(1)
