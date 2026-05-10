@@ -428,6 +428,29 @@ def create_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_learnm8_error(error: Exception) -> None:
+    if isinstance(error, ConfigurationError):
+        console.print(f"[red]Configuration error:[/red] {error}")
+        sys.exit(2)
+    elif isinstance(error, (ValidationError, FeatureExtractionError)):
+        if isinstance(error, ValidationError):
+            console.print(f"[red]Validation error:[/red] {error}")
+        else:
+            console.print(f"[red]Feature extraction error:[/red] {error}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    elif isinstance(error, LearnM8Error):
+        label = type(error).__name__
+        if 'Learner' in label:
+            console.print(f"[red]Training/prediction error:[/red] {error}")
+        else:
+            console.print(f"[red]Error:[/red] {error}")
+        sys.exit(1)
+    else:
+        console.print_exception()
+        sys.exit(1)
+
+
 def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None, cycles: list | None) -> dict:
     return dict(
         compound_pool=args.compound_pool,
@@ -602,27 +625,8 @@ def cmd_run(args: argparse.Namespace):
 
         console.print(f"\n[green]📁 All results saved to:[/green] {results['output_dir']}")
 
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(2)
-    except ValidationError as e:
-        console.print(f"[red]Validation error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except FeatureExtractionError as e:
-        console.print(f"[red]Feature extraction error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except LearnM8Error as e:
-        label = type(e).__name__
-        if 'Learner' in label:
-            console.print(f"[red]Training/prediction error:[/red] {e}")
-        else:
-            console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-    except Exception:
-        console.print_exception()
-        sys.exit(1)
+    except (LearnM8Error, Exception) as e:
+        _print_learnm8_error(e)
 
 
 def cmd_list(args: argparse.Namespace):
@@ -790,27 +794,8 @@ def cmd_validate(args: argparse.Namespace):
 
             console.print(f"\n[green]Report saved to:[/green] {report_path}")
 
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(2)
-    except ValidationError as e:
-        console.print(f"[red]Validation error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except FeatureExtractionError as e:
-        console.print(f"[red]Feature extraction error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except LearnM8Error as e:
-        label = type(e).__name__
-        if 'Learner' in label:
-            console.print(f"[red]Training/prediction error:[/red] {e}")
-        else:
-            console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-    except Exception:
-        console.print_exception()
-        sys.exit(1)
+    except (LearnM8Error, Exception) as e:
+        _print_learnm8_error(e)
 
 
 def main():
