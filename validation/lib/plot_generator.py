@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from learnm8.core.persistence import prediction_parquet_path
-from learnm8.visualization import create_dashboard_animation_from_csv
 
 logger = logging.getLogger(__name__)
 
@@ -357,56 +356,8 @@ def create_animations(
     fps: int = 2,
     dpi: int = 100
 ) -> List[Path]:
-    param_name = strategy_config['param_name']
-    param_values = strategy_config['param_values']
-    strategy_name = strategy_config['name']
-
-    logger.info("Creating animations for %s...", strategy_name)
-
-    animations_dir = output_dir / 'animations'
-    animations_dir.mkdir(parents=True, exist_ok=True)
-
-    animation_paths = []
-
-    for param_value in param_values:
-        result = results[param_value]
-        data_dir = Path(result['output_dir'])
-
-        if not data_dir.exists():
-            logger.warning("Data directory not found for %s=%s", param_name, param_value)
-            continue
-
-        required_files = ['cycle_metrics.csv', 'compounds_final.csv']
-        if not all((data_dir / f).exists() for f in required_files):
-            logger.warning("Missing required files for %s=%s", param_name, param_value)
-            continue
-
-        anim_filename = f"{param_name}_{param_value}.gif"
-        anim_path = animations_dir / anim_filename
-
-        try:
-            create_dashboard_animation_from_csv(
-                output_dir=str(data_dir),
-                output_file=str(anim_path),
-                format='gif',
-                fps=fps,
-                dpi=dpi,
-                downsample_scatter=5000
-            )
-            animation_paths.append(anim_path)
-            logger.info("Animation created: %s", anim_path.resolve())
-
-        except FileNotFoundError as e:
-            logger.warning("FFmpeg not found - skipping animation for %s=%s", param_name, param_value)
-        except Exception as e:
-            logger.warning("Failed to create animation for %s=%s: %s", param_name, param_value, e)
-
-    if animation_paths:
-        logger.info("Created %d animations", len(animation_paths))
-    else:
-        logger.warning("No animations created")
-
-    return animation_paths
+    logger.warning("Animation creation has been removed (learnm8.visualization deleted)")
+    return []
 
 
 def create_embedding_plots(
