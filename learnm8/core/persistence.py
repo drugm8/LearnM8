@@ -412,9 +412,20 @@ def save_results(
     if validation_result.invalid_compounds.height > 0:
         try:
             invalid_df = validation_result.invalid_compounds.clone()
-            # Map errors using join
-            from learnm8.utils.polars_utils import map_values_via_join
-            invalid_df = map_values_via_join(invalid_df, validation_result.validation_errors, 'ID', 'error')
+            lookup_df = pl.DataFrame({
+                'ID': list(validation_result.validation_errors.keys()),
+                'error_new': list(validation_result.validation_errors.values())
+            })
+            invalid_df = invalid_df.join(lookup_df, on='ID', how='left')
+            if 'error' in invalid_df.columns:
+                invalid_df = invalid_df.with_columns(
+                    pl.coalesce(
+                        pl.col('error_new'),
+                        pl.col('error')
+                    ).alias('error')
+                ).drop('error_new')
+            else:
+                invalid_df = invalid_df.rename({'error_new': 'error'})
 
             validation_path = output_dir / 'validation_report.csv'
             invalid_df.write_csv(validation_path)

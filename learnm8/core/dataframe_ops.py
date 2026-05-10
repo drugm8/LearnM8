@@ -20,8 +20,6 @@ import logging
 import pandas as pd
 import polars as pl
 
-from learnm8.utils.polars_utils import map_values_via_join
-
 from .initialization import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -101,7 +99,20 @@ def _update_status_inplace(
                     f"Pass measured values as a Polars Series, pandas Series, or dict mapping ID → value."
                 )
 
-            df = map_values_via_join(df, id_to_value, 'ID', target_col)
+            lookup_df = pl.DataFrame({
+                'ID': list(id_to_value.keys()),
+                f'{target_col}_new': list(id_to_value.values())
+            })
+            df = df.join(lookup_df, on='ID', how='left')
+            if target_col in df.columns:
+                df = df.with_columns(
+                    pl.coalesce(
+                        pl.col(f'{target_col}_new'),
+                        pl.col(target_col)
+                    ).alias(target_col)
+                ).drop(f'{target_col}_new')
+            else:
+                df = df.rename({f'{target_col}_new': target_col})
 
     elif new_status == 'pruned':
         df = df.with_columns(
