@@ -6,17 +6,20 @@ for 3D fingerprints, and parameter management.
 """
 
 import logging
+import warnings
 from typing import Any
 
 import numpy as np
 from skfp.preprocessing import ConformerGenerator, MolFromSmilesTransformer
 
 from learnm8.core.interfaces import Featurizer
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import FeatureExtractionError, LearnM8Warning
 
 logger = logging.getLogger(__name__)
 
 MAX_SMILES_LENGTH = 10000
+
+DEFAULT_3D_RANDOM_STATE: int = 0xf00d
 
 
 class SkfpFeaturizer(Featurizer):
@@ -45,7 +48,8 @@ class SkfpFeaturizer(Featurizer):
         fingerprint_instance,
         auto_generate_conformers: bool = True,
         conformer_params: dict[str, Any] | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
     ):
         """Initialize scikit-fingerprints wrapper.
 
@@ -57,6 +61,12 @@ class SkfpFeaturizer(Featurizer):
             conformer_params: Optional dict of parameters for ConformerGenerator
                             (e.g., {'num_conformers': 1, 'optimize_force_field': 'UFF'})
             n_jobs: Number of parallel jobs (-1 for all cores)
+            random_state: Seed forwarded to ConformerGenerator for deterministic
+                         3D conformer embedding (default: 0xf00d / 61453, the
+                         RDKit ETKDG convention). Only consumed by 3D
+                         fingerprints; recorded in get_config() when
+                         requires_3d() is True so cache keys disambiguate
+                         different seeds.
 
         Note:
             If fingerprint.requires_conformers=True and
@@ -67,14 +77,33 @@ class SkfpFeaturizer(Featurizer):
         self.auto_generate_conformers = auto_generate_conformers
         self.conformer_params = conformer_params or {}
         self.n_jobs = n_jobs
+        self.random_state = int(random_state)
 
         self.mol_from_smiles = MolFromSmilesTransformer()
 
         if self.requires_3d() and auto_generate_conformers:
-            self.conformer_gen = ConformerGenerator(
-                n_jobs=n_jobs,
-                **self.conformer_params
-            )
+            try:
+                self.conformer_gen = ConformerGenerator(
+                    n_jobs=n_jobs,
+                    random_state=self.random_state,
+                    **self.conformer_params,
+                )
+            except TypeError as e:
+                if 'random_state' in str(e):
+                    warnings.warn(
+                        'scikit-fingerprints<1.18.0 detected; ConformerGenerator '
+                        'does not accept random_state. 3D fingerprints will be '
+                        'non-deterministic. Upgrade with: '
+                        'pip install -U scikit-fingerprints',
+                        LearnM8Warning,
+                        stacklevel=2,
+                    )
+                    self.conformer_gen = ConformerGenerator(
+                        n_jobs=n_jobs,
+                        **self.conformer_params,
+                    )
+                else:
+                    raise
         else:
             self.conformer_gen = None
 
@@ -227,7 +256,7 @@ class SkfpFeaturizer(Featurizer):
             conformer generation parameters, and all fingerprint-specific
             parameters from get_params().
         """
-        config = {
+        config: dict[str, Any] = {
             'fingerprint_class': self.fingerprint.__class__.__name__,
             'auto_generate_conformers': self.auto_generate_conformers,
             'n_jobs': self.n_jobs,
@@ -235,6 +264,9 @@ class SkfpFeaturizer(Featurizer):
 
         if self.conformer_params:
             config['conformer_params'] = self.conformer_params
+
+        if self.requires_3d():
+            config['random_state'] = self.random_state
 
         params = self.fingerprint.get_params()
         config.update(params)

@@ -7,7 +7,7 @@ Requires 3D conformers.
 
 from skfp.fingerprints import USRFingerprint
 
-from learnm8.features.base import SkfpFeaturizer
+from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 
 
 class USRFeaturizer(SkfpFeaturizer):
@@ -22,7 +22,8 @@ class USRFeaturizer(SkfpFeaturizer):
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
         optimize_force_field: str | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
     ):
         """Initialize USR fingerprinter.
 
@@ -34,7 +35,7 @@ class USRFeaturizer(SkfpFeaturizer):
 
         Note:
             This is a 3D shape-based fingerprint (requires_3d() == True).
-            USR fingerprints are 12-dimensional: 4 reference points × 3 moments.
+            USR fingerprints are 12-dimensional: 4 reference points x 3 moments.
         """
         fp = USRFingerprint(n_jobs=n_jobs)
 
@@ -48,7 +49,8 @@ class USRFeaturizer(SkfpFeaturizer):
             fp,
             auto_generate_conformers=auto_generate_conformers,
             conformer_params=conformer_params,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            random_state=random_state,
         )
 
     @property

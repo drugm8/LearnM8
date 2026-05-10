@@ -40,7 +40,7 @@ import polars as pl
 
 from learnm8.core.batching import predict_with_batching
 from learnm8.core.config import CycleConfig
-from learnm8.core.interfaces import Learner, Oracle
+from learnm8.core.interfaces import Featurizer, Learner, Oracle
 from learnm8.evaluation import RunCache, evaluate_cycle
 from learnm8.exceptions import (
     AcquisitionError,
@@ -56,6 +56,46 @@ from learnm8.utils.logging_formatters import format_cycle_metrics_table
 logger = logging.getLogger(__name__)
 
 
+def _resolve_feature_type(
+    featurizer: str | Featurizer | None,
+    featurizer_obj: Featurizer | None = None,
+) -> str:
+    """Resolve _feature_type without re-instantiating user-supplied Featurizer instances.
+
+    Precedence:
+      1. featurizer_obj (Featurizer instance) — wins if non-None
+      2. featurizer (Featurizer instance via widened type)
+      3. featurizer (string name → registry default)
+      4. 'binary' fallback
+    """
+    if isinstance(featurizer_obj, Featurizer):
+        return featurizer_obj.feature_type
+
+    if featurizer is None:
+        return 'binary'
+
+    if isinstance(featurizer, Featurizer):
+        return featurizer.feature_type
+
+    if isinstance(featurizer, str):
+        from learnm8.features import FEATURIZER_REGISTRY
+        if featurizer in FEATURIZER_REGISTRY:
+            featurizer_instance = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            return getattr(featurizer_instance, 'feature_type', 'binary')
+        logger.warning(
+            'Unknown featurizer name %r — falling back to feature_type=%r',
+            featurizer, 'binary',
+        )
+        return 'binary'
+
+    logger.warning(
+        'Unsupported featurizer type %r (expected str|Featurizer|None) — '
+        'falling back to feature_type=%r',
+        type(featurizer).__name__, 'binary',
+    )
+    return 'binary'
+
+
 def execute_cycle(
     compounds_df: pl.DataFrame,
     cycle: int,
@@ -63,7 +103,7 @@ def execute_cycle(
     learner: Learner,
     oracle: Oracle,
     target_col: str,
-    featurizer: str | None,
+    featurizer: str | Featurizer | None,
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str = 'higher',
@@ -75,7 +115,7 @@ def execute_cycle(
     n_jobs: int = -1,
     output_dir: Path | None = None,
     run_cache: RunCache | None = None,
-    featurizer_obj: Any = None,
+    featurizer_obj: Featurizer | None = None,
     disable_molecular_similarity: bool | Iterable[str] = False,
     random_state: int | None = None,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
@@ -185,15 +225,7 @@ def execute_cycle(
         )
     else:
         # Propagate feature_type from featurizer to learner
-        if featurizer is not None:
-            from learnm8.features import FEATURIZER_REGISTRY
-            if featurizer in FEATURIZER_REGISTRY:
-                featurizer_instance = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
-                learner._feature_type = featurizer_instance.feature_type
-            else:
-                learner._feature_type = 'binary'
-        else:
-            learner._feature_type = 'binary'
+        learner._feature_type = _resolve_feature_type(featurizer, featurizer_obj)
 
         # Extract features and train learner.
         # Feature-extraction time is tracked separately from learner-side

@@ -7,7 +7,7 @@ Requires 3D conformers.
 
 from skfp.fingerprints import E3FPFingerprint
 
-from learnm8.features.base import SkfpFeaturizer
+from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 
 
 class E3FPFeaturizer(SkfpFeaturizer):
@@ -25,7 +25,8 @@ class E3FPFeaturizer(SkfpFeaturizer):
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
         optimize_force_field: str | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
     ):
         """Initialize E3FP fingerprinter.
 
@@ -59,7 +60,8 @@ class E3FPFeaturizer(SkfpFeaturizer):
             fp,
             auto_generate_conformers=auto_generate_conformers,
             conformer_params=conformer_params,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            random_state=random_state,
         )
 
         self.fp_size = fp_size

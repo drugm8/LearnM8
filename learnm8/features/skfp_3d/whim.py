@@ -7,7 +7,7 @@ molecular geometry. Requires 3D conformers.
 
 from skfp.fingerprints import WHIMFingerprint
 
-from learnm8.features.base import SkfpFeaturizer
+from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 
 
 class WHIMFeaturizer(SkfpFeaturizer):
@@ -22,7 +22,8 @@ class WHIMFeaturizer(SkfpFeaturizer):
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
         optimize_force_field: str | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
     ):
         """Initialize WHIM descriptor calculator.
 
@@ -49,7 +50,8 @@ class WHIMFeaturizer(SkfpFeaturizer):
             fp,
             auto_generate_conformers=auto_generate_conformers,
             conformer_params=conformer_params,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            random_state=random_state,
         )
 
     @property

@@ -23,7 +23,7 @@ dependencies:
   - joblib>=1.2
 
   # --- Chemistry ---
-  - rdkit>=2023.03
+  - rdkit>=2024.03.6
   - datamol>=0.12
   - mordredcommunity
 
@@ -55,7 +55,7 @@ dependencies:
   - pip:
     - chemprop
     - fastprop
-    - scikit-fingerprints
+    - scikit-fingerprints>=1.18.0
     - gauche>=0.1.6
     - pytest-xdist>=3.5
     - git+https://github.com/mqcomplab/bitbirch.git

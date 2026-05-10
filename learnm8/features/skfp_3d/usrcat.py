@@ -2,7 +2,7 @@
 
 from skfp.fingerprints import USRCATFingerprint
 
-from learnm8.features.base import SkfpFeaturizer
+from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 
 
 class USRCATFeaturizer(SkfpFeaturizer):
@@ -17,7 +17,8 @@ class USRCATFeaturizer(SkfpFeaturizer):
         auto_generate_conformers: bool = True,
         num_conformers: int = 1,
         optimize_force_field: str | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
     ):
         """Initialize USRCAT fingerprinter.
 
@@ -30,7 +31,7 @@ class USRCATFeaturizer(SkfpFeaturizer):
         Note:
             This is a 3D fingerprint (requires_3d() == True).
             USRCAT extends USR by considering atom types (CREDO scheme).
-            Dimension: 60 (5 atom types × 12 USR descriptors).
+            Dimension: 60 (5 atom types x 12 USR descriptors).
         """
         fp = USRCATFingerprint(n_jobs=n_jobs)
 
@@ -44,7 +45,8 @@ class USRCATFeaturizer(SkfpFeaturizer):
             fp,
             auto_generate_conformers=auto_generate_conformers,
             conformer_params=conformer_params,
-            n_jobs=n_jobs
+            n_jobs=n_jobs,
+            random_state=random_state,
         )
 
     @property

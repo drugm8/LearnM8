@@ -111,7 +111,7 @@ def test_dim_unknown_bak_when_bit_count_attr_missing(
 ):
     cache_path = tmp_path / 'features_morgan.h5'
     with h5py.File(cache_path, 'w') as f:
-        f.attrs['schema_version'] = np.uint8(2)
+        f.attrs['schema_version'] = np.uint8(3)
         # bit_count intentionally missing
         f.attrs['storage_dtype'] = 'packed_uint8'
         f.attrs['featurizer_name'] = 'morgan'

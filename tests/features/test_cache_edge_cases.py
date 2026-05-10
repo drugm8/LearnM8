@@ -10,7 +10,7 @@ import pytest
 from learnm8.exceptions import FeatureExtractionError
 from learnm8.features import MorganFeaturizer
 from learnm8.features.cache import (
-    _cache_keys_uint64,
+    _cache_keys_bytes16,
     _merge_sorted_indices,
     from_storage,
     to_storage,
@@ -63,34 +63,38 @@ def test_from_storage_chunk_streaming_handles_partial_last_chunk():
     assert np.array_equal(arr, decoded)
 
 
+def _s16(values: list[int]) -> np.ndarray:
+    return np.array([v.to_bytes(16, 'big') for v in values], dtype='S16')
+
+
 @pytest.mark.unit
 def test_merge_sorted_indices_concat_path_small():
-    h_old = np.array([1, 5, 10], dtype=np.uint64)
+    h_old = _s16([1, 5, 10])
     r_old = np.array([0, 1, 2], dtype=np.uint64)
-    h_new = np.array([7, 3], dtype=np.uint64)
+    h_new = _s16([7, 3])
     r_new = np.array([3, 4], dtype=np.uint64)
     h, r = _merge_sorted_indices(h_old, r_old, h_new, r_new)
-    assert np.array_equal(h, np.array([1, 3, 5, 7, 10], dtype=np.uint64))
+    assert np.array_equal(h, _s16([1, 3, 5, 7, 10]))
     assert np.array_equal(r, np.array([0, 4, 1, 3, 2], dtype=np.uint64))
 
 
 @pytest.mark.unit
 def test_merge_sorted_indices_rejects_duplicate():
-    h_old = np.array([1, 5], dtype=np.uint64)
+    h_old = _s16([1, 5])
     r_old = np.array([0, 1], dtype=np.uint64)
-    h_new = np.array([5, 7], dtype=np.uint64)  # 5 collides with old
+    h_new = _s16([5, 7])
     r_new = np.array([2, 3], dtype=np.uint64)
     with pytest.raises(FeatureExtractionError, match=r"Duplicate"):
         _merge_sorted_indices(h_old, r_old, h_new, r_new)
 
 
 @pytest.mark.unit
-def test_cache_key_truncation_stable_across_calls():
+def test_cache_key_stable_across_calls():
     feat = MorganFeaturizer(n_jobs=1)
-    keys_a = _cache_keys_uint64(['CCO', 'CCC', 'CCN'], feat)
-    keys_b = _cache_keys_uint64(['CCO', 'CCC', 'CCN'], feat)
+    keys_a = _cache_keys_bytes16(['CCO', 'CCC', 'CCN'], feat)
+    keys_b = _cache_keys_bytes16(['CCO', 'CCC', 'CCN'], feat)
     assert np.array_equal(keys_a, keys_b)
-    assert keys_a.dtype == np.uint64
+    assert keys_a.dtype == np.dtype('S16')
 
 
 @pytest.mark.unit

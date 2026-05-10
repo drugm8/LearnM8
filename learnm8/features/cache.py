@@ -1,19 +1,27 @@
-"""HDF5 v2 bit-packed cache for molecular feature extraction.
+"""HDF5 v3 bit-packed binary feature cache.
 
-Schema v2: one consolidated 2-D ``/features`` dataset per featurizer plus
-``/hash_index`` and ``/row_index`` for O(log N) lookup. Binary featurizers
-round-trip through :func:`numpy.packbits` for 32x storage reduction; continuous
-featurizers store float32 in place. Public ``extract_features`` signature is
-unchanged. Failure mode is fail-fast: corruption or persistent OS errors raise
-:class:`FeatureExtractionError` with a remediation message rather than silently
-re-fingerprinting (which at 100M scale wastes ~10 hours).
+Schema (version 3):
+  - /hash_index: (N,) S16   - 128-bit BLAKE2b digests, sorted ascending
+  - /row_index:  (N,) uint64 - row index into /features
+  - /features:   per-storage-dtype layout (packed_uint8 / float32 / uint8 / csr_uint16)
 
-Cache-key recipe (FR-004) preserves the v1 contract:
-``MD5(smiles + '_' + name + '_' + config_hash)`` truncated to 8 big-endian
-bytes interpreted as ``uint64``. ``hashlib.md5(..., usedforsecurity=False)`` so
-LearnM8 stays operational on FIPS-locked hosts. The 64-bit truncation residual
-collision probability at N=10**8 is ~0.027% — accepted as documented risk;
-recoverable by deleting the cache file.
+Cache-key recipe:
+  blake2b(f'{canonical_smiles}_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode(),
+          digest_size=16, usedforsecurity=False)
+
+Collision probability at N=10^8 (birthday formula): ~1.5e-23.
+
+Concurrency support:
+  Single-node, single-filesystem use only. NFS, Lustre, GlusterFS, and other
+  shared/distributed filesystems are NOT supported and may produce silent
+  corruption. The cache uses fcntl.flock on a sidecar .lock file, which has
+  well-defined semantics only on local POSIX filesystems.
+
+Migration:
+  Opening a v2 cache (64-bit hash) renames the file to <name>.h5.hash64.bak
+  and creates a fresh v3 cache. The .bak is preserved; the user may delete
+  it once satisfied. If <name>.h5.hash64.bak already exists, migration is
+  REFUSED to prevent data loss.
 """
 
 from __future__ import annotations
@@ -24,8 +32,10 @@ import fcntl
 import hashlib
 import logging
 import os
+import threading
 import time
-import weakref
+import warnings
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import wraps
@@ -41,22 +51,26 @@ from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import (
     ConfigurationError,
     FeatureExtractionError,
+    LearnM8Warning,
     PersistenceError,
 )
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Schema constants (T005)
+# Schema constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
+HASH_WIDTH_BITS: int = 128
+HASH_DTYPE: np.dtype = np.dtype('S16')
 ATTR_SCHEMA_VERSION = 'schema_version'
 ATTR_BIT_COUNT = 'bit_count'
 ATTR_STORAGE_DTYPE = 'storage_dtype'
 ATTR_FEATURIZER_NAME = 'featurizer_name'
 ATTR_WRITE_EPOCH = 'write_epoch'
 ATTR_STORAGE_LAYOUT = 'storage_layout'
+ATTR_HASH_WIDTH = 'hash_width_bits'
 
 LAYOUT_DENSE = 'dense'
 LAYOUT_CSR = 'csr'
@@ -120,33 +134,100 @@ _BLOSC_KWARGS = hdf5plugin.Blosc(
     shuffle=hdf5plugin.Blosc.SHUFFLE,
 )
 
+# Bounded LRU cap for in-process /hash_index re-reads. At 100M rows x 16 B,
+# each entry is 1.6 GB; 4 entries ≈ 6.4 GB headroom respects 30 GB cache budget.
+DEFAULT_HASH_INDEX_LRU_MAX: int = 4
+ENV_HASH_INDEX_LRU_MAX: str = 'LEARNM8_HASH_INDEX_LRU_MAX'
+
 
 # ---------------------------------------------------------------------------
-# Process-level hash_index cache (post-review addendum)
+# Process-level hash_index LRU cache
 # ---------------------------------------------------------------------------
-# WHY: NFR-003 (<1 s open at 100M) requires that we don't re-read the 800 MB
-# hash_index on every reader open. Cache key (path, mtime_ns, write_epoch)
-# invalidates automatically on writer commit (write_epoch bumps under LOCK_EX).
+# WHY: NFR-003 (<1 s open at 100M) requires we don't re-read the 1.6 GB
+# /hash_index on every reader open. Strong-ref OrderedDict LRU keyed on
+# (path, mtime_ns, write_epoch) auto-invalidates on writer commit (write_epoch
+# bumps under LOCK_EX) and on external mtime changes. Bounded by
+# _max_lru_entries() to respect the cache memory budget.
 
-_HASH_INDEX_CACHE: dict[tuple[str, int, int], Any] = {}
+_HASH_INDEX_CACHE: OrderedDict[tuple[str, int, int], np.ndarray] = OrderedDict()
+_HASH_INDEX_LOCK: threading.Lock = threading.Lock()
 
 
-def _hash_index_cache_get(path: Path, mtime_ns: int, write_epoch: int) -> np.ndarray | None:
+def _max_lru_entries() -> int:
+    """Read DEFAULT_HASH_INDEX_LRU_MAX with optional env override.
+
+    LEARNM8_HASH_INDEX_LRU_MAX must parse as int > 0; otherwise default with
+    a LearnM8Warning describing the offending value.
+    """
+    env_val = os.environ.get(ENV_HASH_INDEX_LRU_MAX)
+    if env_val is None:
+        return DEFAULT_HASH_INDEX_LRU_MAX
+    try:
+        parsed = int(env_val)
+    except ValueError:
+        warnings.warn(
+            f"{ENV_HASH_INDEX_LRU_MAX}={env_val!r} is not a positive integer; "
+            f"using default {DEFAULT_HASH_INDEX_LRU_MAX}.",
+            LearnM8Warning,
+            stacklevel=2,
+        )
+        return DEFAULT_HASH_INDEX_LRU_MAX
+    if parsed <= 0:
+        warnings.warn(
+            f"{ENV_HASH_INDEX_LRU_MAX}={env_val!r} is not a positive integer; "
+            f"using default {DEFAULT_HASH_INDEX_LRU_MAX}.",
+            LearnM8Warning,
+            stacklevel=2,
+        )
+        return DEFAULT_HASH_INDEX_LRU_MAX
+    return parsed
+
+
+def _hash_index_cache_get(
+    path: Path, mtime_ns: int, write_epoch: int
+) -> np.ndarray | None:
+    """Lookup the cached hash_index array; return None on miss.
+
+    On hit: moves the entry to the most-recently-used position. Strong ref
+    returned - caller does NOT need to keep arr alive.
+    """
     key = (str(path.resolve()), mtime_ns, write_epoch)
-    weak = _HASH_INDEX_CACHE.get(key)
-    if weak is None:
+    with _HASH_INDEX_LOCK:
+        if key in _HASH_INDEX_CACHE:
+            _HASH_INDEX_CACHE.move_to_end(key)
+            return _HASH_INDEX_CACHE[key]
         return None
-    cached = weak()
-    if cached is None:
-        _HASH_INDEX_CACHE.pop(key, None)
-        return None
-    return cached
 
 
-def _hash_index_cache_put(path: Path, mtime_ns: int, write_epoch: int, arr: np.ndarray) -> None:
+def _hash_index_cache_put(
+    path: Path, mtime_ns: int, write_epoch: int, arr: np.ndarray
+) -> None:
+    """Store arr under the (path, mtime_ns, write_epoch) key.
+
+    On insert: moves to MRU. If size exceeds _max_lru_entries(), evicts the
+    LRU entry until the cap is satisfied. Holds _HASH_INDEX_LOCK for the
+    duration of the compound update.
+    """
     key = (str(path.resolve()), mtime_ns, write_epoch)
-    with contextlib.suppress(TypeError):
-        _HASH_INDEX_CACHE[key] = weakref.ref(arr)
+    cap = _max_lru_entries()
+    with _HASH_INDEX_LOCK:
+        # Drop any prior entries for the same path under a different
+        # mtime_ns/write_epoch. Without this, write_epoch bumps leave the old
+        # ~1.6 GB array occupying an LRU slot until natural eviction.
+        path_str = key[0]
+        stale = [k for k in _HASH_INDEX_CACHE if k[0] == path_str and k != key]
+        for k in stale:
+            del _HASH_INDEX_CACHE[k]
+        _HASH_INDEX_CACHE[key] = arr
+        _HASH_INDEX_CACHE.move_to_end(key)
+        while len(_HASH_INDEX_CACHE) > cap:
+            _HASH_INDEX_CACHE.popitem(last=False)
+
+
+def _hash_index_cache_clear() -> None:
+    """Clear all entries; for use in test setUp/tearDown only."""
+    with _HASH_INDEX_LOCK:
+        _HASH_INDEX_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +447,7 @@ def _read_with_one_retry(reader_callable: Callable[[], T]) -> T:
 
 
 # ---------------------------------------------------------------------------
-# Cache-key recipe (FR-004)
+# Cache-key recipe (FR-001, FR-002)
 # ---------------------------------------------------------------------------
 
 
@@ -378,17 +459,26 @@ def _generate_cache_key(smiles: str, featurizer: Featurizer) -> str:
     return hashlib.md5(cache_string.encode('utf-8'), usedforsecurity=False).hexdigest()
 
 
-def _cache_keys_uint64(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
-    """Vectorized 8-byte big-endian truncation of MD5 cache keys to ``uint64``."""
+def _cache_keys_bytes16(
+    smiles_list: list[str], featurizer: Featurizer
+) -> np.ndarray:
+    """Compute 128-bit BLAKE2b cache keys for each SMILES + featurizer config.
+
+    Returns an ``np.ndarray`` of shape ``(len(smiles_list),)``, dtype ``|S16``.
+    Each row is a 16-byte BLAKE2b digest of
+    ``f'{smiles}_{name}_{config_hash}'.encode()``.
+    """
     name = featurizer.get_name()
     config_hash = featurizer.get_config_hash()
-    out = np.empty(len(smiles_list), dtype=np.uint64)
+    suffix_bytes = f'_{name}_{config_hash}'.encode()
+    out = np.empty(len(smiles_list), dtype=HASH_DTYPE)
     for i, s in enumerate(smiles_list):
-        digest = hashlib.md5(
-            f"{s}_{name}_{config_hash}".encode(),
+        digest = hashlib.blake2b(
+            s.encode() + suffix_bytes,
+            digest_size=16,
             usedforsecurity=False,
         ).digest()
-        out[i] = int.from_bytes(digest[:8], byteorder='big', signed=False)
+        out[i] = digest
     return out
 
 
@@ -410,10 +500,14 @@ def _merge_sorted_indices(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merge two parallel ``(hash, row)`` arrays preserving sort order.
 
-    For ``len(h_old) > VECTORIZED_MERGE_THRESHOLD`` uses vectorized
+    Hash arrays have dtype ``|S16`` (128-bit BLAKE2b digests); ``np.searchsorted``
+    and ``np.argsort`` operate on the lexicographic byte ordering. ``np.diff`` is
+    NOT supported on bytes dtypes; strictly-increasing checks use elementwise
+    comparison ``arr[1:] > arr[:-1]`` instead. For
+    ``len(h_old) > VECTORIZED_MERGE_THRESHOLD`` uses vectorized
     ``np.searchsorted``+``np.insert``. Smaller inputs use ``np.argsort`` on the
     concatenation (TimSort detects sorted runs). Both paths reject duplicate
-    hashes (FR-010 tightening).
+    hashes.
     """
     if h_old.size > VECTORIZED_MERGE_THRESHOLD:
         sort_perm = np.argsort(h_new, kind='stable')
@@ -429,7 +523,7 @@ def _merge_sorted_indices(
         out_h = out_h_unsorted[order]
         out_r = out_r_unsorted[order]
 
-    if out_h.size > 1 and not np.all(np.diff(out_h) > 0):
+    if out_h.size > 1 and not np.all(out_h[1:] > out_h[:-1]):
         raise FeatureExtractionError(
             "Duplicate cache_key detected during merge — cache file is "
             "corrupt. Delete the cache file and retry."
@@ -475,6 +569,13 @@ def _dense_np_dtype(storage_dtype: str) -> Any:
     return np.float32
 
 
+def _hash_index_chunks(n: int | None) -> tuple[int]:
+    """Pick a chunk shape for /hash_index sized for 10^8-row scale (T007)."""
+    if n is None or n <= 0:
+        return (2 ** 16,)
+    return (max(2 ** 16, n // 256),)
+
+
 def _initialize_v2_csr_datasets(
     f: h5py.File, featurizer: Featurizer, storage_dtype: str
 ) -> None:
@@ -517,7 +618,8 @@ def _initialize_v2_csr_datasets(
         DSET_HASH_INDEX,
         shape=(0,),
         maxshape=(None,),
-        dtype=np.uint64,
+        dtype=HASH_DTYPE,
+        chunks=_hash_index_chunks(None),
     )
     f.create_dataset(
         DSET_ROW_INDEX,
@@ -532,6 +634,7 @@ def _initialize_v2_csr_datasets(
     f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_CSR
+    f.attrs[ATTR_HASH_WIDTH] = np.uint8(HASH_WIDTH_BITS)
     f.flush()
 
 
@@ -561,7 +664,8 @@ def _initialize_v2_datasets(
         DSET_HASH_INDEX,
         shape=(0,),
         maxshape=(None,),
-        dtype=np.uint64,
+        dtype=HASH_DTYPE,
+        chunks=_hash_index_chunks(None),
     )
     f.create_dataset(
         DSET_ROW_INDEX,
@@ -576,6 +680,7 @@ def _initialize_v2_datasets(
     f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_DENSE
+    f.attrs[ATTR_HASH_WIDTH] = np.uint8(HASH_WIDTH_BITS)
     f.flush()
 
 
@@ -627,14 +732,29 @@ def _open_or_create_h5(
         file_storage_dtype = None
 
     if schema_version != SCHEMA_VERSION:
-        suffix_tag = (
-            f'v{schema_version}' if schema_version is not None else 'v1'
-        )
-        backup = cache_path.with_suffix(cache_path.suffix + f'.{suffix_tag}.bak')
-        _atomic_rename(cache_path, backup)
-        logger.warning(
-            "Renamed non-v2 cache to %s; starting fresh v2 cache.", backup
-        )
+        # v2 → v3 migration uses a dedicated .hash64.bak suffix and refuses to
+        # clobber an existing backup so the user can never silently lose data.
+        if schema_version == 2:
+            backup = cache_path.with_suffix(cache_path.suffix + '.hash64.bak')
+            if backup.exists():
+                raise PersistenceError(
+                    f"Refusing to migrate {cache_path} to {backup}: {backup} "
+                    f"already exists. Manually move or delete it to proceed."
+                )
+            _atomic_rename(cache_path, backup)
+            logger.info(
+                "Renamed v2 (64-bit hash) cache to %s; starting fresh v3 cache.",
+                backup,
+            )
+        else:
+            suffix_tag = (
+                f'v{schema_version}' if schema_version is not None else 'v0'
+            )
+            backup = cache_path.with_suffix(cache_path.suffix + f'.{suffix_tag}.bak')
+            _atomic_rename(cache_path, backup)
+            logger.warning(
+                "Renamed non-v3 cache to %s; starting fresh v3 cache.", backup
+            )
         _create_fresh_v2(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
@@ -644,7 +764,7 @@ def _open_or_create_h5(
         _atomic_rename(cache_path, backup)
         logger.warning(
             "Renamed cache with mismatched bit_count (%s vs expected %d) "
-            "to %s; starting fresh v2 cache.",
+            "to %s; starting fresh v3 cache.",
             bit_count,
             expected_dim,
             backup,
@@ -664,7 +784,7 @@ def _open_or_create_h5(
         _atomic_rename(cache_path, backup)
         logger.warning(
             "Renamed cache with mismatched storage_dtype (%s vs expected %s) "
-            "to %s; starting fresh v2 cache.",
+            "to %s; starting fresh v3 cache.",
             file_storage_dtype,
             storage_dtype,
             backup,
@@ -704,7 +824,7 @@ def _validate_v2_file_integrity(
 
     if int(f.attrs[ATTR_SCHEMA_VERSION]) != SCHEMA_VERSION:
         raise FeatureExtractionError(
-            f"v2 cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, "
+            f"cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, "
             f"expected {SCHEMA_VERSION})." + msg_suffix
         )
 
@@ -714,10 +834,16 @@ def _validate_v2_file_integrity(
     for dset in (DSET_HASH_INDEX, DSET_ROW_INDEX):
         if dset not in f:
             raise FeatureExtractionError(
-                f"v2 cache missing dataset {dset!r}." + msg_suffix
+                f"cache missing dataset {dset!r}." + msg_suffix
             )
     hash_index = f[DSET_HASH_INDEX]
     row_index = f[DSET_ROW_INDEX]
+
+    if hash_index.dtype != HASH_DTYPE:
+        raise FeatureExtractionError(
+            f"cache /hash_index dtype mismatch: expected {HASH_DTYPE!r}, "
+            f"got {hash_index.dtype!r}." + msg_suffix
+        )
 
     if layout == LAYOUT_DENSE:
         if DSET_FEATURES not in f:
@@ -811,8 +937,12 @@ def _validate_v2_file_integrity(
         )
 
     if len(hash_index) > 1:
-        diffs = np.diff(hash_index[:])
-        if np.any(diffs <= 0):
+        # Load via the LRU so the immediately-following _lookup_cache reuses
+        # this array instead of re-reading the full ~1.6 GB at 100M scale.
+        # Dtype was validated above, so _load_hash_index's asarray coercion is
+        # safe (it's a no-op on already-S16 data).
+        arr = _load_hash_index(f, cache_path)
+        if not np.all(arr[1:] > arr[:-1]):
             raise FeatureExtractionError(
                 "v2 cache hash_index is not strictly increasing "
                 "(duplicates or out-of-order)." + msg_suffix
@@ -832,7 +962,7 @@ def _validate_v2_file_integrity(
 
 
 def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
-    """Return ``/hash_index`` as a uint64 array, using the process cache."""
+    """Return ``/hash_index`` as an ``S16`` array, using the process LRU cache."""
     try:
         mtime_ns = os.stat(cache_path).st_mtime_ns
     except OSError:
@@ -841,7 +971,7 @@ def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
     cached = _hash_index_cache_get(cache_path, mtime_ns, write_epoch)
     if cached is not None:
         return cached
-    arr = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    arr = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     _hash_index_cache_put(cache_path, mtime_ns, write_epoch, arr)
     return arr
 
@@ -849,7 +979,12 @@ def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
 def _lookup_cache(
     f: h5py.File, query_hashes: np.ndarray, cache_path: Path
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(hits_mask, target_rows_for_hits)`` for a batch of query hashes."""
+    """Return ``(hits_mask, target_rows_for_hits)`` for a batch of query hashes.
+
+    ``query_hashes`` MUST have dtype ``|S16`` (128-bit BLAKE2b digests).
+    ``np.searchsorted`` compares fixed-length byte rows lexicographically via
+    memcmp, matching the strictly-ascending order in /hash_index.
+    """
     n_query = query_hashes.shape[0]
     if len(f[DSET_HASH_INDEX]) == 0:
         return np.zeros(n_query, dtype=bool), np.empty(0, dtype=np.uint64)
@@ -1020,9 +1155,9 @@ def _write_csr_misses(
     indptr_dset[prev_n_rows + 1 : prev_n_rows + 1 + new_n] = indptr_offsets
 
     new_row_index = np.arange(prev_n_rows, prev_n_rows + new_n, dtype=np.uint64)
-    new_hash_index = np.asarray(miss_hashes, dtype=np.uint64)
+    new_hash_index = np.asarray(miss_hashes, dtype=HASH_DTYPE)
 
-    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     r_old = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
     merged_h, merged_r = _merge_sorted_indices(h_old, r_old, new_hash_index, new_row_index)
 
@@ -1062,9 +1197,9 @@ def _write_cache_misses(
     features[cur_n : cur_n + new_n] = encoded
 
     new_row_index = np.arange(cur_n, cur_n + new_n, dtype=np.uint64)
-    new_hash_index = np.asarray(miss_hashes, dtype=np.uint64)
+    new_hash_index = np.asarray(miss_hashes, dtype=HASH_DTYPE)
 
-    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     r_old = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
 
     merged_h, merged_r = _merge_sorted_indices(h_old, r_old, new_hash_index, new_row_index)
@@ -1179,7 +1314,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path = cache_dir / f"features_{featurizer_name}.h5"
 
-            query_hashes = _cache_keys_uint64(smiles_list, featurizer)
+            query_hashes = _cache_keys_bytes16(smiles_list, featurizer)
 
             # Phase 1: read-only attempt under LOCK_SH (lets concurrent readers run).
             found = np.zeros(len(smiles_list), dtype=bool)
