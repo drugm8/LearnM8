@@ -6,6 +6,7 @@ from pathlib import Path
 
 from learnm8.core.cycle import execute_cycle, _calculate_cycle_metrics, _apply_pruning, _select_compounds
 from learnm8.core.config import CycleConfig
+from learnm8.exceptions import AcquisitionError, LearnerError, PruningError
 from tests.fixtures.master_dataframe import create_initialized_master_df as initialize_master_dataframe
 
 
@@ -77,7 +78,7 @@ class TestExecuteCycle:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
 
-        with pytest.raises(RuntimeError, match="No labeled compounds available"):
+        with pytest.raises(LearnerError, match="No labeled compounds available"):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=1,
@@ -297,7 +298,7 @@ class TestExecuteCycle:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(RuntimeError, match="Training failed in cycle 0"):
+        with pytest.raises(LearnerError, match="Training failed in cycle 0"):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -483,7 +484,7 @@ class TestApplyPruning:
         )
         predictions = pool['prediction'].to_numpy()
 
-        with pytest.raises(RuntimeError, match="Pruning failed with strategy"):
+        with pytest.raises(PruningError, match="Pruning failed with strategy"):
             _apply_pruning(
                 pool,
                 predictions,
@@ -585,7 +586,7 @@ class TestEdgeCaseHandling:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(RuntimeError, match="Predictions contain NaN values"):
+        with pytest.raises(AcquisitionError, match="Predictions contain NaN values"):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
