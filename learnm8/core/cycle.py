@@ -66,7 +66,7 @@ def execute_cycle(
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str = 'higher',
-    mode: Literal['run', 'benchmark'] = 'run',
+    oracle_type: Literal['run', 'benchmark'] = 'run',
     original_pool: pl.DataFrame | None = None,
     cumulative_selected_ids: set | None = None,
     memory_safety_factor: float = 0.7,
@@ -99,7 +99,7 @@ def execute_cycle(
         cache_dir: Directory for feature caching
         original_pool_size: Size of original compound pool (for batch calculation)
         score_direction: 'higher' or 'lower' for optimization direction
-        mode: 'run' or 'benchmark' execution mode
+        oracle_type: 'run' or 'benchmark' oracle type
         original_pool: Required for benchmark mode - full original compound pool
         cumulative_selected_ids: Optional set of previously selected compound IDs
         memory_safety_factor: Fraction of available memory to use for prediction
@@ -118,14 +118,14 @@ def execute_cycle(
         updated_df, metrics = execute_cycle(
             compounds_df, 0, config, learner, oracle,
             'Activity', 'morgan', cache_dir, 1000,
-            mode='run'
+            oracle_type='run'
         )
 
         # Benchmark mode (evaluation)
         updated_df, metrics = execute_cycle(
             compounds_df, 0, config, learner, oracle,
             'Activity', 'morgan', cache_dir, 1000,
-            mode='benchmark', original_pool=original_df
+            oracle_type='benchmark', original_pool=original_df
         )
     """
     from learnm8.core.dataframe_ops import (
@@ -135,17 +135,17 @@ def execute_cycle(
     from learnm8.core.persistence import write_cycle_predictions
 
     # Step 1: Setup and Validation
-    if mode not in ['run', 'benchmark']:
+    if oracle_type not in ['run', 'benchmark']:
         raise ValueError(
-            f"mode must be 'run' or 'benchmark', got '{mode}'. "
-            f"Mode is auto-detected from oracle type: CSV oracle → 'benchmark', "
-            f"Python oracle → 'run'. Override with mode='run' or mode='benchmark'."
+            f"oracle_type must be 'run' or 'benchmark', got '{oracle_type}'. "
+            f"Oracle type is derived from the oracle: CSV oracle → 'benchmark', "
+            f"Python oracle → 'run'."
         )
 
-    if mode == 'benchmark' and original_pool is None:
+    if oracle_type == 'benchmark' and original_pool is None:
         raise ValueError(
             "original_pool is required for benchmark mode because discovery and "
-            "ranking metrics need ground truth. Provide original_pool or use mode='run'."
+            "ranking metrics need ground truth. Provide original_pool or use a non-CSV oracle."
         )
 
     if score_direction not in ['higher', 'lower']:
@@ -560,7 +560,7 @@ def execute_cycle(
                 pool_df_for_eval = None
                 original_pool_for_eval = None
 
-                if mode == 'benchmark' and original_pool is not None:
+                if oracle_type == 'benchmark' and original_pool is not None:
                     pool_df_for_eval = cycle_predictions.select(['ID', 'prediction'])
                     original_pool_for_eval = original_pool
 
@@ -575,7 +575,7 @@ def execute_cycle(
                     labeled_data=labeled_with_pred.select(['ID', 'SMILES', target_col]),
                     selected_compounds=selected_for_eval,
                     target_col=target_col,
-                    oracle_type=mode,
+                    oracle_type=oracle_type,
                     ground_truth_data=original_pool_for_eval,
                     pool_df=pool_df_for_eval,
                     uncertainties=uncertainties if uncertainties is not None else None,
