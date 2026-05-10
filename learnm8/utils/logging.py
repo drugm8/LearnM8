@@ -1,6 +1,7 @@
 """Centralized logging configuration with Rich formatting support."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Literal
@@ -9,16 +10,125 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 
-def is_running_in_jupyter() -> bool:
-    """Detect if code is running in Jupyter notebook/lab."""
+def detect_jupyter_environment() -> bool:
+    """
+    Detect if code is running in a Jupyter notebook environment.
+
+    Returns:
+        bool: True if running in Jupyter, False otherwise
+    """
+    jupyter_indicators = [
+        'IPY_PARENT',
+        'JUPYTER_COLUMNS',
+        'JPY_PARENT_PID',
+        'JUPYTER_RUNTIME_DIR',
+    ]
+
+    for indicator in jupyter_indicators:
+        if indicator in os.environ:
+            return True
+
     try:
-        from IPython import get_ipython
-        ipython = get_ipython()
-        if ipython is None:
-            return False
-        return ipython.__class__.__name__ == 'ZMQInteractiveShell'
+        import IPython
+        ipy = IPython.get_ipython()
+        if ipy is not None:
+            if hasattr(ipy, 'kernel'):
+                return True
+            if ipy.__class__.__name__ == 'ZMQInteractiveShell':
+                return True
     except ImportError:
-        return False
+        pass
+
+    try:
+        import ipykernel.kernelapp
+        if hasattr(ipykernel.kernelapp, 'IPKernelApp') and ipykernel.kernelapp.IPKernelApp.initialized():
+            return True
+    except (ImportError, AttributeError):
+        pass
+
+    return False
+
+
+def get_console_config() -> dict:
+    """
+    Get appropriate Rich console configuration based on environment.
+
+    Returns:
+        dict: Configuration parameters for Rich Console
+    """
+    in_jupyter = detect_jupyter_environment()
+
+    config = {
+        'width': 100,
+        'legacy_windows': False,
+    }
+
+    if in_jupyter:
+        config.update({
+            'force_jupyter': True,
+            'force_terminal': False,
+        })
+    else:
+        config.update({
+            'force_terminal': True,
+            'force_jupyter': False,
+        })
+
+    return config
+
+
+def get_change_indicator_style() -> str:
+    """
+    Get appropriate change indicator style based on environment.
+
+    Returns:
+        str: 'emoji' for Jupyter environments, 'arrow' for terminal
+    """
+    return 'emoji' if detect_jupyter_environment() else 'arrow'
+
+
+def format_change_indicator(
+    diff: float,
+    is_improvement: bool,
+    style: str = 'auto',
+    stagnation_threshold: float = 0.01
+) -> tuple[str, str]:
+    """
+    Format change indicator based on environment and style preference.
+
+    Args:
+        diff: Numeric difference (positive or negative)
+        is_improvement: Whether the change represents an improvement
+        style: 'arrow', 'emoji', or 'auto' for automatic detection
+        stagnation_threshold: Absolute threshold below which change is considered stagnant (default 1%)
+
+    Returns:
+        tuple: (symbol, color) for the change indicator
+               - Green ↑/📈 for improvement
+               - Red ↓/📉 for worsening
+               - Yellow →/➡️ for stagnation (|diff| < threshold)
+    """
+    if style == 'auto':
+        style = get_change_indicator_style()
+
+    if abs(diff) < stagnation_threshold:
+        if style == 'emoji':
+            return "➡️", "yellow"
+        else:
+            return "→", "yellow"
+
+    if style == 'emoji':
+        if is_improvement:
+            symbol = "📈" if diff > 0 else "📉"
+            color = "green"
+        else:
+            symbol = "📉" if diff > 0 else "📈"
+            color = "red"
+    else:
+        symbol = "↑" if diff > 0 else "↓"
+        color = "green" if is_improvement else "red"
+
+    return symbol, color
 
 
 def configure_learnm8_logging(
@@ -83,7 +193,7 @@ def configure_learnm8_logging(
 
     if console_type != 'none':
         if console_type == 'auto':
-            use_rich = not is_running_in_jupyter()
+            use_rich = not detect_jupyter_environment()
         elif console_type == 'rich':
             use_rich = True
         else:
@@ -134,44 +244,3 @@ def log_success(logger: logging.Logger, message: str) -> None:
 def log_file_operation(logger: logging.Logger, operation: str, path: str) -> None:
     """Log file operations (save, load, etc.)."""
     logger.info(f"{operation}: [dim]{path}[/dim]")
-
-
-def setup_logging(
-    level: str = "INFO",
-    show_time: bool = True,
-    show_path: bool = False,
-    console: Console | None = None
-) -> logging.Logger:
-    """
-    Backward compatibility wrapper for configure_learnm8_logging().
-
-    DEPRECATED: Use configure_learnm8_logging() instead.
-    """
-    return configure_learnm8_logging(
-        level=level,
-        console_type='rich',
-        show_time=show_time
-    )
-
-
-def setup_logging_for_environment(
-    logger: logging.Logger,
-    output_dir: Path | None = None,
-    level: str = "INFO",
-    show_time: bool = True
-):
-    """
-    Backward compatibility wrapper for configure_learnm8_logging().
-
-    DEPRECATED: Use configure_learnm8_logging() instead.
-
-    Note: This function previously returned a list of handlers, but the new
-    implementation does not support this. It now returns None for compatibility.
-    """
-    configure_learnm8_logging(
-        output_dir=output_dir,
-        level=level,
-        console_type='auto',
-        show_time=show_time
-    )
-    return []
