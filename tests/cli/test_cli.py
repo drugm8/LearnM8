@@ -68,7 +68,6 @@ def make_run_namespace(compound_pool, tmp_path, **overrides):
         learner='rf',
         score_direction='higher',
         cycles=None,
-        schedule=None,
         config=None,
         n_cycles=2,
         batch_fraction=0.4,
@@ -107,7 +106,7 @@ def make_validate_namespace(compound_pool, **overrides):
 
 @pytest.fixture
 def minimal_compounds(tmp_path):
-    """Create valid compound pool CSV with enough diversity for predefined schedules."""
+    """Create valid compound pool CSV."""
     csv_path = tmp_path / "compounds.csv"
     base_smiles = [
         'CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC',
@@ -278,18 +277,6 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
-
-    def test_predefined_schedules(self, minimal_compounds, tmp_path, monkeypatch):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            learner='dt',
-            output=str(tmp_path / 'output' / 'quick'),
-            n_cycles=2, batch_fraction=0.4,
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode == 0, f"Schedule test failed: {result.stdout}"
-        assert 'Using predefined schedule' not in result.stdout
 
     def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch):
         pytest.importorskip('yaml', reason="PyYAML not installed")
@@ -516,15 +503,6 @@ class TestEdgeCases:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    def test_invalid_schedule(self, minimal_compounds, tmp_path, monkeypatch):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            schedule='nonexistent',
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode != 0
-
     @pytest.mark.slow
     def test_invalid_pruning_fraction(self, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
@@ -643,7 +621,6 @@ def run_args(minimal_compounds, tmp_path):
         learner='rf',
         score_direction='higher',
         cycles=None,
-        schedule=None,
         config=None,
         n_cycles=2,
         batch_fraction=0.4,
