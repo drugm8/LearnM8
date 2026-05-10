@@ -191,8 +191,9 @@ def _create_learner(
     Automatically detects whether learner accepts random_state (singular)
     or random_states (plural) parameter through signature inspection.
 
-    For ensemble learners requiring random_states, derives a deterministic
-    list from the provided random_state: [seed, seed+81, seed+314]
+    For ensemble learners, the constructor itself derives a deterministic
+    member-seed list from `random_state` via the unified offset scheme
+    `[base, base+81, base+314, ...]` (see `_derive_random_states`).
 
     Supported learner shortcuts:
     - 'rf': Random Forest
@@ -267,17 +268,23 @@ def _create_learner(
         if 'device' in params:
             kwargs['device'] = device
 
-        if 'random_states' in params:
-            random_states = [random_state, random_state + 81, random_state + 314]
-            logger.debug(
-                f"Creating {learner_class.__name__} with random_states={random_states} "
-                f"(derived from random_state={random_state})"
-            )
-            return learner_class(random_states=random_states, **kwargs)
-
-        elif 'random_state' in params:
+        # Prefer the unified `random_state` (singular) path: ensemble constructors
+        # derive their internal `random_states` list from this single seed via the
+        # shared `_derive_random_states` helper (offsets 0, 81, 314). This collapses
+        # the two historically competing schemes into one source of truth so direct
+        # construction and factory construction always agree.
+        if 'random_state' in params:
             logger.debug(f"Creating {learner_class.__name__} with random_state={random_state}")
             return learner_class(random_state=random_state, **kwargs)
+
+        elif 'random_states' in params:
+            from learnm8.learners.ensemble.ensemble import _derive_random_states
+            random_states = _derive_random_states(random_state, 3)
+            logger.debug(
+                f"Creating {learner_class.__name__} with random_states={random_states} "
+                f"(legacy path; class lacks `random_state` parameter)"
+            )
+            return learner_class(random_states=random_states, **kwargs)
 
         else:
             logger.debug(f"Creating {learner_class.__name__} without random state parameter")

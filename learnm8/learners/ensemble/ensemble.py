@@ -18,6 +18,34 @@ from ...core.interfaces import Learner
 logger = logging.getLogger(__name__)
 
 
+# Single source of truth for ensemble member seed offsets. Member i's seed is
+# ``base_seed + ENSEMBLE_SEED_OFFSETS[i]``. Index ≥ 3 extends deterministically.
+ENSEMBLE_SEED_OFFSETS: tuple[int, ...] = (0, 81, 314)
+
+
+def _derive_random_states(
+    base_seed: int,
+    n_members: int,
+    override: list[int] | None = None,
+) -> list[int]:
+    """Resolve per-member seeds for an ensemble.
+
+    If ``override`` is provided it is returned unchanged (explicit user
+    seeds win). Otherwise returns ``[base + ENSEMBLE_SEED_OFFSETS[i] for i in
+    range(n_members)]``; for ``n_members > len(ENSEMBLE_SEED_OFFSETS)``,
+    additional offsets are extended by chaining the last offset so two runs
+    with the same base seed still produce identical member-seed lists.
+    """
+    if override is not None:
+        return override
+    if n_members <= 0:
+        return []
+    offsets: list[int] = list(ENSEMBLE_SEED_OFFSETS[:n_members])
+    while len(offsets) < n_members:
+        offsets.append(offsets[-1] + ENSEMBLE_SEED_OFFSETS[-1])
+    return [base_seed + off for off in offsets]
+
+
 class EnsembleLearner(Learner):
     """Meta-learner that combines multiple models through composition.
 

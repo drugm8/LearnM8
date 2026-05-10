@@ -280,6 +280,7 @@ def execute_cycle(
         score_direction=score_direction,
         original_pool_size=original_pool_size,
         oracle=oracle,
+        random_state=random_state,
     )
 
     # Step 14: Calculate Cycle Metrics (basic + evaluate_cycle enhancement)
@@ -662,7 +663,9 @@ def _select_compounds(
     strategy: str,
     batch_size: int,
     score_direction: str,
-    acquisition_params: dict[str, Any]
+    acquisition_params: dict[str, Any],
+    random_state: int | None = None,
+    cycle_idx: int | None = None,
 ) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.
@@ -679,6 +682,13 @@ def _select_compounds(
         batch_size: Number of compounds to select
         score_direction: 'higher' or 'lower'
         acquisition_params: Strategy-specific parameters
+        random_state: Base seed forwarded from ``run_active_learning``. Used to
+            derive a per-cycle stochastic-acquisition seed when the user has
+            not explicitly supplied ``acquisition_params['random_state']``.
+        cycle_idx: Cycle index (0-based) used as the second component of the
+            per-cycle seed derivation. Required for the per-cycle derivation to
+            actually vary across cycles; ``None`` falls back to direct use of
+            ``random_state``.
 
     Returns:
         DataFrame with selected compounds
@@ -687,6 +697,8 @@ def _select_compounds(
         ValueError: Unknown strategy or missing requirements
         RuntimeError: Selection failures
     """
+    import inspect as _inspect
+
     from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
 
     # Get acquisition class
@@ -700,6 +712,22 @@ def _select_compounds(
             f"Basic strategies (any learner): greedy, random, topk. "
             f"Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy."
         ) from None
+
+    # Per-cycle seed derivation. Inject a deterministic but cycle-distinct
+    # random_state into acquisition_params only if (a) the acquisition class
+    # accepts random_state and (b) the user has not already supplied one.
+    if (
+        random_state is not None
+        and 'random_state' not in acquisition_params
+        and 'random_state' in _inspect.signature(acq_class).parameters
+    ):
+        if cycle_idx is not None:
+            acq_seed = int(
+                np.random.default_rng([random_state, cycle_idx]).integers(2**31)
+            )
+        else:
+            acq_seed = int(random_state)
+        acquisition_params = {**acquisition_params, 'random_state': acq_seed}
 
     # Note: current_best must be set from labeled data at cycle level, not predictions
     # This is handled in execute_cycle before calling _select_compounds
@@ -936,6 +964,7 @@ def _select_and_measure(
     score_direction: str,
     original_pool_size: int,
     oracle: Oracle,
+    random_state: int | None = None,
 ) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None]:
     """Compute batch size, run acquisition, measure via oracle, update master_df.
 
@@ -987,7 +1016,9 @@ def _select_and_measure(
         config.strategy,
         batch_size,
         score_direction,
-        acquisition_params
+        acquisition_params,
+        random_state=random_state,
+        cycle_idx=cycle,
     )
 
     selected_ids = selected_df['ID'].to_list()
