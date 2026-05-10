@@ -4,18 +4,14 @@ Logging formatters for LearnM8 active learning experiments.
 Provides clean, reusable formatting functions for console output including:
 - Cycle schedule presentation
 - Duration formatting
-- Rich metrics tables
 - Experiment summaries
 
 All functions return formatted strings suitable for logging at INFO level.
 """
 
 import logging
-from typing import Any
 
 import polars as pl
-
-from learnm8.utils.logging import format_change_indicator
 
 logger = logging.getLogger(__name__)
 
@@ -96,123 +92,6 @@ def format_duration(seconds: float) -> str:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         return f"{hours} hours {minutes} minutes"
-
-
-def format_cycle_metrics_table(
-	metrics: dict[str, Any],
-	oracle_type: str = 'auto',
-	previous_metrics: dict[str, Any] | None = None,
-	score_direction: str = 'higher'
-) -> str:
-	"""
-	Format cycle metrics as compact key-value lines with change indicators.
-
-	Creates clean multi-line output automatically adapting for benchmark vs run modes.
-	Uses colored arrows: [green]↑[/green] (improvement), [red]↓[/red] (worsening),
-	[yellow]→[/yellow] (stagnant) with Rich markup.
-
-	Args:
-		metrics: Metrics dictionary from evaluate_cycle
-		oracle_type: Oracle type for mode-specific formatting ('benchmark' or 'run')
-		previous_metrics: Previous cycle metrics for change indicators
-		score_direction: 'higher' or 'lower' - indicates optimization direction
-
-	Returns:
-		Formatted string for console output with Rich markup
-
-	Note:
-		This function provides mode-aware display:
-		- Benchmark mode: Shows Discovery (2 rows), Ranking, and Selection metrics
-		- Run mode: Shows only Selection metrics
-	"""
-	lines = []
-
-	cycle = metrics.get('cycle', '?')
-	batch_size = metrics.get('batch_size', '?')
-	cumulative_labeled = metrics.get('cumulative_labeled', '?')
-	is_benchmark = (oracle_type == 'benchmark')
-
-	# Metrics where lower is better (error metrics).
-	bad_metrics = {'rmse', 'mae', 'mse'}
-	# Add avg_score_selected to bad_metrics if score_direction is 'lower'
-	if score_direction == 'lower':
-		bad_metrics = bad_metrics | {'avg_score_selected'}
-
-	def get_change(key: str, current_val: float, is_pct: bool = False) -> str:
-		"""Return Rich-markup colored change indicator with stagnation support."""
-		if previous_metrics is None or key not in previous_metrics:
-			return ""
-
-		prev_val = previous_metrics.get(key)
-		if prev_val is None or current_val is None:
-			return ""
-
-		try:
-			diff = float(current_val) - float(prev_val)
-		except (ValueError, TypeError):
-			return ""
-
-		if is_pct or 'discovery' in key or 'overlap' in key:
-			stagnation_threshold = 1.0
-		else:
-			stagnation_threshold = 0.01
-
-		is_higher_better = key not in bad_metrics
-		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
-
-		symbol, color = format_change_indicator(
-			diff, is_improvement, style='arrow',
-			stagnation_threshold=stagnation_threshold
-		)
-		return f"[{color}]{symbol}[/{color}]"
-
-	def format_metric(key: str, label: str, digits: int = 1, is_pct: bool = False) -> str:
-		"""Format a single metric with optional change indicator."""
-		val = metrics.get(key)
-		if val is None:
-			return f"{label}:N/A"
-
-		change = get_change(key, val, is_pct)
-		if is_pct:
-			return f"{label}:{val:.{digits}f}%{change}"
-		else:
-			return f"{label}:{val:.{digits}f}{change}"
-
-	# Header
-	lines.append(f"Cycle {cycle} | {batch_size} selected | {cumulative_labeled} labeled")
-	lines.append("─" * 60)
-
-	if is_benchmark:
-		# Discovery metrics - split into two rows
-		discovery_row1 = [
-			format_metric('top_10_discovery', 'Top10', 1, True),
-			format_metric('top_100_discovery', 'Top100', 1, True),
-			format_metric('top_1000_discovery', 'Top1K', 1, True),
-		]
-		discovery_row2 = [
-			format_metric('top_0_1_pct_discovery', 'Top0.1%', 1, True),
-			format_metric('top_1_pct_discovery', 'Top1%', 1, True),
-		]
-		lines.append(f"Discovery │ {' '.join(discovery_row1)}")
-		lines.append(f"          │ {' '.join(discovery_row2)}")
-
-		# Ranking line
-		ranking_parts = [
-			format_metric('unlabeled_spearman_correlation', 'Spearman', 3, False),
-			format_metric('unlabeled_ef_1_0', 'EF@1%', 2, False),
-			format_metric('unlabeled_ef_5_0', 'EF@5%', 2, False),
-		]
-		lines.append(f"Ranking   │ {' '.join(ranking_parts)}")
-
-	# Selection line
-	selection_parts = [format_metric('avg_score_selected', 'Avg', 2, False)]
-
-	if metrics.get('uncertainty_mean') is not None:
-		selection_parts.append(format_metric('uncertainty_mean', 'Unc', 3, False))
-
-	lines.append(f"Selection │ {' '.join(selection_parts)}")
-
-	return "\n".join(lines)
 
 
 def format_experiment_summary(

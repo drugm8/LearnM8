@@ -51,7 +51,6 @@ from learnm8.exceptions import (
     PruningError,
 )
 from learnm8.features.extraction import extract_features
-from learnm8.utils.logging_formatters import format_cycle_metrics_table
 
 logger = logging.getLogger(__name__)
 
@@ -621,23 +620,16 @@ def execute_cycle(
     metrics['parquet_path'] = parquet_path
     metrics['selected_predictions'] = selected_predictions
 
-    # Step 15: Display Rich Metrics Table
-    try:
-        metrics_table = format_cycle_metrics_table(
-            metrics=metrics,
-            oracle_type=mode,
-            previous_metrics=previous_metrics,
-            score_direction=score_direction
-        )
-
-        if metrics_table:
-            # Disable highlighter to prevent Rich from overriding our markup colors
-            logger.info("\n" + metrics_table, extra={"highlighter": None})
-
-    except ImportError:
-        logger.debug("Rich not installed, skipping metrics table display")
-    except (ValueError, RuntimeError, TypeError) as e:
-        logger.debug(f"Failed to display metrics table: {e}")
+    # Step 15: Log Cycle Metrics
+    parts = []
+    for key, val in metrics.items():
+        if key in ('parquet_path', 'selected_predictions'):
+            continue
+        if isinstance(val, float):
+            parts.append(f"{key}={val:.4f}")
+        else:
+            parts.append(f"{key}={val}")
+    logger.info(f"Cycle {cycle} metrics: " + ", ".join(parts))
 
     # Step 16: Return Results
     total_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
