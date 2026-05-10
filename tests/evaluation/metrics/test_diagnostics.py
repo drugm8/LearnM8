@@ -107,7 +107,7 @@ class TestPredictionEntropy:
     """Unit tests for compute_prediction_entropy."""
 
     def test_uniform_predictions_high_entropy(self):
-        # Predictions spread uniformly → entropy ≈ log2(n_bins).
+        # Feature 019: units changed bits → nats. Uniform predictions → entropy ≈ log(n_bins) (nats).
         rng = np.random.default_rng(0)
         pool = pl.DataFrame({
             'ID': [f'm{i}' for i in range(10_000)],
@@ -116,8 +116,8 @@ class TestPredictionEntropy:
         result = compute_prediction_entropy(pool, cumulative_selected_ids=set(),
                                             n_bins=50)
         assert result is not None
-        # log2(50) ≈ 5.64. Allow generous tolerance for sampling noise.
-        assert result == pytest.approx(math.log2(50), abs=0.2)
+        # log(50) ≈ 3.91 (nats). Allow generous tolerance for sampling noise.
+        assert result == pytest.approx(math.log(50), abs=0.2)
 
     def test_all_identical_predictions_low_entropy(self):
         # All predictions equal → density histogram has all mass in one bin.

@@ -57,17 +57,21 @@ class TestTanimotoKernel:
         np.testing.assert_allclose(diag, 1.0, atol=1e-15)
 
     def test_zero_vector_handling(self, kernel, X_with_zero):
+        # Feature 019 FR-014: zero-zero diagonal returns signal_variance=1.0
+        # (canonical k(x,x)=1 identity); cross-terms with non-zero rows still 0.
         K = kernel(X_with_zero)
         assert np.all(np.isfinite(K))
         assert K[1, 0] == 0.0
         assert K[0, 1] == 0.0
-        assert K[1, 1] == 0.0
+        assert K[1, 1] == 1.0  # zero-zero pair → signal_variance, was 0.0
         assert K[1, 2] == 0.0
 
     def test_zero_vector_diag(self, kernel, X_with_zero):
+        # Feature 019 FR-014: diag returns signal_variance for every row,
+        # including zero-vector rows (was 0.0 before; caused LinAlgError).
         diag = kernel.diag(X_with_zero)
         assert diag[0] == pytest.approx(1.0)
-        assert diag[1] == 0.0
+        assert diag[1] == pytest.approx(1.0)
         assert diag[2] == pytest.approx(1.0)
 
     def test_eval_gradient_shape(self, kernel, X_binary):

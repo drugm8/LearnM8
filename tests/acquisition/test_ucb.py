@@ -99,5 +99,8 @@ class TestUCBAcquisition:
             [0.1, np.nan, 0.3, 0.4, 0.5],
         )
 
-        with pytest.raises(ValueError, match='Uncertainties contain'):
+        # Feature 019: NaN at acquisition layer hits the defence-in-depth
+        # secondary guard (LearnerError); cycle.py is the canonical fail-fast.
+        from learnm8.exceptions import LearnerError
+        with pytest.raises(LearnerError, match=r"\[secondary-guard\] Uncertainties contain"):
             UCBAcquisition().select(compounds, n_select=2)

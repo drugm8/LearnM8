@@ -12,6 +12,7 @@ import polars as pl
 
 from learnm8.exceptions import (
     AcquisitionError,
+    LearnerError,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,14 +133,19 @@ class AcquisitionFunction(ABC):
             logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
                          f"will select all {len(compounds)} available compounds")
 
-        # Check for NaN/null values in predictions — single combined pass (not 4 passes)
+        # FR-005 ext (Should-Fix #7): defence-in-depth check using `if/raise
+        # LearnerError` so it survives `python -O` (where bare `assert` is
+        # stripped). The canonical NaN guard is in core/cycle.py immediately
+        # after learner.predict(). This branch only fires if the caller
+        # bypasses cycle.py (e.g., direct .select() from a notebook).
         pred_col = compounds.get_column('prediction')
         null_or_nan = pred_col.is_null() | pred_col.is_nan()
         if null_or_nan.any():
-            raise ValueError(
-                f"Predictions contain NaN values: found {null_or_nan.sum()} NaN/null values out of {len(compounds)} compounds. "
-                f"This may indicate a featurizer or learner issue. "
-                f"Check that all SMILES are valid and the model trained successfully."
+            raise LearnerError(
+                f"[secondary-guard] Predictions contain NaN values: found "
+                f"{null_or_nan.sum()} NaN/null values out of {len(compounds)} compounds. "
+                f"cycle.py upstream guard should have caught this — did the caller "
+                f"bypass cycle.py (direct .select() from notebook)?"
             )
 
         # Check for duplicate IDs — skipped on internal call path where uniqueness is guaranteed
@@ -155,11 +161,13 @@ class AcquisitionFunction(ABC):
         # Check uncertainty values if present
         if 'uncertainty' in compounds.columns:
             unc_col = compounds.get_column('uncertainty')
+            # FR-005 ext (Should-Fix #7): defence-in-depth secondary guard.
             if unc_col.is_null().any() or unc_col.is_nan().any():
                 nan_count = unc_col.is_null().sum() + unc_col.is_nan().sum()
-                raise ValueError(
-                    f"Uncertainties contain {nan_count} NaN/null values out of {len(compounds)} compounds. "
-                    f"This may indicate an issue with the uncertainty estimation in the learner."
+                raise LearnerError(
+                    f"[secondary-guard] Uncertainties contain {nan_count} NaN/null values "
+                    f"out of {len(compounds)} compounds. cycle.py upstream guard should "
+                    f"have caught this — direct .select() bypassing cycle.py?"
                 )
 
             if (unc_col < 0).any():
@@ -206,14 +214,16 @@ class AcquisitionFunction(ABC):
 
         if ascending:
             if actual_n_select >= n:
-                top_indices = np.argsort(scores)
+                # FR-015 ext (Should-Fix #8): kind='stable' for deterministic
+                # ties on the full-sort branch.
+                top_indices = np.argsort(scores, kind='stable')
             else:
                 # O(n) partition + O(k log k) sort with index-stable tie-breaking
                 top_indices = np.argpartition(scores, actual_n_select - 1)[:actual_n_select]
                 top_indices = top_indices[np.lexsort((top_indices, scores[top_indices]))]
         else:
             if actual_n_select >= n:
-                top_indices = np.argsort(scores)[::-1]
+                top_indices = np.argsort(scores, kind='stable')[::-1]
             else:
                 # O(n) partition + O(k log k) sort with index-stable tie-breaking
                 top_indices = np.argpartition(scores, -actual_n_select)[-actual_n_select:]
@@ -263,20 +273,10 @@ def validate_uncertainty_inputs(compounds: pl.DataFrame) -> tuple[np.ndarray, np
     predictions = compounds.get_column('prediction').to_numpy()
     uncertainties = compounds.get_column('uncertainty').to_numpy()
 
-    # Check for NaN values
-    if np.any(np.isnan(predictions)):
-        nan_count = int(np.isnan(predictions).sum())
-        raise AcquisitionError(
-            f"Predictions contain {nan_count} NaN values out of {len(predictions)} compounds. "
-            f"Check that the learner trained successfully and all SMILES are valid."
-        )
-
-    if np.any(np.isnan(uncertainties)):
-        nan_count = int(np.isnan(uncertainties).sum())
-        raise AcquisitionError(
-            f"Uncertainties contain {nan_count} NaN values out of {len(uncertainties)} compounds. "
-            f"This may indicate an issue with the uncertainty estimation in the learner."
-        )
+    # NaN guards live upstream in core/cycle.py (FR-005 single source of truth);
+    # the acquisition-level secondary guards in validate_input + assert_no_nan
+    # cover the bypass-cycle.py case. Re-checking here would mean ~3 extra
+    # full-array scans per acquisition call on the canonical (clean) path.
 
     # Check for negative uncertainties
     if np.any(uncertainties < 0):

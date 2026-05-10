@@ -51,6 +51,10 @@ from learnm8.exceptions import (
     PruningError,
 )
 from learnm8.features.extraction import extract_features
+from learnm8.utils.numerical import (
+    assert_no_inf_uncertainty,
+    assert_no_nan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +239,15 @@ def execute_cycle(
         cycle_predictions['uncertainty'].to_numpy()
         if 'uncertainty' in cycle_predictions.columns else None
     )
+
+    # FR-005 (019): single-source-of-truth NaN/Inf guard immediately after prediction.
+    # `valid_compound_ids` is passed lazily; numerical.py only materialises it on the
+    # error path, so the canonical clean path pays no per-cycle Python-list cost.
+    valid_compound_ids = cycle_predictions['ID'].to_list()
+    assert_no_nan(predictions, valid_compound_ids, "predictions")
+    if uncertainties is not None:
+        assert_no_nan(uncertainties, valid_compound_ids, "uncertainties")
+        assert_no_inf_uncertainty(uncertainties, valid_compound_ids)
 
     parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
 

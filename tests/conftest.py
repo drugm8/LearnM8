@@ -10,6 +10,11 @@ Fixtures are organized into domain-specific modules in tests/fixtures/:
 All fixtures are automatically available to tests via pytest's fixture discovery.
 """
 
+from typing import Final
+
+import numpy as np
+import pytest
+
 # Register fixture plugins from fixtures/ directory
 pytest_plugins = [
     "tests.fixtures.molecules",
@@ -22,7 +27,33 @@ pytest_plugins = [
 ]
 
 
-import pytest
+RNG_SEED: Final[int] = 19_2026
+
+
+@pytest.fixture
+def rng() -> np.random.Generator:
+    """Deterministic NumPy generator seeded with RNG_SEED for property tests."""
+    return np.random.default_rng(RNG_SEED)
+
+
+@pytest.fixture
+def synthetic_mu_sigma(rng: np.random.Generator):
+    """Factory yielding (mu, sigma) pairs of arbitrary length, including σ=0 corners.
+
+    Returns a callable: f(n: int, include_zero_sigma: bool = True) -> (mu, sigma).
+    """
+    def _make(n: int, include_zero_sigma: bool = True):
+        mu = rng.normal(loc=0.0, scale=5.0, size=n)
+        sigma = np.abs(rng.normal(loc=1.0, scale=0.5, size=n))
+        if include_zero_sigma and n >= 5:
+            sigma[0] = 0.0
+            sigma[1] = 0.0
+            sigma[2] = 1e-300
+            sigma[3] = 1e-12
+        return mu, sigma
+
+    return _make
+
 
 SPEED_MARKERS = {"unit", "integration", "slow"}
 
