@@ -21,49 +21,6 @@ def validate_csv_columns(df: pl.DataFrame, required_columns: list, file_descript
         )
 
 
-def load_benchmark_data(data_path: str, target_col: str) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """
-    Load data for benchmark mode from single file (CSV/SDF/SMI).
-
-    Args:
-        data_path: Path to compound file (CSV/SDF/SMI)
-        target_col: Name of target column
-
-    Returns:
-        Tuple of (compound_pool_df, ground_truth_df)
-    """
-    data_path = Path(data_path)
-    if not data_path.exists():
-        raise FileNotFoundError(f"Data file not found: {data_path}")
-
-    # Load the data using multi-format loader
-    df = load_compound_file(data_path, progress=False)
-
-    # Validate required columns
-    required_columns = ['ID', 'SMILES', target_col]
-    validate_csv_columns(df, required_columns, "Benchmark data file")
-
-    # Check for optional Activity column
-    has_activity = 'Activity' in df.columns
-    if has_activity:
-        logger.info("Found Activity column - enrichment calculations will be performed")
-        # Validate Activity column is binary
-        unique_values = df.get_column('Activity').drop_nulls().unique().to_list()
-        if not set(unique_values).issubset({0, 1}):
-            logger.warning("Activity column should contain only 0 and 1, found: %s", unique_values)
-    else:
-        logger.info("No Activity column found - enrichment calculations will be skipped")
-
-    # For benchmark mode, compound pool and ground truth are the same
-    compound_pool = df.select(['ID', 'SMILES'])
-    ground_truth = df.clone()
-
-    logger.info("Loaded %d compounds for benchmarking", len(df))
-    logger.info("Target column: %s", target_col)
-
-    return compound_pool, ground_truth
-
-
 def load_run_data(compounds_path: str, oracle_path: str) -> pl.DataFrame:
     """
     Load data for run mode with separate compound pool.
