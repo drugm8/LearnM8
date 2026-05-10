@@ -400,7 +400,6 @@ def run_active_learning(
     device: str = 'auto',
     # Diversity metrics (feature 013)
     disable_molecular_similarity: bool | Iterable[str] = False,
-    **kwargs
 ) -> dict[str, Any]:
     """Execute active learning experiment.
 
@@ -524,8 +523,6 @@ def run_active_learning(
         memory_safety_factor: Fraction of available memory to use for prediction
             batching (0.0, 1.0]. Default 0.7. Higher values use more memory for
             larger batches. Use 0.85 on dedicated hardware, 0.5 on shared clusters.
-
-        **kwargs: Additional parameters passed to cycle execution
 
     Returns:
         Dictionary with:
@@ -847,19 +844,18 @@ def run_active_learning(
             if pruning_fraction is not None:
                 pruning_params['pruning_fraction'] = pruning_fraction
 
-            kwargs['pruning_strategy'] = pruning_strategy
-            kwargs['pruning_params'] = pruning_params
-
             fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
             logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
 
-        if acquisition_params is not None:
-            kwargs['acquisition_params'] = acquisition_params
-
         cycle_schedule = parse_cycle_schedule(
-            cycles, strategy, n_cycles, batch_fraction,
-            initial_strategy,
-            **kwargs
+            cycles=cycles,
+            strategy=strategy,
+            n_cycles=n_cycles,
+            batch_fraction=batch_fraction,
+            initial_strategy=initial_strategy,
+            acquisition_params=acquisition_params,
+            pruning_strategy=pruning_strategy,
+            pruning_params=pruning_params,
         )
 
         if len(cycle_schedule) == 0:
