@@ -16,46 +16,38 @@ from learnm8.exceptions import (
     PruningError,
     LearnM8Warning,
     ConvergenceWarning,
-    DataConversionWarning,
 )
 
 pytestmark = [pytest.mark.unit]
 
 EXCEPTION_SPECS = [
-    (LearnM8Error,         Exception,    None),
-    (ConfigurationError,   ValueError,   None),
-    (ValidationError,      ValueError,   ("err",)),
-    (FeatureExtractionError, RuntimeError, None),
-    (LearnerError,         RuntimeError, None),
-    (AcquisitionError,     RuntimeError, None),
-    (OracleError,          RuntimeError, None),
-    (PersistenceError,     OSError,       None),
-    (PruningError,         RuntimeError, None),
+    (LearnM8Error, None),
+    (ConfigurationError, None),
+    (ValidationError, ("err",)),
+    (FeatureExtractionError, None),
+    (LearnerError, None),
+    (AcquisitionError, None),
+    (OracleError, None),
+    (PersistenceError, None),
+    (PruningError, None),
 ]
 
 
 class TestExceptionHierarchy:
 
-    @pytest.mark.parametrize("exc_class,stdlib_base,_", EXCEPTION_SPECS)
-    def test_inheritance(self, exc_class, stdlib_base, _):
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_inheritance(self, exc_class, args):
         assert issubclass(exc_class, LearnM8Error)
-        assert issubclass(exc_class, stdlib_base)
 
-    @pytest.mark.parametrize("exc_class,stdlib_base,_", EXCEPTION_SPECS)
-    def test_isinstance(self, exc_class, stdlib_base, _):
-        exc = exc_class("test")
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_isinstance(self, exc_class, args):
+        exc = exc_class(*(args or ("test",)))
         assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, stdlib_base)
         assert isinstance(exc, Exception)
 
-    @pytest.mark.parametrize("exc_class,stdlib_base,args", EXCEPTION_SPECS)
-    def test_catchable_as_learnm8error(self, exc_class, stdlib_base, args):
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_catchable_as_learnm8error(self, exc_class, args):
         with pytest.raises(LearnM8Error):
-            raise exc_class(*(args or ("test",)))
-
-    @pytest.mark.parametrize("exc_class,stdlib_base,args", EXCEPTION_SPECS)
-    def test_catchable_as_stdlib(self, exc_class, stdlib_base, args):
-        with pytest.raises(stdlib_base):
             raise exc_class(*(args or ("test",)))
 
     def test_learnm8error_instantiation(self):
@@ -85,19 +77,16 @@ class TestValidationErrorAttributes:
 
 
 WARNING_SPECS = [
-    (LearnM8Warning,      UserWarning, None),
-    (ConvergenceWarning,  LearnM8Warning, UserWarning),
-    (DataConversionWarning, LearnM8Warning, UserWarning),
+    (LearnM8Warning, UserWarning),
+    (ConvergenceWarning, LearnM8Warning),
 ]
 
 
 class TestWarningHierarchy:
 
-    @pytest.mark.parametrize("warn_class,parent1,parent2", WARNING_SPECS)
-    def test_inheritance(self, warn_class, parent1, parent2):
-        assert issubclass(warn_class, parent1)
-        if parent2:
-            assert issubclass(warn_class, parent2)
+    @pytest.mark.parametrize("warn_class,parent", WARNING_SPECS)
+    def test_inheritance(self, warn_class, parent):
+        assert issubclass(warn_class, parent)
 
     def test_captured_by_warnings_module(self):
         with warnings.catch_warnings(record=True) as w:
@@ -121,7 +110,7 @@ class TestImportPaths:
             LearnM8Error, ConfigurationError, ValidationError,
             FeatureExtractionError, LearnerError, AcquisitionError,
             OracleError, PersistenceError, PruningError,
-            LearnM8Warning, ConvergenceWarning, DataConversionWarning,
+            LearnM8Warning, ConvergenceWarning,
         )
 
     def test_import_from_exceptions_module(self):

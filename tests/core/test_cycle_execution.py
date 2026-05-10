@@ -8,6 +8,8 @@ import pytest
 import numpy as np
 import pandas as pd
 import polars as pl
+
+from learnm8.exceptions import LearnerError
 from unittest.mock import Mock
 
 from learnm8.core.cycle import execute_cycle
@@ -359,7 +361,7 @@ class TestCycleExecution:
         config = CycleConfig(strategy='greedy', batch_fraction=0.5)
 
         # Cycle 0 should raise error if no labeled compounds (this validates initialization check)
-        with pytest.raises(RuntimeError, match="No labeled compounds available"):
+        with pytest.raises(LearnerError, match="No labeled compounds available"):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=0,
