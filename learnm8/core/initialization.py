@@ -97,7 +97,7 @@ def calculate_initialization_metrics(
     target_col: str,
     strategy: str,
     score_direction: str,
-    mode: str,
+    oracle_type: str,
     original_pool: pl.DataFrame | None = None,
     cumulative_selected_ids: set[str] | None = None,
     run_cache: 'RunCache | None' = None,
@@ -120,7 +120,7 @@ def calculate_initialization_metrics(
         target_col: Target property column name
         strategy: Acquisition strategy used (typically 'random')
         score_direction: 'higher' or 'lower' for optimization
-        mode: 'run' or 'benchmark' execution mode
+        oracle_type: 'run' or 'benchmark' oracle type
         original_pool: Full original pool (required for benchmark mode)
         cumulative_selected_ids: Set of all selected IDs (for discovery metrics)
 
@@ -186,7 +186,7 @@ def calculate_initialization_metrics(
     # (FR-004 / FR-012) are mode-agnostic so the metric path runs in BOTH
     # benchmark and run modes; the benchmark-only metrics (discovery, EFs)
     # remain inside the inner conditional in evaluate_cycle.
-    if original_pool is not None or mode != 'benchmark':
+    if original_pool is not None or oracle_type != 'benchmark':
         try:
             from learnm8.evaluation import evaluate_cycle
 
@@ -213,7 +213,7 @@ def calculate_initialization_metrics(
                 labeled_data=labeled_for_eval,
                 selected_compounds=selected_for_eval,
                 target_col=target_col,
-                oracle_type=mode,
+                oracle_type=oracle_type,
                 ground_truth_data=original_pool,
                 uncertainties=None,
                 cumulative_selected_compounds=cumulative_selected_compounds,
@@ -249,7 +249,7 @@ def select_initial_batch(
     random_state: int = 42,
     acquisition_params: dict | None = None,
     score_direction: str = 'higher',
-    mode: str = 'run',
+    oracle_type: str = 'run',
     original_pool: pl.DataFrame | None = None,
     run_cache: 'RunCache | None' = None,
     featurizer_obj: Any = None,
@@ -272,7 +272,7 @@ def select_initial_batch(
         random_state: Random seed for reproducibility
         acquisition_params: Optional parameters for acquisition function
         score_direction: 'higher' or 'lower' for optimization (default: 'higher')
-        mode: 'run' or 'benchmark' execution mode (default: 'run')
+        oracle_type: 'run' or 'benchmark' oracle type (default: 'run')
         original_pool: Full original pool (required for benchmark mode metrics)
 
     Returns:
@@ -295,7 +295,7 @@ def select_initial_batch(
         ...     cache_dir=Path('.cache'),
         ...     original_pool_size=10000,
         ...     score_direction='higher',
-        ...     mode='benchmark',
+        ...     oracle_type='benchmark',
         ...     original_pool=original_df
         ... )
     """
@@ -420,7 +420,7 @@ def select_initial_batch(
         target_col=target_col,
         strategy=strategy,
         score_direction=score_direction,
-        mode=mode,
+        oracle_type=oracle_type,
         original_pool=original_pool,
         cumulative_selected_ids=cumulative_selected_ids,
         run_cache=run_cache,

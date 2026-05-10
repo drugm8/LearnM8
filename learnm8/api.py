@@ -51,7 +51,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable
 
 import polars as pl
 
@@ -292,14 +292,14 @@ def _create_learner(
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
-    mode: str
+    oracle_type: str
 ) -> dict[str, Any]:
     """Calculate aggregate metrics across all cycles.
 
     Args:
         all_metrics: List of cycle metrics dictionaries
         compounds_df: Final master DataFrame
-        mode: Execution mode ('run' or 'benchmark')
+        oracle_type: Oracle type ('run' or 'benchmark')
 
     Returns:
         Dictionary with aggregate metrics
@@ -322,7 +322,7 @@ def _calculate_aggregate_metrics(
         best_cycle = next((i for i, m in enumerate(all_metrics) if m.get('best_so_far') == best_values[-1]), None)
         agg['best_compound_found_cycle'] = best_cycle
 
-    if mode == 'benchmark':
+    if oracle_type == 'benchmark':
         top10_disc_values = [m.get('top_10_discovery') for m in all_metrics if m.get('top_10_discovery') is not None]
         if top10_disc_values:
             agg['final_top_10_discovery'] = top10_disc_values[-1]
@@ -381,7 +381,7 @@ def run_active_learning(
     initial_strategy: str = 'random',
     # Common parameters
     score_direction: str = 'higher',
-    mode: Literal['run', 'benchmark'] | None = None,
+
     output_dir: str | Path | None = None,
     cache_dir: str | Path | None = None,
     random_state: int = 42,
@@ -498,15 +498,6 @@ def run_active_learning(
 
         score_direction: Optimization direction ('higher' or 'lower')
 
-        mode: Execution mode:
-            - None: Auto-detect from oracle type
-            - 'run': Production screening (basic metrics only, no ground truth needed)
-            - 'benchmark': Evaluation (includes discovery/ranking metrics using ground truth)
-
-            Note: Both modes predict on unlabeled compounds only. The difference is in
-            metric computation: benchmark mode calculates additional discovery and ranking
-            metrics using the ground truth reference (original_pool).
-
         output_dir: Output directory path
             If None, auto-generates timestamped directory
 
@@ -558,8 +549,8 @@ def run_active_learning(
         **Oracle Auto-Detection:**
         - When oracle=None and compound_pool is a CSV path → uses that CSV as benchmark oracle
         - When oracle=None and compound_pool is a DataFrame → raises error (oracle required)
-        - CSV oracle files automatically trigger benchmark mode
-        - Python function oracles (module.py:function) automatically trigger run mode
+        - CSV oracle files → benchmark mode (includes discovery/ranking metrics)
+        - Python function oracles (module.py:function) → run mode (basic metrics only)
 
         **Other Notes:**
         - Pruning is enabled automatically if pruning_fraction is provided
@@ -634,15 +625,11 @@ def run_active_learning(
                 f"Ensure your data has 'ID' (unique identifier) and 'SMILES' (molecular structure) columns."
             )
 
-        mode_detected = False
-
         if oracle is None:
             logger.debug("Oracle not provided, attempting auto-detection from compound_pool")
             if original_compound_pool_path is not None:
                 oracle = CSVOracle(str(original_compound_pool_path), id_column=id_column or 'ID')
-                mode = 'benchmark'
-                mode_detected = True
-                logger.debug("Auto-detected CSV oracle from compound pool, mode=benchmark")
+                logger.debug("Auto-detected CSV oracle from compound pool")
             else:
                 raise ValueError(
                     "Oracle is required when compound_pool is a DataFrame. "
@@ -654,10 +641,7 @@ def run_active_learning(
             oracle_path = Path(oracle)
             if oracle_path.suffix == '.csv':
                 oracle = CSVOracle(str(oracle_path))
-                if mode is None:
-                    mode = 'benchmark'
-                    mode_detected = True
-                logger.debug(f"Using CSV oracle: {oracle_path}, mode={mode}")
+                logger.debug(f"Using CSV oracle: {oracle_path}")
             else:
                 if ':' not in str(oracle):
                     raise ValueError(
@@ -668,28 +652,17 @@ def run_active_learning(
                 module_path, function_name = str(oracle).split(':', 1)
                 from learnm8.oracles.python_oracle import PythonOracle
                 oracle = PythonOracle(module_path, function_name)
-                if mode is None:
-                    mode = 'run'
-                    mode_detected = True
-                logger.debug(f"Using Python oracle: {module_path}:{function_name}, mode={mode}")
+                logger.debug(f"Using Python oracle: {module_path}:{function_name}")
         elif isinstance(oracle, Oracle):
             logger.debug(f"Using provided oracle instance: {oracle.__class__.__name__}")
-            if mode is None:
-                mode = 'run'
         elif isinstance(oracle, pl.DataFrame):
-            # DataFrame oracle for benchmark mode (in-memory)
             logger.debug("Creating in-memory oracle from DataFrame")
-            # Note: CSVOracle already imported at module level
-            # Save to temp file for CSVOracle
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
                 temp_oracle_path = Path(f.name)
                 oracle.write_csv(temp_oracle_path)
             oracle = CSVOracle(str(temp_oracle_path))
-            if mode is None:
-                mode = 'benchmark'
-                mode_detected = True
-            logger.debug(f"Created CSV oracle from DataFrame, mode={mode}")
+            logger.debug("Created CSV oracle from DataFrame")
         else:
             raise TypeError(
                 f"oracle must be None, str, Path, DataFrame, or Oracle instance, "
@@ -698,14 +671,7 @@ def run_active_learning(
                 f"or pass an Oracle instance."
             )
 
-        logger.debug(f"Detected {mode} mode (oracle type: {type(oracle).__name__})")
-
-        if mode is None:
-            mode = 'run'
-        elif mode_detected:
-            pass
-        else:
-            pass
+        oracle_type: str = 'benchmark' if isinstance(oracle, CSVOracle) else 'run'
 
         if isinstance(learner, str):
             learner_str = learner
@@ -904,7 +870,7 @@ def run_active_learning(
             f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
         )
 
-        original_pool = validation_result.valid_compounds.clone() if mode == 'benchmark' else None
+        original_pool = validation_result.valid_compounds.clone() if oracle_type == 'benchmark' else None
         original_pool_size = len(validation_result.valid_compounds)
 
         compounds_df, cycle_0_metrics = select_initial_batch(
@@ -919,7 +885,7 @@ def run_active_learning(
             random_state=random_state,
             acquisition_params=init_config.acquisition_params,
             score_direction=score_direction,
-            mode=mode,
+            oracle_type=oracle_type,
             original_pool=original_pool,
             run_cache=run_cache,
             featurizer_obj=featurizer_obj,
@@ -976,7 +942,7 @@ def run_active_learning(
                     cache_dir=cache_dir,
                     original_pool_size=original_pool_size,
                     score_direction=score_direction,
-                    mode=mode,
+            oracle_type=oracle_type,
                     original_pool=original_pool,
                     cumulative_selected_ids=cumulative_selected_ids,
                     memory_safety_factor=memory_safety_factor,
@@ -1020,7 +986,7 @@ def run_active_learning(
                 raise err from e
 
         logger.debug("Calculating aggregate metrics")
-        aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)
+        aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, oracle_type)
 
         if aggregate_metrics:
             logger.debug("Aggregate metrics:")
@@ -1044,7 +1010,7 @@ def run_active_learning(
             'target_col': target_col,
             'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
             'score_direction': score_direction,
-            'mode': mode,
+            'oracle_type': oracle_type,
             'n_cycles': len(all_metrics),
             'random_state': random_state,
             'learner': learner.__class__.__name__,
