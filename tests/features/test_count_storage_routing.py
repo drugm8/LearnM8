@@ -8,8 +8,9 @@ for backwards compatibility (REQ-4).
 
 from __future__ import annotations
 
-from learnm8.features import create_featurizer
 import pytest
+
+from learnm8.features import create_featurizer
 
 # (factory, expected_count_storage_dtype)
 COUNT_CSR_FEATURIZERS = [

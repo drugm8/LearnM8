@@ -9,7 +9,7 @@ import pytest
 
 from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import ConfigurationError
-from learnm8.features import create_featurizer, FEATURIZER_REGISTRY
+from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 from learnm8.features.base import SkfpFeaturizer
 from learnm8.features.cache import (
     ALLOWED_STORAGE_DTYPES,

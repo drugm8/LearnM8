@@ -1,9 +1,9 @@
 """Test configuration-aware HDF5 caching for featurizers."""
 
-from learnm8.features import create_featurizer
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
 
 
@@ -14,10 +14,10 @@ class TestConfigurationAwareCaching:
     def test_different_configs_use_different_cache_keys(
         self, small_real_compounds, tmp_path
     ):
-        """Different featurizer radii share the v2 cache file with distinct uint64 hash keys."""
+        """Different featurizer radii share the v3 cache file with distinct 128-bit hash keys."""
         import h5py
 
-        from learnm8.features.cache import _cache_keys_uint64
+        from learnm8.features.cache import _cache_keys_bytes16
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
         test_smiles = smiles[0]
@@ -40,8 +40,8 @@ class TestConfigurationAwareCaching:
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
             hash_index = h5f['hash_index'][:]
-            key1 = int(_cache_keys_uint64([test_smiles], featurizer1)[0])
-            key2 = int(_cache_keys_uint64([test_smiles], featurizer2)[0])
+            key1 = _cache_keys_bytes16([test_smiles], featurizer1)[0]
+            key2 = _cache_keys_bytes16([test_smiles], featurizer2)[0]
             assert key1 != key2
             assert key1 in hash_index
             assert key2 in hash_index
@@ -171,10 +171,10 @@ class TestCacheWithDifferentParameters:
             assert int(h5f.attrs['bit_count']) == 4096
 
     def test_cache_3d_conformer_params(self, small_real_compounds, tmp_path):
-        """Different USR conformer params share file with distinct uint64 hash keys."""
+        """Different USR conformer params share file with distinct 128-bit hash keys."""
         import h5py
 
-        from learnm8.features.cache import _cache_keys_uint64
+        from learnm8.features.cache import _cache_keys_bytes16
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:3]
         test_smiles = smiles[0]
@@ -191,8 +191,8 @@ class TestCacheWithDifferentParameters:
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
             hash_index = h5f['hash_index'][:]
-            key1 = int(_cache_keys_uint64([test_smiles], feat1)[0])
-            key2 = int(_cache_keys_uint64([test_smiles], feat2)[0])
+            key1 = _cache_keys_bytes16([test_smiles], feat1)[0]
+            key2 = _cache_keys_bytes16([test_smiles], feat2)[0]
             assert key1 != key2
             assert key1 in hash_index
             assert key2 in hash_index

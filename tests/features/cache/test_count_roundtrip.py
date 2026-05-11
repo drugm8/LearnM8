@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from learnm8.features import create_featurizer
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
 
 # SMILES chosen to produce repeated substructures so count fingerprints

@@ -1,11 +1,12 @@
 """Test featurizer integration with API and registry."""
 
-import pytest
+
 import numpy as np
-from pathlib import Path
-from learnm8.features.extraction import extract_features
-from learnm8.features import create_featurizer, FEATURIZER_REGISTRY
+import pytest
+
 from learnm8 import run_active_learning
+from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
+from learnm8.features.extraction import extract_features
 
 
 @pytest.mark.integration

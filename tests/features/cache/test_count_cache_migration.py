@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from learnm8.features import create_featurizer
 import h5py
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.cache import (
     DSET_FEATURES,
     DSET_HASH_INDEX,

@@ -49,7 +49,7 @@ from skfp.fingerprints import (
 )
 
 from learnm8.exceptions import ConfigurationError
-from learnm8.features.base import SkfpFeaturizer
+from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 from learnm8.features.extraction import extract_features
 
 __all__: list[str] = []
@@ -107,6 +107,7 @@ def _3d_defaults(**extra: Any) -> dict[str, Any]:
         'optimize_force_field': None,
         'n_jobs': -1,
         'verbose': 0,
+        'random_state': DEFAULT_3D_RANDOM_STATE,
     }
     d.update(extra)
     return d
@@ -521,16 +522,22 @@ def create_featurizer(name: str, **overrides: Any) -> SkfpFeaturizer:
 
     defaults.update(overrides)
 
+    # random_state lives on the SkfpFeaturizer wrapper (forwarded to
+    # ConformerGenerator), NOT on the scikit-fingerprints fingerprint instance.
+    # Keep it out of fp_kwargs so calls like USRFingerprint(random_state=...)
+    # don't fail with TypeError.
     conformer_keys = {
         'auto_generate_conformers',
         'num_conformers',
         'optimize_force_field',
+        'random_state',
     }
     fp_kwargs = {k: v for k, v in defaults.items() if k not in conformer_keys}
 
     auto_generate_conformers = defaults.get('auto_generate_conformers', False)
     num_conformers = defaults.get('num_conformers', 1)
     optimize_force_field = defaults.get('optimize_force_field')
+    random_state = defaults.get('random_state', DEFAULT_3D_RANDOM_STATE)
 
     conformer_params: dict[str, Any] = {}
     if num_conformers != 1:
@@ -555,6 +562,7 @@ def create_featurizer(name: str, **overrides: Any) -> SkfpFeaturizer:
         conformer_params=conformer_params if conformer_params else None,
         n_jobs=fp_kwargs.get('n_jobs', -1),
         verbose=fp_kwargs.get('verbose', 0),
+        random_state=random_state,
         storage_dtype=storage_dtype,
         feature_type=feature_type,
         fingerprint_name=name,
