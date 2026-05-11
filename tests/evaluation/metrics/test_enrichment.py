@@ -9,6 +9,8 @@ import pytest
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.enrichment import (
+    _count_actives_numpy,
+    _active_expr,
     calculate_enrichment_factor,
     calculate_multiple_enrichment_factors,
     calculate_multiple_top_k_discovery_rates,
@@ -18,6 +20,7 @@ from learnm8.evaluation.metrics.enrichment import (
     calculate_top_k_overlap,
     calculate_unlabeled_ranking_correlation,
 )
+from learnm8.exceptions import ValidationError
 
 
 @pytest.mark.unit
@@ -456,3 +459,47 @@ class TestUnlabeledRankingCorrelation:
         preds_df = pl.DataFrame({'ID': ids, 'prediction': [0.5, 0.5, 0.5, 0.5, 0.5]})
         gt_df = pl.DataFrame({'ID': ids, 'score': [1.0, 2.0, 3.0, 4.0, 5.0]})
         assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') is None
+
+
+@pytest.mark.unit
+class TestCountActives:
+    def test_numpy_standard_binary(self):
+        arr = np.array([0, 1, 0, 1, 0], dtype=np.int64)
+        assert _count_actives_numpy(arr) == 2
+
+    def test_numpy_float_encoding(self):
+        arr = np.array([0.0, 1.0, 0.0, 1.0, 0.0], dtype=np.float64)
+        assert _count_actives_numpy(arr) == 2
+
+    def test_numpy_boolean_encoding(self):
+        arr = np.array([True, False, True, True], dtype=bool)
+        assert _count_actives_numpy(arr) == 3
+
+    def test_numpy_neg_one_encoding_treats_neg_as_inactive(self):
+        arr = np.array([-1, 1, -1, 0, 1], dtype=np.int64)
+        assert _count_actives_numpy(arr) == 2
+
+    def test_numpy_non_numeric_raises(self):
+        arr = np.array(['active', 'inactive', 'active'])
+        with pytest.raises(ValidationError, match='non-numeric dtype'):
+            _count_actives_numpy(arr)
+
+    def test_polars_standard_binary(self):
+        df = pl.DataFrame({'Activity': [0, 1, 0, 1, 0]})
+        activated = df.filter(_active_expr('Activity', df))
+        assert activated.height == 2
+
+    def test_polars_float_encoding(self):
+        df = pl.DataFrame({'Activity': [0.0, 1.0, 0.0, 1.0, 0.0]})
+        activated = df.filter(_active_expr('Activity', df))
+        assert activated.height == 2
+
+    def test_polars_boolean_encoding(self):
+        df = pl.DataFrame({'Activity': [True, False, True, True]})
+        activated = df.filter(_active_expr('Activity', df))
+        assert activated.height == 3
+
+    def test_polars_non_numeric_raises(self):
+        df = pl.DataFrame({'Activity': ['active', 'inactive', 'active']})
+        with pytest.raises(ValidationError, match='non-numeric dtype'):
+            _active_expr('Activity', df)

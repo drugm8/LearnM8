@@ -8,9 +8,46 @@ from typing import Literal
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import ValidationError
 from learnm8.utils.logging import get_logger, log_warning
 
 ScoreDirection = Literal["higher", "lower"]
+
+_NUMERIC_DTYPES = (
+    pl.Int8, pl.Int16, pl.Int32, pl.Int64,
+    pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
+    pl.Float32, pl.Float64, pl.Boolean,
+)
+
+
+def _count_actives_numpy(activity_arr: np.ndarray) -> int:
+    """Count active compounds in a numpy array.
+
+    Activity is defined as value == 1 after coercion to integer.
+    Accepts numeric and boolean dtypes; raises ValidationError otherwise.
+    """
+    if activity_arr.dtype.kind not in ('i', 'u', 'f', 'b'):
+        raise ValidationError(
+            f"activity column has non-numeric dtype {activity_arr.dtype}; "
+            f"expected numeric (int/float) or boolean"
+        )
+    coerced = activity_arr.astype(np.int64, copy=False)
+    return int((coerced == 1).sum())
+
+
+def _active_expr(col_name: str, df: pl.DataFrame) -> pl.Expr:
+    """Return a Polars expression selecting active rows (value == 1 after int coercion).
+
+    Validates that the column has a numeric or boolean dtype; raises
+    ValidationError otherwise.
+    """
+    dtype = df.schema[col_name]
+    if not isinstance(dtype, _NUMERIC_DTYPES):
+        raise ValidationError(
+            f"activity column '{col_name}' has non-numeric dtype {dtype}; "
+            f"expected numeric (int/float) or boolean"
+        )
+    return pl.col(col_name).cast(pl.Int64, strict=False) == 1
 
 
 def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
@@ -386,11 +423,11 @@ def calculate_cumulative_enrichment_factor(
     if n_selected == 0:
         return None
 
-    n_actives_found = selected_df.filter(pl.col(activity_column) == 1).height
+    n_actives_found = selected_df.filter(_active_expr(activity_column, selected_df)).height
 
     # Population
     n_total = len(ground_truth_df)
-    n_actives_total = ground_truth_df.filter(pl.col(activity_column) == 1).height
+    n_actives_total = ground_truth_df.filter(_active_expr(activity_column, ground_truth_df)).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -427,7 +464,7 @@ def calculate_batch_hit_rate(
     if n_batch == 0:
         return None
 
-    n_actives_batch = newly_selected_df.filter(pl.col(activity_column) == 1).height
+    n_actives_batch = newly_selected_df.filter(_active_expr(activity_column, newly_selected_df)).height
 
     batch_hit_rate = n_actives_batch / n_batch
 
@@ -462,11 +499,11 @@ def calculate_batch_enrichment_factor(
     if n_batch == 0:
         return None
 
-    n_actives_batch = newly_selected_df.filter(pl.col(activity_column) == 1).height
+    n_actives_batch = newly_selected_df.filter(_active_expr(activity_column, newly_selected_df)).height
 
     # Population statistics
     n_total = len(ground_truth_df)
-    n_actives_total = ground_truth_df.filter(pl.col(activity_column) == 1).height
+    n_actives_total = ground_truth_df.filter(_active_expr(activity_column, ground_truth_df)).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -720,12 +757,12 @@ def calculate_multiple_unlabeled_enrichment_factors(
     n_selects = {p: max(1, int(n_total * p / 100)) for p in percentiles}
     max_k = max(n_selects.values())
     pred_order = top_k_indices(sign * pred_arr, max_k=max_k)
-    n_actives_total = int((activity_arr == 1).sum())
+    n_actives_total = _count_actives_numpy(activity_arr)
 
     for p in percentiles:
         n_select = n_selects[p]
         top_idx = pred_order[:n_select]
-        n_actives_selected = int((activity_arr[top_idx] == 1).sum())
+        n_actives_selected = _count_actives_numpy(activity_arr[top_idx])
 
         if n_select == 0 or n_actives_total == 0:
             ef = 0.0
