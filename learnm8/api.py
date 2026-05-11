@@ -332,6 +332,72 @@ def _validate_pool(
     return validation_result
 
 
+def _initialize_active_learning(
+    validation_result: Any,
+    oracle: Oracle,
+    target_col: str,
+    cycle_schedule: list[CycleConfig],
+    featurizer_obj: Featurizer | None,
+    cache_dir: Path,
+    random_state: int,
+    score_direction: str,
+    oracle_type: str,
+    run_cache: RunCache,
+    disable_molecular_similarity: bool | Iterable[str],
+) -> tuple[pl.DataFrame, list[dict[str, Any]], pl.DataFrame | None, int]:
+    compounds_df = initialize_master_dataframe_empty(
+        validation_result.valid_compounds,
+        target_col
+    )
+
+    expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
+    if not expected_cols.issubset(compounds_df.columns):
+        missing = expected_cols - set(compounds_df.columns)
+        raise ValueError(
+            f"Master DataFrame missing required columns: {missing}. "
+            f"This is an internal error — initialization may have failed. "
+            f"Check that target_col='{target_col}' matches a column in your data."
+        )
+
+    init_config = cycle_schedule[0]
+
+    logger.info(
+        f"Cycle 0 (initialization) config: "
+        f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
+    )
+
+    original_pool = validation_result.valid_compounds.clone() if oracle_type == 'benchmark' else None
+    original_pool_size = len(validation_result.valid_compounds)
+
+    compounds_df, cycle_0_metrics = select_initial_batch(
+        compounds_df=compounds_df,
+        oracle=oracle,
+        target_col=target_col,
+        strategy=init_config.strategy,
+        batch_fraction=init_config.batch_fraction,
+        featurizer=featurizer_obj.get_name() if featurizer_obj else None,
+        cache_dir=cache_dir,
+        original_pool_size=original_pool_size,
+        random_state=random_state,
+        acquisition_params=init_config.acquisition_params,
+        score_direction=score_direction,
+        oracle_type=oracle_type,
+        original_pool=original_pool,
+        run_cache=run_cache,
+        featurizer_obj=featurizer_obj,
+        disable_molecular_similarity=disable_molecular_similarity,
+    )
+
+    all_metrics = [cycle_0_metrics]
+    logger.info(
+        f"Cycle 0 metrics captured: "
+        f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
+        f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
+    )
+
+    return compounds_df, all_metrics, original_pool, original_pool_size
+
+
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
@@ -821,28 +887,6 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
-        logger.info("═══════════════════════════════════════════════════════════════")
-
-        compounds_df = initialize_master_dataframe_empty(
-            validation_result.valid_compounds,
-            target_col
-        )
-
-        expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
-        if not expected_cols.issubset(compounds_df.columns):
-            missing = expected_cols - set(compounds_df.columns)
-            raise ValueError(
-                f"Master DataFrame missing required columns: {missing}. "
-                f"This is an internal error — initialization may have failed. "
-                f"Check that target_col='{target_col}' matches a column in your data."
-            )
-
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
-        logger.info("═══════════════════════════════════════════════════════════════")
-
         if pruning_fraction is not None or pruning_strategy is not None:
             if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
                 raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
@@ -872,41 +916,26 @@ def run_active_learning(
         if len(cycle_schedule) == 0:
             raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
 
-        init_config = cycle_schedule[0]
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
-        logger.info(
-            f"Cycle 0 (initialization) config: "
-            f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
-        )
+        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
+        logger.info("═══════════════════════════════════════════════════════════════")
 
-        original_pool = validation_result.valid_compounds.clone() if oracle_type == 'benchmark' else None
-        original_pool_size = len(validation_result.valid_compounds)
-
-        compounds_df, cycle_0_metrics = select_initial_batch(
-            compounds_df=compounds_df,
+        compounds_df, all_metrics, original_pool, original_pool_size = _initialize_active_learning(
+            validation_result=validation_result,
             oracle=oracle,
             target_col=target_col,
-            strategy=init_config.strategy,
-            batch_fraction=init_config.batch_fraction,
-            featurizer=featurizer_obj.get_name() if featurizer_obj else None,
+            cycle_schedule=cycle_schedule,
+            featurizer_obj=featurizer_obj,
             cache_dir=cache_dir,
-            original_pool_size=original_pool_size,
             random_state=random_state,
-            acquisition_params=init_config.acquisition_params,
             score_direction=score_direction,
             oracle_type=oracle_type,
-            original_pool=original_pool,
             run_cache=run_cache,
-            featurizer_obj=featurizer_obj,
             disable_molecular_similarity=disable_molecular_similarity,
-        )
-
-        # Initialize metrics list with cycle 0
-        all_metrics = [cycle_0_metrics]
-        logger.info(
-            f"Cycle 0 metrics captured: "
-            f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
-            f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
         )
 
         logger.info("═══════════════════════════════════════════════════════════════")
