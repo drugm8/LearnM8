@@ -220,7 +220,9 @@ def test_skfp_old_version_falls_back_with_warning(
     featurizer must:
       1. Emit a LearnM8Warning mentioning 'scikit-fingerprints<1.18.0'.
       2. Continue to construct successfully (no exception escapes).
-      3. Still record self.random_state on the instance.
+      3. Set self.random_state = None (non-deterministic generation).
+      4. Omit random_state from get_config() so cache keys differ from
+         the deterministic path (fixes silent cache corruption).
     """
     import learnm8.features.base as base_module
 
@@ -245,5 +247,6 @@ def test_skfp_old_version_falls_back_with_warning(
     with pytest.warns(LearnM8Warning, match='scikit-fingerprints<1.18.0'):
         f = create_featurizer('whim', random_state=42, n_jobs=1)
 
-    assert f.random_state == 42
+    assert f.random_state is None
     assert f.conformer_gen is not None
+    assert 'random_state' not in f.get_config()
