@@ -433,15 +433,15 @@ class TestUnlabeledRankingCorrelation:
         gt_df = pl.DataFrame({'ID': ids, 'score': list(range(20, 0, -1))})
         assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == -1.0
 
-    def test_single_compound_returns_zero(self):
+    def test_single_compound_returns_none(self):
         preds_df = pl.DataFrame({'ID': ['mol_0'], 'prediction': [1.0]})
         gt_df = pl.DataFrame({'ID': ['mol_0'], 'score': [1.0]})
-        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == 0.0
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') is None
 
-    def test_no_overlap_returns_zero(self):
+    def test_no_overlap_returns_none(self):
         preds_df = pl.DataFrame({'ID': ['mol_A', 'mol_B'], 'prediction': [1.0, 2.0]})
         gt_df = pl.DataFrame({'ID': ['mol_X', 'mol_Y'], 'score': [3.0, 4.0]})
-        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') == 0.0
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') is None
 
     def test_returns_finite_float(self):
         ids = [f'mol_{i}' for i in range(10)]
@@ -450,3 +450,9 @@ class TestUnlabeledRankingCorrelation:
         result = calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score')
         assert isinstance(result, float)
         assert not np.isnan(result)
+
+    def test_constant_predictions_returns_none(self):
+        ids = [f'mol_{i}' for i in range(5)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': [0.5, 0.5, 0.5, 0.5, 0.5]})
+        gt_df = pl.DataFrame({'ID': ids, 'score': [1.0, 2.0, 3.0, 4.0, 5.0]})
+        assert calculate_unlabeled_ranking_correlation(preds_df, gt_df, 'score') is None
