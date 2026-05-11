@@ -177,6 +177,10 @@ class GaussianProcessLearner(SklearnLearner):
     def get_name(self) -> str:
         return f'GaussianProcess({self._kernel_name},alpha={self.alpha})'
 
+    def preferred_feature_dtype(self) -> str:
+        """StandardScaler upcasts uint8→float64; float32 avoids wasted cache reads."""
+        return 'float32'
+
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         n_train = getattr(self, '_n_train', 0)
         return {

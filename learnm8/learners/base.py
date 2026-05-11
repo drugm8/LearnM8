@@ -805,6 +805,10 @@ class TorchLearner(Learner):
         """Return a descriptive name for this learner."""
         return f'Torch{self.__class__.__name__}'
 
+    def preferred_feature_dtype(self) -> str:
+        """StandardScaler upcasts uint8→float64; float32 avoids wasted cache reads."""
+        return 'float32'
+
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
         # Base PyTorch models don't provide uncertainty by default
