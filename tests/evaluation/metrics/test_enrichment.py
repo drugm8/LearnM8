@@ -503,3 +503,27 @@ class TestCountActives:
         df = pl.DataFrame({'Activity': ['active', 'inactive', 'active']})
         with pytest.raises(ValidationError, match='non-numeric dtype'):
             _active_expr('Activity', df)
+
+
+@pytest.mark.unit
+class TestTopKTieStability:
+    def test_top_k_overlaps_deterministic_under_ties(self):
+        n = 100
+        ids = [f'mol_{i}' for i in range(n)]
+        preds_df = pl.DataFrame({'ID': ids, 'prediction': [0.5] * n})
+        gt_df = pl.DataFrame({'ID': ids, 'Activity': list(range(n, 0, -1))})
+
+        result_1 = calculate_multiple_top_k_overlaps(preds_df, gt_df, 'Activity')
+        result_2 = calculate_multiple_top_k_overlaps(preds_df, gt_df, 'Activity')
+        assert result_1 == result_2
+
+    def test_top_k_discovery_rates_deterministic_under_ties(self):
+        n = 200
+        ids = [f'mol_{i}' for i in range(n)]
+        gt_df = pl.DataFrame({
+            'ID': ids,
+            'score': [0.0] * (n // 2) + [1.0] * (n // 2),
+        })
+        result_1 = calculate_multiple_top_k_discovery_rates(set(ids[:10]), gt_df, 'score')
+        result_2 = calculate_multiple_top_k_discovery_rates(set(ids[:10]), gt_df, 'score')
+        assert result_1 == result_2
