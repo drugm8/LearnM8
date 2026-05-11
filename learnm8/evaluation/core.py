@@ -186,8 +186,8 @@ def evaluate_cycle(
 	# Uncertainty metrics (when available)
 	if uncertainties is not None and len(uncertainties) > 0:
 		try:
-			metrics['uncertainty_mean'] = float(np.mean(uncertainties))
-			metrics['uncertainty_std'] = float(np.std(uncertainties))
+			metrics['uncertainty_mean'] = float(np.mean(uncertainties, dtype=np.float64))
+			metrics['uncertainty_std'] = float(np.std(uncertainties, dtype=np.float64))
 		except (ValueError, TypeError) as e:
 			logger.warning(
 				f"Could not calculate uncertainty metrics: {e}. "

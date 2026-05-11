@@ -66,4 +66,4 @@ def calculate_average_score(scores: np.ndarray) -> float | None:
     """
     if len(scores) == 0:
         return None
-    return float(np.mean(scores))
+    return float(np.mean(scores, dtype=np.float64))
