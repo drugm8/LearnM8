@@ -152,6 +152,60 @@ random_state: 42
 
 
 @pytest.fixture
+def mock_run_success(monkeypatch):
+    """Patch learnm8.cli.main.run_active_learning to skip the pipeline.
+
+    Writes stub compounds_final.csv and cycle_metrics.csv into ``output_dir``
+    so tests asserting on output-file existence still pass, while skipping
+    the multi-second model train + featurize cost. Tests of pipeline
+    behavior live elsewhere; CLI tests should only verify the CLI layer.
+    """
+    def _stub(**kwargs):
+        output_dir = Path(kwargs.get('output_dir', '.'))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        n_cycles = kwargs.get('n_cycles')
+        cycles_spec = kwargs.get('cycles')
+        if cycles_spec:
+            n_cycles = 0
+            for token in str(cycles_spec).split():
+                _, rest = token.split(':', 1)
+                _, _, mult = rest.partition('*')
+                n_cycles += int(mult) if mult else 1
+        n_cycles = int(n_cycles or 1)
+        (output_dir / 'compounds_final.csv').write_text(
+            'ID,SMILES,Activity,status\nCOMP_0001,CCO,0.5,labeled\n'
+        )
+        (output_dir / 'cycle_metrics.csv').write_text(
+            'cycle,strategy,selected_count\n'
+            + ''.join(f'{i},random,1\n' for i in range(n_cycles))
+        )
+        class _StubValidation:
+            valid_compounds = pl.DataFrame({'ID': ['COMP_0001'], 'SMILES': ['CCO']})
+            invalid_compounds = pl.DataFrame({'ID': [], 'SMILES': []})
+            success_rate = 1.0
+
+        return {
+            'compounds_df': pl.DataFrame({
+                'ID': ['COMP_0001'], 'SMILES': ['CCO'], 'Activity': [0.5],
+            }),
+            'cycle_metrics': [{'cycle': i, 'strategy': 'random', 'selected_count': 1}
+                              for i in range(n_cycles)],
+            'output_dir': output_dir,
+            'labeled_count': n_cycles,
+            'unlabeled_count': 0,
+            'saved_files': {
+                'compounds_final': output_dir / 'compounds_final.csv',
+                'cycle_metrics': output_dir / 'cycle_metrics.csv',
+            },
+            'validation_result': _StubValidation(),
+        }
+
+    cli_module = _get_cli_module()
+    monkeypatch.setattr(cli_module, 'run_active_learning', _stub)
+    return _stub
+
+
+@pytest.fixture
 def config_json(tmp_path):
     """Create JSON config file."""
     config_path = tmp_path / "config.json"
@@ -203,7 +257,7 @@ class TestRunSubcommand:
         assert (output_dir / 'compounds_final.csv').exists()
         assert (output_dir / 'cycle_metrics.csv').exists()
 
-    def test_with_explicit_oracle(self, minimal_compounds, oracle_csv, tmp_path, monkeypatch):
+    def test_with_explicit_oracle(self, minimal_compounds, oracle_csv, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -231,7 +285,7 @@ class TestRunSubcommand:
         metrics = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
         assert len(metrics) == 3
 
-    def test_output_dir_creation(self, minimal_compounds, tmp_path, monkeypatch):
+    def test_output_dir_creation(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         output_dir = tmp_path / "nested" / "output" / "dir"
         args = make_run_namespace(
@@ -244,7 +298,7 @@ class TestRunSubcommand:
         assert output_dir.exists()
         assert (output_dir / 'compounds_final.csv').exists()
 
-    def test_pruning_flags(self, minimal_compounds, tmp_path, monkeypatch):
+    def test_pruning_flags(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -255,7 +309,7 @@ class TestRunSubcommand:
         assert result.returncode == 0, f"Failed: {result.stdout}"
 
     @pytest.mark.parametrize("learner", ["rf", "gp", "xgb"])
-    def test_learner_selection(self, minimal_compounds, tmp_path, monkeypatch, learner):
+    def test_learner_selection(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success, learner):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -266,7 +320,7 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Learner {learner} failed: {result.stdout}"
 
-    def test_acquisition_selection(self, minimal_compounds, tmp_path, monkeypatch):
+    def test_acquisition_selection(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -277,7 +331,7 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
 
-    def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch):
+    def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch, mock_run_success):
         pytest.importorskip('yaml', reason="PyYAML not installed")
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
@@ -289,7 +343,7 @@ class TestRunSubcommand:
         output_dir = Path(args.output)
         assert output_dir.exists()
 
-    def test_config_json(self, minimal_compounds, config_json, tmp_path, monkeypatch):
+    def test_config_json(self, minimal_compounds, config_json, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -330,7 +384,7 @@ class TestRunSubcommand:
         assert result.returncode != 0
 
     @pytest.mark.parametrize("featurizer", ["morgan", "maccs", "ecfp6"])
-    def test_featurizer_options(self, minimal_compounds, tmp_path, monkeypatch, featurizer):
+    def test_featurizer_options(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success, featurizer):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -342,7 +396,7 @@ class TestRunSubcommand:
         assert result.returncode == 0, f"Featurizer {featurizer} failed: {result.stdout}"
 
     @pytest.mark.parametrize("direction", ["higher", "lower"])
-    def test_score_direction(self, minimal_compounds, tmp_path, monkeypatch, direction):
+    def test_score_direction(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success, direction):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -383,7 +437,7 @@ class TestRunSubcommand:
             df2.sort_values('ID').reset_index(drop=True)
         )
 
-    def test_quiet_flag(self, minimal_compounds, tmp_path, monkeypatch):
+    def test_quiet_flag(self, minimal_compounds, tmp_path, monkeypatch, mock_run_success):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -427,9 +481,9 @@ class TestValidateSubcommand:
         assert result.returncode != 0
 
 
-@pytest.mark.slow
+@pytest.mark.unit
 class TestHelpAndErrors:
-    """Test help messages and error handling."""
+    """Test help messages and error handling — pure parser, no pipeline."""
 
     def test_no_args_shows_help(self):
         from learnm8.cli.main import create_parser
@@ -454,9 +508,9 @@ class TestHelpAndErrors:
         assert exc_info.value.code == 0
 
 
-@pytest.mark.slow
+@pytest.mark.unit
 class TestEdgeCases:
-    """Test edge cases and error scenarios."""
+    """Test edge cases and error scenarios — most fail fast before pipeline runs."""
 
     def test_empty_compound_pool(self, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
