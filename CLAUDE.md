@@ -285,6 +285,7 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 - Added `.coveragerc` for coverage configuration
 - Fixed GP learner feature preprocessing on predict
 - Fixed TorchLearner model recreation on input dimension change
+- 023 math-correctness: chunked-predict uncertainty alignment, Spearman None-on-undefined signaling, float64 accumulators in eval reducers, activity-count dtype validation (ValidationError on non-numeric), 3D conformer cache determinism (random_state=None fallback), Inf-sigma guard on EI/PI, top-K tie stability (Polars sort convergence).
 
 <!-- SPECKIT:START -->
 ## Current Feature: 022-metrics-scale
