@@ -158,7 +158,7 @@ LearnM8Error(Exception)
 
 ### Batch Size
 
-`int(original_pool_size * batch_fraction)` — uses original pool size for consistent selection pressure.
+`min(max(1, math.ceil(original_pool_size * batch_fraction)), len(selection_pool))` — floor-at-1 ceiling clipped to remaining pool size. Retains original pool for consistent selection pressure.
 
 ### Two-Mode Architecture
 

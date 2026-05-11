@@ -291,6 +291,30 @@ class TestExecuteCycle:
         expected_batch_size = int(5 * 0.4)
         assert metrics['selected_count'] == expected_batch_size
 
+    def test_batch_size_floor_one_for_tiny_pool(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+        pool_of_ten = sample_compounds.clone()[:10]
+        master_df = initialize_master_dataframe(
+            valid_compounds=pool_of_ten,
+            target_col='Activity',
+            initial_labeled_ids=[pool_of_ten[0, 'ID']],
+            initial_measurements={pool_of_ten[0, 'ID']: 0.5}
+        )
+        config = CycleConfig('random', n_cycles=1, batch_fraction=0.001)
+
+        _updated_df, metrics = execute_cycle(
+            compounds_df=master_df,
+            cycle=0,
+            config=config,
+            learner=mock_learner_with_uncertainty,
+            oracle=mock_oracle,
+            target_col='Activity',
+            featurizer='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=10,
+            oracle_type='run'
+        )
+        assert metrics['selected_count'] == 1
+
     def test_training_failure_raises_error(self, sample_master_df, mock_oracle, tmp_path):
         from learnm8.core.interfaces import Learner
 

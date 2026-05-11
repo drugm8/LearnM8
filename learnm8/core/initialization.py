@@ -304,13 +304,7 @@ def select_initial_batch(
         len(compounds_df)
     )
 
-    if batch_size == 0:
-        raise ValueError(
-            f"Calculated batch size is 0 (pool_size={original_pool_size}, "
-            f"batch_fraction={batch_fraction}). "
-            f"The pool is too small for the given batch_fraction. "
-            f"Increase batch_fraction or use a larger compound pool."
-        )
+    assert batch_size >= 1, "batch_size unreachable: max(1, ...) guarantees >=1"
 
     logger.debug("Starting initialization phase (cycle 0)")
     logger.debug(f"Strategy: {strategy}, batch_fraction: {batch_fraction}")
