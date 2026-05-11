@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from learnm8.exceptions import FeatureExtractionError
-from learnm8.features import MorganFeaturizer
+from learnm8.features import create_featurizer
 from learnm8.features.cache import (
     _cache_keys_uint64,
     _merge_sorted_indices,
@@ -20,7 +20,9 @@ from learnm8.features.extraction import extract_features
 
 @pytest.mark.unit
 def test_empty_smiles_no_io(tmp_path: Path):
-    out = extract_features([], MorganFeaturizer(n_jobs=1), cache_dir=tmp_path)
+    out = extract_features(
+        [], create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path
+    )
     assert out.shape == (0, 2048)
     assert out.dtype == np.float32
     assert list(tmp_path.iterdir()) == []
@@ -28,7 +30,7 @@ def test_empty_smiles_no_io(tmp_path: Path):
 
 @pytest.mark.unit
 def test_single_smiles_cold_then_warm(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     a = extract_features(['CCO'], feat, cache_dir=tmp_path)
     b = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert np.array_equal(a, b)
@@ -80,13 +82,13 @@ def test_merge_sorted_indices_rejects_duplicate():
     r_old = np.array([0, 1], dtype=np.uint64)
     h_new = np.array([5, 7], dtype=np.uint64)  # 5 collides with old
     r_new = np.array([2, 3], dtype=np.uint64)
-    with pytest.raises(FeatureExtractionError, match=r"Duplicate"):
+    with pytest.raises(FeatureExtractionError, match=r'Duplicate'):
         _merge_sorted_indices(h_old, r_old, h_new, r_new)
 
 
 @pytest.mark.unit
 def test_cache_key_truncation_stable_across_calls():
-    feat = MorganFeaturizer(n_jobs=1)
+    feat = create_featurizer('morgan', n_jobs=1)
     keys_a = _cache_keys_uint64(['CCO', 'CCC', 'CCN'], feat)
     keys_b = _cache_keys_uint64(['CCO', 'CCC', 'CCN'], feat)
     assert np.array_equal(keys_a, keys_b)
@@ -97,14 +99,14 @@ def test_cache_key_truncation_stable_across_calls():
 def test_cache_directory_auto_created(tmp_path: Path):
     new_dir = tmp_path / 'fresh' / 'cache'
     assert not new_dir.exists()
-    extract_features(['CCO'], MorganFeaturizer(n_jobs=1), cache_dir=new_dir)
+    extract_features(['CCO'], create_featurizer('morgan', n_jobs=1), cache_dir=new_dir)
     assert new_dir.exists()
 
 
 @pytest.mark.unit
 def test_warm_read_after_partial_write_returns_consistent_data(tmp_path: Path):
     """Two interleaved cold-then-warm calls produce consistent output."""
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     a = extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
     b = extract_features(['CCN', 'CCO'], feat, cache_dir=tmp_path)
     c = extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)

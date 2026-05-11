@@ -324,10 +324,10 @@ def _get_n_features(featurizer: str | None) -> int:
     if featurizer is None:
         return 2048
     try:
-        from learnm8.features import FEATURIZER_REGISTRY
+        from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 
         if featurizer in FEATURIZER_REGISTRY:
-            temp = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            temp = create_featurizer(featurizer, n_jobs=1)
             return temp.get_dimension()
     except Exception:
         pass
