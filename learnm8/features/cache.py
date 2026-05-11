@@ -1156,8 +1156,8 @@ def _emit_uint8_fallback_warning(storage_dtype: str, featurizer_name: str) -> No
     _uint8_fallback_warned.add(key)
     logger.warning(
         "preferred_dtype='uint8' incompatible with storage_dtype=%r "
-        "for featurizer=%r; falling back to float32. "
-        "This loses the 4x working-set saving.",
+        'for featurizer=%r; falling back to float32. '
+        'This loses the 4x working-set saving.',
         storage_dtype,
         featurizer_name,
     )

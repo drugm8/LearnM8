@@ -20,7 +20,6 @@ from pathlib import Path
 from validation.lib import (
     ValidationRunner,
     create_comprehensive_validation_plot,
-    create_animations,
     MarkdownReportGenerator
 )
 
@@ -44,13 +43,6 @@ def main():
         plots[param_value] = create_comprehensive_validation_plot(
             result, runner.strategy_config, param_value, plot_path
         )
-
-    print("\nGenerating animations...")
-    animations = create_animations(
-        results, runner.strategy_config, output_dir,
-        fps=runner.global_config['animation_fps'],
-        dpi=runner.global_config['animation_dpi']
-    )
 
     print("\nGenerating report...")
     report = MarkdownReportGenerator(strategy_name, runner.strategy_config, results)

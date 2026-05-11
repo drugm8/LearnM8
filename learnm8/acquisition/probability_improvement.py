@@ -22,10 +22,14 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     the current best observed value.
     """
 
-    def __init__(self,
-                 xi: float = 0.01, minimize: bool | None = None, score_direction: str = 'higher',
-                 current_best: float | None = None,
-                 **kwargs):
+    def __init__(
+        self,
+        xi: float = 0.01,
+        minimize: bool | None = None,
+        score_direction: str = 'higher',
+        current_best: float | None = None,
+        **kwargs,
+    ):
         """Initialize Probability of Improvement acquisition function.
 
         Args:
@@ -38,15 +42,17 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         # Handle backward compatibility with minimize parameter
         if minimize is not None:
             import warnings
+
             warnings.warn(
                 "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
-                DeprecationWarning, stacklevel=2
+                DeprecationWarning,
+                stacklevel=2,
             )
             score_direction = 'lower' if minimize else 'higher'
 
         super().__init__(score_direction=score_direction, **kwargs)
         if xi < 0:
-            raise ValueError("xi must be non-negative")
+            raise ValueError('xi must be non-negative')
 
         self.xi = xi
         self.current_best = current_best
@@ -71,18 +77,21 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
         from learnm8.utils.numerical import assert_no_inf_uncertainty
-        assert_no_inf_uncertainty(uncertainties, compounds.get_column("ID"))
+
+        assert_no_inf_uncertainty(uncertainties, compounds.get_column('ID'))
 
         # Require current_best from labeled data
         if self.current_best is None:
             raise ValueError(
                 "Probability of Improvement requires 'current_best' parameter with the best observed value "
-                "from labeled training data. This should be passed via acquisition_params at the cycle level."
+                'from labeled training data. This should be passed via acquisition_params at the cycle level.'
             )
 
         current_best = self.current_best
 
-        logger.debug(f"PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement")
+        logger.debug(
+            f'PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement'
+        )
 
         # Calculate improvement based on score direction
         if self.maximize:
@@ -108,8 +117,10 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             compounds, pi_scores, n_select, ascending=False
         )
 
-        logger.debug(f"ProbabilityImprovementAcquisition selected {len(selected)} compounds "
-                    f"with ξ={self.xi}, current_best={current_best:.3f}")
+        logger.debug(
+            f'ProbabilityImprovementAcquisition selected {len(selected)} compounds '
+            f'with ξ={self.xi}, current_best={current_best:.3f}'
+        )
 
         return selected
 
@@ -119,5 +130,5 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        direction = "max" if self.maximize else "min"
-        return f"PI(ξ={self.xi},{direction})"
+        direction = 'max' if self.maximize else 'min'
+        return f'PI(ξ={self.xi},{direction})'

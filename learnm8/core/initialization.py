@@ -31,8 +31,7 @@ if TYPE_CHECKING:
 
 
 def initialize_master_dataframe_empty(
-    valid_compounds: 'pl.DataFrame',
-    target_col: str
+    valid_compounds: 'pl.DataFrame', target_col: str
 ) -> pl.DataFrame:
     """Create master DataFrame with all compounds unlabeled.
 
@@ -59,28 +58,30 @@ def initialize_master_dataframe_empty(
     if 'ID' not in valid_compounds.columns or 'SMILES' not in valid_compounds.columns:
         missing = [c for c in ['ID', 'SMILES'] if c not in valid_compounds.columns]
         raise ValueError(
-            f"valid_compounds is missing required columns: {missing}. "
-            f"Available columns: {list(valid_compounds.columns)}. "
+            f'valid_compounds is missing required columns: {missing}. '
+            f'Available columns: {list(valid_compounds.columns)}. '
             f"Ensure your compound pool CSV has 'ID' and 'SMILES' columns."
         )
 
     master_df = valid_compounds.select(['ID', 'SMILES']).clone()
 
     # All compounds start unlabeled
-    master_df = master_df.with_columns([
-        pl.lit(STATUS_UNLABELED).cast(pl.Enum(VALID_STATUSES)).alias('status')
-    ])
+    master_df = master_df.with_columns(
+        [pl.lit(STATUS_UNLABELED).cast(pl.Enum(VALID_STATUSES)).alias('status')]
+    )
 
     # Initialize empty tracking columns
-    master_df = master_df.with_columns([
-        pl.lit(None).cast(pl.Int64).alias('labeled_cycle'),
-        pl.lit(None).cast(pl.Int64).alias('selected_cycle'),
-        pl.lit(None).cast(pl.Int64).alias('pruned_cycle'),
-        pl.lit(None).cast(pl.Float64).alias(target_col)
-    ])
+    master_df = master_df.with_columns(
+        [
+            pl.lit(None).cast(pl.Int64).alias('labeled_cycle'),
+            pl.lit(None).cast(pl.Int64).alias('selected_cycle'),
+            pl.lit(None).cast(pl.Int64).alias('pruned_cycle'),
+            pl.lit(None).cast(pl.Float64).alias(target_col),
+        ]
+    )
 
     logger.info(
-        f"Initialized master DataFrame: {len(master_df)} compounds (all unlabeled)"
+        f'Initialized master DataFrame: {len(master_df)} compounds (all unlabeled)'
     )
 
     return master_df
@@ -154,9 +155,9 @@ def calculate_initialization_metrics(
     metrics['has_uncertainty'] = False
 
     # Measured value statistics for selected compounds
-    measured_values = compounds_df.filter(
-        pl.col('ID').is_in(selected_ids)
-    )[target_col].to_numpy()
+    measured_values = compounds_df.filter(pl.col('ID').is_in(selected_ids))[
+        target_col
+    ].to_numpy()
 
     if len(measured_values) > 0 and not np.all(np.isnan(measured_values)):
         # Spec 022 FR-010: force float64 accumulator for nanmean / nanstd at scale.
@@ -165,7 +166,9 @@ def calculate_initialization_metrics(
         metrics['measured_min'] = float(np.nanmin(measured_values))
         metrics['measured_max'] = float(np.nanmax(measured_values))
         metrics['measured_best'] = float(
-            np.nanmax(measured_values) if score_direction == 'higher' else np.nanmin(measured_values)
+            np.nanmax(measured_values)
+            if score_direction == 'higher'
+            else np.nanmin(measured_values)
         )
         metrics['best_so_far'] = metrics['measured_best']
         metrics['avg_score_selected'] = metrics['measured_mean']
@@ -225,10 +228,14 @@ def calculate_initialization_metrics(
             )
 
             metrics.update(eval_metrics)
-            logger.debug(f"Cycle 0 enhanced metrics: Top-10 Discovery: {eval_metrics.get('top_10_discovery', 'N/A')}%")
+            logger.debug(
+                f'Cycle 0 enhanced metrics: Top-10 Discovery: {eval_metrics.get("top_10_discovery", "N/A")}%'
+            )
 
         except (ValueError, RuntimeError, TypeError, ArithmeticError) as e:
-            logger.warning(f"Failed to calculate enhanced evaluation metrics for cycle 0: {e}")
+            logger.warning(
+                f'Failed to calculate enhanced evaluation metrics for cycle 0: {e}'
+            )
 
     return metrics
 
@@ -300,42 +307,50 @@ def select_initial_batch(
     from .dataframe_ops import update_status
 
     batch_size = min(
-        max(1, math.ceil(original_pool_size * batch_fraction)),
-        len(compounds_df)
+        max(1, math.ceil(original_pool_size * batch_fraction)), len(compounds_df)
     )
 
-    assert batch_size >= 1, "batch_size unreachable: max(1, ...) guarantees >=1"
+    if batch_size == 0:
+        raise ValueError(
+            f'Selection pool is empty ({len(compounds_df)} compounds). '
+            f'Cannot select any compounds for initialization. '
+            f'Ensure the compound pool contains at least one compound.'
+        )
 
-    logger.debug("Starting initialization phase (cycle 0)")
-    logger.debug(f"Strategy: {strategy}, batch_fraction: {batch_fraction}")
-    logger.debug(f"Original pool size: {original_pool_size}, calculated batch: {batch_size}")
+    logger.debug('Starting initialization phase (cycle 0)')
+    logger.debug(f'Strategy: {strategy}, batch_fraction: {batch_fraction}')
+    logger.debug(
+        f'Original pool size: {original_pool_size}, calculated batch: {batch_size}'
+    )
 
-    logger.info(f"Initialization: selecting {batch_size} compounds using '{strategy}' strategy")
+    logger.info(
+        f"Initialization: selecting {batch_size} compounds using '{strategy}' strategy"
+    )
 
-    unlabeled = compounds_df.filter(
-        pl.col('status') == 'unlabeled'
-    ).select(['ID', 'SMILES'])
+    unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').select(
+        ['ID', 'SMILES']
+    )
 
     if len(unlabeled) == 0:
         raise AcquisitionError(
-            "No unlabeled compounds available for initialization (cycle 0). "
-            "All compounds may have been pre-labeled or filtered out during validation. "
-            "Check that your compound pool contains valid, unlabeled compounds."
+            'No unlabeled compounds available for initialization (cycle 0). '
+            'All compounds may have been pre-labeled or filtered out during validation. '
+            'Check that your compound pool contains valid, unlabeled compounds.'
         )
 
     if strategy != 'random':
         logger.warning(
             f"Strategy '{strategy}' not yet supported for initialization. "
             f"Using 'random' strategy instead. "
-            f"(BitBIRCH and other strategies deferred to future release)"
+            f'(BitBIRCH and other strategies deferred to future release)'
         )
         strategy = 'random'
 
     acq_class = get_acquisition_function('random')
     acq_func = acq_class(random_state=random_state)
 
-    logger.debug(f"Acquiring from {len(unlabeled)} unlabeled compounds")
-    logger.debug(f"Acquisition function: {acq_class.__name__}")
+    logger.debug(f'Acquiring from {len(unlabeled)} unlabeled compounds')
+    logger.debug(f'Acquisition function: {acq_class.__name__}')
 
     selected_df = acq_func.select(unlabeled, batch_size)
 
@@ -344,46 +359,53 @@ def select_initial_batch(
     if len(selected_ids) == 0:
         raise AcquisitionError(
             f"Acquisition strategy '{strategy}' selected 0 compounds during initialization. "
-            f"The pool had {len(unlabeled)} unlabeled compounds with batch_size={batch_size}. "
-            f"This is unexpected — check the acquisition strategy implementation."
+            f'The pool had {len(unlabeled)} unlabeled compounds with batch_size={batch_size}. '
+            f'This is unexpected — check the acquisition strategy implementation.'
         )
 
-    logger.info(f"Measuring {len(selected_ids)} selected compounds...")
+    logger.info(f'Measuring {len(selected_ids)} selected compounds...')
 
     # Create temporary mapping to preserve selected_ids order
     id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
 
-    selected_compounds = compounds_df.filter(
-        pl.col('ID').is_in(selected_ids)
-    ).select(['ID', 'SMILES']).with_columns(
-        pl.col('ID').map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64).alias('_order')
-    ).sort('_order').drop('_order')
+    selected_compounds = (
+        compounds_df.filter(pl.col('ID').is_in(selected_ids))
+        .select(['ID', 'SMILES'])
+        .with_columns(
+            pl.col('ID')
+            .map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64)
+            .alias('_order')
+        )
+        .sort('_order')
+        .drop('_order')
+    )
 
     try:
         measurements = oracle.measure(selected_compounds, [target_col])
     except OracleError:
         raise
     except (ValueError, RuntimeError, TypeError, OSError) as e:
-        logger.error(f"Oracle measurement failed during initialization: {e}")
+        logger.error(f'Oracle measurement failed during initialization: {e}')
         raise OracleError(
-            f"Oracle measurement failed during initialization (cycle 0) "
-            f"for {len(selected_ids)} compounds: {e}. "
-            f"Check that your oracle function/CSV contains data for the selected compound IDs."
+            f'Oracle measurement failed during initialization (cycle 0) '
+            f'for {len(selected_ids)} compounds: {e}. '
+            f'Check that your oracle function/CSV contains data for the selected compound IDs.'
         ) from e
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):
         missing = set(selected_ids) - set(measurement_ids)
         from learnm8.exceptions import _truncate_list
+
         raise OracleError(
-            f"Oracle did not return measurements for {len(missing)} of "
-            f"{len(selected_ids)} compounds during initialization. "
-            f"Missing IDs: {_truncate_list(missing)}. "
-            f"Check that your oracle contains data for all compound IDs in the pool."
+            f'Oracle did not return measurements for {len(missing)} of '
+            f'{len(selected_ids)} compounds during initialization. '
+            f'Missing IDs: {_truncate_list(missing)}. '
+            f'Check that your oracle contains data for all compound IDs in the pool.'
         )
 
-    logger.debug(f"Oracle measured {len(selected_ids)} compounds")
-    logger.debug("Updating DataFrame: status=labeled, labeled_cycle=0")
+    logger.debug(f'Oracle measured {len(selected_ids)} compounds')
+    logger.debug('Updating DataFrame: status=labeled, labeled_cycle=0')
 
     # Extract target values from measurements
     target_values = measurements.get_column(target_col)
@@ -394,11 +416,11 @@ def select_initial_batch(
         'labeled',
         cycle=0,
         target_col=target_col,
-        target_values=target_values
+        target_values=target_values,
     )
 
     logger.info(
-        f"Initialization (cycle 0) complete: {len(selected_ids)} compounds labeled "
+        f'Initialization (cycle 0) complete: {len(selected_ids)} compounds labeled '
         f"(strategy='{strategy}')"
     )
 
@@ -423,9 +445,7 @@ def select_initial_batch(
     return compounds_df, metrics
 
 
-def validate_master_dataframe(
-    master_df: 'pl.DataFrame'
-) -> bool:
+def validate_master_dataframe(master_df: 'pl.DataFrame') -> bool:
     """Validate master DataFrame schema.
 
     Validates core columns required for compound tracking. Does not validate:
@@ -453,48 +473,60 @@ def validate_master_dataframe(
         True
     """
     required_columns = [
-        'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle'
+        'ID',
+        'SMILES',
+        'status',
+        'labeled_cycle',
+        'selected_cycle',
+        'pruned_cycle',
     ]
 
     missing_cols = [col for col in required_columns if col not in master_df.columns]
     if missing_cols:
         raise ValueError(
-            f"Master DataFrame missing required columns: {missing_cols}. "
-            f"Available columns: {list(master_df.columns)}. "
-            f"Required columns are: {required_columns}. "
-            f"This may indicate the DataFrame was not properly initialized."
+            f'Master DataFrame missing required columns: {missing_cols}. '
+            f'Available columns: {list(master_df.columns)}. '
+            f'Required columns are: {required_columns}. '
+            f'This may indicate the DataFrame was not properly initialized.'
         )
 
     if master_df['ID'].is_duplicated().any():
         dupes = master_df.filter(pl.col('ID').is_duplicated())['ID'].unique().to_list()
         from learnm8.exceptions import _truncate_list
+
         raise ValueError(
-            f"Duplicate compound IDs found in master DataFrame: {_truncate_list(dupes)}. "
-            f"Each compound must have a unique ID. Check your input data for duplicate entries."
+            f'Duplicate compound IDs found in master DataFrame: {_truncate_list(dupes)}. '
+            f'Each compound must have a unique ID. Check your input data for duplicate entries.'
         )
 
     if master_df['status'].dtype == pl.Categorical:
         current_categories = master_df['status'].cat.get_categories().to_list()
         if set(current_categories) != set(VALID_STATUSES):
-            logger.warning(f"Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}")
+            logger.warning(
+                f'Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}'
+            )
     elif master_df['status'].dtype == pl.Enum:
         current_categories = master_df['status'].dtype.categories
         if set(current_categories) != set(VALID_STATUSES):
-            logger.warning(f"Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}")
+            logger.warning(
+                f'Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}'
+            )
     elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
         raise ValueError(
-            f"Status column must be categorical, enum, or string type, "
-            f"got {master_df['status'].dtype}. "
-            f"This may indicate the DataFrame was not properly initialized."
+            f'Status column must be categorical, enum, or string type, '
+            f'got {master_df["status"].dtype}. '
+            f'This may indicate the DataFrame was not properly initialized.'
         )
 
-    invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(VALID_STATUSES)
+    invalid_statuses = set(master_df['status'].drop_nulls().unique().to_list()) - set(
+        VALID_STATUSES
+    )
     if invalid_statuses:
         raise ValueError(
-            f"Invalid status values found: {invalid_statuses}. "
-            f"Valid status values are: {VALID_STATUSES}. "
-            f"Check that compound statuses are set correctly during initialization."
+            f'Invalid status values found: {invalid_statuses}. '
+            f'Valid status values are: {VALID_STATUSES}. '
+            f'Check that compound statuses are set correctly during initialization.'
         )
 
-    logger.debug("Master DataFrame validation passed")
+    logger.debug('Master DataFrame validation passed')
     return True

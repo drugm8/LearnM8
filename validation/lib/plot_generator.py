@@ -349,17 +349,6 @@ def create_comprehensive_validation_plot(
     return output_path
 
 
-def create_animations(
-    results: Dict[str, Any],
-    strategy_config: Dict[str, Any],
-    output_dir: Path,
-    fps: int = 2,
-    dpi: int = 100
-) -> List[Path]:
-    logger.warning("Animation creation has been removed (learnm8.visualization deleted)")
-    return []
-
-
 def create_embedding_plots(
     embeddings: np.ndarray,
     labels: Optional[np.ndarray],
