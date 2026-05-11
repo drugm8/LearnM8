@@ -482,3 +482,16 @@ class TestGPFeatureScaling:
         learner.train(features, targets)
         preds, _ = learner.predict(features)
         assert np.all(np.isfinite(preds))
+
+    def test_preferred_feature_dtype_is_float32(self):
+        learner = GaussianProcessLearner(random_state=42)
+        assert learner.preferred_feature_dtype() == 'float32'
+
+    def test_extract_features_with_preferred_dtype_returns_float32(self, tmp_path):
+        learner = GaussianProcessLearner(random_state=42)
+        smiles = ['CCO', 'CCC', 'CCCC']
+        features = extract_features(
+            smiles, 'morgan', cache_dir=tmp_path,
+            preferred_dtype=learner.preferred_feature_dtype(),
+        )
+        assert features.dtype == np.float32
