@@ -441,6 +441,96 @@ def _initialize_active_learning(
     return compounds_df, all_metrics, original_pool, original_pool_size
 
 
+def _execute_loop(
+    compounds_df: pl.DataFrame,
+    all_metrics: list[dict[str, Any]],
+    cycle_schedule: list[CycleConfig],
+    learner: Learner,
+    oracle: Oracle,
+    target_col: str,
+    featurizer_obj: Featurizer | None,
+    cache_dir: Path,
+    original_pool_size: int,
+    score_direction: str,
+    oracle_type: str,
+    original_pool: pl.DataFrame | None,
+    memory_safety_factor: float,
+    run_cache: RunCache,
+    disable_molecular_similarity: bool | Iterable[str],
+    random_state: int,
+    n_jobs: int,
+    output_dir: Path,
+    feature_type: str,
+) -> tuple[pl.DataFrame, list[dict[str, Any]], list[Path]]:
+    cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+    prediction_files: list[Path] = []
+    total_cycles = len(cycle_schedule)
+
+    for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
+        logger.info("─────────────────────────────────────────────────────────────")
+        logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
+        logger.info("─────────────────────────────────────────────────────────────")
+
+        try:
+            previous_metrics = all_metrics[-1] if all_metrics else None
+
+            compounds_df, metrics = execute_cycle(
+                compounds_df=compounds_df,
+                cycle=cycle_num,
+                config=config,
+                learner=learner,
+                oracle=oracle,
+                target_col=target_col,
+                featurizer=featurizer_obj.get_name() if featurizer_obj else None,
+                cache_dir=cache_dir,
+                original_pool_size=original_pool_size,
+                score_direction=score_direction,
+                oracle_type=oracle_type,
+                original_pool=original_pool,
+                cumulative_selected_ids=cumulative_selected_ids,
+                memory_safety_factor=memory_safety_factor,
+                run_cache=run_cache,
+                featurizer_obj=featurizer_obj,
+                disable_molecular_similarity=disable_molecular_similarity,
+                random_state=random_state,
+                previous_metrics=previous_metrics,
+                n_jobs=n_jobs,
+                output_dir=output_dir,
+                feature_type=feature_type,
+            )
+            all_metrics.append(metrics)
+
+            cycle_parquet_path = metrics.get('parquet_path')
+            if cycle_parquet_path is not None:
+                prediction_files.append(cycle_parquet_path)
+
+            cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+
+            if metrics['remaining_unlabeled'] == 0:
+                logger.info("Pool exhausted, stopping early")
+                break
+
+        except LearnM8Error as e:
+            e.add_note(
+                f"Failed during cycle {cycle_num} of {total_cycles} "
+                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+            )
+            raise
+        except (ValueError, RuntimeError, TypeError, OSError) as e:
+            logger.error(f"Cycle {cycle_num} failed: {e}")
+            err = LearnM8Error(
+                f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
+                f"Check the error details above for the specific cause."
+            )
+            err.add_note(
+                f"Failed during cycle {cycle_num} of {total_cycles} "
+                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+            )
+            raise err from e
+
+    return compounds_df, all_metrics, prediction_files
+
+
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
@@ -983,72 +1073,27 @@ def run_active_learning(
         logger.info("Phase 4: Active Learning Cycles")
         logger.info("═══════════════════════════════════════════════════════════════")
 
-        cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
-        prediction_files: list[Path] = []
-
-        for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
-            logger.info("─────────────────────────────────────────────────────────────")
-            logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
-            logger.info("─────────────────────────────────────────────────────────────")
-
-            try:
-                # Get previous metrics for change indicators in logging
-                previous_metrics = all_metrics[-1] if all_metrics else None
-
-                compounds_df, metrics = execute_cycle(
-                    compounds_df=compounds_df,
-                    cycle=cycle_num,
-                    config=config,
-                    learner=learner,
-                    oracle=oracle,
-                    target_col=target_col,
-                    featurizer=featurizer_obj.get_name() if featurizer_obj else None,
-                    cache_dir=cache_dir,
-                    original_pool_size=original_pool_size,
-                    score_direction=score_direction,
-                    oracle_type=oracle_type,
-                    original_pool=original_pool,
-                    cumulative_selected_ids=cumulative_selected_ids,
-                    memory_safety_factor=memory_safety_factor,
-                    run_cache=run_cache,
-                    featurizer_obj=featurizer_obj,
-                    disable_molecular_similarity=disable_molecular_similarity,
-                    random_state=random_state,
-                    previous_metrics=previous_metrics,
-                    n_jobs=n_jobs,
-                    output_dir=output_dir,
-                    feature_type=feature_type,
-                )
-                all_metrics.append(metrics)
-
-                cycle_parquet_path = metrics.get('parquet_path')
-                if cycle_parquet_path is not None:
-                    prediction_files.append(cycle_parquet_path)
-
-                # Update cumulative_selected_ids after cycle
-                cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
-
-                if metrics['remaining_unlabeled'] == 0:
-                    logger.info("Pool exhausted, stopping early")
-                    break
-
-            except LearnM8Error as e:
-                e.add_note(
-                    f"Failed during cycle {cycle_num} of {total_cycles} "
-                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
-                )
-                raise
-            except (ValueError, RuntimeError, TypeError, OSError) as e:
-                logger.error(f"Cycle {cycle_num} failed: {e}")
-                err = LearnM8Error(
-                    f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
-                    f"Check the error details above for the specific cause."
-                )
-                err.add_note(
-                    f"Failed during cycle {cycle_num} of {total_cycles} "
-                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
-                )
-                raise err from e
+        compounds_df, all_metrics, prediction_files = _execute_loop(
+            compounds_df=compounds_df,
+            all_metrics=all_metrics,
+            cycle_schedule=cycle_schedule,
+            learner=learner,
+            oracle=oracle,
+            target_col=target_col,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            original_pool_size=original_pool_size,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            original_pool=original_pool,
+            memory_safety_factor=memory_safety_factor,
+            run_cache=run_cache,
+            disable_molecular_similarity=disable_molecular_similarity,
+            random_state=random_state,
+            n_jobs=n_jobs,
+            output_dir=output_dir,
+            feature_type=feature_type,
+        )
 
         logger.debug("Calculating aggregate metrics")
         aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, oracle_type)
