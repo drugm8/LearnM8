@@ -40,10 +40,11 @@ def top_k_indices(scores: np.ndarray, max_k: int) -> np.ndarray:
         that need uint32 should cast explicitly.
 
     Notes:
-        Ties at the K-th score are non-deterministic under ``argpartition``
-        (introselect is unstable). Downstream callers that compare top-K
-        sets across runs should either (a) use distinct scores or
-        (b) tie-break by index lexicographically before set comparison.
+        **NOT stable under ties.** ``argpartition`` (introselect) is
+        non-deterministic when multiple elements share the K-th score value.
+        Downstream callers that compare top-K sets across runs should use
+        stable Polars ``sort().head()`` instead. This helper is retained for
+        callers that do not need deterministic tie-breaking.
     """
     n = scores.size
     if max_k >= n:

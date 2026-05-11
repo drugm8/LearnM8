@@ -216,27 +216,27 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
         'top_10_percent_overlap': max(1, int(n_total * 0.10))     # 10%
     }
 
-    # Spec 022 FR-005: one argpartition per side (predictions / ground-truth),
-    # then sub-K slicing -- replaces N x O(N log N) full sorts with N x O(N) selection.
-    from learnm8.evaluation.metrics._topk import top_k_indices
+    # Use stable Polars sort (same approach as calculate_multiple_top_k_discovery_rates)
+    # to ensure deterministic top-K selection under tied scores.
     descending = (score_direction == 'higher')
-    # argpartition gives the largest values. For "lower is better", flip the
-    # sign so the same helper finds the smallest.
-    pred_arr = merged.get_column('prediction').to_numpy()
-    truth_arr = merged.get_column(target_col).to_numpy()
-    id_arr = merged.get_column('ID').to_numpy()
-    sign = 1.0 if descending else -1.0
     max_k = max(k_values.values())
-    pred_order = top_k_indices(sign * pred_arr, max_k=max_k)
-    truth_order = top_k_indices(sign * truth_arr, max_k=max_k)
+    pred_sorted_ids = (
+        merged.sort('prediction', descending=descending)
+        .head(max_k)
+        .get_column('ID')
+        .to_list()
+    )
+    truth_sorted_ids = (
+        merged.sort(target_col, descending=descending)
+        .head(max_k)
+        .get_column('ID')
+        .to_list()
+    )
 
     results = {}
     for key, k in k_values.items():
-        if k > n_total:
-            k = n_total
-
-        top_k_predicted = set(id_arr[pred_order[:k]].tolist())
-        top_k_true = set(id_arr[truth_order[:k]].tolist())
+        top_k_predicted = set(pred_sorted_ids[:k])
+        top_k_true = set(truth_sorted_ids[:k])
 
         overlap_count = len(top_k_predicted & top_k_true)
         overlap_percentage = (overlap_count / k) * 100
