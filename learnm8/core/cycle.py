@@ -44,7 +44,6 @@ from learnm8.core.interfaces import Learner, Oracle
 from learnm8.evaluation import RunCache, evaluate_cycle
 from learnm8.exceptions import (
     AcquisitionError,
-    ConfigurationError,
     FeatureExtractionError,
     LearnerError,
     OracleError,
@@ -1001,14 +1000,7 @@ def _select_and_measure(
         len(selection_pool)
     )
 
-    if batch_size == 0:
-        raise ConfigurationError(
-            f"Calculated batch size is 0 (original_pool_size={original_pool_size}, "
-            f"batch_fraction={config.batch_fraction}, product={original_pool_size * config.batch_fraction:.4f}). "
-            f"Increase batch_fraction so that pool_size * batch_fraction >= 1. "
-            f"For a pool of {original_pool_size} compounds, minimum batch_fraction is "
-            f"{1.0 / original_pool_size:.6f}."
-        )
+    assert batch_size >= 1, "batch_size unreachable: max(1, ...) guarantees >=1"
 
     # Step 10: Prepare acquisition params with current_best from labeled data
     acquisition_params = (config.acquisition_params or {}).copy()
