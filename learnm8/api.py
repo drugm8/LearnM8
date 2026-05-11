@@ -531,6 +531,42 @@ def _execute_loop(
     return compounds_df, all_metrics, prediction_files
 
 
+def _save_results(
+    compounds_df: pl.DataFrame,
+    all_metrics: list[dict[str, Any]],
+    validation_result: Any,
+    target_col: str,
+    featurizer_obj: Featurizer | None,
+    score_direction: str,
+    oracle_type: str,
+    random_state: int,
+    learner: Learner,
+    oracle: Oracle,
+    output_dir: Path,
+) -> dict[str, Path]:
+    config_dict = {
+        'target_col': target_col,
+        'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
+        'score_direction': score_direction,
+        'oracle_type': oracle_type,
+        'n_cycles': len(all_metrics),
+        'random_state': random_state,
+        'learner': learner.__class__.__name__,
+        'oracle': oracle.__class__.__name__
+    }
+
+    saved_files = save_results(
+        compounds_df, all_metrics, validation_result, config_dict, output_dir
+    )
+
+    logger.info(f"All results saved to: {output_dir}")
+    logger.debug("Saved files:")
+    for file_type, file_path in saved_files.items():
+        logger.debug(f"  {file_type}: {file_path}")
+
+    return saved_files
+
+
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
@@ -1116,25 +1152,20 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 5: Saving Results")
         logger.info("═══════════════════════════════════════════════════════════════")
-        config_dict = {
-            'target_col': target_col,
-            'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
-            'score_direction': score_direction,
-            'oracle_type': oracle_type,
-            'n_cycles': len(all_metrics),
-            'random_state': random_state,
-            'learner': learner.__class__.__name__,
-            'oracle': oracle.__class__.__name__
-        }
 
-        saved_files = save_results(
-            compounds_df, all_metrics, validation_result, config_dict, output_dir
+        saved_files = _save_results(
+            compounds_df=compounds_df,
+            all_metrics=all_metrics,
+            validation_result=validation_result,
+            target_col=target_col,
+            featurizer_obj=featurizer_obj,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            random_state=random_state,
+            learner=learner,
+            oracle=oracle,
+            output_dir=output_dir,
         )
-
-        logger.info(f"All results saved to: {output_dir}")
-        logger.debug("Saved files:")
-        for file_type, file_path in saved_files.items():
-            logger.debug(f"  {file_type}: {file_path}")
 
         return {
             'compounds_df': compounds_df,
