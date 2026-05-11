@@ -7,7 +7,6 @@ get_name, get_dimension.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from learnm8.features import FEATURIZER_REGISTRY, create_featurizer

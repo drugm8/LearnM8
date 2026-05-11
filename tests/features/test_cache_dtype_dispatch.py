@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import pytest
 
-from learnm8.features import create_featurizer, FEATURIZER_REGISTRY
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
 
 

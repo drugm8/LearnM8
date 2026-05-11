@@ -6,17 +6,24 @@ for 3D fingerprints, and parameter management.
 """
 
 import logging
+import warnings
 from typing import Any
 
 import numpy as np
 from skfp.preprocessing import ConformerGenerator, MolFromSmilesTransformer
 
 from learnm8.core.interfaces import Featurizer
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import FeatureExtractionError, LearnM8Warning
 
 logger = logging.getLogger(__name__)
 
 MAX_SMILES_LENGTH = 10000
+
+# RDKit ETKDG convention seed (0xf00d == 61453). Used as the default
+# random_state for ConformerGenerator so 3D fingerprints are deterministic
+# across runs. Recorded in get_config() when requires_3d() is True so cache
+# keys disambiguate different seeds.
+DEFAULT_3D_RANDOM_STATE: int = 0xF00D
 
 
 class SkfpFeaturizer(Featurizer):
@@ -47,6 +54,7 @@ class SkfpFeaturizer(Featurizer):
         conformer_params: dict[str, Any] | None = None,
         n_jobs: int = -1,
         verbose: int = 0,
+        random_state: int = DEFAULT_3D_RANDOM_STATE,
         *,
         storage_dtype: str,
         feature_type: str,
@@ -65,6 +73,12 @@ class SkfpFeaturizer(Featurizer):
                             (e.g., {'num_conformers': 1, 'optimize_force_field': 'UFF'})
             n_jobs: Number of parallel jobs (-1 for all cores)
             verbose: Verbosity level for scikit-fingerprints logging (default: 0)
+            random_state: Seed forwarded to ConformerGenerator for deterministic
+                         3D conformer embedding (default ``0xf00d`` == 61453,
+                         the RDKit ETKDG convention). Only consumed by 3D
+                         fingerprints; recorded in :meth:`get_config` when
+                         :meth:`requires_3d` is True so cache keys disambiguate
+                         different seeds.
             storage_dtype: Storage dtype for feature cache ('packed_uint8',
                           'float32', 'csr_uint16', etc.)
             feature_type: Feature type identifier ('binary' or 'continuous')
@@ -83,6 +97,7 @@ class SkfpFeaturizer(Featurizer):
         self.conformer_params = conformer_params or {}
         self.n_jobs = n_jobs
         self.verbose = verbose
+        self.random_state = int(random_state)
         self._storage_dtype = storage_dtype
         self._feature_type = feature_type
         self._fingerprint_name = fingerprint_name
@@ -92,9 +107,26 @@ class SkfpFeaturizer(Featurizer):
         self.mol_from_smiles = MolFromSmilesTransformer()
 
         if self.requires_3d() and auto_generate_conformers:
-            self.conformer_gen = ConformerGenerator(
-                n_jobs=n_jobs, **self.conformer_params
-            )
+            try:
+                self.conformer_gen = ConformerGenerator(
+                    n_jobs=n_jobs,
+                    random_state=self.random_state,
+                    **self.conformer_params,
+                )
+            except TypeError as e:
+                if 'random_state' not in str(e):
+                    raise
+                warnings.warn(
+                    'scikit-fingerprints<1.18.0 detected; ConformerGenerator '
+                    'does not accept random_state. 3D fingerprints will be '
+                    'non-deterministic. Upgrade with: '
+                    'pip install -U scikit-fingerprints',
+                    LearnM8Warning,
+                    stacklevel=2,
+                )
+                self.conformer_gen = ConformerGenerator(
+                    n_jobs=n_jobs, **self.conformer_params
+                )
         else:
             self.conformer_gen = None
 
@@ -246,11 +278,14 @@ class SkfpFeaturizer(Featurizer):
             conformer generation parameters, and all fingerprint-specific
             parameters from get_params().
         """
-        config = {
+        config: dict[str, Any] = {
             'fingerprint_class': self.fingerprint.__class__.__name__,
             'auto_generate_conformers': self.auto_generate_conformers,
             'n_jobs': self.n_jobs,
         }
+
+        if self.requires_3d():
+            config['random_state'] = self.random_state
 
         if self.conformer_params:
             config['conformer_params'] = self.conformer_params
