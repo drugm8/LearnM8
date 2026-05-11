@@ -424,10 +424,15 @@ def _calculate_cycle_metrics(
     # Selection statistics
     metrics['selected_ids'] = selected_ids
 
+    # Spec 022 FR-010: force float64 accumulator for nanmean / nanstd / nansum
+    # so float32 prediction storage does not bleed into float32 reductions at
+    # 100M scale (np.mean on float32 accumulator loses ~1e-5 relative precision).
+    # min/max/median are order statistics — dtype doesn't affect them — but we
+    # pass dtype=float64 on the reductions where it matters.
     # Prediction statistics (with NaN safeguards)
     if predictions is not None and len(predictions) > 0:
-        metrics['prediction_mean'] = float(np.nanmean(predictions)) if not np.all(np.isnan(predictions)) else None
-        metrics['prediction_std'] = float(np.nanstd(predictions)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_mean'] = float(np.nanmean(predictions, dtype=np.float64)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_std'] = float(np.nanstd(predictions, dtype=np.float64)) if not np.all(np.isnan(predictions)) else None
         metrics['prediction_min'] = float(np.nanmin(predictions)) if not np.all(np.isnan(predictions)) else None
         metrics['prediction_max'] = float(np.nanmax(predictions)) if not np.all(np.isnan(predictions)) else None
         metrics['prediction_median'] = float(np.nanmedian(predictions)) if not np.all(np.isnan(predictions)) else None
@@ -440,8 +445,8 @@ def _calculate_cycle_metrics(
 
     # Uncertainty statistics (with NaN safeguards)
     if uncertainties is not None and len(uncertainties) > 0:
-        metrics['uncertainty_mean'] = float(np.nanmean(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
-        metrics['uncertainty_std'] = float(np.nanstd(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['uncertainty_mean'] = float(np.nanmean(uncertainties, dtype=np.float64)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['uncertainty_std'] = float(np.nanstd(uncertainties, dtype=np.float64)) if not np.all(np.isnan(uncertainties)) else None
         metrics['uncertainty_min'] = float(np.nanmin(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
         metrics['uncertainty_max'] = float(np.nanmax(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
         metrics['has_uncertainty'] = True
@@ -454,8 +459,8 @@ def _calculate_cycle_metrics(
     )[target_col].to_numpy()
 
     if len(measured_values) > 0:
-        metrics['measured_mean'] = float(np.nanmean(measured_values)) if not np.all(np.isnan(measured_values)) else None
-        metrics['measured_std'] = float(np.nanstd(measured_values)) if not np.all(np.isnan(measured_values)) else None
+        metrics['measured_mean'] = float(np.nanmean(measured_values, dtype=np.float64)) if not np.all(np.isnan(measured_values)) else None
+        metrics['measured_std'] = float(np.nanstd(measured_values, dtype=np.float64)) if not np.all(np.isnan(measured_values)) else None
         metrics['measured_min'] = float(np.nanmin(measured_values)) if not np.all(np.isnan(measured_values)) else None
         metrics['measured_max'] = float(np.nanmax(measured_values)) if not np.all(np.isnan(measured_values)) else None
         if not np.all(np.isnan(measured_values)):

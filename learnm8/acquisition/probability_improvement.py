@@ -8,7 +8,7 @@ import logging
 
 import numpy as np
 import polars as pl
-from scipy.stats import norm
+from scipy.special import ndtr
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
@@ -23,7 +23,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     """
 
     def __init__(self,
-                 xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
+                 xi: float = 0.01, minimize: bool | None = None, score_direction: str = 'higher',
                  current_best: float | None = None,
                  **kwargs):
         """Initialize Probability of Improvement acquisition function.
@@ -87,18 +87,18 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         else:
             improvement = current_best - predictions - self.xi
 
-        # Use uncertainties directly (already standard deviations, not variances)
+        # Spec 022 FR-006/FR-007: inline PI with scipy.special.ndtr (C-level
+        # Cephes; bit-exact equivalent of scipy.stats.norm.cdf) + symmetric
+        # z-clipping + Botorch sigma=0 -> 0 convention.
         std_devs = uncertainties
-
-        # Calculate Probability of Improvement
-        with np.errstate(divide="ignore"):
-            z_scores = improvement / std_devs
-
-        pi_scores = norm.cdf(z_scores)
-
-        # Handle zero variance case
-        zero_var_mask = uncertainties == 0
-        pi_scores[zero_var_mask] = np.where(improvement[zero_var_mask] > 0, 1.0, 0.0)
+        sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
+        z_scores = improvement / sigma_safe
+        z_clipped = np.clip(z_scores, -37.0, 37.0)
+        pi_scores = ndtr(z_clipped)
+        # Botorch convention: sigma=0 means PI is 0 (no uncertainty -> no
+        # improvement-probability information). Behavioural-test-locked in
+        # tests/acquisition/test_probability_improvement.py.
+        pi_scores = np.where(std_devs > 0, pi_scores, 0.0)
 
         # Select top compounds
         selected = self._safe_select_top_k(

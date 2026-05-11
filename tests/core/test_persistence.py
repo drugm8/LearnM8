@@ -407,24 +407,31 @@ def test_parquet_filename_convention(tmp_path):
 
 
 def test_parquet_schema_matches_spec(tmp_path):
-    """Written parquet has schema [ID: Utf8, prediction: Float64, uncertainty: Float64]."""
+    """Spec 022 FR-009: written parquet uses Float32 for prediction + uncertainty."""
     df = _make_predictions_df(n=4, with_uncertainty=True)
     written = write_cycle_predictions(df, tmp_path, cycle=1)
     assert written is not None
     actual = pl.read_parquet(written)
     assert actual.columns == ['ID', 'prediction', 'uncertainty']
     assert actual.schema['ID'] == pl.Utf8
-    assert actual.schema['prediction'] == pl.Float64
-    assert actual.schema['uncertainty'] == pl.Float64
+    assert actual.schema['prediction'] == pl.Float32
+    assert actual.schema['uncertainty'] == pl.Float32
 
 
 def test_parquet_roundtrip_values(tmp_path):
-    """write_cycle_predictions then read returns identical values."""
+    """write_cycle_predictions then read returns identical values within Float32 tolerance.
+
+    Spec 022 FR-009: writer downcasts Float64 inputs to Float32 at the boundary;
+    roundtrip equality holds at Float32 precision.
+    """
     df = _make_predictions_df(n=10, with_uncertainty=True)
     path = write_cycle_predictions(df, tmp_path, cycle=2)
     assert path is not None
     actual = pl.read_parquet(path).sort('ID')
-    expected = df.sort('ID')
+    expected = df.sort('ID').with_columns([
+        pl.col('prediction').cast(pl.Float32),
+        pl.col('uncertainty').cast(pl.Float32),
+    ])
     assert actual.equals(expected)
 
 
