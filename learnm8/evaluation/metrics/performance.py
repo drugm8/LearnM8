@@ -26,7 +26,7 @@ def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
         return mape_percentage
 
 
-def calculate_spearman_correlation(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+def calculate_spearman_correlation(y_true: np.ndarray, y_pred: np.ndarray) -> float | None:
     """
     Calculate Spearman rank correlation coefficient.
 
@@ -35,19 +35,19 @@ def calculate_spearman_correlation(y_true: np.ndarray, y_pred: np.ndarray) -> fl
         y_pred: Predicted values
 
     Returns:
-        Spearman correlation coefficient
+        Spearman correlation coefficient, or None when undefined
+        (N<2, σ_pred=0 constant predictions, or scipy returns NaN).
     """
     if len(y_true) < 2 or len(y_pred) < 2:
-        return 0.0
+        return None
 
     try:
         correlation, _ = spearmanr(y_true, y_pred)
-        # Handle nan values
         if np.isnan(correlation):
-            return 0.0
-        return correlation
+            return None
+        return float(correlation)
     except (ValueError, TypeError):
-        return 0.0
+        return None
 
 
 def calculate_average_score(scores: np.ndarray) -> float | None:

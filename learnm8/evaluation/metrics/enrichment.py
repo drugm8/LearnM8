@@ -772,11 +772,13 @@ def calculate_unlabeled_ranking_correlation(
         merged = merged_target
 
     if len(merged) < 2:
-        return 0.0
+        return None
 
     predictions = merged.get_column('prediction').to_numpy()
     ground_truth_vals = merged.get_column(target_column).to_numpy()
 
     correlation, _ = spearmanr(predictions, ground_truth_vals)
 
-    return round(correlation, 4) if not np.isnan(correlation) else 0.0
+    if np.isnan(correlation):
+        return None
+    return round(float(correlation), 4)
