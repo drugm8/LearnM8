@@ -159,8 +159,9 @@ def calculate_initialization_metrics(
     )[target_col].to_numpy()
 
     if len(measured_values) > 0 and not np.all(np.isnan(measured_values)):
-        metrics['measured_mean'] = float(np.nanmean(measured_values))
-        metrics['measured_std'] = float(np.nanstd(measured_values))
+        # Spec 022 FR-010: force float64 accumulator for nanmean / nanstd at scale.
+        metrics['measured_mean'] = float(np.nanmean(measured_values, dtype=np.float64))
+        metrics['measured_std'] = float(np.nanstd(measured_values, dtype=np.float64))
         metrics['measured_min'] = float(np.nanmin(measured_values))
         metrics['measured_max'] = float(np.nanmax(measured_values))
         metrics['measured_best'] = float(

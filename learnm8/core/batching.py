@@ -422,4 +422,12 @@ def predict_with_batching(
             else np.concatenate(all_uncertainties)
         )
 
+    # Spec 022 FR-008: single dtype-conversion boundary. predict_with_batching is
+    # the sole producer cast site; downstream consumers (persistence, metric
+    # aggregators) receive float32 inputs. ``copy=False`` skips the copy if the
+    # learner already returned float32 (e.g. torch float32 inference).
+    predictions = predictions.astype(np.float32, copy=False)
+    if uncertainties is not None:
+        uncertainties = uncertainties.astype(np.float32, copy=False)
+
     return predictions, uncertainties, all_valid_ids, feature_extraction_time

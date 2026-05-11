@@ -71,6 +71,10 @@ Z_95: float = 1.96                # 95% normal critical value
 FALLBACK_FP_RADIUS: int = 2
 FALLBACK_FP_SIZE: int = 2048
 
+# Spec 022 (FR-003): cap the cumulative fingerprint reservoir at this size.
+# Internal — not exposed in the public API per constitution §8.2.
+K_RESERVOIR: int = 100_000
+
 
 # ============================================================================
 # RunCache dataclass (post-review revision)
@@ -99,6 +103,15 @@ class RunCache:
     cumulative_fp_buffer: list[ExplicitBitVect] = field(default_factory=list)
     cumulative_smiles_seen: set[str] = field(default_factory=set)
     bit_sum_buffer: np.ndarray | None = None
+    # Spec 022 FR-001: incremental cumulative-scaffold accumulator. Mirrors the
+    # Shannon ``bit_sum_buffer`` pattern: ``update(new_batch)`` per cycle
+    # instead of re-iterating the full cumulative SMILES list.
+    cumulative_unique_scaffolds: set[str] = field(default_factory=set)
+    cumulative_valid_count: int = 0
+    # Spec 022 FR-003: global stream counter for Vitter Algorithm R reservoir
+    # sampling on ``cumulative_fp_buffer``. Persists across batches; must be
+    # incremented per-fingerprint (not per-batch) — see research.md Pitfall #1.
+    cumulative_seen_count: int = 0
 
     def clear(self) -> None:
         """Manual eviction. Called from run_active_learning's finally block."""
@@ -107,6 +120,9 @@ class RunCache:
         self.cumulative_fp_buffer.clear()
         self.cumulative_smiles_seen.clear()
         self.bit_sum_buffer = None
+        self.cumulative_unique_scaffolds.clear()
+        self.cumulative_valid_count = 0
+        self.cumulative_seen_count = 0
 
 
 # ============================================================================
@@ -125,6 +141,40 @@ def _derive_rng(global_seed: int | None, cycle: int) -> np.random.Generator:
     if global_seed is None:
         return np.random.default_rng([0xA17C7E, cycle])
     return np.random.default_rng([int(global_seed), int(cycle)])
+
+
+def _reservoir_extend(
+    cache: RunCache,
+    new_fps: list[ExplicitBitVect],
+    rng: np.random.Generator,
+) -> None:
+    """Vitter Algorithm R reservoir extension with global stream counter (FR-003).
+
+    Mutates ``cache.cumulative_fp_buffer`` and ``cache.cumulative_seen_count`` in
+    place. The buffer is capped at ``K_RESERVOIR``; ``cumulative_seen_count`` is
+    the global stream count of fingerprints offered to the reservoir (NOT a
+    per-batch counter — see research.md Pitfall #1).
+
+    Each item in the cumulative stream survives in the final reservoir with
+    probability exactly ``K_RESERVOIR / cumulative_seen_count`` (Vitter 1985).
+    Determinism: identical ``(global_seed, cycle, batch sequence)`` produces
+    identical reservoir contents because ``rng`` is derived from
+    ``_derive_rng(global_seed, cycle)``.
+    """
+    n = cache.cumulative_seen_count
+    buf = cache.cumulative_fp_buffer
+    for fp in new_fps:
+        n += 1
+        if n <= K_RESERVOIR:
+            buf.append(fp)
+        else:
+            j = int(rng.integers(0, n))
+            if j < K_RESERVOIR:
+                buf[j] = fp
+    cache.cumulative_seen_count = n
+    # FR-003 invariant: buffer capped at K_RESERVOIR; counter monotonic.
+    assert len(buf) <= K_RESERVOIR
+    assert cache.cumulative_seen_count >= 0
 
 
 def _sample_distinct_pairs(
@@ -289,6 +339,10 @@ def _scaffold_diversity_index(
     Cache contract: every successfully-computed scaffold is memoised in
     ``scaffold_cache`` keyed by SMILES so subsequent cycles re-encountering
     the same compound skip RDKit work.
+
+    Used for the per-batch path. The cumulative path uses the incremental
+    accumulator on ``RunCache`` (Spec 022 FR-001/FR-002) instead of
+    re-iterating the cumulative SMILES list each cycle.
     """
     if not smiles_list:
         return None
@@ -307,6 +361,33 @@ def _scaffold_diversity_index(
     if valid_count == 0:
         return None
     return float(len(unique) / valid_count)
+
+
+def _compute_batch_scaffolds(
+    smiles_list: list[str],
+    scaffold_cache: dict[str, str],
+) -> tuple[set[str], int]:
+    """Spec 022 FR-001/FR-002 helper: scaffolds + valid count for ONE batch.
+
+    Returns ``(new_scaffolds_set, new_valid_count)``. Designed to feed the
+    incremental cumulative-scaffold accumulator on ``RunCache`` so the
+    cumulative metric stays O(batch) per cycle rather than O(cumulative).
+    """
+    if not smiles_list:
+        return set(), 0
+    out: set[str] = set()
+    valid_count = 0
+    for smi in smiles_list:
+        if smi in scaffold_cache:
+            scaffold = scaffold_cache[smi]
+        else:
+            scaffold = _scaffold_for_smiles(smi)
+            if scaffold is None:
+                continue
+            scaffold_cache[smi] = scaffold
+        out.add(scaffold)
+        valid_count += 1
+    return out, valid_count
 
 
 def _shannon_entropy_from_bit_sum(
@@ -528,7 +609,9 @@ def compute_diversity_metrics(
     )
     batch_ms = (time.perf_counter() - batch_start) * 1000.0
 
-    # ----- Cumulative fingerprints (append-only buffer) -----
+    # ----- Cumulative fingerprints (reservoir-sampled buffer) -----
+    # Spec 022 FR-003: cumulative_fp_buffer is capped at K_RESERVOIR via
+    # Vitter Algorithm R using the per-cycle deterministic RNG.
     cum_start = time.perf_counter()
     new_cumulative_smiles = [
         s for s in cumulative_smiles if s not in run_cache.cumulative_smiles_seen
@@ -536,7 +619,7 @@ def compute_diversity_metrics(
     new_fps, new_packed, fp_label_cum, _cum_valid_idx = _get_or_build_fps(
         new_cumulative_smiles, featurizer, cache_dir, run_cache.fp_cache
     )
-    run_cache.cumulative_fp_buffer.extend(new_fps)
+    _reservoir_extend(run_cache, new_fps, rng)
     for s in new_cumulative_smiles:
         run_cache.cumulative_smiles_seen.add(s)
 
@@ -548,7 +631,11 @@ def compute_diversity_metrics(
     cumulative_fps = run_cache.cumulative_fp_buffer
     cum_ms = (time.perf_counter() - cum_start) * 1000.0
 
+    # Spec 022 FR-004: append `_reservoir_<K>` suffix to fingerprint_used
+    # provenance whenever the cumulative stream has overflowed K_RESERVOIR.
     fingerprint_used_label = fp_label_batch or fp_label_cum
+    if run_cache.cumulative_seen_count > K_RESERVOIR:
+        fingerprint_used_label = f"{fingerprint_used_label}_reservoir_{K_RESERVOIR}"
     metrics["fingerprint_used"] = fingerprint_used_label
 
     # ----- Mean Tanimoto (adaptive) -----
@@ -570,6 +657,8 @@ def compute_diversity_metrics(
         metrics["mean_tanimoto_similarity_sampled_cumulative"] = None
 
     # ----- Scaffold diversity -----
+    # Spec 022 FR-001/FR-002: cumulative path uses incremental accumulator on
+    # RunCache (O(batch) per cycle) instead of re-iterating cumulative_smiles.
     scaffold_start = time.perf_counter()
     try:
         if "scaffold_diversity_index_batch" not in disabled_set:
@@ -577,9 +666,18 @@ def compute_diversity_metrics(
                 batch_smiles, run_cache.scaffold_cache
             )
         if "scaffold_diversity_index_cumulative" not in disabled_set:
-            metrics["scaffold_diversity_index_cumulative"] = _scaffold_diversity_index(
-                cumulative_smiles, run_cache.scaffold_cache
+            new_scaffolds, new_valid = _compute_batch_scaffolds(
+                new_cumulative_smiles, run_cache.scaffold_cache
             )
+            run_cache.cumulative_unique_scaffolds.update(new_scaffolds)
+            run_cache.cumulative_valid_count += new_valid
+            if run_cache.cumulative_valid_count > 0:
+                metrics["scaffold_diversity_index_cumulative"] = float(
+                    len(run_cache.cumulative_unique_scaffolds)
+                    / run_cache.cumulative_valid_count
+                )
+            else:
+                metrics["scaffold_diversity_index_cumulative"] = None
     except Exception as exc:
         logger.warning(
             "diversity cycle=%d scaffold failed (%s); setting to None",
@@ -601,8 +699,12 @@ def compute_diversity_metrics(
             else:
                 metrics["shannon_entropy_diversity_batch"] = None
         if "shannon_entropy_diversity_cumulative" not in disabled_set:
+            # Spec 022: use cumulative_seen_count (true cumulative count) as
+            # denominator, not the now-capped reservoir buffer length.
+            # bit_sum_buffer accumulates over ALL fingerprints, so the
+            # denominator must too.
             metrics["shannon_entropy_diversity_cumulative"] = _shannon_entropy_from_bit_sum(
-                run_cache.bit_sum_buffer, len(run_cache.cumulative_fp_buffer)
+                run_cache.bit_sum_buffer, run_cache.cumulative_seen_count
             )
     except Exception as exc:
         logger.warning(

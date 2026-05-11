@@ -172,30 +172,28 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
         'top_10_percent_overlap': max(1, int(n_total * 0.10))     # 10%
     }
 
-    results = {}
+    # Spec 022 FR-005: one argpartition per side (predictions / ground-truth),
+    # then sub-K slicing -- replaces N x O(N log N) full sorts with N x O(N) selection.
+    from learnm8.evaluation.metrics._topk import top_k_indices
     descending = (score_direction == 'higher')
+    # argpartition gives the largest values. For "lower is better", flip the
+    # sign so the same helper finds the smallest.
+    pred_arr = merged.get_column('prediction').to_numpy()
+    truth_arr = merged.get_column(target_col).to_numpy()
+    id_arr = merged.get_column('ID').to_numpy()
+    sign = 1.0 if descending else -1.0
+    max_k = max(k_values.values())
+    pred_order = top_k_indices(sign * pred_arr, max_k=max_k)
+    truth_order = top_k_indices(sign * truth_arr, max_k=max_k)
 
+    results = {}
     for key, k in k_values.items():
         if k > n_total:
             k = n_total
 
-        # Get top k by predictions
-        top_k_predicted = set(
-            merged.sort('prediction', descending=descending)
-            .head(k)
-            .get_column('ID')
-            .to_list()
-        )
+        top_k_predicted = set(id_arr[pred_order[:k]].tolist())
+        top_k_true = set(id_arr[truth_order[:k]].tolist())
 
-        # Get top k by ground truth
-        top_k_true = set(
-            merged.sort(target_col, descending=descending)
-            .head(k)
-            .get_column('ID')
-            .to_list()
-        )
-
-        # Calculate overlap
         overlap_count = len(top_k_predicted & top_k_true)
         overlap_percentage = (overlap_count / k) * 100
         results[key] = round(overlap_percentage, 2)
@@ -697,18 +695,22 @@ def calculate_multiple_unlabeled_enrichment_factors(
     results = {}
     descending = (score_direction == 'higher')
 
+    # Spec 022 FR-005: one argpartition pass for max-K then sub-K slicing,
+    # rather than one full sort per percentile.
+    from learnm8.evaluation.metrics._topk import top_k_indices
+    n_total = len(merged)
+    pred_arr = merged.get_column('prediction').to_numpy()
+    activity_arr = merged.get_column(activity_column).to_numpy()
+    sign = 1.0 if descending else -1.0
+    n_selects = {p: max(1, int(n_total * p / 100)) for p in percentiles}
+    max_k = max(n_selects.values())
+    pred_order = top_k_indices(sign * pred_arr, max_k=max_k)
+    n_actives_total = int((activity_arr == 1).sum())
+
     for p in percentiles:
-        # Sort by model predictions
-        sorted_df = merged.sort('prediction', descending=descending)
-
-        # Select top percentile
-        n_total = len(sorted_df)
-        n_select = max(1, int(n_total * p / 100))
-        top_percentile = sorted_df.head(n_select)
-
-        # Calculate EF
-        n_actives_selected = top_percentile.filter(pl.col(activity_column) == 1).height
-        n_actives_total = merged.filter(pl.col(activity_column) == 1).height
+        n_select = n_selects[p]
+        top_idx = pred_order[:n_select]
+        n_actives_selected = int((activity_arr[top_idx] == 1).sum())
 
         if n_select == 0 or n_actives_total == 0:
             ef = 0.0
