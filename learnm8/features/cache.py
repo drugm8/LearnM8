@@ -1135,19 +1135,32 @@ def _resolve_uint8_output(
 
     Returns True only when caller asked for uint8 AND storage actually has the
     bits handy (packed_uint8 / uint8). For float32 / csr_uint16 storage we
-    must materialise float32 — log once and fall back.
+    must materialise float32 — warn once per (featurizer, storage_dtype) pair
+    and fall back.
     """
     if preferred_dtype != 'uint8':
         return False
     if storage_dtype in (STORAGE_PACKED, STORAGE_UINT8):
         return True
-    logger.debug(
-        "preferred_dtype='uint8' incompatible with storage_dtype=%r for "
-        'featurizer %r; falling back to float32 output',
+    _emit_uint8_fallback_warning(storage_dtype, featurizer_name)
+    return False
+
+
+_uint8_fallback_warned: set[tuple[str, str]] = set()
+
+
+def _emit_uint8_fallback_warning(storage_dtype: str, featurizer_name: str) -> None:
+    key = (featurizer_name, storage_dtype)
+    if key in _uint8_fallback_warned:
+        return
+    _uint8_fallback_warned.add(key)
+    logger.warning(
+        "preferred_dtype='uint8' incompatible with storage_dtype=%r "
+        "for featurizer=%r; falling back to float32. "
+        "This loses the 4x working-set saving.",
         storage_dtype,
         featurizer_name,
     )
-    return False
 
 
 def from_storage_uint8(

@@ -87,3 +87,24 @@ def test_packed_storage_uses_correct_packed_width(tmp_path: Path):
     expected_width = (bit_count + 7) // 8
     with h5py.File(cache_file_maccs, 'r') as f:
         assert f['features'].shape[1] == expected_width
+
+
+@pytest.mark.unit
+def test_uint8_csr_fallback_warns_once(tmp_path: Path, caplog):
+    import logging
+    from learnm8.features import cache as cache_module
+    cache_module._uint8_fallback_warned.clear()
+
+    feat = create_featurizer('morgan', count=True, n_jobs=1)
+    caplog.set_level(logging.WARNING, logger='learnm8.features.cache')
+
+    extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path, preferred_dtype='uint8')
+    assert feat._storage_dtype == 'csr_uint16'
+
+    warn_records = [r for r in caplog.records if '4x working-set' in r.message]
+    assert len(warn_records) == 1, f'Expected exactly 1 warning, got {len(warn_records)}'
+
+    caplog.clear()
+    extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path, preferred_dtype='uint8')
+    warn_records_2 = [r for r in caplog.records if '4x working-set' in r.message]
+    assert len(warn_records_2) == 0, 'Warning should not fire twice'
