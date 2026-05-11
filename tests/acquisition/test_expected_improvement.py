@@ -6,6 +6,7 @@ import pytest
 from scipy.stats import norm
 
 from learnm8.acquisition import ExpectedImprovementAcquisition
+from learnm8.exceptions import LearnerError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -126,3 +127,12 @@ class TestExpectedImprovementAcquisition:
 
         score = result.filter(pl.col('prediction') == 12.0).get_column('acquisition_score')[0]
         assert np.isclose(score, expected_score, rtol=1e-5)
+
+    def test_inf_uncertainty_raises_learner_error(self, small_real_compounds):
+        compounds = _pool_with_predictions_and_uncertainty(
+            small_real_compounds.head(3).clone(),
+            [1.0, 2.0, 3.0],
+            [1.0, np.inf, 1.0],
+        )
+        with pytest.raises(LearnerError, match='Inf uncertainties'):
+            ExpectedImprovementAcquisition(current_best=0.5).select(compounds, n_select=2)

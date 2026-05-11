@@ -70,6 +70,9 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        from learnm8.utils.numerical import assert_no_inf_uncertainty
+        assert_no_inf_uncertainty(uncertainties, compounds.get_column("ID"))
+
         # Require current_best from labeled data
         if self.current_best is None:
             raise ValueError(
