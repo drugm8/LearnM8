@@ -5,7 +5,7 @@ import numpy as np
 from learnm8.exceptions import LearnerError
 
 from ..torch.fastprop_learner import FastpropLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class FastpropEnsemble(EnsembleLearner):
@@ -25,6 +25,7 @@ class FastpropEnsemble(EnsembleLearner):
         early_stopping_patience: int = 5,
         val_fraction: float = 0.1,
         random_states: list[int] | None = None,
+        random_state: int = 42,
         device: str = 'auto',
         enable_aggressive_gc: bool = True,
         **kwargs,
@@ -43,14 +44,15 @@ class FastpropEnsemble(EnsembleLearner):
             clamp_input: Apply input winsorization per learner (default: True)
             early_stopping_patience: Early stopping patience per learner (default: 5)
             val_fraction: Validation set fraction for early stopping per learner (default: 0.1)
-            random_states: List of random states for diversity (default: [42, 123, 456])
+            random_states: Explicit list of member seeds. When None (default),
+                seeds are derived from `random_state` via the unified offset
+                scheme `[base, base+81, base+314]` (see `_derive_random_states`).
             device: Device for computation ('auto', 'cpu', 'cuda') (default: 'auto')
             enable_aggressive_gc: Enable automatic GPU memory cleanup for all
                 ensemble members (default: True)
             **kwargs: Additional arguments passed to EnsembleLearner
         """
-        if random_states is None:
-            random_states = [42, 123, 456]
+        random_states = _derive_random_states(random_state, 3, override=random_states)
 
         learners = []
         for rs in random_states:

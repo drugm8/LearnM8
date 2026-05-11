@@ -46,11 +46,13 @@ def _configure_cuda_allocator() -> None:
     if _allocator_configured:
         return
     _allocator_configured = True
-    conf = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
-    if "expandable_segments" not in conf:
-        new_val = f"{conf},expandable_segments:True" if conf else "expandable_segments:True"
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = new_val
-        logger.debug("Set PYTORCH_CUDA_ALLOC_CONF=%s", new_val)
+    conf = os.environ.get('PYTORCH_CUDA_ALLOC_CONF', '')
+    if 'expandable_segments' not in conf:
+        new_val = (
+            f'{conf},expandable_segments:True' if conf else 'expandable_segments:True'
+        )
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = new_val
+        logger.debug('Set PYTORCH_CUDA_ALLOC_CONF=%s', new_val)
 
 
 def _get_learner_device(learner: Learner) -> str:
@@ -59,18 +61,18 @@ def _get_learner_device(learner: Learner) -> str:
     Checks .device, ._device, .accelerator in order.
     Maps Lightning semantics ('gpu' -> 'cuda').
     """
-    for attr in ("device", "_device", "accelerator"):
+    for attr in ('device', '_device', 'accelerator'):
         val = getattr(learner, attr, None)
         if val is not None:
             val_str = str(val)
-            if val_str in ("gpu", "cuda") or val_str.startswith("cuda:"):
-                return val_str if val_str != "gpu" else "cuda"
-            if val_str == "cpu":
-                return "cpu"
-    return "cpu"
+            if val_str in ('gpu', 'cuda') or val_str.startswith('cuda:'):
+                return val_str if val_str != 'gpu' else 'cuda'
+            if val_str == 'cpu':
+                return 'cpu'
+    return 'cpu'
 
 
-def get_available_memory(device: str = "cpu") -> int:
+def get_available_memory(device: str = 'cpu') -> int:
     """Query available memory for the target device.
 
     Args:
@@ -79,31 +81,31 @@ def get_available_memory(device: str = "cpu") -> int:
     Returns:
         Available memory in bytes.
     """
-    if device.startswith("cuda") or device == "gpu":
+    if device.startswith('cuda') or device == 'gpu':
         try:
             import torch.cuda
 
             if torch.cuda.is_available():
                 _configure_cuda_allocator()
                 dev_idx = 0
-                if ":" in device:
-                    dev_idx = int(device.split(":")[1])
+                if ':' in device:
+                    dev_idx = int(device.split(':')[1])
                 torch.cuda.empty_cache()
                 free, _total = torch.cuda.mem_get_info(dev_idx)
-                logger.debug("GPU %d available memory: %d bytes", dev_idx, free)
+                logger.debug('GPU %d available memory: %d bytes', dev_idx, free)
                 return free
         except Exception:
-            logger.debug("GPU memory query failed, falling back to CPU")
+            logger.debug('GPU memory query failed, falling back to CPU')
 
     try:
         import psutil
 
         available = psutil.virtual_memory().available
-        logger.debug("CPU available memory: %d bytes", available)
+        logger.debug('CPU available memory: %d bytes', available)
         return available
     except Exception:
         logger.debug(
-            "psutil unavailable, using fallback %d bytes", FALLBACK_MEMORY_BYTES
+            'psutil unavailable, using fallback %d bytes', FALLBACK_MEMORY_BYTES
         )
         return FALLBACK_MEMORY_BYTES
 
@@ -112,7 +114,7 @@ def estimate_batch_size(
     learner: Learner,
     n_samples: int,
     n_features: int,
-    device: str = "cpu",
+    device: str = 'cpu',
     memory_safety_factor: float = DEFAULT_SAFETY_FACTOR,
     n_jobs: int = 1,
 ) -> int:
@@ -133,15 +135,15 @@ def estimate_batch_size(
         LearnerError: If memory profile is invalid or memory insufficient.
     """
     profile = learner.memory_profile(n_features)
-    bytes_per_sample = profile["bytes_per_sample"]
-    working_multiplier = profile["working_multiplier"]
-    fixed_overhead = profile.get("fixed_overhead", 0)
+    bytes_per_sample = profile['bytes_per_sample']
+    working_multiplier = profile['working_multiplier']
+    fixed_overhead = profile.get('fixed_overhead', 0)
 
     if bytes_per_sample <= 0 or working_multiplier <= 0:
         raise LearnerError(
-            f"Invalid memory profile from {learner.get_name()}: "
-            f"bytes_per_sample={bytes_per_sample}, working_multiplier={working_multiplier}. "
-            f"Both must be positive. Check memory_profile() implementation."
+            f'Invalid memory profile from {learner.get_name()}: '
+            f'bytes_per_sample={bytes_per_sample}, working_multiplier={working_multiplier}. '
+            f'Both must be positive. Check memory_profile() implementation.'
         )
 
     available = get_available_memory(device)
@@ -153,15 +155,15 @@ def estimate_batch_size(
 
     if usable < cost_per_sample:
         raise LearnerError(
-            f"Insufficient memory for even 1 sample. "
-            f"Available: {available} bytes, cost per sample: {cost_per_sample:.0f} bytes, "
-            f"safety_factor: {memory_safety_factor}. "
-            f"Free up memory or reduce model complexity."
+            f'Insufficient memory for even 1 sample. '
+            f'Available: {available} bytes, cost per sample: {cost_per_sample:.0f} bytes, '
+            f'safety_factor: {memory_safety_factor}. '
+            f'Free up memory or reduce model complexity.'
         )
 
     batch_size = int(usable / cost_per_sample)
 
-    is_gpu = device.startswith("cuda") or device == "gpu"
+    is_gpu = device.startswith('cuda') or device == 'gpu'
     if is_gpu and batch_size >= GPU_ALIGNMENT:
         batch_size = (batch_size // GPU_ALIGNMENT) * GPU_ALIGNMENT
 
@@ -193,7 +195,7 @@ def _predict_chunk(
     The third element is the wall-clock seconds spent inside ``extract_features``
     so callers can report it separately from learner-side prediction time.
     """
-    chunk_smiles = chunk_df["SMILES"].to_list()
+    chunk_smiles = chunk_df['SMILES'].to_list()
     feature_time = 0.0
 
     preferred_dtype = learner.preferred_feature_dtype()
@@ -216,10 +218,10 @@ def _predict_chunk(
     else:
         if featurizer is None:
             raise ValueError(
-                f"featurizer is required for {learner.get_name()} because it is a "
+                f'featurizer is required for {learner.get_name()} because it is a '
                 f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
                 f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
-                f"a featurizer (featurizer=None)."
+                f'a featurizer (featurizer=None).'
             )
         t0 = time.time()
         chunk_features = extract_features(
@@ -237,7 +239,7 @@ def _predict_chunk(
 
 def _is_oom_error(error: BaseException) -> bool:
     return isinstance(error, MemoryError) or (
-        isinstance(error, RuntimeError) and "out of memory" in str(error).lower()
+        isinstance(error, RuntimeError) and 'out of memory' in str(error).lower()
     )
 
 
@@ -281,15 +283,15 @@ def _predict_chunk_with_oom_retry(
     effective_min = min(min_batch, n_samples)
     if retry_batch_size < effective_min:
         raise LearnerError(
-            f"OOM at minimum batch size ({effective_min}). "
-            f"Cannot predict with available memory. "
-            f"Samples: {n_samples}, features: {n_features}, "
-            f"available memory: {get_available_memory(device)} bytes. "
-            f"Free GPU/CPU memory or reduce model complexity."
+            f'OOM at minimum batch size ({effective_min}). '
+            f'Cannot predict with available memory. '
+            f'Samples: {n_samples}, features: {n_features}, '
+            f'available memory: {get_available_memory(device)} bytes. '
+            f'Free GPU/CPU memory or reduce model complexity.'
         )
 
     logger.warning(
-        "OOM during prediction, retrying with batch_size=%d (was %d)",
+        'OOM during prediction, retrying with batch_size=%d (was %d)',
         retry_batch_size,
         len(chunk_df),
     )
@@ -324,10 +326,10 @@ def _get_n_features(featurizer: str | None) -> int:
     if featurizer is None:
         return 2048
     try:
-        from learnm8.features import FEATURIZER_REGISTRY
+        from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 
         if featurizer in FEATURIZER_REGISTRY:
-            temp = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            temp = create_featurizer(featurizer, n_jobs=1)
             return temp.get_dimension()
     except Exception:
         pass
@@ -365,7 +367,7 @@ def predict_with_batching(
     n_samples = len(prediction_pool)
     n_features = _get_n_features(featurizer)
     device = _get_learner_device(learner)
-    is_gpu = device.startswith("cuda") or device == "gpu"
+    is_gpu = device.startswith('cuda') or device == 'gpu'
     min_batch = MIN_BATCH_GPU if is_gpu else MIN_BATCH_CPU
 
     batch_size = estimate_batch_size(
@@ -375,8 +377,8 @@ def predict_with_batching(
     n_batches = math.ceil(n_samples / batch_size)
     available = get_available_memory(device)
     logger.info(
-        "Batched prediction: %d samples, %d batches (batch_size=%d), "
-        "available=%d bytes, safety_factor=%.2f",
+        'Batched prediction: %d samples, %d batches (batch_size=%d), '
+        'available=%d bytes, safety_factor=%.2f',
         n_samples,
         n_batches,
         batch_size,
@@ -390,7 +392,9 @@ def predict_with_batching(
     all_valid_ids: list = []
     feature_extraction_time = 0.0
 
-    for _chunk_idx, chunk_df in enumerate(_chunk_dataframe(prediction_pool, batch_size)):
+    for _chunk_idx, chunk_df in enumerate(
+        _chunk_dataframe(prediction_pool, batch_size)
+    ):
         chunk_preds, chunk_uncerts, chunk_feat_time = _predict_chunk_with_oom_retry(
             chunk_df,
             learner,
@@ -405,8 +409,20 @@ def predict_with_batching(
         feature_extraction_time += chunk_feat_time
 
         all_predictions.append(chunk_preds)
-        all_valid_ids.extend(chunk_df["ID"].to_list())
-        if has_uncertainty and chunk_uncerts is not None:
+        all_valid_ids.extend(chunk_df['ID'].to_list())
+        if has_uncertainty:
+            if chunk_uncerts is None:
+                raise LearnerError(
+                    f'Chunk {_chunk_idx}: learner declared supports_uncertainty()=True '
+                    f'but returned None uncertainties. Every chunk must return non-None '
+                    f'uncertainties of equal length to predictions.'
+                )
+            if len(chunk_uncerts) != len(chunk_preds):
+                raise LearnerError(
+                    f'Chunk {_chunk_idx}: uncertainty length {len(chunk_uncerts)} '
+                    f'mismatches prediction length {len(chunk_preds)}. '
+                    f'Both arrays must have the same number of rows.'
+                )
             all_uncertainties.append(chunk_uncerts)
 
     predictions = (
@@ -421,5 +437,13 @@ def predict_with_batching(
             if len(all_uncertainties) == 1
             else np.concatenate(all_uncertainties)
         )
+
+    # Spec 022 FR-008: single dtype-conversion boundary. predict_with_batching is
+    # the sole producer cast site; downstream consumers (persistence, metric
+    # aggregators) receive float32 inputs. ``copy=False`` skips the copy if the
+    # learner already returned float32 (e.g. torch float32 inference).
+    predictions = predictions.astype(np.float32, copy=False)
+    if uncertainties is not None:
+        uncertainties = uncertainties.astype(np.float32, copy=False)
 
     return predictions, uncertainties, all_valid_ids, feature_extraction_time

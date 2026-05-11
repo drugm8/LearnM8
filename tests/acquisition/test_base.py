@@ -60,13 +60,17 @@ class TestAcquisitionBaseValidation:
             DummyAcquisition().validate_input(duplicated, n_select=2)
 
     def test_validate_input_rejects_nan_uncertainty_values(self, small_real_compounds):
+        # Feature 019 FR-005: cycle.py is the canonical NaN-fail-fast path.
+        # The validate_input branch is now defence-in-depth (LearnerError with
+        # [secondary-guard] prefix) so it survives `python -O`.
+        from learnm8.exceptions import LearnerError
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(3).clone(),
             [0.1, 0.2, 0.3],
             [0.1, np.nan, 0.3],
         )
 
-        with pytest.raises(ValueError, match='Uncertainties contain'):
+        with pytest.raises(LearnerError, match=r"\[secondary-guard\] Uncertainties contain"):
             DummyAcquisition().validate_input(compounds, n_select=2)
 
     def test_safe_select_top_k_rejects_score_length_mismatch(self, small_real_compounds):
@@ -203,25 +207,19 @@ class TestValidateUncertaintyInputs:
         with pytest.raises(AcquisitionError, match="missing required 'uncertainty' column"):
             validate_uncertainty_inputs(compounds)
 
-    def test_validate_uncertainty_inputs_rejects_nan_predictions(self, small_real_compounds):
+    def test_validate_uncertainty_inputs_skips_nan_checks(self, small_real_compounds):
+        # Feature 019: NaN guards are upstream (cycle.py FR-005) and at the
+        # secondary-guard `validate_input` layer; validate_uncertainty_inputs
+        # no longer re-checks for NaN to avoid duplicate hot-path scans.
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(3).select(['ID', 'SMILES']).clone(),
             [0.1, np.nan, 0.3],
             [0.1, 0.2, 0.3],
         )
-
-        with pytest.raises(AcquisitionError, match='Predictions contain 1 NaN values'):
-            validate_uncertainty_inputs(compounds)
-
-    def test_validate_uncertainty_inputs_rejects_nan_uncertainties(self, small_real_compounds):
-        compounds = _pool_with_predictions_and_uncertainty(
-            small_real_compounds.head(3).select(['ID', 'SMILES']).clone(),
-            [0.1, 0.2, 0.3],
-            [0.1, np.nan, 0.3],
-        )
-
-        with pytest.raises(AcquisitionError, match='Uncertainties contain 1 NaN values'):
-            validate_uncertainty_inputs(compounds)
+        # Returns the arrays as-is — no inline raise.
+        preds, uncs = validate_uncertainty_inputs(compounds)
+        assert np.isnan(preds).any()
+        assert not np.isnan(uncs).any()
 
     def test_validate_uncertainty_inputs_rejects_negative_uncertainties(self, small_real_compounds):
         compounds = _pool_with_predictions_and_uncertainty(

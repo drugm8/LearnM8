@@ -1,4 +1,4 @@
-"""Round-trip tests for v2 cache: cold→write→read→unpack matches cold output (T017, SC-006)."""
+"""Round-trip tests for v3 cache: cold→write→read→unpack matches cold output (T017, SC-006)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,14 @@ import h5py
 import numpy as np
 import pytest
 
-from learnm8.features import MACCSFeaturizer, MordredFeaturizer, MorganFeaturizer
+from learnm8.features import create_featurizer
+from learnm8.features.cache import HASH_DTYPE
 from learnm8.features.extraction import extract_features
 
 
 @pytest.mark.unit
 def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     cold = extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
 
     assert cold.shape == (3, 2048)
@@ -23,16 +24,18 @@ def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
 
     cache_file = tmp_path / 'features_morgan.h5'
     with h5py.File(cache_file, 'r') as f:
-        assert int(f.attrs['schema_version']) == 2
+        assert int(f.attrs['schema_version']) == 3
         assert str(f.attrs['storage_dtype']) == 'packed_uint8'
         assert int(f.attrs['bit_count']) == 2048
         assert f['features'].shape == (3, 256)
         assert f['features'].dtype == np.uint8
         assert f['hash_index'].shape == (3,)
-        assert f['hash_index'].dtype == np.uint64
+        assert f['hash_index'].dtype == HASH_DTYPE
         assert f['row_index'].shape == (3,)
         assert f['row_index'].dtype == np.uint64
-        assert np.all(np.diff(f['hash_index'][:]) > 0)
+        # S16 element-wise comparison is lex byte comparison; np.diff doesn't apply.
+        h_arr = f['hash_index'][:]
+        assert np.all(h_arr[1:] > h_arr[:-1])
 
     warm = extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
     assert np.array_equal(cold, warm)
@@ -41,7 +44,7 @@ def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_maccs_166_non_multiple_of_8_roundtrip(tmp_path: Path):
-    feat = MACCSFeaturizer(n_jobs=1)
+    feat = create_featurizer('maccs', n_jobs=1)
     cold = extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
 
     bit_count = feat.get_dimension()
@@ -60,7 +63,7 @@ def test_maccs_166_non_multiple_of_8_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_mordred_float32_roundtrip(tmp_path: Path):
-    feat = MordredFeaturizer(n_jobs=1)
+    feat = create_featurizer('mordred', n_jobs=1)
     cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
 
     assert cold.dtype == np.float32
@@ -76,7 +79,7 @@ def test_mordred_float32_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_mixed_hit_miss_preserves_order(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
     direct = feat.transform(['CCO', 'CCCC', 'CCC'])
 
@@ -86,7 +89,7 @@ def test_mixed_hit_miss_preserves_order(tmp_path: Path):
 
 @pytest.mark.unit
 def test_single_smiles_roundtrip(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
     warm = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert np.array_equal(cold, warm)

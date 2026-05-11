@@ -8,7 +8,7 @@ import logging
 
 import numpy as np
 import polars as pl
-from scipy.stats import norm
+from scipy.special import ndtr
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
@@ -22,10 +22,14 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     providing a principled way to balance exploration and exploitation.
     """
 
-    def __init__(self,
-                 xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
-                 current_best: float | None = None,
-                 **kwargs):
+    def __init__(
+        self,
+        xi: float = 0.01,
+        minimize: bool | None = None,
+        score_direction: str = 'higher',
+        current_best: float | None = None,
+        **kwargs,
+    ):
         """Initialize Expected Improvement acquisition function.
 
         Args:
@@ -38,15 +42,17 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         # Handle backward compatibility with minimize parameter
         if minimize is not None:
             import warnings
+
             warnings.warn(
                 "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
-                DeprecationWarning, stacklevel=2
+                DeprecationWarning,
+                stacklevel=2,
             )
             score_direction = 'lower' if minimize else 'higher'
 
         super().__init__(score_direction=score_direction, **kwargs)
         if xi < 0:
-            raise ValueError("xi must be non-negative")
+            raise ValueError('xi must be non-negative')
 
         self.xi = xi
         self.current_best = current_best
@@ -70,16 +76,22 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        from learnm8.utils.numerical import assert_no_inf_uncertainty
+
+        assert_no_inf_uncertainty(uncertainties, compounds.get_column('ID'))
+
         # Require current_best from labeled data
         if self.current_best is None:
             raise ValueError(
                 "Expected Improvement requires 'current_best' parameter with the best observed value "
-                "from labeled training data. This should be passed via acquisition_params at the cycle level."
+                'from labeled training data. This should be passed via acquisition_params at the cycle level.'
             )
 
         current_best = self.current_best
 
-        logger.debug(f"EIAcquisition: current_best={current_best:.3f}, calculating expected improvement")
+        logger.debug(
+            f'EIAcquisition: current_best={current_best:.3f}, calculating expected improvement'
+        )
 
         # Calculate improvement based on score direction
         if self.maximize:
@@ -87,29 +99,35 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         else:
             improvement = current_best - predictions - self.xi
 
-        # Use uncertainties directly (already standard deviations, not variances)
+        # Spec 022 FR-006/FR-007: inline EI with scipy.special.ndtr (C-level
+        # Cephes; bit-exact equivalent of scipy.stats.norm.cdf) + symmetric
+        # z-clipping for IEEE 754 safety + Botorch sigma=0 -> 0 convention.
         std_devs = uncertainties
+        sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
+        z_scores = improvement / sigma_safe
+        z_clipped = np.clip(z_scores, -37.0, 37.0)
+        Phi = ndtr(z_clipped)
+        phi = np.exp(-0.5 * z_clipped * z_clipped) / np.sqrt(2.0 * np.pi)
+        ei_scores = improvement * Phi + std_devs * phi
+        # Botorch convention: when sigma = 0 the model is fully certain -- no
+        # improvement opportunity beyond what the deterministic prediction
+        # already says, so EI = 0. This is behavioural-test-locked in
+        # tests/acquisition/test_expected_improvement.py.
+        ei_scores = np.where(std_devs > 0, ei_scores, 0.0)
 
-        # Calculate Expected Improvement
-        with np.errstate(divide="ignore", invalid="ignore"):
-            z_scores = improvement / std_devs
-
-        # Calculate EI using normal distribution
-        ei_scores = improvement * norm.cdf(z_scores) + std_devs * norm.pdf(z_scores)
-
-        # Handle zero variance case
-        zero_var_mask = uncertainties == 0
-        ei_scores[zero_var_mask] = np.maximum(improvement[zero_var_mask], 0)
-
-        logger.debug(f"EI statistics: {(ei_scores > 0).sum()} compounds with positive EI")
+        logger.debug(
+            f'EI statistics: {(ei_scores > 0).sum()} compounds with positive EI'
+        )
 
         # Select top compounds
         selected = self._safe_select_top_k(
             compounds, ei_scores, n_select, ascending=False
         )
 
-        logger.debug(f"ExpectedImprovementAcquisition selected {len(selected)} compounds "
-                    f"with ξ={self.xi}, current_best={current_best:.3f}")
+        logger.debug(
+            f'ExpectedImprovementAcquisition selected {len(selected)} compounds '
+            f'with ξ={self.xi}, current_best={current_best:.3f}'
+        )
 
         return selected
 
@@ -119,5 +137,5 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        direction = "max" if self.maximize else "min"
-        return f"EI(ξ={self.xi},{direction})"
+        direction = 'max' if self.maximize else 'min'
+        return f'EI(ξ={self.xi},{direction})'

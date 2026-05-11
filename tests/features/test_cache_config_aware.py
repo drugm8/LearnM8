@@ -1,29 +1,29 @@
 """Test configuration-aware HDF5 caching for featurizers."""
 
-
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
-from learnm8.features.skfp_2d.morgan import MorganFeaturizer
-from learnm8.features.skfp_3d.usr import USRFeaturizer
 
 
 @pytest.mark.integration
 class TestConfigurationAwareCaching:
     """Test cache keys include featurizer configuration hash."""
 
-    def test_different_configs_use_different_cache_keys(self, small_real_compounds, tmp_path):
-        """Different featurizer radii share the v2 cache file with distinct uint64 hash keys."""
+    def test_different_configs_use_different_cache_keys(
+        self, small_real_compounds, tmp_path
+    ):
+        """Different featurizer radii share the v3 cache file with distinct 128-bit hash keys."""
         import h5py
 
-        from learnm8.features.cache import _cache_keys_uint64
+        from learnm8.features.cache import _cache_keys_bytes16
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
         test_smiles = smiles[0]
 
-        featurizer1 = MorganFeaturizer(radius=2)
-        featurizer2 = MorganFeaturizer(radius=3)
+        featurizer1 = create_featurizer('morgan', radius=2)
+        featurizer2 = create_featurizer('morgan', radius=3)
 
         features1 = extract_features(
             smiles, featurizer=featurizer1, cache_dir=tmp_path, n_jobs=1
@@ -34,14 +34,14 @@ class TestConfigurationAwareCaching:
 
         assert not np.array_equal(features1, features2)
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
 
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
             hash_index = h5f['hash_index'][:]
-            key1 = int(_cache_keys_uint64([test_smiles], featurizer1)[0])
-            key2 = int(_cache_keys_uint64([test_smiles], featurizer2)[0])
+            key1 = _cache_keys_bytes16([test_smiles], featurizer1)[0]
+            key2 = _cache_keys_bytes16([test_smiles], featurizer2)[0]
             assert key1 != key2
             assert key1 in hash_index
             assert key2 in hash_index
@@ -52,21 +52,21 @@ class TestConfigurationAwareCaching:
 
         features1 = extract_features(
             smiles,
-            featurizer=MorganFeaturizer(radius=2),
+            featurizer=create_featurizer('morgan', radius=2),
             cache_dir=tmp_path,
-            n_jobs=1
+            n_jobs=1,
         )
 
         features2 = extract_features(
             smiles,
-            featurizer=MorganFeaturizer(radius=2),
+            featurizer=create_featurizer('morgan', radius=2),
             cache_dir=tmp_path,
-            n_jobs=1
+            n_jobs=1,
         )
 
         assert np.array_equal(features1, features2)
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
 
     def test_cache_key_includes_featurizer_name(self, small_real_compounds, tmp_path):
@@ -74,20 +74,14 @@ class TestConfigurationAwareCaching:
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
         extract_features(
-            smiles,
-            featurizer=MorganFeaturizer(),
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=create_featurizer('morgan'), cache_dir=tmp_path, n_jobs=1
         )
 
         extract_features(
-            smiles,
-            featurizer=USRFeaturizer(),
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=create_featurizer('usr'), cache_dir=tmp_path, n_jobs=1
         )
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 2
 
         cache_names = [f.stem for f in cache_files]
@@ -102,7 +96,7 @@ class TestCacheHitMiss:
     def test_cache_hit_on_second_call(self, small_real_compounds, tmp_path):
         """Second call with same config hits cache."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
-        featurizer = MorganFeaturizer(radius=2, fp_size=2048)
+        featurizer = create_featurizer('morgan', radius=2, fp_size=2048)
 
         features1 = extract_features(smiles, featurizer, cache_dir=tmp_path, n_jobs=1)
         features2 = extract_features(smiles, featurizer, cache_dir=tmp_path, n_jobs=1)
@@ -115,16 +109,16 @@ class TestCacheHitMiss:
 
         features1 = extract_features(
             smiles,
-            featurizer=MorganFeaturizer(radius=2),
+            featurizer=create_featurizer('morgan', radius=2),
             cache_dir=tmp_path,
-            n_jobs=1
+            n_jobs=1,
         )
 
         features2 = extract_features(
             smiles,
-            featurizer=MorganFeaturizer(radius=3),
+            featurizer=create_featurizer('morgan', radius=3),
             cache_dir=tmp_path,
-            n_jobs=1
+            n_jobs=1,
         )
 
         assert not np.array_equal(features1, features2)
@@ -134,17 +128,11 @@ class TestCacheHitMiss:
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
         features1 = extract_features(
-            smiles,
-            featurizer=MorganFeaturizer(),
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=create_featurizer('morgan'), cache_dir=tmp_path, n_jobs=1
         )
 
         features2 = extract_features(
-            smiles,
-            featurizer=USRFeaturizer(),
-            cache_dir=tmp_path,
-            n_jobs=1
+            smiles, featurizer=create_featurizer('usr'), cache_dir=tmp_path, n_jobs=1
         )
 
         assert features1.shape[1] != features2.shape[1]
@@ -160,8 +148,8 @@ class TestCacheWithDifferentParameters:
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
-        feat1 = MorganFeaturizer(fp_size=2048)
-        feat2 = MorganFeaturizer(fp_size=4096)
+        feat1 = create_featurizer('morgan', fp_size=2048)
+        feat2 = create_featurizer('morgan', fp_size=4096)
 
         feat_2048 = extract_features(
             smiles, featurizer=feat1, cache_dir=tmp_path, n_jobs=1
@@ -183,28 +171,28 @@ class TestCacheWithDifferentParameters:
             assert int(h5f.attrs['bit_count']) == 4096
 
     def test_cache_3d_conformer_params(self, small_real_compounds, tmp_path):
-        """Different USR conformer params share file with distinct uint64 hash keys."""
+        """Different USR conformer params share file with distinct 128-bit hash keys."""
         import h5py
 
-        from learnm8.features.cache import _cache_keys_uint64
+        from learnm8.features.cache import _cache_keys_bytes16
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:3]
         test_smiles = smiles[0]
 
-        feat1 = USRFeaturizer(num_conformers=1)
-        feat2 = USRFeaturizer(num_conformers=2, optimize_force_field='UFF')
+        feat1 = create_featurizer('usr', num_conformers=1)
+        feat2 = create_featurizer('usr', num_conformers=2, optimize_force_field='UFF')
 
         extract_features(smiles, featurizer=feat1, cache_dir=tmp_path, n_jobs=1)
         extract_features(smiles, featurizer=feat2, cache_dir=tmp_path, n_jobs=1)
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
 
         cache_file = cache_files[0]
         with h5py.File(cache_file, 'r') as h5f:
             hash_index = h5f['hash_index'][:]
-            key1 = int(_cache_keys_uint64([test_smiles], feat1)[0])
-            key2 = int(_cache_keys_uint64([test_smiles], feat2)[0])
+            key1 = _cache_keys_bytes16([test_smiles], feat1)[0]
+            key2 = _cache_keys_bytes16([test_smiles], feat2)[0]
             assert key1 != key2
             assert key1 in hash_index
             assert key2 in hash_index
@@ -217,11 +205,11 @@ class TestCacheFileStructure:
     def test_cache_file_naming_convention(self, small_real_compounds, tmp_path):
         """Cache files follow naming convention (features_<featurizer_name>.h5)."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
-        featurizer = MorganFeaturizer(radius=2, fp_size=2048)
+        featurizer = create_featurizer('morgan', radius=2, fp_size=2048)
 
         extract_features(smiles, featurizer, cache_dir=tmp_path, n_jobs=1)
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
 
         cache_file = cache_files[0]
@@ -231,20 +219,23 @@ class TestCacheFileStructure:
     def test_multiple_featurizers_separate_files(self, small_real_compounds, tmp_path):
         """Same-name featurizer configs with same bit_count share file; different
         featurizer types or different bit_counts create separate active files."""
-        from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
         # Same bit_count (radius differs only) → single file
-        extract_features(smiles, MorganFeaturizer(radius=2), tmp_path, n_jobs=1)
-        extract_features(smiles, MorganFeaturizer(radius=3), tmp_path, n_jobs=1)
+        extract_features(
+            smiles, create_featurizer('morgan', radius=2), tmp_path, n_jobs=1
+        )
+        extract_features(
+            smiles, create_featurizer('morgan', radius=3), tmp_path, n_jobs=1
+        )
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
         assert cache_files[0].name == 'features_morgan.h5'
 
         # Different featurizer type creates separate file
-        extract_features(smiles, MACCSFeaturizer(), tmp_path, n_jobs=1)
-        cache_files = list(tmp_path.glob("*.h5"))
+        extract_features(smiles, create_featurizer('maccs'), tmp_path, n_jobs=1)
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 2
         file_names = {f.name for f in cache_files}
         assert file_names == {'features_morgan.h5', 'features_maccs.h5'}
@@ -257,7 +248,7 @@ class TestCachePersistence:
     def test_cache_persists_across_calls(self, small_real_compounds, tmp_path):
         """Cache persists and is reused across multiple calls."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
-        featurizer = MorganFeaturizer(radius=2)
+        featurizer = create_featurizer('morgan', radius=2)
 
         features1 = extract_features(smiles, featurizer, tmp_path, n_jobs=1)
         features2 = extract_features(smiles, featurizer, tmp_path, n_jobs=1)
@@ -266,18 +257,20 @@ class TestCachePersistence:
         assert np.array_equal(features1, features2)
         assert np.array_equal(features2, features3)
 
-        cache_files = list(tmp_path.glob("*.h5"))
+        cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
 
     def test_cache_handles_subset_of_compounds(self, small_real_compounds, tmp_path):
         """Cache correctly handles subset requests."""
         all_smiles = small_real_compounds.get_column('SMILES').to_list()[:20]
         subset_smiles = all_smiles[:10]
-        featurizer = MorganFeaturizer()
+        featurizer = create_featurizer('morgan')
 
         features_all = extract_features(all_smiles, featurizer, tmp_path, n_jobs=1)
 
-        features_subset = extract_features(subset_smiles, featurizer, tmp_path, n_jobs=1)
+        features_subset = extract_features(
+            subset_smiles, featurizer, tmp_path, n_jobs=1
+        )
 
         assert np.array_equal(features_subset, features_all[:10])
 
@@ -289,7 +282,7 @@ class TestCacheEdgeCases:
     def test_cache_with_no_cache_dir(self, small_real_compounds):
         """Extract features without caching works."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
-        featurizer = MorganFeaturizer()
+        featurizer = create_featurizer('morgan')
 
         features = extract_features(smiles, featurizer, cache_dir=None, n_jobs=1)
 
@@ -297,7 +290,7 @@ class TestCacheEdgeCases:
 
     def test_cache_with_empty_input(self, tmp_path):
         """Caching handles empty input gracefully."""
-        featurizer = MorganFeaturizer()
+        featurizer = create_featurizer('morgan')
 
         features = extract_features([], featurizer, tmp_path, n_jobs=1)
 
@@ -305,11 +298,11 @@ class TestCacheEdgeCases:
 
     def test_cache_creates_directory(self, small_real_compounds, tmp_path):
         """Cache directory is created if it doesn't exist."""
-        new_cache_dir = tmp_path / "new_cache"
+        new_cache_dir = tmp_path / 'new_cache'
         assert not new_cache_dir.exists()
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
-        extract_features(smiles, MorganFeaturizer(), new_cache_dir, n_jobs=1)
+        extract_features(smiles, create_featurizer('morgan'), new_cache_dir, n_jobs=1)
 
         assert new_cache_dir.exists()
-        assert len(list(new_cache_dir.glob("*.h5"))) == 1
+        assert len(list(new_cache_dir.glob('*.h5'))) == 1

@@ -66,6 +66,19 @@ def write_cycle_predictions(
         return None
     parquet_path = prediction_parquet_path(output_dir, cycle)
     tmp_path = parquet_path.with_suffix('.parquet.tmp')
+    # Spec 022 FR-008/FR-009: predictions and uncertainty columns are written
+    # as Float32 to halve disk + RAM at 100M scale. predict_with_batching is
+    # the single producer-side cast site; the re-cast here is a defensive
+    # boundary check so a learner that bypasses the batching path still
+    # produces a Float32 parquet (no silent Float64 writes).
+    cast_exprs: list[pl.Expr] = []
+    if cycle_predictions.schema.get('prediction') is not None:
+        cast_exprs.append(pl.col('prediction').cast(pl.Float32))
+    for unc_col in ('uncertainty', 'uncertainty_at_selection'):
+        if unc_col in cycle_predictions.columns:
+            cast_exprs.append(pl.col(unc_col).cast(pl.Float32))
+    if cast_exprs:
+        cycle_predictions = cycle_predictions.with_columns(cast_exprs)
     try:
         cycle_predictions.write_parquet(tmp_path, compression='zstd')
         tmp_path.rename(parquet_path)
@@ -73,6 +86,29 @@ def write_cycle_predictions(
         tmp_path.unlink(missing_ok=True)
         raise
     return parquet_path
+
+
+def read_cycle_predictions(parquet_path: Path) -> pl.DataFrame:
+    """Read a cycle-predictions parquet, accepting both Float32 and Float64.
+
+    Spec 022 FR-009 backward-compat: old runs wrote Float64 columns; new runs
+    write Float32. The loader transparently downcasts Float64 fixtures so
+    downstream code always sees Float32. Implemented as
+    ``scan_parquet → with_columns(...cast(pl.Float32)) → collect`` to avoid
+    a transient 2x memory peak that ``read_parquet`` then-cast would incur
+    on 100M-row files (see contracts/prediction-parquet-schema.md).
+    """
+    lf = pl.scan_parquet(parquet_path)
+    columns_on_disk = lf.collect_schema().names()
+    cast_exprs: list[pl.Expr] = []
+    if 'prediction' in columns_on_disk:
+        cast_exprs.append(pl.col('prediction').cast(pl.Float32))
+    for unc_col in ('uncertainty', 'uncertainty_at_selection'):
+        if unc_col in columns_on_disk:
+            cast_exprs.append(pl.col(unc_col).cast(pl.Float32))
+    if cast_exprs:
+        lf = lf.with_columns(cast_exprs)
+    return lf.collect()
 
 
 def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
@@ -412,9 +448,20 @@ def save_results(
     if validation_result.invalid_compounds.height > 0:
         try:
             invalid_df = validation_result.invalid_compounds.clone()
-            # Map errors using join
-            from learnm8.utils.polars_utils import map_values_via_join
-            invalid_df = map_values_via_join(invalid_df, validation_result.validation_errors, 'ID', 'error')
+            lookup_df = pl.DataFrame({
+                'ID': list(validation_result.validation_errors.keys()),
+                'error_new': list(validation_result.validation_errors.values())
+            })
+            invalid_df = invalid_df.join(lookup_df, on='ID', how='left')
+            if 'error' in invalid_df.columns:
+                invalid_df = invalid_df.with_columns(
+                    pl.coalesce(
+                        pl.col('error_new'),
+                        pl.col('error')
+                    ).alias('error')
+                ).drop('error_new')
+            else:
+                invalid_df = invalid_df.rename({'error_new': 'error'})
 
             validation_path = output_dir / 'validation_report.csv'
             invalid_df.write_csv(validation_path)

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from learnm8.exceptions import FeatureExtractionError
-from learnm8.features import MorganFeaturizer
+from learnm8.features import create_featurizer
 from learnm8.features.cache import _acquire_lock
 from learnm8.features.extraction import extract_features
 
@@ -21,7 +21,7 @@ def test_writer_lock_contention_raises_within_timeout(
 ):
     monkeypatch.setattr('learnm8.features.cache.LOCK_TIMEOUT_S', 0.2)
 
-    extract_features(['CCO'], MorganFeaturizer(n_jobs=1), cache_dir=tmp_path)
+    extract_features(['CCO'], create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
     cache_path = tmp_path / 'features_morgan.h5'
 
     holder_started = threading.Event()
@@ -36,12 +36,14 @@ def test_writer_lock_contention_raises_within_timeout(
     holder.start()
     assert holder_started.wait(timeout=1.0)
 
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     t0 = time.perf_counter()
-    with pytest.raises(FeatureExtractionError, match=r"lock"):
+    with pytest.raises(FeatureExtractionError, match=r'lock'):
         extract_features(['XXXNEW'], feat, cache_dir=tmp_path)
     elapsed = time.perf_counter() - t0
-    assert elapsed < 1.0, f"lock contention should fail within timeout, took {elapsed:.3f}s"
+    assert elapsed < 1.0, (
+        f'lock contention should fail within timeout, took {elapsed:.3f}s'
+    )
 
     holder_release.set()
     holder.join(timeout=2.0)
@@ -49,7 +51,7 @@ def test_writer_lock_contention_raises_within_timeout(
 
 @pytest.mark.unit
 def test_concurrent_readers_do_not_block(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
 
     barrier = threading.Barrier(3)
@@ -70,7 +72,7 @@ def test_concurrent_readers_do_not_block(tmp_path: Path):
     for t in readers:
         t.join(timeout=5.0)
 
-    assert not errors, f"reader errors: {errors}"
+    assert not errors, f'reader errors: {errors}'
     assert len(results) == 3
     for r in results:
         assert r.shape == (2, 2048)
@@ -79,7 +81,7 @@ def test_concurrent_readers_do_not_block(tmp_path: Path):
 
 @pytest.mark.unit
 def test_shared_reader_does_not_block_concurrent_shared_reader(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
     cache_path = tmp_path / 'features_morgan.h5'
 
@@ -121,6 +123,7 @@ def test_lock_timeout_env_var_overridable(
 ):
     """LEARNM8_LOCK_TIMEOUT_S env var is read at module import; verify constant present."""
     from learnm8.features import cache as cache_mod
+
     assert isinstance(cache_mod.LOCK_TIMEOUT_S, float)
 
 
@@ -130,7 +133,7 @@ def test_lock_holder_pid_message_when_proc_locks_unavailable(
 ):
     monkeypatch.setattr('learnm8.features.cache.LOCK_TIMEOUT_S', 0.1)
 
-    extract_features(['CCO'], MorganFeaturizer(n_jobs=1), cache_dir=tmp_path)
+    extract_features(['CCO'], create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
     cache_path = tmp_path / 'features_morgan.h5'
 
     # Force /proc/locks unavailable.
@@ -155,8 +158,10 @@ def test_lock_holder_pid_message_when_proc_locks_unavailable(
     holder.start()
     assert holder_started.wait(timeout=1.0)
 
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
-    with pytest.raises(FeatureExtractionError, match=r"PID unknown|holder PID"):
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
+    with pytest.raises(
+        FeatureExtractionError, match=r'Another process is likely using this cache'
+    ):
         extract_features(['XXXNEW'], feat, cache_dir=tmp_path)
 
     holder_release.set()

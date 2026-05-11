@@ -16,66 +16,45 @@ from learnm8.exceptions import (
     PruningError,
     LearnM8Warning,
     ConvergenceWarning,
-    DataConversionWarning,
 )
 
 pytestmark = [pytest.mark.unit]
 
-
-# ---------------------------------------------------------------------------
-# Base exception
-# ---------------------------------------------------------------------------
-
-
-class TestLearnM8Error:
-
-    def test_inherits_from_exception(self):
-        assert issubclass(LearnM8Error, Exception)
-
-    def test_instantiation_with_message(self):
-        exc = LearnM8Error("something went wrong")
-        assert str(exc) == "something went wrong"
-
-    def test_catchable_as_exception(self):
-        with pytest.raises(Exception):
-            raise LearnM8Error("boom")
+EXCEPTION_SPECS = [
+    (LearnM8Error, None),
+    (ConfigurationError, None),
+    (ValidationError, ("err",)),
+    (FeatureExtractionError, None),
+    (LearnerError, None),
+    (AcquisitionError, None),
+    (OracleError, None),
+    (PersistenceError, None),
+    (PruningError, None),
+]
 
 
-# ---------------------------------------------------------------------------
-# Dual-inheritance error classes
-# ---------------------------------------------------------------------------
+class TestExceptionHierarchy:
 
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_inheritance(self, exc_class, args):
+        assert issubclass(exc_class, LearnM8Error)
 
-class TestConfigurationError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(ConfigurationError, LearnM8Error)
-
-    def test_inherits_valueerror(self):
-        assert issubclass(ConfigurationError, ValueError)
-
-    def test_catchable_as_valueerror(self):
-        with pytest.raises(ValueError):
-            raise ConfigurationError("bad param")
-
-    def test_catchable_as_learnm8error(self):
-        with pytest.raises(LearnM8Error):
-            raise ConfigurationError("bad param")
-
-    def test_isinstance_checks(self):
-        exc = ConfigurationError("x")
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_isinstance(self, exc_class, args):
+        exc = exc_class(*(args or ("test",)))
         assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, ValueError)
         assert isinstance(exc, Exception)
 
+    @pytest.mark.parametrize("exc_class,args", EXCEPTION_SPECS)
+    def test_catchable_as_learnm8error(self, exc_class, args):
+        with pytest.raises(LearnM8Error):
+            raise exc_class(*(args or ("test",)))
 
-class TestValidationError:
+    def test_learnm8error_instantiation(self):
+        assert str(LearnM8Error("msg")) == "msg"
 
-    def test_inherits_learnm8error(self):
-        assert issubclass(ValidationError, LearnM8Error)
 
-    def test_inherits_valueerror(self):
-        assert issubclass(ValidationError, ValueError)
+class TestValidationErrorAttributes:
 
     def test_default_attributes_are_none(self):
         exc = ValidationError("bad data")
@@ -88,154 +67,26 @@ class TestValidationError:
         assert exc.invalid_smiles is None
 
     def test_invalid_smiles_attribute(self):
-        exc = ValidationError(
-            "bad smiles",
-            invalid_indices=[0, 2],
-            invalid_smiles=["XXX", "YYY"],
-        )
+        exc = ValidationError("bad smiles", invalid_indices=[0, 2],
+                              invalid_smiles=["XXX", "YYY"])
         assert exc.invalid_indices == [0, 2]
         assert exc.invalid_smiles == ["XXX", "YYY"]
 
     def test_message_preserved(self):
-        exc = ValidationError("test message", invalid_indices=[1])
-        assert str(exc) == "test message"
-
-    def test_catchable_as_valueerror(self):
-        with pytest.raises(ValueError):
-            raise ValidationError("bad", invalid_indices=[0])
-
-    def test_catchable_as_learnm8error(self):
-        with pytest.raises(LearnM8Error):
-            raise ValidationError("bad")
+        assert str(ValidationError("test message", invalid_indices=[1])) == "test message"
 
 
-class TestFeatureExtractionError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(FeatureExtractionError, LearnM8Error)
-
-    def test_inherits_runtimeerror(self):
-        assert issubclass(FeatureExtractionError, RuntimeError)
-
-    def test_catchable_as_runtimeerror(self):
-        with pytest.raises(RuntimeError):
-            raise FeatureExtractionError("featurizer failed")
-
-    def test_catchable_as_learnm8error(self):
-        with pytest.raises(LearnM8Error):
-            raise FeatureExtractionError("featurizer failed")
+WARNING_SPECS = [
+    (LearnM8Warning, UserWarning),
+    (ConvergenceWarning, LearnM8Warning),
+]
 
 
-class TestLearnerError:
+class TestWarningHierarchy:
 
-    def test_inherits_learnm8error(self):
-        assert issubclass(LearnerError, LearnM8Error)
-
-    def test_inherits_runtimeerror(self):
-        assert issubclass(LearnerError, RuntimeError)
-
-    def test_isinstance_checks(self):
-        exc = LearnerError("train failed")
-        assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, RuntimeError)
-
-
-class TestAcquisitionError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(AcquisitionError, LearnM8Error)
-
-    def test_inherits_runtimeerror(self):
-        assert issubclass(AcquisitionError, RuntimeError)
-
-    def test_isinstance_checks(self):
-        exc = AcquisitionError("selection failed")
-        assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, RuntimeError)
-
-
-class TestOracleError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(OracleError, LearnM8Error)
-
-    def test_inherits_runtimeerror(self):
-        assert issubclass(OracleError, RuntimeError)
-
-    def test_catchable_as_runtimeerror(self):
-        with pytest.raises(RuntimeError):
-            raise OracleError("measurement failed")
-
-
-class TestPersistenceError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(PersistenceError, LearnM8Error)
-
-    def test_inherits_oserror(self):
-        assert issubclass(PersistenceError, OSError)
-
-    def test_catchable_as_oserror(self):
-        with pytest.raises(OSError):
-            raise PersistenceError("disk full")
-
-    def test_isinstance_checks(self):
-        exc = PersistenceError("write failed")
-        assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, OSError)
-
-
-class TestPruningError:
-
-    def test_inherits_learnm8error(self):
-        assert issubclass(PruningError, LearnM8Error)
-
-    def test_inherits_runtimeerror(self):
-        assert issubclass(PruningError, RuntimeError)
-
-    def test_isinstance_checks(self):
-        exc = PruningError("pruning failed")
-        assert isinstance(exc, LearnM8Error)
-        assert isinstance(exc, RuntimeError)
-
-
-# ---------------------------------------------------------------------------
-# Catch-all: every error subclass caught by except LearnM8Error
-# ---------------------------------------------------------------------------
-
-
-class TestCatchAll:
-
-    @pytest.mark.parametrize(
-        "exc_class",
-        [
-            ConfigurationError,
-            ValidationError,
-            FeatureExtractionError,
-            LearnerError,
-            AcquisitionError,
-            OracleError,
-            PersistenceError,
-            PruningError,
-        ],
-    )
-    def test_all_caught_by_learnm8error(self, exc_class):
-        with pytest.raises(LearnM8Error):
-            if exc_class is ValidationError:
-                raise exc_class("err", invalid_indices=[])
-            else:
-                raise exc_class("err")
-
-
-# ---------------------------------------------------------------------------
-# Warnings
-# ---------------------------------------------------------------------------
-
-
-class TestLearnM8Warning:
-
-    def test_inherits_userwarning(self):
-        assert issubclass(LearnM8Warning, UserWarning)
+    @pytest.mark.parametrize("warn_class,parent", WARNING_SPECS)
+    def test_inheritance(self, warn_class, parent):
+        assert issubclass(warn_class, parent)
 
     def test_captured_by_warnings_module(self):
         with warnings.catch_warnings(record=True) as w:
@@ -243,15 +94,6 @@ class TestLearnM8Warning:
             warnings.warn("test", LearnM8Warning)
             assert len(w) == 1
             assert issubclass(w[0].category, LearnM8Warning)
-
-
-class TestConvergenceWarning:
-
-    def test_inherits_learnm8warning(self):
-        assert issubclass(ConvergenceWarning, LearnM8Warning)
-
-    def test_inherits_userwarning(self):
-        assert issubclass(ConvergenceWarning, UserWarning)
 
     def test_captured_by_learnm8warning_filter(self):
         with warnings.catch_warnings(record=True) as w:
@@ -261,36 +103,14 @@ class TestConvergenceWarning:
             assert issubclass(w[0].category, ConvergenceWarning)
 
 
-class TestDataConversionWarning:
-
-    def test_inherits_learnm8warning(self):
-        assert issubclass(DataConversionWarning, LearnM8Warning)
-
-    def test_inherits_userwarning(self):
-        assert issubclass(DataConversionWarning, UserWarning)
-
-
-# ---------------------------------------------------------------------------
-# Import paths (backward compatibility)
-# ---------------------------------------------------------------------------
-
-
 class TestImportPaths:
 
     def test_import_from_top_level(self):
         from learnm8 import (  # noqa: F401
-            LearnM8Error,
-            ConfigurationError,
-            ValidationError,
-            FeatureExtractionError,
-            LearnerError,
-            AcquisitionError,
-            OracleError,
-            PersistenceError,
-            PruningError,
-            LearnM8Warning,
-            ConvergenceWarning,
-            DataConversionWarning,
+            LearnM8Error, ConfigurationError, ValidationError,
+            FeatureExtractionError, LearnerError, AcquisitionError,
+            OracleError, PersistenceError, PruningError,
+            LearnM8Warning, ConvergenceWarning,
         )
 
     def test_import_from_exceptions_module(self):

@@ -8,7 +8,7 @@ import logging
 
 import numpy as np
 import polars as pl
-from scipy.stats import norm
+from scipy.special import ndtr
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
@@ -22,10 +22,14 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     the current best observed value.
     """
 
-    def __init__(self,
-                 xi: float = 0.01, minimize: bool = None, score_direction: str = 'higher',
-                 current_best: float | None = None,
-                 **kwargs):
+    def __init__(
+        self,
+        xi: float = 0.01,
+        minimize: bool | None = None,
+        score_direction: str = 'higher',
+        current_best: float | None = None,
+        **kwargs,
+    ):
         """Initialize Probability of Improvement acquisition function.
 
         Args:
@@ -38,15 +42,17 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         # Handle backward compatibility with minimize parameter
         if minimize is not None:
             import warnings
+
             warnings.warn(
                 "The 'minimize' parameter is deprecated. Use 'score_direction' instead.",
-                DeprecationWarning, stacklevel=2
+                DeprecationWarning,
+                stacklevel=2,
             )
             score_direction = 'lower' if minimize else 'higher'
 
         super().__init__(score_direction=score_direction, **kwargs)
         if xi < 0:
-            raise ValueError("xi must be non-negative")
+            raise ValueError('xi must be non-negative')
 
         self.xi = xi
         self.current_best = current_best
@@ -70,16 +76,22 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        from learnm8.utils.numerical import assert_no_inf_uncertainty
+
+        assert_no_inf_uncertainty(uncertainties, compounds.get_column('ID'))
+
         # Require current_best from labeled data
         if self.current_best is None:
             raise ValueError(
                 "Probability of Improvement requires 'current_best' parameter with the best observed value "
-                "from labeled training data. This should be passed via acquisition_params at the cycle level."
+                'from labeled training data. This should be passed via acquisition_params at the cycle level.'
             )
 
         current_best = self.current_best
 
-        logger.debug(f"PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement")
+        logger.debug(
+            f'PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement'
+        )
 
         # Calculate improvement based on score direction
         if self.maximize:
@@ -87,26 +99,28 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         else:
             improvement = current_best - predictions - self.xi
 
-        # Use uncertainties directly (already standard deviations, not variances)
+        # Spec 022 FR-006/FR-007: inline PI with scipy.special.ndtr (C-level
+        # Cephes; bit-exact equivalent of scipy.stats.norm.cdf) + symmetric
+        # z-clipping + Botorch sigma=0 -> 0 convention.
         std_devs = uncertainties
-
-        # Calculate Probability of Improvement
-        with np.errstate(divide="ignore"):
-            z_scores = improvement / std_devs
-
-        pi_scores = norm.cdf(z_scores)
-
-        # Handle zero variance case
-        zero_var_mask = uncertainties == 0
-        pi_scores[zero_var_mask] = np.where(improvement[zero_var_mask] > 0, 1.0, 0.0)
+        sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
+        z_scores = improvement / sigma_safe
+        z_clipped = np.clip(z_scores, -37.0, 37.0)
+        pi_scores = ndtr(z_clipped)
+        # Botorch convention: sigma=0 means PI is 0 (no uncertainty -> no
+        # improvement-probability information). Behavioural-test-locked in
+        # tests/acquisition/test_probability_improvement.py.
+        pi_scores = np.where(std_devs > 0, pi_scores, 0.0)
 
         # Select top compounds
         selected = self._safe_select_top_k(
             compounds, pi_scores, n_select, ascending=False
         )
 
-        logger.debug(f"ProbabilityImprovementAcquisition selected {len(selected)} compounds "
-                    f"with ξ={self.xi}, current_best={current_best:.3f}")
+        logger.debug(
+            f'ProbabilityImprovementAcquisition selected {len(selected)} compounds '
+            f'with ξ={self.xi}, current_best={current_best:.3f}'
+        )
 
         return selected
 
@@ -116,5 +130,5 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        direction = "max" if self.maximize else "min"
-        return f"PI(ξ={self.xi},{direction})"
+        direction = 'max' if self.maximize else 'min'
+        return f'PI(ξ={self.xi},{direction})'

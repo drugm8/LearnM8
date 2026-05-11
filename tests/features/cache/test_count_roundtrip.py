@@ -14,23 +14,20 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
-from learnm8.features.skfp_2d.atom_pair import AtomPairFeaturizer
-from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
-from learnm8.features.skfp_2d.morgan import MorganFeaturizer
-from learnm8.features.skfp_2d.topological_torsion import TopologicalTorsionFeaturizer
 
 # SMILES chosen to produce repeated substructures so count fingerprints
 # accumulate values ≥ 2 in multiple bins.
 HIGH_COUNT_SMILES = [
-    'CCCCCCCCCCCCCCCCCC',           # n-octadecane: many repeated CH2 atoms
-    'c1ccc2c(c1)ccc1ccccc12',       # phenanthrene-ish polycyclic aromatic
-    'C1CCCCCCCCCC1',                # cycloundecane
-    'CCCCCCCCCCCCCCCC(=O)O',        # palmitic acid
-    'c1ccc(-c2ccc(-c3ccccc3)cc2)cc1', # terphenyl
-    'CC(C)(C)CC(C)(C)CC(C)(C)C',    # branched alkane
-    'O=C(O)CC(=O)O',                # malonic acid (carboxyls)
-    'NCCNCCNCCN',                   # polyamine (repeated NH)
+    'CCCCCCCCCCCCCCCCCC',  # n-octadecane: many repeated CH2 atoms
+    'c1ccc2c(c1)ccc1ccccc12',  # phenanthrene-ish polycyclic aromatic
+    'C1CCCCCCCCCC1',  # cycloundecane
+    'CCCCCCCCCCCCCCCC(=O)O',  # palmitic acid
+    'c1ccc(-c2ccc(-c3ccccc3)cc2)cc1',  # terphenyl
+    'CC(C)(C)CC(C)(C)CC(C)(C)C',  # branched alkane
+    'O=C(O)CC(=O)O',  # malonic acid (carboxyls)
+    'NCCNCCNCCN',  # polyamine (repeated NH)
 ]
 
 
@@ -41,10 +38,12 @@ HIGH_COUNT_SMILES = [
 )
 def test_count_fingerprint_round_trip_exact(tmp_path: Path, factory_name: str):
     factories = {
-        'morgan_count': MorganFeaturizer(count=True),
-        'atom_pair_count': AtomPairFeaturizer(count=True),
-        'topological_torsion_count': TopologicalTorsionFeaturizer(count=True),
-        'maccs_count': MACCSFeaturizer(count=True),
+        'morgan_count': create_featurizer('morgan', count=True),
+        'atom_pair_count': create_featurizer('atom_pair', count=True),
+        'topological_torsion_count': create_featurizer(
+            'topological_torsion', count=True
+        ),
+        'maccs_count': create_featurizer('maccs', count=True),
     }
     feat = factories[factory_name]
 
@@ -53,8 +52,8 @@ def test_count_fingerprint_round_trip_exact(tmp_path: Path, factory_name: str):
     # Sanity: for COUNT featurizers we should observe values ≥ 2 in at least
     # one bin so the test actually exercises non-binary behaviour.
     assert int(expected.max()) >= 2, (
-        f"{factory_name}: expected max value ≥ 2 from count featurizer on "
-        f"chosen SMILES; got max={expected.max()} — choose denser SMILES"
+        f'{factory_name}: expected max value ≥ 2 from count featurizer on '
+        f'chosen SMILES; got max={expected.max()} — choose denser SMILES'
     )
 
     cold = extract_features(HIGH_COUNT_SMILES, feat, cache_dir=tmp_path)

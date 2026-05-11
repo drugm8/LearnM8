@@ -20,6 +20,7 @@ from .initialization import initialize_master_dataframe_empty
 from .interfaces import Learner, Oracle
 from .persistence import (
     prediction_parquet_path,
+    read_cycle_predictions,
     save_results,
     write_cycle_predictions,
 )
@@ -43,6 +44,7 @@ __all__ = [
     'parse_cycle_spec',
     # Persistence
     'prediction_parquet_path',
+    'read_cycle_predictions',
     'save_results',
     'update_status',
     # Validation

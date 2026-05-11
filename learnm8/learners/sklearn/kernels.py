@@ -45,7 +45,13 @@ class TanimotoKernel(Kernel):
         norm_X = np.sum(X**2, axis=1)
         norm_Y = np.sum(Y**2, axis=1)
         denominator = norm_X[:, None] + norm_Y[None, :] - XY
-        T = XY / np.maximum(denominator, 1e-10)
+        # Feature 019 FR-014: zero-zero pairs (denominator == 0) get T = 1
+        # (canonical k(x,x)=1 identity, removable singularity from |x|→0+).
+        # `denom_safe` swaps the zero entries to 1.0 BEFORE the divide so the
+        # divide path never sees a zero — avoids the np.where double-eval
+        # that would materialise a full divide-result over the entire matrix.
+        denom_safe = np.where(denominator > 0, denominator, 1.0)
+        T = np.where(denominator > 0, XY / denom_safe, 1.0)
         K = self.signal_variance * T
 
         if not eval_gradient:
@@ -57,10 +63,11 @@ class TanimotoKernel(Kernel):
             return K, np.empty((X.shape[0], X.shape[0], 0))
 
     def diag(self, X: np.ndarray) -> np.ndarray:
-        norm_sq = np.sum(X**2, axis=1)
-        result = self.signal_variance * norm_sq / np.maximum(norm_sq, 1e-10)
-        result[norm_sq == 0] = 0.0
-        return result
+        # Feature 019 FR-014: canonical k(x,x)=1 identity, scaled by signal_variance.
+        # Returns signal_variance for every row including zero vectors (removable
+        # singularity); the previous ``zero-row → 0`` branch caused LinAlgError
+        # when sklearn computed predictive variance on zero-fingerprint rows.
+        return np.full(X.shape[0], self.signal_variance, dtype=np.float64)
 
     def is_stationary(self) -> bool:
         return False

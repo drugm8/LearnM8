@@ -68,7 +68,6 @@ def make_run_namespace(compound_pool, tmp_path, **overrides):
         learner='rf',
         score_direction='higher',
         cycles=None,
-        schedule=None,
         config=None,
         n_cycles=2,
         batch_fraction=0.4,
@@ -83,7 +82,6 @@ def make_run_namespace(compound_pool, tmp_path, **overrides):
         n_jobs=-1,
         device='cpu',
         random_state=42,
-        mode=None,
         memory_safety_factor=0.7,
         smiles_col=None,
         id_col=None,
@@ -105,14 +103,9 @@ def make_validate_namespace(compound_pool, **overrides):
     return argparse.Namespace(**defaults)
 
 
-def make_list_namespace(component):
-    """Build argparse.Namespace for cmd_list."""
-    return argparse.Namespace(component=component)
-
-
 @pytest.fixture
 def minimal_compounds(tmp_path):
-    """Create valid compound pool CSV with enough diversity for predefined schedules."""
+    """Create valid compound pool CSV."""
     csv_path = tmp_path / "compounds.csv"
     base_smiles = [
         'CCO', 'CCC', 'CCCC', 'CCCCC', 'CCCCCC',
@@ -284,18 +277,6 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
 
-    def test_predefined_schedules(self, minimal_compounds, tmp_path, monkeypatch):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            learner='dt',
-            output=str(tmp_path / 'output' / 'quick'),
-            n_cycles=2, batch_fraction=0.4,
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode == 0, f"Schedule test failed: {result.stdout}"
-        assert 'Using predefined schedule' not in result.stdout
-
     def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch):
         pytest.importorskip('yaml', reason="PyYAML not installed")
         from learnm8.cli.main import cmd_run
@@ -372,18 +353,6 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Direction {direction} failed"
 
-    @pytest.mark.parametrize("mode", ["run", "benchmark"])
-    def test_mode_parameter(self, minimal_compounds, tmp_path, monkeypatch, mode):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            mode=mode,
-            output=str(tmp_path / mode),
-            n_cycles=1, batch_fraction=0.4,
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode == 0, f"Mode {mode} failed"
-
     def test_random_state(self, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
         output_dir1 = tmp_path / "run1"
@@ -423,49 +392,6 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
-
-
-@pytest.mark.slow
-class TestListSubcommand:
-    """Test 'list' subcommand functionality."""
-
-    def test_list_learners(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('learners')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'rf' in result.stdout or 'gp' in result.stdout
-
-    def test_list_acquisition(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('acquisition')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'greedy' in result.stdout or 'random' in result.stdout
-
-    def test_list_featurizers(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('featurizers')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'morgan' in result.stdout
-        assert 'maccs' in result.stdout
-
-    def test_list_schedules(self, monkeypatch):
-        from learnm8.cli.main import cmd_list
-        args = make_list_namespace('schedules')
-        result = run_cmd_inprocess(cmd_list, args, monkeypatch)
-        assert result.returncode == 0
-        assert 'quick' in result.stdout
-        assert 'standard' in result.stdout
-        assert 'intensive' in result.stdout
-
-    def test_list_invalid_component(self):
-        from learnm8.cli.main import create_parser
-        parser = create_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(['list', 'invalid'])
-        assert exc_info.value.code != 0
 
 
 @pytest.mark.slow
@@ -520,13 +446,6 @@ class TestHelpAndErrors:
             parser.parse_args(['run', '-h'])
         assert exc_info.value.code == 0
 
-    def test_list_help(self):
-        from learnm8.cli.main import create_parser
-        parser = create_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(['list', '-h'])
-        assert exc_info.value.code == 0
-
     def test_validate_help(self):
         from learnm8.cli.main import create_parser
         parser = create_parser()
@@ -567,15 +486,6 @@ class TestEdgeCases:
         args = make_run_namespace(
             minimal_compounds, tmp_path,
             cycles='invalid_format',
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode != 0
-
-    def test_invalid_schedule(self, minimal_compounds, tmp_path, monkeypatch):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            schedule='nonexistent',
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
@@ -698,7 +608,6 @@ def run_args(minimal_compounds, tmp_path):
         learner='rf',
         score_direction='higher',
         cycles=None,
-        schedule=None,
         config=None,
         n_cycles=2,
         batch_fraction=0.4,
@@ -713,7 +622,6 @@ def run_args(minimal_compounds, tmp_path):
         n_jobs=1,
         device='cpu',
         random_state=42,
-        mode=None,
         memory_safety_factor=0.7,
         smiles_col=None,
         id_col=None,

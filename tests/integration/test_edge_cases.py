@@ -79,15 +79,18 @@ class TestAcquisitionEdgeCases:
     
     def test_acquisition_with_nan_predictions(self, small_real_compounds):
         """Test acquisition function handling of NaN predictions."""
+        from learnm8.exceptions import LearnerError
+
         compounds = small_real_compounds.head(10).clone()
         compounds = compounds.with_columns(
             pl.Series('prediction', [np.nan if i < 3 else 0.5 for i in range(len(compounds))])
         )
-        
+
         acq = GreedyAcquisition()
-        
-        # Should reject NaN predictions with error
-        with pytest.raises(ValueError, match="Predictions contain NaN values"):
+
+        # 019 US2: defense-in-depth secondary guard raises LearnerError.
+        # Canonical NaN guard is upstream in cycle.py; direct .select() hits this fallback.
+        with pytest.raises(LearnerError, match="Predictions contain NaN values"):
             acq.select(compounds, n_select=5)
     
     def test_random_acquisition_reproducibility(self, small_real_compounds):

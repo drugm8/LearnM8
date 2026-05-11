@@ -22,7 +22,7 @@ class TestDTEnsemble:
         """Test DTEnsemble initialization with default parameters."""
         assert len(dt_ensemble.learners) == 3
         assert dt_ensemble.max_depths == [5, 10, 15]
-        assert dt_ensemble.random_states == [42, 123, 456]
+        assert dt_ensemble.random_states == [42, 123, 356]
         assert dt_ensemble.aggregation_method == 'mean'
         assert dt_ensemble.uncertainty_method == 'std'
         assert not dt_ensemble.is_trained

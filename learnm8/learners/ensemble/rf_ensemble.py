@@ -3,24 +3,31 @@
 import warnings
 
 from ..sklearn.random_forest import RandomForestLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class RFEnsemble(EnsembleLearner):
     """Ensemble of 3 Random Forest learners with different random states."""
 
     def __init__(
-        self, n_estimators: int = 100, random_states: list[int] | None = None, **kwargs
+        self,
+        n_estimators: int = 100,
+        random_states: list[int] | None = None,
+        random_state: int = 42,
+        **kwargs,
     ):
         """Initialize RF ensemble.
 
         Args:
             n_estimators: Number of trees per forest (default: 100)
-            random_states: List of random states for diversity (default: [42, 123, 456])
+            random_states: Explicit list of member seeds. When None (default),
+                seeds are derived from ``random_state`` via the unified offset
+                scheme ``[base, base+81, base+314]``.
+            random_state: Base seed for member-seed derivation (default: 42).
+                Ignored when ``random_states`` is provided explicitly.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
-        if random_states is None:
-            random_states = [42, 123, 456]
+        random_states = _derive_random_states(random_state, 3, override=random_states)
 
         total_trees = n_estimators * len(random_states)
         warnings.warn(

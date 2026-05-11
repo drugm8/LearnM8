@@ -1,36 +1,49 @@
-"""HDF5 v2 bit-packed cache for molecular feature extraction.
+"""HDF5 v3 bit-packed binary feature cache.
 
-Schema v2: one consolidated 2-D ``/features`` dataset per featurizer plus
-``/hash_index`` and ``/row_index`` for O(log N) lookup. Binary featurizers
-round-trip through :func:`numpy.packbits` for 32x storage reduction; continuous
-featurizers store float32 in place. Public ``extract_features`` signature is
-unchanged. Failure mode is fail-fast: corruption or persistent OS errors raise
-:class:`FeatureExtractionError` with a remediation message rather than silently
-re-fingerprinting (which at 100M scale wastes ~10 hours).
+Schema (version 3):
+  - /hash_index: (N,) S16    — 128-bit BLAKE2b digests, sorted ascending (lex)
+  - /row_index:  (N,) uint64 — row index into /features
+  - /features:   per-storage-dtype layout (packed_uint8 / float32 / uint8 /
+                 csr_uint16); for CSR, the /csr_data, /csr_indices, /csr_indptr
+                 triple replaces the dense /features dataset.
 
-Cache-key recipe (FR-004) preserves the v1 contract:
-``MD5(smiles + '_' + name + '_' + config_hash)`` truncated to 8 big-endian
-bytes interpreted as ``uint64``. ``hashlib.md5(..., usedforsecurity=False)`` so
-LearnM8 stays operational on FIPS-locked hosts. The 64-bit truncation residual
-collision probability at N=10**8 is ~0.027% — accepted as documented risk;
-recoverable by deleting the cache file.
+Cache-key recipe:
+  blake2b(f'{canonical_smiles}_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode(),
+          digest_size=16, usedforsecurity=False)
+
+The 128-bit digest gives ~1.5e-23 collision probability at N=10**8 (birthday
+formula), versus ~2.7e-4 for the prior v2 64-bit truncation — adequate at
+LearnM8's 10**8 design point with comfortable headroom.
+
+Concurrency:
+  Single-node, single-filesystem use only. NFS, Lustre, GlusterFS, and other
+  shared/distributed filesystems are NOT supported and may produce silent
+  corruption — fcntl.flock has well-defined semantics only on local POSIX
+  filesystems. Locking uses a sidecar `<cache>.lock` file and a thread-safe
+  in-process `OrderedDict` LRU keyed on (path, mtime_ns, write_epoch).
+
+Migration:
+  Opening a cache (64-bit hash) renames the file to ``<name>.h5.hash64.bak``
+  and creates a fresh v3 cache. The ``.bak`` is preserved; the user may delete
+  it once satisfied. If ``<name>.h5.hash64.bak`` already exists, migration is
+  REFUSED to prevent data loss.
 """
 
 from __future__ import annotations
 
 import contextlib
-import errno
 import fcntl
 import hashlib
 import logging
 import os
+import threading
 import time
-import weakref
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import h5py
 import hdf5plugin
@@ -47,16 +60,19 @@ from learnm8.exceptions import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Schema constants (T005)
+# Schema constants
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
+HASH_WIDTH_BITS: int = 128
+HASH_DTYPE: np.dtype = np.dtype('S16')
 ATTR_SCHEMA_VERSION = 'schema_version'
 ATTR_BIT_COUNT = 'bit_count'
 ATTR_STORAGE_DTYPE = 'storage_dtype'
 ATTR_FEATURIZER_NAME = 'featurizer_name'
 ATTR_WRITE_EPOCH = 'write_epoch'
 ATTR_STORAGE_LAYOUT = 'storage_layout'
+ATTR_HASH_WIDTH = 'hash_width_bits'
 
 LAYOUT_DENSE = 'dense'
 LAYOUT_CSR = 'csr'
@@ -120,33 +136,67 @@ _BLOSC_KWARGS = hdf5plugin.Blosc(
     shuffle=hdf5plugin.Blosc.SHUFFLE,
 )
 
+# Bounded LRU cap for in-process /hash_index re-reads. At 100M rows x 16 B,
+# each entry is ~1.6 GB; 4 entries ~ 6.4 GB headroom, fits the 30 GB cache
+# budget alongside Morgan-2048 features.
+DEFAULT_HASH_INDEX_LRU_MAX: int = 4
+
 
 # ---------------------------------------------------------------------------
-# Process-level hash_index cache (post-review addendum)
+# Process-level hash_index LRU cache
 # ---------------------------------------------------------------------------
-# WHY: NFR-003 (<1 s open at 100M) requires that we don't re-read the 800 MB
-# hash_index on every reader open. Cache key (path, mtime_ns, write_epoch)
-# invalidates automatically on writer commit (write_epoch bumps under LOCK_EX).
+# WHY: NFR-003 (<1 s open at 100M) requires we don't re-read the ~1.6 GB
+# /hash_index on every reader open. Strong-ref OrderedDict LRU keyed on
+# (path, mtime_ns, write_epoch) auto-invalidates on writer commit (write_epoch
+# bumps under LOCK_EX) and on external mtime changes. Bounded by
+# DEFAULT_HASH_INDEX_LRU_MAX to respect the cache memory budget.
 
-_HASH_INDEX_CACHE: dict[tuple[str, int, int], Any] = {}
+_HASH_INDEX_CACHE: OrderedDict[tuple[str, int, int], np.ndarray] = OrderedDict()
+_HASH_INDEX_LOCK: threading.Lock = threading.Lock()
 
 
-def _hash_index_cache_get(path: Path, mtime_ns: int, write_epoch: int) -> np.ndarray | None:
+def _hash_index_cache_get(
+    path: Path, mtime_ns: int, write_epoch: int
+) -> np.ndarray | None:
+    """Lookup the cached hash_index array; return None on miss.
+
+    On hit: moves the entry to the most-recently-used position. Returns a
+    strong reference — caller does NOT need to keep ``arr`` alive.
+    """
     key = (str(path.resolve()), mtime_ns, write_epoch)
-    weak = _HASH_INDEX_CACHE.get(key)
-    if weak is None:
+    with _HASH_INDEX_LOCK:
+        if key in _HASH_INDEX_CACHE:
+            _HASH_INDEX_CACHE.move_to_end(key)
+            return _HASH_INDEX_CACHE[key]
         return None
-    cached = weak()
-    if cached is None:
-        _HASH_INDEX_CACHE.pop(key, None)
-        return None
-    return cached
 
 
-def _hash_index_cache_put(path: Path, mtime_ns: int, write_epoch: int, arr: np.ndarray) -> None:
+def _hash_index_cache_put(
+    path: Path, mtime_ns: int, write_epoch: int, arr: np.ndarray
+) -> None:
+    """Store ``arr`` under the (path, mtime_ns, write_epoch) key.
+
+    Evicts stale entries for the same path (different mtime_ns/write_epoch) so
+    a write_epoch bump doesn't leave the old ~1.6 GB array occupying an LRU
+    slot until natural eviction. Caps the cache at
+    ``DEFAULT_HASH_INDEX_LRU_MAX`` entries.
+    """
     key = (str(path.resolve()), mtime_ns, write_epoch)
-    with contextlib.suppress(TypeError):
-        _HASH_INDEX_CACHE[key] = weakref.ref(arr)
+    with _HASH_INDEX_LOCK:
+        path_str = key[0]
+        stale = [k for k in _HASH_INDEX_CACHE if k[0] == path_str and k != key]
+        for k in stale:
+            del _HASH_INDEX_CACHE[k]
+        _HASH_INDEX_CACHE[key] = arr
+        _HASH_INDEX_CACHE.move_to_end(key)
+        while len(_HASH_INDEX_CACHE) > DEFAULT_HASH_INDEX_LRU_MAX:
+            _HASH_INDEX_CACHE.popitem(last=False)
+
+
+def _hash_index_cache_clear() -> None:
+    """Drop all cached hash_index arrays (test convenience)."""
+    with _HASH_INDEX_LOCK:
+        _HASH_INDEX_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -158,9 +208,9 @@ def _normalize_storage_dtype(dtype_str: str) -> str:
     """Validate and normalize a storage dtype string (FR-015)."""
     if dtype_str not in ALLOWED_STORAGE_DTYPES:
         raise ConfigurationError(
-            f"unknown storage_dtype: {dtype_str!r}; supported: "
-            f"{sorted(ALLOWED_STORAGE_DTYPES)}. "
-            f"Override Featurizer.get_storage_dtype() to one of these."
+            f'unknown storage_dtype: {dtype_str!r}; supported: '
+            f'{sorted(ALLOWED_STORAGE_DTYPES)}. '
+            f'Override Featurizer.get_storage_dtype() to one of these.'
         )
     return dtype_str
 
@@ -172,13 +222,15 @@ def _validate_uint8_range(features: np.ndarray) -> None:
     arr_max = float(features.max())
     if arr_min < 0.0 or arr_max > 255.0:
         offenders = np.argwhere((features < 0) | (features > 255))
-        row, col = (int(offenders[0, 0]), int(offenders[0, 1])) if offenders.size else (-1, -1)
+        row, col = (
+            (int(offenders[0, 0]), int(offenders[0, 1])) if offenders.size else (-1, -1)
+        )
         bad_value = float(features[row, col]) if row >= 0 else arr_max
         raise FeatureExtractionError(
-            f"uint8 storage out of range: row={row} col={col} value={bad_value} "
-            f"(observed min={arr_min}, max={arr_max}; uint8 admits [0, 255]). "
+            f'uint8 storage out of range: row={row} col={col} value={bad_value} '
+            f'(observed min={arr_min}, max={arr_max}; uint8 admits [0, 255]). '
             f"Either set this featurizer's get_storage_dtype() to 'float32' or "
-            f"contact maintainers about a wider int dtype."
+            f'contact maintainers about a wider int dtype.'
         )
 
 
@@ -196,9 +248,9 @@ def to_storage(features: np.ndarray, storage_dtype: str) -> np.ndarray:
         return np.ascontiguousarray(features, dtype=np.uint8)
     if storage_dtype == STORAGE_CSR_UINT16:
         raise FeatureExtractionError(
-            f"to_storage() does not encode {STORAGE_CSR_UINT16!r}; "
-            f"the cache writer dispatches CSR rows directly. "
-            f"This call indicates a bug in the cache write path."
+            f'to_storage() does not encode {STORAGE_CSR_UINT16!r}; '
+            f'the cache writer dispatches CSR rows directly. '
+            f'This call indicates a bug in the cache write path.'
         )
     return np.ascontiguousarray(features, dtype=np.float32)
 
@@ -218,14 +270,18 @@ def from_storage(
     """
     storage_dtype = _normalize_storage_dtype(storage_dtype)
     if storage_dtype == STORAGE_FLOAT32:
-        return stored if stored.dtype == np.float32 else stored.astype(np.float32, copy=False)
+        return (
+            stored
+            if stored.dtype == np.float32
+            else stored.astype(np.float32, copy=False)
+        )
     if storage_dtype == STORAGE_UINT8:
         return stored.astype(np.float32, copy=False)
     if storage_dtype == STORAGE_CSR_UINT16:
         raise FeatureExtractionError(
-            f"from_storage() does not decode {STORAGE_CSR_UINT16!r}; "
-            f"the cache reader dispatches CSR rows directly. "
-            f"This call indicates a bug in the cache read path."
+            f'from_storage() does not decode {STORAGE_CSR_UINT16!r}; '
+            f'the cache reader dispatches CSR rows directly. '
+            f'This call indicates a bug in the cache read path.'
         )
 
     n = stored.shape[0]
@@ -235,7 +291,9 @@ def from_storage(
     chunk = max(1, max_chunk_rows)
     for start in range(0, n, chunk):
         end = min(start + chunk, n)
-        unpacked = np.unpackbits(stored[start:end], axis=1, count=bit_count, bitorder='big')
+        unpacked = np.unpackbits(
+            stored[start:end], axis=1, count=bit_count, bitorder='big'
+        )
         out[start:end] = unpacked.astype(np.float32, copy=False)
     return out
 
@@ -247,40 +305,6 @@ def from_storage(
 
 def _lock_path(cache_path: Path) -> Path:
     return cache_path.with_suffix(cache_path.suffix + '.lock')
-
-
-def _read_lock_holder_pid(lock_path: Path) -> str:
-    """Best-effort PID lookup via /proc/locks; degrade gracefully."""
-    proc_locks = Path('/proc/locks')
-    if not proc_locks.exists():
-        return 'PID unknown'
-    try:
-        st = lock_path.stat()
-        target_inode = st.st_ino
-        target_dev = st.st_dev
-        # /proc/locks format: id: type kind access pid major:minor:inode start end
-        major = os.major(target_dev)
-        minor = os.minor(target_dev)
-        with proc_locks.open('r') as f:
-            for line in f:
-                parts = line.split()
-                if len(parts) < 8:
-                    continue
-                pid = parts[4]
-                location = parts[5]
-                try:
-                    maj_str, min_str, inode_str = location.split(':')
-                except ValueError:
-                    continue
-                if (
-                    int(inode_str) == target_inode
-                    and int(maj_str, 16) == major
-                    and int(min_str, 16) == minor
-                ):
-                    return pid
-    except (OSError, ValueError):
-        return 'PID unknown'
-    return 'PID unknown'
 
 
 @contextmanager
@@ -319,12 +343,10 @@ def _acquire_lock(
                 break
             except BlockingIOError:
                 if time.monotonic() >= deadline:
-                    holder = _read_lock_holder_pid(lock_path)
                     raise FeatureExtractionError(
-                        f"Failed to acquire {mode} lock on {lock_path} within "
-                        f"{timeout:.2f}s (holder PID: {holder}). "
-                        f"Another LearnM8 process is using this cache; wait or "
-                        f"set LEARNM8_LOCK_TIMEOUT_S to a larger value."
+                        f'Failed to acquire {mode} lock on {lock_path} within '
+                        f'{timeout:.2f}s. '
+                        f'Another process is likely using this cache.'
                     ) from None
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 0.5)
@@ -338,63 +360,29 @@ def _acquire_lock(
 
 
 # ---------------------------------------------------------------------------
-# Retry seam (T013)
-# ---------------------------------------------------------------------------
-
-T = TypeVar('T')
-
-_TRANSIENT_ERRNOS = frozenset({errno.EAGAIN, errno.EINTR, errno.EIO})
-
-
-def _read_with_one_retry(reader_callable: Callable[[], T]) -> T:
-    """Call ``reader_callable``; on transient ``OSError`` retry exactly once.
-
-    FR-010: transient errnos (EAGAIN, EINTR, EIO) get one retry with a single
-    WARNING; persistent or non-transient errors propagate immediately.
-    """
-    try:
-        return reader_callable()
-    except OSError as exc:
-        if getattr(exc, 'errno', None) not in _TRANSIENT_ERRNOS:
-            raise
-        logger.warning(
-            "Transient OSError (errno=%s) on cache read; retrying once: %s",
-            exc.errno,
-            exc,
-        )
-        return reader_callable()
-
-
-# ---------------------------------------------------------------------------
 # Cache-key recipe (FR-004)
 # ---------------------------------------------------------------------------
 
 
-def _generate_cache_key(smiles: str, featurizer: Featurizer) -> str:
-    """Generate the v1-compatible 32-char hex MD5 cache key (kept for tests)."""
-    config_hash = featurizer.get_config_hash()
-    featurizer_name = featurizer.get_name()
-    cache_string = f"{smiles}_{featurizer_name}_{config_hash}"
-    return hashlib.md5(cache_string.encode('utf-8'), usedforsecurity=False).hexdigest()
+def _cache_keys_bytes16(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
+    """Compute the 128-bit BLAKE2b cache key for each SMILES.
 
-
-def _cache_keys_uint64(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
-    """Vectorized 8-byte big-endian truncation of MD5 cache keys to ``uint64``."""
+    Returns an ``np.ndarray`` of shape ``(len(smiles_list),)`` and dtype
+    ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
+    FIPS-locked hosts (BLAKE2b would otherwise still be admitted, but the
+    flag mirrors the MD5-era contract).
+    """
     name = featurizer.get_name()
     config_hash = featurizer.get_config_hash()
-    out = np.empty(len(smiles_list), dtype=np.uint64)
+    out = np.empty(len(smiles_list), dtype=HASH_DTYPE)
     for i, s in enumerate(smiles_list):
-        digest = hashlib.md5(
-            f"{s}_{name}_{config_hash}".encode(),
+        digest = hashlib.blake2b(
+            f'{s}_{name}_{config_hash}'.encode(),
+            digest_size=16,
             usedforsecurity=False,
         ).digest()
-        out[i] = int.from_bytes(digest[:8], byteorder='big', signed=False)
+        out[i] = digest
     return out
-
-
-def get_smiles_hash(smiles: str) -> str:
-    """Legacy SMILES-only MD5 (kept for backward compatibility in tests)."""
-    return hashlib.md5(smiles.encode('utf-8'), usedforsecurity=False).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +397,10 @@ def _merge_sorted_indices(
     r_new: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Merge two parallel ``(hash, row)`` arrays preserving sort order.
+
+    Hash arrays have dtype ``|S16`` (128-bit BLAKE2b digests); ``np.searchsorted``
+    on contiguous bytes runs at full memcpy speed, whereas a structured
+    ``uint64[2]`` representation triggers numpy#13566's element-wise fallback.
 
     For ``len(h_old) > VECTORIZED_MERGE_THRESHOLD`` uses vectorized
     ``np.searchsorted``+``np.insert``. Smaller inputs use ``np.argsort`` on the
@@ -429,10 +421,12 @@ def _merge_sorted_indices(
         out_h = out_h_unsorted[order]
         out_r = out_r_unsorted[order]
 
-    if out_h.size > 1 and not np.all(np.diff(out_h) > 0):
+    # S16 element-wise comparison is lex byte comparison — the strict-ascending
+    # invariant. np.diff() doesn't work on bytes dtypes, hence the slice form.
+    if out_h.size > 1 and np.any(out_h[1:] <= out_h[:-1]):
         raise FeatureExtractionError(
-            "Duplicate cache_key detected during merge — cache file is "
-            "corrupt. Delete the cache file and retry."
+            'Duplicate cache_key detected during merge — cache file is '
+            'corrupt. Delete the cache file and retry.'
         )
     return out_h, out_r
 
@@ -482,9 +476,9 @@ def _initialize_v2_csr_datasets(
     bit_count = int(featurizer.get_dimension())
     if bit_count > CSR_MAX_DIM - 1:
         raise ConfigurationError(
-            f"csr_uint16 storage requires dim <= {CSR_MAX_DIM - 1} (uint16 column "
-            f"indices), got dim={bit_count} for featurizer "
-            f"{featurizer.get_name()!r}. Either reduce dim or set "
+            f'csr_uint16 storage requires dim <= {CSR_MAX_DIM - 1} (uint16 column '
+            f'indices), got dim={bit_count} for featurizer '
+            f'{featurizer.get_name()!r}. Either reduce dim or set '
             f"get_storage_dtype() to 'packed_uint8' / 'float32'."
         )
 
@@ -517,7 +511,7 @@ def _initialize_v2_csr_datasets(
         DSET_HASH_INDEX,
         shape=(0,),
         maxshape=(None,),
-        dtype=np.uint64,
+        dtype=HASH_DTYPE,
     )
     f.create_dataset(
         DSET_ROW_INDEX,
@@ -532,13 +526,14 @@ def _initialize_v2_csr_datasets(
     f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_CSR
+    f.attrs[ATTR_HASH_WIDTH] = np.uint16(HASH_WIDTH_BITS)
     f.flush()
 
 
-def _initialize_v2_datasets(
+def _initialize_v3_datasets(
     f: h5py.File, featurizer: Featurizer, storage_dtype: str
 ) -> None:
-    """Create empty v2 datasets and write root attrs (T010, T014)."""
+    """Create empty v3 datasets and write root attrs."""
     storage_dtype = _normalize_storage_dtype(storage_dtype)
     if storage_dtype == STORAGE_CSR_UINT16:
         _initialize_v2_csr_datasets(f, featurizer, storage_dtype)
@@ -561,7 +556,7 @@ def _initialize_v2_datasets(
         DSET_HASH_INDEX,
         shape=(0,),
         maxshape=(None,),
-        dtype=np.uint64,
+        dtype=HASH_DTYPE,
     )
     f.create_dataset(
         DSET_ROW_INDEX,
@@ -576,12 +571,13 @@ def _initialize_v2_datasets(
     f.attrs[ATTR_FEATURIZER_NAME] = featurizer.get_name()
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_DENSE
+    f.attrs[ATTR_HASH_WIDTH] = np.uint16(HASH_WIDTH_BITS)
     f.flush()
 
 
-def _create_fresh_v2(path: Path, featurizer: Featurizer, storage_dtype: str) -> None:
+def _create_fresh_v3(path: Path, featurizer: Featurizer, storage_dtype: str) -> None:
     with _h5_open(path, 'w') as f:
-        _initialize_v2_datasets(f, featurizer, storage_dtype)
+        _initialize_v3_datasets(f, featurizer, storage_dtype)
 
 
 def _atomic_rename(src: Path, dst: Path) -> None:
@@ -589,14 +585,12 @@ def _atomic_rename(src: Path, dst: Path) -> None:
         os.replace(str(src), str(dst))
     except OSError as exc:
         raise PersistenceError(
-            f"Failed to rename cache file {src} → {dst}: {exc}. "
-            f"The original file has not been modified."
+            f'Failed to rename cache file {src} → {dst}: {exc}. '
+            f'The original file has not been modified.'
         ) from exc
 
 
-def _open_or_create_h5(
-    cache_path: Path, featurizer: Featurizer
-) -> h5py.File:
+def _open_or_create_h5(cache_path: Path, featurizer: Featurizer) -> h5py.File:
     """Probe-and-create-or-open under the writer's exclusive lock (T009 + T029).
 
     Caller MUST already hold ``LOCK_EX`` on ``cache_path.lock``. The probe step
@@ -607,7 +601,7 @@ def _open_or_create_h5(
     expected_dim = int(featurizer.get_dimension())
 
     if not cache_path.exists():
-        _create_fresh_v2(cache_path, featurizer, storage_dtype)
+        _create_fresh_v3(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
     schema_version: int | None
@@ -627,15 +621,31 @@ def _open_or_create_h5(
         file_storage_dtype = None
 
     if schema_version != SCHEMA_VERSION:
-        suffix_tag = (
-            f'v{schema_version}' if schema_version is not None else 'v1'
-        )
-        backup = cache_path.with_suffix(cache_path.suffix + f'.{suffix_tag}.bak')
-        _atomic_rename(cache_path, backup)
-        logger.warning(
-            "Renamed non-v2 cache to %s; starting fresh v2 cache.", backup
-        )
-        _create_fresh_v2(cache_path, featurizer, storage_dtype)
+        # v2 → v3 migration uses a dedicated .hash64.bak suffix and refuses to
+        # overwrite an existing .bak — prevents data loss if the user runs the
+        # migration twice.
+        if schema_version == 2:
+            backup = cache_path.with_suffix(cache_path.suffix + '.hash64.bak')
+            if backup.exists():
+                raise PersistenceError(
+                    f'Refusing to migrate cache {cache_path}: backup target '
+                    f'{backup} already exists. Inspect or delete it and retry. '
+                    f'The original cache has not been modified.'
+                )
+            _atomic_rename(cache_path, backup)
+            logger.warning(
+                'Migrated v2 (64-bit hash) cache to %s; starting fresh v3 '
+                '(128-bit hash) cache. The .bak may be deleted once verified.',
+                backup,
+            )
+        else:
+            suffix_tag = f'v{schema_version}' if schema_version is not None else 'v0'
+            backup = cache_path.with_suffix(cache_path.suffix + f'.{suffix_tag}.bak')
+            _atomic_rename(cache_path, backup)
+            logger.warning(
+                'Renamed non-v3 cache to %s; starting fresh v3 cache.', backup
+            )
+        _create_fresh_v3(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
     if bit_count != expected_dim:
@@ -643,13 +653,13 @@ def _open_or_create_h5(
         backup = cache_path.with_suffix(cache_path.suffix + f'.{tag}.bak')
         _atomic_rename(cache_path, backup)
         logger.warning(
-            "Renamed cache with mismatched bit_count (%s vs expected %d) "
-            "to %s; starting fresh v2 cache.",
+            'Renamed cache with mismatched bit_count (%s vs expected %d) '
+            'to %s; starting fresh v3 cache.',
             bit_count,
             expected_dim,
             backup,
         )
-        _create_fresh_v2(cache_path, featurizer, storage_dtype)
+        _create_fresh_v3(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
     if file_storage_dtype is not None and file_storage_dtype != storage_dtype:
@@ -663,13 +673,13 @@ def _open_or_create_h5(
         backup = cache_path.with_suffix(cache_path.suffix + f'.{tag}.bak')
         _atomic_rename(cache_path, backup)
         logger.warning(
-            "Renamed cache with mismatched storage_dtype (%s vs expected %s) "
-            "to %s; starting fresh v2 cache.",
+            'Renamed cache with mismatched storage_dtype (%s vs expected %s) '
+            'to %s; starting fresh v3 cache.',
             file_storage_dtype,
             storage_dtype,
             backup,
         )
-        _create_fresh_v2(cache_path, featurizer, storage_dtype)
+        _create_fresh_v3(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
     return _h5_open(cache_path, 'a')
@@ -692,20 +702,20 @@ def _validate_v2_file_integrity(
 ) -> None:
     """Check the contract invariants; on violation raise ``FeatureExtractionError``."""
     msg_suffix = (
-        f"\nDelete the cache file ({cache_path}) and retry. "
-        f"This file will not be used until removed."
+        f'\nDelete the cache file ({cache_path}) and retry. '
+        f'This file will not be used until removed.'
     )
 
     for attr in REQUIRED_ATTRS:
         if attr not in f.attrs:
             raise FeatureExtractionError(
-                f"v2 cache missing required attr {attr!r}." + msg_suffix
+                f'cache missing required attr {attr!r}.' + msg_suffix
             )
 
     if int(f.attrs[ATTR_SCHEMA_VERSION]) != SCHEMA_VERSION:
         raise FeatureExtractionError(
-            f"v2 cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, "
-            f"expected {SCHEMA_VERSION})." + msg_suffix
+            f'cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, '
+            f'expected {SCHEMA_VERSION}).' + msg_suffix
         )
 
     storage_dtype = _normalize_storage_dtype(str(f.attrs[ATTR_STORAGE_DTYPE]))
@@ -714,46 +724,52 @@ def _validate_v2_file_integrity(
     for dset in (DSET_HASH_INDEX, DSET_ROW_INDEX):
         if dset not in f:
             raise FeatureExtractionError(
-                f"v2 cache missing dataset {dset!r}." + msg_suffix
+                f'cache missing dataset {dset!r}.' + msg_suffix
             )
     hash_index = f[DSET_HASH_INDEX]
     row_index = f[DSET_ROW_INDEX]
 
+    if hash_index.dtype != HASH_DTYPE:
+        raise FeatureExtractionError(
+            f'cache /hash_index dtype mismatch: expected {HASH_DTYPE!r} '
+            f'(128-bit BLAKE2b digests), got {hash_index.dtype!r}.' + msg_suffix
+        )
+
     if layout == LAYOUT_DENSE:
         if DSET_FEATURES not in f:
             raise FeatureExtractionError(
-                f"v2 cache missing dataset {DSET_FEATURES!r}." + msg_suffix
+                f'cache missing dataset {DSET_FEATURES!r}.' + msg_suffix
             )
         features = f[DSET_FEATURES]
 
         expected_features_dtype = _DENSE_EXPECTED_FEATURES_DTYPE[storage_dtype]
         if features.dtype != np.dtype(expected_features_dtype):
             raise FeatureExtractionError(
-                f"v2 cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} "
-                f"but /features.dtype={features.dtype!r}." + msg_suffix
+                f'cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} '
+                f'but /features.dtype={features.dtype!r}.' + msg_suffix
             )
 
         bit_count = int(f.attrs[ATTR_BIT_COUNT])
         expected_width = _packed_width(bit_count, storage_dtype)
         if features.ndim != 2 or features.shape[1] != expected_width:
             raise FeatureExtractionError(
-                f"v2 cache /features shape mismatch: expected (*, {expected_width}) "
-                f"for bit_count={bit_count} storage_dtype={storage_dtype!r}, "
-                f"got {features.shape}." + msg_suffix
+                f'cache /features shape mismatch: expected (*, {expected_width}) '
+                f'for bit_count={bit_count} storage_dtype={storage_dtype!r}, '
+                f'got {features.shape}.' + msg_suffix
             )
 
         if len(row_index) > 0:
             max_row = int(row_index[:].max())
             if max_row >= features.shape[0]:
                 raise FeatureExtractionError(
-                    f"v2 cache row_index points past /features rows "
-                    f"(max={max_row}, /features rows={features.shape[0]})." + msg_suffix
+                    f'cache row_index points past /features rows '
+                    f'(max={max_row}, /features rows={features.shape[0]}).' + msg_suffix
                 )
     elif layout == LAYOUT_CSR:
         if storage_dtype != STORAGE_CSR_UINT16:
             raise FeatureExtractionError(
-                f"v2 cache storage_layout='csr' requires storage_dtype='csr_uint16', "
-                f"got {storage_dtype!r}." + msg_suffix
+                f"cache storage_layout='csr' requires storage_dtype='csr_uint16', "
+                f'got {storage_dtype!r}.' + msg_suffix
             )
         for dset, expected_dtype in (
             (DSET_CSR_DATA, np.uint8),
@@ -762,12 +778,12 @@ def _validate_v2_file_integrity(
         ):
             if dset not in f:
                 raise FeatureExtractionError(
-                    f"v2 cache missing dataset {dset!r}." + msg_suffix
+                    f'cache missing dataset {dset!r}.' + msg_suffix
                 )
             if f[dset].dtype != np.dtype(expected_dtype):
                 raise FeatureExtractionError(
-                    f"v2 cache {dset!r} dtype mismatch: expected {np.dtype(expected_dtype)!r}, "
-                    f"got {f[dset].dtype!r}." + msg_suffix
+                    f'cache {dset!r} dtype mismatch: expected {np.dtype(expected_dtype)!r}, '
+                    f'got {f[dset].dtype!r}.' + msg_suffix
                 )
 
         indptr = f[DSET_CSR_INDPTR]
@@ -776,53 +792,56 @@ def _validate_v2_file_integrity(
 
         if indptr.shape[0] != row_index.shape[0] + 1:
             raise FeatureExtractionError(
-                f"v2 cache csr_indptr length mismatch: expected {row_index.shape[0] + 1} "
-                f"(row_index + 1), got {indptr.shape[0]}." + msg_suffix
+                f'cache csr_indptr length mismatch: expected {row_index.shape[0] + 1} '
+                f'(row_index + 1), got {indptr.shape[0]}.' + msg_suffix
             )
 
         if indptr.shape[0] >= 1 and int(indptr[0]) != 0:
             raise FeatureExtractionError(
-                f"v2 cache csr_indptr[0] must be 0, got {int(indptr[0])}." + msg_suffix
+                f'cache csr_indptr[0] must be 0, got {int(indptr[0])}.' + msg_suffix
             )
 
         if indptr.shape[0] > 0:
             last = int(indptr[-1])
             if last != csr_data.shape[0] or last != csr_indices.shape[0]:
                 raise FeatureExtractionError(
-                    f"v2 cache csr_indptr[-1]={last} disagrees with csr_data "
-                    f"({csr_data.shape[0]}) / csr_indices ({csr_indices.shape[0]})." + msg_suffix
+                    f'cache csr_indptr[-1]={last} disagrees with csr_data '
+                    f'({csr_data.shape[0]}) / csr_indices ({csr_indices.shape[0]}).'
+                    + msg_suffix
                 )
 
         if indptr.shape[0] > 1:
             diffs = np.diff(np.asarray(indptr[:], dtype=np.int64))
             if np.any(diffs < 0):
                 raise FeatureExtractionError(
-                    "v2 cache csr_indptr is not monotone non-decreasing." + msg_suffix
+                    'cache csr_indptr is not monotone non-decreasing.' + msg_suffix
                 )
     else:
         raise FeatureExtractionError(
-            f"v2 cache has unknown storage_layout {layout!r}." + msg_suffix
+            f'cache has unknown storage_layout {layout!r}.' + msg_suffix
         )
 
     if len(hash_index) != len(row_index):
         raise FeatureExtractionError(
-            f"v2 cache hash_index/row_index length mismatch "
-            f"({len(hash_index)} vs {len(row_index)})." + msg_suffix
+            f'cache hash_index/row_index length mismatch '
+            f'({len(hash_index)} vs {len(row_index)}).' + msg_suffix
         )
 
     if len(hash_index) > 1:
-        diffs = np.diff(hash_index[:])
-        if np.any(diffs <= 0):
+        # S16 element-wise comparison is lex byte comparison — the
+        # strict-ascending invariant. np.diff() doesn't work on bytes dtypes.
+        h_arr = hash_index[:]
+        if np.any(h_arr[1:] <= h_arr[:-1]):
             raise FeatureExtractionError(
-                "v2 cache hash_index is not strictly increasing "
-                "(duplicates or out-of-order)." + msg_suffix
+                'cache hash_index is not strictly increasing '
+                '(duplicates or out-of-order).' + msg_suffix
             )
 
     if str(f.attrs[ATTR_FEATURIZER_NAME]) != featurizer.get_name():
         raise FeatureExtractionError(
-            f"v2 cache featurizer_name mismatch: file says "
-            f"{str(f.attrs[ATTR_FEATURIZER_NAME])!r}, expected "
-            f"{featurizer.get_name()!r}." + msg_suffix
+            f'cache featurizer_name mismatch: file says '
+            f'{str(f.attrs[ATTR_FEATURIZER_NAME])!r}, expected '
+            f'{featurizer.get_name()!r}.' + msg_suffix
         )
 
 
@@ -832,7 +851,7 @@ def _validate_v2_file_integrity(
 
 
 def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
-    """Return ``/hash_index`` as a uint64 array, using the process cache."""
+    """Return ``/hash_index`` as an ``S16`` array, using the process LRU cache."""
     try:
         mtime_ns = os.stat(cache_path).st_mtime_ns
     except OSError:
@@ -841,7 +860,7 @@ def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
     cached = _hash_index_cache_get(cache_path, mtime_ns, write_epoch)
     if cached is not None:
         return cached
-    arr = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    arr = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     _hash_index_cache_put(cache_path, mtime_ns, write_epoch, arr)
     return arr
 
@@ -849,7 +868,10 @@ def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
 def _lookup_cache(
     f: h5py.File, query_hashes: np.ndarray, cache_path: Path
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(hits_mask, target_rows_for_hits)`` for a batch of query hashes."""
+    """Return ``(hits_mask, target_rows_for_hits)`` for a batch of query hashes.
+
+    ``query_hashes`` MUST have dtype ``|S16`` (128-bit BLAKE2b digests).
+    """
     n_query = query_hashes.shape[0]
     if len(f[DSET_HASH_INDEX]) == 0:
         return np.zeros(n_query, dtype=bool), np.empty(0, dtype=np.uint64)
@@ -913,7 +935,9 @@ def _read_cache_hits_csr(
         row_for_each_nnz = np.repeat(
             np.arange(run_lo, run_hi, dtype=np.int64), per_row_counts
         )
-        out_unique[row_for_each_nnz, cols_slab] = vals_slab.astype(np.float32, copy=False)
+        out_unique[row_for_each_nnz, cols_slab] = vals_slab.astype(
+            np.float32, copy=False
+        )
 
     return out_unique[inverse_unique]
 
@@ -972,8 +996,8 @@ def _write_csr_misses(
     density = float((miss_features != 0).mean()) if miss_features.size > 0 else 0.0
     if density > CSR_DENSITY_HARD_LIMIT:
         raise FeatureExtractionError(
-            f"observed density {density:.4f} exceeds {CSR_DENSITY_HARD_LIMIT} "
-            f"hard limit on csr_uint16 storage. CSR overhead exceeds dense storage "
+            f'observed density {density:.4f} exceeds {CSR_DENSITY_HARD_LIMIT} '
+            f'hard limit on csr_uint16 storage. CSR overhead exceeds dense storage '
             f"above 50% density; switch this featurizer's get_storage_dtype() to "
             f"'packed_uint8'."
         )
@@ -983,11 +1007,15 @@ def _write_csr_misses(
         arr_max = float(miss_features.max())
         if arr_min < 0.0 or arr_max > 255.0:
             offenders = np.argwhere((miss_features < 0) | (miss_features > 255))
-            row, col = (int(offenders[0, 0]), int(offenders[0, 1])) if offenders.size else (-1, -1)
+            row, col = (
+                (int(offenders[0, 0]), int(offenders[0, 1]))
+                if offenders.size
+                else (-1, -1)
+            )
             bad_value = float(miss_features[row, col]) if row >= 0 else arr_max
             raise FeatureExtractionError(
-                f"csr_uint16 nonzero out of range: row={row} col={col} value={bad_value} "
-                f"(observed min={arr_min}, max={arr_max}; uint8 csr_data admits [0, 255]). "
+                f'csr_uint16 nonzero out of range: row={row} col={col} value={bad_value} '
+                f'(observed min={arr_min}, max={arr_max}; uint8 csr_data admits [0, 255]). '
                 f"Either reduce the value range or switch storage to 'float32'."
             )
 
@@ -998,8 +1026,8 @@ def _write_csr_misses(
 
     if new_indices.size > 0 and int(new_indices.max()) >= dim:
         raise FeatureExtractionError(
-            f"csr_uint16 column index {int(new_indices.max())} >= dim {dim}; "
-            f"this indicates a featurizer bug or dim mismatch."
+            f'csr_uint16 column index {int(new_indices.max())} >= dim {dim}; '
+            f'this indicates a featurizer bug or dim mismatch.'
         )
 
     indptr_dset = f[DSET_CSR_INDPTR]
@@ -1015,16 +1043,20 @@ def _write_csr_misses(
     indices_dset.resize((prev_nnz + nnz,))
     indices_dset[prev_nnz : prev_nnz + nnz] = new_indices
 
-    indptr_offsets = (new_indptr[1:].astype(np.uint64) + np.uint64(prev_nnz)).astype(np.uint64)
+    indptr_offsets = (new_indptr[1:].astype(np.uint64) + np.uint64(prev_nnz)).astype(
+        np.uint64
+    )
     indptr_dset.resize((prev_n_rows + 1 + new_n,))
     indptr_dset[prev_n_rows + 1 : prev_n_rows + 1 + new_n] = indptr_offsets
 
     new_row_index = np.arange(prev_n_rows, prev_n_rows + new_n, dtype=np.uint64)
-    new_hash_index = np.asarray(miss_hashes, dtype=np.uint64)
+    new_hash_index = np.asarray(miss_hashes, dtype=HASH_DTYPE)
 
-    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     r_old = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
-    merged_h, merged_r = _merge_sorted_indices(h_old, r_old, new_hash_index, new_row_index)
+    merged_h, merged_r = _merge_sorted_indices(
+        h_old, r_old, new_hash_index, new_row_index
+    )
 
     hash_dset = f[DSET_HASH_INDEX]
     row_dset = f[DSET_ROW_INDEX]
@@ -1062,12 +1094,14 @@ def _write_cache_misses(
     features[cur_n : cur_n + new_n] = encoded
 
     new_row_index = np.arange(cur_n, cur_n + new_n, dtype=np.uint64)
-    new_hash_index = np.asarray(miss_hashes, dtype=np.uint64)
+    new_hash_index = np.asarray(miss_hashes, dtype=HASH_DTYPE)
 
-    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=np.uint64)
+    h_old = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
     r_old = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
 
-    merged_h, merged_r = _merge_sorted_indices(h_old, r_old, new_hash_index, new_row_index)
+    merged_h, merged_r = _merge_sorted_indices(
+        h_old, r_old, new_hash_index, new_row_index
+    )
 
     hash_dset = f[DSET_HASH_INDEX]
     row_dset = f[DSET_ROW_INDEX]
@@ -1101,19 +1135,32 @@ def _resolve_uint8_output(
 
     Returns True only when caller asked for uint8 AND storage actually has the
     bits handy (packed_uint8 / uint8). For float32 / csr_uint16 storage we
-    must materialise float32 — log once and fall back.
+    must materialise float32 — warn once per (featurizer, storage_dtype) pair
+    and fall back.
     """
     if preferred_dtype != 'uint8':
         return False
     if storage_dtype in (STORAGE_PACKED, STORAGE_UINT8):
         return True
-    logger.debug(
-        "preferred_dtype='uint8' incompatible with storage_dtype=%r for "
-        "featurizer %r; falling back to float32 output",
+    _emit_uint8_fallback_warning(storage_dtype, featurizer_name)
+    return False
+
+
+_uint8_fallback_warned: set[tuple[str, str]] = set()
+
+
+def _emit_uint8_fallback_warning(storage_dtype: str, featurizer_name: str) -> None:
+    key = (featurizer_name, storage_dtype)
+    if key in _uint8_fallback_warned:
+        return
+    _uint8_fallback_warned.add(key)
+    logger.warning(
+        "preferred_dtype='uint8' incompatible with storage_dtype=%r "
+        'for featurizer=%r; falling back to float32. '
+        'This loses the 4x working-set saving.',
         storage_dtype,
         featurizer_name,
     )
-    return False
 
 
 def from_storage_uint8(
@@ -1129,7 +1176,9 @@ def from_storage_uint8(
     storage layouts; raises :class:`FeatureExtractionError` otherwise.
     """
     if storage_dtype == STORAGE_UINT8:
-        return stored if stored.dtype == np.uint8 else stored.astype(np.uint8, copy=False)
+        return (
+            stored if stored.dtype == np.uint8 else stored.astype(np.uint8, copy=False)
+        )
     if storage_dtype == STORAGE_PACKED:
         n = stored.shape[0]
         out = np.empty((n, bit_count), dtype=np.uint8)
@@ -1143,9 +1192,9 @@ def from_storage_uint8(
             )
         return out
     raise FeatureExtractionError(
-        f"from_storage_uint8() does not decode {storage_dtype!r}; "
-        f"caller must use the float32 path for non-binary storage. "
-        f"This call indicates a bug in the cache read dispatcher."
+        f'from_storage_uint8() does not decode {storage_dtype!r}; '
+        f'caller must use the float32 path for non-binary storage. '
+        f'This call indicates a bug in the cache read dispatcher.'
     )
 
 
@@ -1177,9 +1226,9 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                 return np.empty((0, dim), dtype=out_np_dtype)
 
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = cache_dir / f"features_{featurizer_name}.h5"
+            cache_path = cache_dir / f'features_{featurizer_name}.h5'
 
-            query_hashes = _cache_keys_uint64(smiles_list, featurizer)
+            query_hashes = _cache_keys_bytes16(smiles_list, featurizer)
 
             # Phase 1: read-only attempt under LOCK_SH (lets concurrent readers run).
             found = np.zeros(len(smiles_list), dtype=bool)
@@ -1206,7 +1255,9 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                                 and bc == dim
                                 and sd_match
                             ):
-                                _validate_v2_file_integrity(f_ro, featurizer, cache_path)
+                                _validate_v2_file_integrity(
+                                    f_ro, featurizer, cache_path
+                                )
                                 t_open = time.perf_counter()
 
                                 def _lookup_and_read() -> tuple[np.ndarray, np.ndarray]:
@@ -1222,7 +1273,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                                     )
                                     return found_local, hit_features_local
 
-                                found, hit_features = _read_with_one_retry(_lookup_and_read)
+                                found, hit_features = _lookup_and_read()
                                 t_read = time.perf_counter()
                         finally:
                             f_ro.close()
@@ -1245,11 +1296,12 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                 with _acquire_lock(cache_path, mode='exclusive'):
                     f = _open_or_create_h5(cache_path, featurizer)
                     try:
-                        _validate_v2_file_integrity(f, featurizer, cache_path)
-
                         found, target_rows = _lookup_cache(f, query_hashes, cache_path)
                         hit_features = _read_cache_hits(
-                            f, target_rows, storage_dtype, dim,
+                            f,
+                            target_rows,
+                            storage_dtype,
+                            dim,
                             output_dtype=output_decode_dtype,
                         )
                         if found.any():
@@ -1261,17 +1313,21 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                         t_write_start = time.perf_counter()
                         if n_misses:
                             miss_smiles = [smiles_list[i] for i in miss_idx]
-                            miss_features = func(miss_smiles, featurizer, *args, **kwargs)
+                            miss_features = func(
+                                miss_smiles, featurizer, *args, **kwargs
+                            )
                             miss_features = np.asarray(miss_features, dtype=np.float32)
                             if miss_features.shape != (n_misses, dim):
                                 raise FeatureExtractionError(
-                                    f"Featurizer returned shape {miss_features.shape}, "
-                                    f"expected ({n_misses}, {dim})."
+                                    f'Featurizer returned shape {miss_features.shape}, '
+                                    f'expected ({n_misses}, {dim}).'
                                 )
                             if use_uint8_output:
                                 # Cache write still records float32 → packed/uint8 via
                                 # to_storage; user-facing `out` keeps the compact dtype.
-                                out[miss_idx] = miss_features.astype(np.uint8, copy=False)
+                                out[miss_idx] = miss_features.astype(
+                                    np.uint8, copy=False
+                                )
                             else:
                                 out[miss_idx] = miss_features
                             miss_hashes = query_hashes[miss_idx]
@@ -1295,8 +1351,8 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                         f.close()
 
             logger.debug(
-                "cache featurizer=%s hits=%d misses=%d "
-                "open_ms=%.1f read_ms=%.1f write_ms=%.1f",
+                'cache featurizer=%s hits=%d misses=%d '
+                'open_ms=%.1f read_ms=%.1f write_ms=%.1f',
                 featurizer_name,
                 n_hits,
                 n_misses,

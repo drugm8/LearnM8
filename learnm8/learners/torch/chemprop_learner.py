@@ -530,7 +530,6 @@ class ChempropLearner(Learner):
 		import torch
 
 		torch.manual_seed(self.random_state)
-		np.random.seed(self.random_state)
 
 		if self.atom_messages:
 			mp = nn.AtomMessagePassing(

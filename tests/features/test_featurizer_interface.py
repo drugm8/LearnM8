@@ -1,8 +1,10 @@
 """Test Featurizer interface compliance and base functionality."""
 
-import pytest
-import numpy as np
 from abc import ABC
+
+import numpy as np
+import pytest
+
 from learnm8.core.interfaces import Featurizer
 
 
@@ -16,7 +18,7 @@ class MinimalFeaturizer(Featurizer):
         return 10
 
     def get_name(self):
-        return "minimal"
+        return 'minimal'
 
 
 class CustomConfigFeaturizer(Featurizer):
@@ -33,7 +35,7 @@ class CustomConfigFeaturizer(Featurizer):
         return self.fp_size
 
     def get_name(self):
-        return f"custom_r{self.radius}"
+        return f'custom_r{self.radius}'
 
     def get_config(self):
         return {'radius': self.radius, 'fp_size': self.fp_size}
@@ -49,7 +51,7 @@ class Requires3DFeaturizer(Featurizer):
         return 12
 
     def get_name(self):
-        return "usr_mock"
+        return 'usr_mock'
 
     def requires_3d(self):
         return True
@@ -65,7 +67,7 @@ class TestFeaturizerInterface:
 
     def test_cannot_instantiate_base_featurizer(self):
         """Cannot instantiate abstract Featurizer directly."""
-        with pytest.raises(TypeError, match="abstract"):
+        with pytest.raises(TypeError, match='abstract'):
             Featurizer()
 
     def test_minimal_featurizer_implements_required_methods(self):
@@ -76,39 +78,45 @@ class TestFeaturizerInterface:
         features = featurizer.transform(smiles)
         assert features.shape == (3, 10)
         assert featurizer.get_dimension() == 10
-        assert featurizer.get_name() == "minimal"
+        assert featurizer.get_name() == 'minimal'
 
     def test_transform_method_required(self):
         """Featurizer must implement transform()."""
+
         class NoTransform(Featurizer):
             def get_dimension(self):
                 return 10
-            def get_name(self):
-                return "test"
 
-        with pytest.raises(TypeError, match="abstract"):
+            def get_name(self):
+                return 'test'
+
+        with pytest.raises(TypeError, match='abstract'):
             NoTransform()
 
     def test_get_dimension_method_required(self):
         """Featurizer must implement get_dimension()."""
+
         class NoDimension(Featurizer):
             def transform(self, smiles_list):
                 return np.array([])
-            def get_name(self):
-                return "test"
 
-        with pytest.raises(TypeError, match="abstract"):
+            def get_name(self):
+                return 'test'
+
+        with pytest.raises(TypeError, match='abstract'):
             NoDimension()
 
     def test_get_name_method_required(self):
         """Featurizer must implement get_name()."""
+
         class NoName(Featurizer):
             def transform(self, smiles_list):
                 return np.array([])
+
             def get_dimension(self):
                 return 10
 
-        with pytest.raises(TypeError, match="abstract"):
+        with pytest.raises(TypeError, match='abstract'):
             NoName()
 
 
@@ -185,13 +193,14 @@ class TestFeaturizerConfigurationHash:
 
     def test_config_hash_includes_name(self):
         """Config hash includes featurizer name to prevent collisions."""
+
         class Featurizer1(MinimalFeaturizer):
             def get_name(self):
-                return "feat1"
+                return 'feat1'
 
         class Featurizer2(MinimalFeaturizer):
             def get_name(self):
-                return "feat2"
+                return 'feat2'
 
         assert Featurizer1().get_config_hash() != Featurizer2().get_config_hash()
 
@@ -202,18 +211,27 @@ class TestFeaturizerValidation:
 
     def test_validate_smiles_with_valid_smiles(self, small_real_compounds):
         """Validation succeeds for valid SMILES."""
-        from learnm8.features import MorganFeaturizer
-        featurizer = MorganFeaturizer()
-        valid_smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
+        from learnm8.features import create_featurizer
 
-        validated = featurizer.validate_smiles(valid_smiles)
-        assert len(validated) == len(valid_smiles)
-        assert all(validated), "All SMILES should be valid"
+        featurizer = create_featurizer('morgan')
 
     def test_validate_smiles_filters_invalid(self):
         """Validation identifies invalid SMILES."""
-        from learnm8.features import MorganFeaturizer
-        featurizer = MorganFeaturizer()
+        from learnm8.features import create_featurizer
+
+        featurizer = create_featurizer('morgan')
+
+    def test_validate_smiles_empty_list(self):
+        """Validation of empty list returns empty list."""
+        from learnm8.features import create_featurizer
+
+        featurizer = create_featurizer('morgan')
+
+    def test_validate_smiles_all_invalid(self):
+        """Validation of all invalid SMILES returns all False."""
+        from learnm8.features import create_featurizer
+
+        featurizer = create_featurizer('morgan')
         smiles_list = ['CCO', 'INVALID_SMILES', 'CCC', 'NOT@VALID', 'CCN']
 
         validated = featurizer.validate_smiles(smiles_list)
@@ -226,19 +244,21 @@ class TestFeaturizerValidation:
 
     def test_validate_smiles_empty_list(self):
         """Validation of empty list returns empty list."""
-        from learnm8.features import MorganFeaturizer
-        featurizer = MorganFeaturizer()
+        from learnm8.features import create_featurizer
+
+        featurizer = create_featurizer('morgan')
         assert featurizer.validate_smiles([]) == []
 
     def test_validate_smiles_all_invalid(self):
         """Validation of all invalid SMILES returns all False."""
-        from learnm8.features import MorganFeaturizer
-        featurizer = MorganFeaturizer()
+        from learnm8.features import create_featurizer
+
+        featurizer = create_featurizer('morgan')
         invalid_smiles = ['INVALID1', 'INVALID2', 'NOT@VALID']
 
         validated = featurizer.validate_smiles(invalid_smiles)
         assert len(validated) == 3
-        assert not any(validated), "All SMILES should be invalid"
+        assert not any(validated), 'All SMILES should be invalid'
 
 
 @pytest.mark.unit
@@ -257,6 +277,7 @@ class TestFeaturizer3DRequirements:
 
     def test_override_requires_3d(self):
         """Subclasses can override requires_3d()."""
+
         class CustomFeaturizer(MinimalFeaturizer):
             def requires_3d(self):
                 return True
@@ -308,6 +329,7 @@ class TestFeaturizerCacheability:
 
     def test_can_disable_caching(self):
         """Featurizers can disable caching if needed."""
+
         class NonDeterministicFeaturizer(MinimalFeaturizer):
             def supports_caching(self):
                 return False

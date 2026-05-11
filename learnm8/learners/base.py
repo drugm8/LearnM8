@@ -62,6 +62,7 @@ def _preprocess_features(
         features = np.where(np.isinf(features), np.nan, features)
         if is_training:
             from sklearn.impute import SimpleImputer
+
             imputer = SimpleImputer(strategy='median')
             features = imputer.fit_transform(features)
         else:
@@ -176,7 +177,9 @@ def _compute_leverages_cpu(
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
         b = np.asfortranarray(X[start:end].astype(np.float64).T)
-        Z = dtrmm(alpha=1.0, a=L_inv, b=b, side=0, lower=1, trans_a=0, diag=0, overwrite_b=1)
+        Z = dtrmm(
+            alpha=1.0, a=L_inv, b=b, side=0, lower=1, trans_a=0, diag=0, overwrite_b=1
+        )
         np.multiply(Z, Z, out=Z)
         leverages[start:end] = Z.sum(axis=0)
     return leverages
@@ -311,11 +314,13 @@ class SklearnLearner(Learner):
         start_time = time.time()
 
         try:
-            features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
-                features,
-                remove_zero_variance=self.remove_zero_variance,
-                is_training=True,
-                feature_type=self._feature_type,
+            features, self._valid_feature_mask, self._feature_imputer = (
+                _preprocess_features(
+                    features,
+                    remove_zero_variance=self.remove_zero_variance,
+                    is_training=True,
+                    feature_type=self._feature_type,
+                )
             )
 
             if self.scale_features:
@@ -400,7 +405,11 @@ class SklearnLearner(Learner):
 
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         """Return memory usage profile for batch size estimation."""
-        return {'bytes_per_sample': n_features * 8, 'working_multiplier': 1.3, 'fixed_overhead': 0}
+        return {
+            'bytes_per_sample': n_features * 8,
+            'working_multiplier': 1.3,
+            'fixed_overhead': 0,
+        }
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
@@ -585,8 +594,8 @@ class TorchLearner(Learner):
             n_val = n_samples - 1
 
         # Random indices for validation
-        np.random.seed(self.random_state)
-        val_indices = np.random.choice(n_samples, n_val, replace=False)
+        rng = np.random.default_rng(self.random_state)
+        val_indices = rng.choice(n_samples, n_val, replace=False)
         train_indices = np.setdiff1d(np.arange(n_samples), val_indices)
 
         return X[train_indices], X[val_indices], y[train_indices], y[val_indices]
@@ -620,11 +629,13 @@ class TorchLearner(Learner):
         start_time = time.time()
 
         try:
-            features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
-                features,
-                remove_zero_variance=self.remove_zero_variance,
-                is_training=True,
-                feature_type=self._feature_type,
+            features, self._valid_feature_mask, self._feature_imputer = (
+                _preprocess_features(
+                    features,
+                    remove_zero_variance=self.remove_zero_variance,
+                    is_training=True,
+                    feature_type=self._feature_type,
+                )
             )
 
             import torch
@@ -638,9 +649,7 @@ class TorchLearner(Learner):
             self.optimizer = torch.optim.Adam(
                 self.model.parameters(), lr=self.learning_rate
             )
-            logger.debug(
-                f'Cold-start: creating new model with input_dim={input_dim}'
-            )
+            logger.debug(f'Cold-start: creating new model with input_dim={input_dim}')
 
             self.scaler = StandardScaler()
             X_scaled = self.scaler.fit_transform(features)
@@ -690,9 +699,7 @@ class TorchLearner(Learner):
             if best_state_dict is not None:
                 self.model.load_state_dict(best_state_dict)
                 self.model.to(self.device)
-                logger.debug(
-                    f'Restored best checkpoint (val_loss={best_val_loss:.6f})'
-                )
+                logger.debug(f'Restored best checkpoint (val_loss={best_val_loss:.6f})')
 
                 if epoch % 10 == 0:
                     logger.debug(
@@ -786,7 +793,11 @@ class TorchLearner(Learner):
 
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         """Return memory usage profile for batch size estimation."""
-        return {'bytes_per_sample': n_features * 4, 'working_multiplier': 3.0, 'fixed_overhead': 0}
+        return {
+            'bytes_per_sample': n_features * 4,
+            'working_multiplier': 3.0,
+            'fixed_overhead': 0,
+        }
 
     def _inverse_transform_predictions(
         self,
@@ -804,6 +815,10 @@ class TorchLearner(Learner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f'Torch{self.__class__.__name__}'
+
+    def preferred_feature_dtype(self) -> str:
+        """StandardScaler upcasts uint8→float64; float32 avoids wasted cache reads."""
+        return 'float32'
 
     def supports_uncertainty(self) -> bool:
         """Return True if this learner can provide uncertainty estimates."""
@@ -848,6 +863,7 @@ class TorchLearner(Learner):
         }
 
         import torch
+
         torch.save(state, path)
         logger.debug(f'Saved {self.get_name()} model to {path}')
 
