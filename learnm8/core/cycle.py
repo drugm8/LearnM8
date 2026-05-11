@@ -130,10 +130,7 @@ def execute_cycle(
             oracle_type='benchmark', original_pool=original_df
         )
     """
-    from learnm8.core.dataframe_ops import (
-        get_compounds_by_status,
-        update_status,
-    )
+    from learnm8.core.dataframe_ops import get_compounds_by_status
     from learnm8.core.persistence import write_cycle_predictions
 
     # Step 1: Setup and Validation
@@ -184,88 +181,19 @@ def execute_cycle(
             f"Check that select_initial_batch() ran successfully, that your oracle returned "
             f"measurements, and that batch_fraction is large enough to select at least 1 compound."
         )
-    else:
-        learner._feature_type = feature_type
 
-        # Extract features and train learner.
-        # Feature-extraction time is tracked separately from learner-side
-        # training time so that `feature_extraction_time` (HDF5 cache speedup)
-        # can be reported independently in cycle metrics.
-        training_start_time = time.time()
-        train_feature_time = 0.0
-        try:
-            training_targets = labeled_df[target_col].to_numpy()
-            training_smiles = labeled_df['SMILES'].to_list()
-
-            if learner.requires_smiles():
-                if featurizer is not None:
-                    _t0 = time.time()
-                    training_features = extract_features(
-                        training_smiles,
-                        featurizer,
-                        cache_dir=cache_dir,
-                        n_jobs=n_jobs,
-                        preferred_dtype=learner.preferred_feature_dtype(),
-                    )
-                    train_feature_time += time.time() - _t0
-                    logger.info(
-                        f"Training {learner.get_name()} on {len(labeled_df)} compounds "
-                        f"(SMILES + {training_features.shape[1]}-D descriptors)"
-                    )
-                else:
-                    training_features = None
-                    logger.info(
-                        f"Training {learner.get_name()} on {len(labeled_df)} compounds"
-                    )
-
-                learner.train(
-                    features=training_features,
-                    targets=training_targets,
-                    smiles=training_smiles
-                )
-                logger.debug(f"Model trained on {len(training_smiles)} compounds")
-            else:
-                if featurizer is None:
-                    raise ValueError(
-                        f"featurizer is required for {learner.get_name()} because it is a "
-                        f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
-                        f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
-                        f"a featurizer (featurizer=None)."
-                    )
-
-                _t0 = time.time()
-                training_features = extract_features(
-                    training_smiles,
-                    featurizer,
-                    cache_dir=cache_dir,
-                    n_jobs=n_jobs,
-                    preferred_dtype=learner.preferred_feature_dtype(),
-                )
-                train_feature_time += time.time() - _t0
-                logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
-
-                logger.info(f"Training {learner.get_name()} on {len(labeled_df)} compounds ({featurizer})")
-                learner.train(training_features, training_targets)
-                logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
-        except (LearnerError, FeatureExtractionError):
-            raise
-        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
-            logger.error(f"Training failed in cycle {cycle}: {e}")
-            err = LearnerError(
-                f"Training failed in cycle {cycle}: {e}. "
-                f"Check that the training data is valid, the featurizer is compatible "
-                f"with the learner, and there are enough labeled compounds."
-            )
-            err.add_note(f"Failed during cycle {cycle} with {len(labeled_df)} labeled compounds")
-            raise err from e
-
-        # Carve feature-extraction time out of training_time so the two metrics
-        # are mutually exclusive (required for stacked-bar compute breakdowns).
-        training_time = max(0.0, (time.time() - training_start_time) - train_feature_time)
-        logger.info(f"Training complete ({training_time:.2f}s)")
+    training_time, train_feature_time = _train_learner(
+        learner=learner,
+        labeled_df=labeled_df,
+        target_col=target_col,
+        featurizer=featurizer,
+        cache_dir=cache_dir,
+        n_jobs=n_jobs,
+        feature_type=feature_type,
+        cycle=cycle,
+    )
 
     # Step 4: Prediction on unlabeled compounds (unified always-batch approach)
-    prediction_start_time = time.time()
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
     )
@@ -289,6 +217,664 @@ def execute_cycle(
         }
         return compounds_df, metrics
 
+    cycle_predictions, prediction_time, predict_feature_time, _valid_compound_ids = _predict_pool(
+        learner=learner,
+        prediction_pool=prediction_pool,
+        featurizer=featurizer,
+        cache_dir=cache_dir,
+        memory_safety_factor=memory_safety_factor,
+        n_jobs=n_jobs,
+        cycle=cycle,
+    )
+
+    # Derive raw arrays from cycle_predictions for downstream consumers
+    # (_calculate_cycle_metrics + evaluate_cycle). Roundtrip is lossless for
+    # Float64 so REQ-5 value-equality is preserved.
+    predictions = cycle_predictions['prediction'].to_numpy()
+    uncertainties = (
+        cycle_predictions['uncertainty'].to_numpy()
+        if 'uncertainty' in cycle_predictions.columns else None
+    )
+
+    parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
+
+    selection_pool_cols = ['ID', 'prediction'] + (
+        ['uncertainty'] if uncertainties is not None else []
+    )
+    selection_pool = (
+        compounds_df
+        .filter(pl.col('status') == 'unlabeled')
+        .select(['ID', 'SMILES'])
+        .join(cycle_predictions, on='ID', how='inner')
+        .select(['ID', 'SMILES'] + [c for c in selection_pool_cols if c != 'ID'])
+    )
+
+    if len(selection_pool) == 0:
+        raise AcquisitionError(
+            f"No unlabeled compounds with predictions available for selection in cycle {cycle}. "
+            f"The compound pool may be exhausted. Consider reducing n_cycles or increasing "
+            f"the pool size. Current pool: {len(unlabeled_df)} unlabeled, "
+            f"{len(labeled_df)} labeled."
+        )
+
+    logger.debug(f"Selection pool: {len(selection_pool)} unlabeled compounds with predictions")
+
+    # Step 8: Apply Pruning (If Specified)
+    compounds_df, selection_pool, pruning_stats = _apply_pruning(
+        selection_pool=selection_pool,
+        compounds_df=compounds_df,
+        cycle=cycle,
+        target_col=target_col,
+        pruning_strategy=config.pruning_strategy,
+        pruning_params=config.pruning_params,
+        score_direction=score_direction,
+    )
+
+    compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions = _select_and_measure(
+        compounds_df=compounds_df,
+        selection_pool=selection_pool,
+        cycle_predictions=cycle_predictions,
+        cycle=cycle,
+        config=config,
+        target_col=target_col,
+        score_direction=score_direction,
+        original_pool_size=original_pool_size,
+        oracle=oracle,
+    )
+
+    # Step 14: Calculate Cycle Metrics (basic + evaluate_cycle enhancement)
+    evaluation_start_time = time.time()
+    metrics = _calculate_cycle_metrics(
+        compounds_df,
+        cycle,
+        config.strategy,
+        predictions,
+        uncertainties,
+        selected_ids,
+        pruning_stats.get('pruned_ids', []),
+        target_col,
+        score_direction,
+        cycle_predictions=cycle_predictions,
+        oracle_type=oracle_type,
+        original_pool=original_pool,
+        cumulative_selected_ids=cumulative_selected_ids,
+        disable_molecular_similarity=disable_molecular_similarity,
+        run_cache=run_cache,
+        featurizer_obj=featurizer_obj,
+        cache_dir=cache_dir,
+        random_state=random_state,
+    )
+    evaluation_time = time.time() - evaluation_start_time
+
+    # Calculate total cycle time
+    total_time = time.time() - cycle_start_time
+
+    # Add timing metrics. `feature_extraction_time` is the wall-clock seconds
+    # spent in `extract_features` across both training-side and prediction-side
+    # calls; it is carved out of `training_time` and `prediction_time` so the
+    # four compute-component metrics can be summed for stacked-bar breakdowns
+    # (publication Fig. 5 panel C, HDF5 cache speedup).
+    feature_extraction_time = train_feature_time + predict_feature_time
+    metrics['training_time'] = training_time
+    metrics['prediction_time'] = prediction_time
+    metrics['acquisition_time'] = acquisition_time
+    metrics['oracle_time'] = oracle_time
+    metrics['evaluation_time'] = evaluation_time
+    metrics['feature_extraction_time'] = feature_extraction_time
+    metrics['total_time'] = total_time
+
+    # Parquet path and cycle-time prediction capture for selected compounds.
+    # selected_predictions is a tiny DF (~batch_size rows) used by save_results()
+    # to build selection_history.csv without re-reading the parquet file.
+    metrics['parquet_path'] = parquet_path
+    metrics['selected_predictions'] = selected_predictions
+
+    # Step 15: Log Cycle Metrics
+    parts = []
+    for key, val in metrics.items():
+        if key in ('parquet_path', 'selected_predictions'):
+            continue
+        if isinstance(val, float):
+            parts.append(f"{key}={val:.4f}")
+        else:
+            parts.append(f"{key}={val}")
+    logger.info(f"Cycle {cycle} metrics: " + ", ".join(parts))
+
+    # Step 16: Return Results
+    total_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
+    total_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
+    logger.info(f"Cycle {cycle} complete: {total_labeled} labeled, {total_unlabeled} unlabeled remaining")
+
+    logger.debug(f"Oracle measured {len(selected_ids)} compounds for property: {target_col}")
+
+    return compounds_df, metrics
+
+
+def _calculate_cycle_metrics(
+    compounds_df: pl.DataFrame,
+    cycle: int,
+    strategy: str,
+    predictions: np.ndarray,
+    uncertainties: np.ndarray | None,
+    selected_ids: list[str],
+    pruned_ids: list[str],
+    target_col: str,
+    score_direction: str,
+    *,
+    cycle_predictions: pl.DataFrame | None = None,
+    oracle_type: Literal['run', 'benchmark'] = 'run',
+    original_pool: pl.DataFrame | None = None,
+    cumulative_selected_ids: set | None = None,
+    disable_molecular_similarity: bool | Iterable[str] = False,
+    run_cache: RunCache | None = None,
+    featurizer_obj: Any = None,
+    cache_dir: Path | None = None,
+    random_state: int | None = None,
+) -> dict[str, Any]:
+    """
+    Calculate comprehensive metrics for the cycle.
+
+    Provides statistics about:
+    - Cycle info (cycle number, strategy, batch size)
+    - Pool statistics (remaining/cumulative counts)
+    - Pruning statistics
+    - Prediction statistics (mean, std, min, max, median)
+    - Uncertainty statistics (if available)
+    - Measured value statistics for this cycle
+    - Best value found so far
+
+    When `cycle_predictions` is provided, additionally calls `evaluate_cycle()`
+    (mode-aware) and merges its result via `metrics.update(...)`. Owns
+    try/except #4 (eval-wrap). When `cycle_predictions` is None the eval-wrap
+    is skipped (used by unit tests of the basic-stats path).
+
+    Args:
+        compounds_df: Master DataFrame with all compound states
+        cycle: Current cycle number
+        strategy: Acquisition strategy used
+        predictions: Prediction array from learner
+        uncertainties: Uncertainty array (None if not available)
+        selected_ids: IDs of compounds selected this cycle
+        pruned_ids: IDs of compounds pruned this cycle
+        target_col: Target property column name
+        score_direction: 'higher' or 'lower'
+
+    Returns:
+        Dictionary with comprehensive cycle metrics
+    """
+    metrics = {}
+
+    # Basic cycle info
+    metrics['cycle'] = cycle
+    metrics['strategy'] = strategy
+    metrics['batch_size'] = len(selected_ids)
+    metrics['selected_count'] = len(selected_ids)
+
+    # Pool statistics
+    metrics['remaining_unlabeled'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
+    metrics['cumulative_labeled'] = int(compounds_df.filter(pl.col('status') == 'labeled').height)
+    metrics['cumulative_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
+    metrics['pool_size'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
+
+    # Pruning statistics
+    metrics['pruned_count'] = len(pruned_ids)
+    metrics['pruned_ids'] = pruned_ids
+
+    # Selection statistics
+    metrics['selected_ids'] = selected_ids
+
+    # Prediction statistics (with NaN safeguards)
+    if predictions is not None and len(predictions) > 0:
+        metrics['prediction_mean'] = float(np.nanmean(predictions)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_std'] = float(np.nanstd(predictions)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_min'] = float(np.nanmin(predictions)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_max'] = float(np.nanmax(predictions)) if not np.all(np.isnan(predictions)) else None
+        metrics['prediction_median'] = float(np.nanmedian(predictions)) if not np.all(np.isnan(predictions)) else None
+    else:
+        metrics['prediction_mean'] = None
+        metrics['prediction_std'] = None
+        metrics['prediction_min'] = None
+        metrics['prediction_max'] = None
+        metrics['prediction_median'] = None
+
+    # Uncertainty statistics (with NaN safeguards)
+    if uncertainties is not None and len(uncertainties) > 0:
+        metrics['uncertainty_mean'] = float(np.nanmean(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['uncertainty_std'] = float(np.nanstd(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['uncertainty_min'] = float(np.nanmin(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['uncertainty_max'] = float(np.nanmax(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
+        metrics['has_uncertainty'] = True
+    else:
+        metrics['has_uncertainty'] = False
+
+    # Measured value statistics (for selected compounds this cycle, with NaN safeguards)
+    measured_values = compounds_df.filter(
+        pl.col('ID').is_in(selected_ids)
+    )[target_col].to_numpy()
+
+    if len(measured_values) > 0:
+        metrics['measured_mean'] = float(np.nanmean(measured_values)) if not np.all(np.isnan(measured_values)) else None
+        metrics['measured_std'] = float(np.nanstd(measured_values)) if not np.all(np.isnan(measured_values)) else None
+        metrics['measured_min'] = float(np.nanmin(measured_values)) if not np.all(np.isnan(measured_values)) else None
+        metrics['measured_max'] = float(np.nanmax(measured_values)) if not np.all(np.isnan(measured_values)) else None
+        if not np.all(np.isnan(measured_values)):
+            metrics['measured_best'] = float(
+                np.nanmax(measured_values) if score_direction == 'higher' else np.nanmin(measured_values)
+            )
+        else:
+            metrics['measured_best'] = None
+    else:
+        metrics['measured_mean'] = None
+        metrics['measured_std'] = None
+        metrics['measured_min'] = None
+        metrics['measured_max'] = None
+        metrics['measured_best'] = None
+
+    # Best so far (across all labeled compounds, with NaN safeguards)
+    all_labeled_values = compounds_df.filter(
+        pl.col('status') == 'labeled'
+    )[target_col].to_numpy()
+
+    if len(all_labeled_values) > 0 and not np.all(np.isnan(all_labeled_values)):
+        metrics['best_so_far'] = float(
+            np.nanmax(all_labeled_values) if score_direction == 'higher' else np.nanmin(all_labeled_values)
+        )
+    else:
+        metrics['best_so_far'] = None
+
+    # Step 14b: Enhance with evaluation metrics (mode-aware)
+    # Predictions are joined from cycle_predictions (temp DF) rather than read
+    # from prediction_cycle_N columns, which no longer exist on the master DF.
+    if cycle_predictions is not None:
+        try:
+            labeled_with_pred = (
+                compounds_df.filter(pl.col('status') == 'labeled')
+                .select(['ID', 'SMILES', target_col])
+                .join(
+                    cycle_predictions.select(['ID', 'prediction']),
+                    on='ID',
+                    how='inner',
+                )
+            )
+
+            if len(labeled_with_pred) > 0:
+                eval_predictions = labeled_with_pred['prediction'].to_numpy()
+                eval_ground_truth = labeled_with_pred[target_col].to_numpy()
+
+                valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
+
+                if np.sum(valid_mask) > 0:
+                    selected_for_eval = compounds_df.filter(
+                        pl.col('ID').is_in(selected_ids)
+                    ).select(['ID', 'SMILES', target_col])
+
+                    pool_df_for_eval = None
+                    original_pool_for_eval = None
+
+                    if oracle_type == 'benchmark' and original_pool is not None:
+                        pool_df_for_eval = cycle_predictions.select(['ID', 'prediction'])
+                        original_pool_for_eval = original_pool
+
+                    cumulative_selected_compounds = compounds_df.filter(
+                        pl.col('status') == 'labeled'
+                    ).select(['ID', 'SMILES'])
+
+                    eval_metrics = evaluate_cycle(
+                        cycle=cycle,
+                        predictions=eval_predictions[valid_mask],
+                        ground_truth=eval_ground_truth[valid_mask],
+                        labeled_data=labeled_with_pred.select(['ID', 'SMILES', target_col]),
+                        selected_compounds=selected_for_eval,
+                        target_col=target_col,
+                        oracle_type=oracle_type,
+                        ground_truth_data=original_pool_for_eval,
+                        pool_df=pool_df_for_eval,
+                        uncertainties=uncertainties if uncertainties is not None else None,
+                        cumulative_selected_compounds=cumulative_selected_compounds,
+                        advanced_metrics=False,
+                        disable_molecular_similarity=disable_molecular_similarity,
+                        score_direction=score_direction,
+                        cumulative_selected_ids=cumulative_selected_ids,
+                        cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height),
+                        run_cache=run_cache,
+                        featurizer=featurizer_obj,
+                        cache_dir=cache_dir,
+                        random_state=random_state,
+                    )
+
+                    metrics.update(eval_metrics)
+        except (ValueError, RuntimeError, TypeError, ArithmeticError, KeyError, pl.exceptions.ColumnNotFoundError) as e:
+            logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
+
+    return metrics
+
+
+def _apply_pruning(
+    *,
+    selection_pool: pl.DataFrame,
+    compounds_df: pl.DataFrame,
+    cycle: int,
+    target_col: str,
+    pruning_strategy: str | None,
+    pruning_params: dict[str, Any] | None,
+    score_direction: str,
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, Any]]:
+    """Apply pruning strategy to reduce selection pool, update master_df,
+    and validate non-empty post-prune pool.
+
+    Owns try/except #5 (pruning). No dedicated stopwatch — pruning falls in
+    the untimed gap between predict and acquisition (REQ-3). When
+    `pruning_strategy` is None, returns the inputs unchanged (with a
+    pruned_count=0 stats dict).
+
+    Returns:
+        (compounds_df, selection_pool, pruning_stats)
+
+    Pruning stats include:
+        - pruned_count: Number of compounds removed
+        - pruned_ids: List of removed compound IDs
+        - original_count: Original pool size
+        - remaining_count: Pool size after pruning
+        - pruning_fraction: Fraction of compounds removed
+    """
+    from learnm8.core.dataframe_ops import update_status
+
+    pruning_stats: dict[str, Any] = {'pruned_count': 0, 'pruned_ids': []}
+    unlabeled_before_prune = len(selection_pool)
+
+    if pruning_strategy:
+        logger.debug(f"Pruning design space with '{pruning_strategy}' strategy")
+
+        uncertainty_values = None
+        if 'uncertainty' in selection_pool.columns:
+            uncertainty_values = selection_pool['uncertainty'].to_numpy()
+
+        from learnm8.pruning import create_pruning_strategy
+
+        params = pruning_params or {}
+        try:
+            params_with_direction = params.copy()
+            params_with_direction['score_direction'] = score_direction
+
+            pruner = create_pruning_strategy(
+                strategy_name=pruning_strategy,
+                parameters=params_with_direction
+            )
+
+            predictions_np = selection_pool['prediction'].to_numpy()
+            pruned_pool = pruner.prune(selection_pool, predictions_np, uncertainty_values)
+
+            pruned_ids = list(set(selection_pool['ID']) - set(pruned_pool['ID']))
+
+            pruning_stats = {
+                'pruned_count': len(pruned_ids),
+                'pruned_ids': pruned_ids,
+                'original_count': len(selection_pool),
+                'remaining_count': len(pruned_pool),
+                'pruning_fraction': len(pruned_ids) / len(selection_pool) if len(selection_pool) > 0 else 0.0
+            }
+
+            logger.debug(
+                f"Pruning with '{pruning_strategy}': {len(selection_pool)} → {len(pruned_pool)} compounds "
+                f"({pruning_stats['pruning_fraction']:.1%} removed)"
+            )
+
+            selection_pool = pruned_pool
+
+        except PruningError:
+            raise
+        except (ValueError, RuntimeError, TypeError) as e:
+            logger.error(f"Pruning failed with strategy '{pruning_strategy}': {e}")
+            err = PruningError(
+                f"Pruning failed with strategy '{pruning_strategy}': {e}. "
+                f"Check pruning parameters (e.g., pruning_fraction must be 0.0-0.9). "
+                f"To disable pruning, set pruning_strategy=None."
+            )
+            err.add_note(f"Pruning failed on pool of {unlabeled_before_prune} compounds with params: {params}")
+            raise err from e
+
+        pruned_ids = pruning_stats['pruned_ids']
+        if pruned_ids:
+            compounds_df = update_status(
+                compounds_df, pruned_ids, 'pruned', cycle, target_col, None
+            )
+
+        if pruning_stats['pruned_count'] > 0:
+            prune_pct = (pruning_stats['pruned_count'] / unlabeled_before_prune) * 100
+            logger.debug(f"Pruned {pruning_stats['pruned_count']} compounds ({prune_pct:.1f}% of unlabeled pool)")
+
+        logger.debug(f"Pruning parameters: {pruning_params}")
+        logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
+
+    if len(selection_pool) == 0:
+        raise PruningError(
+            f"No compounds remaining after pruning in cycle {cycle}. "
+            f"Pruning removed all {unlabeled_before_prune} candidates. "
+            f"Reduce pruning_fraction (current: {pruning_params.get('pruning_fraction', 'N/A') if pruning_params else 'N/A'}) "
+            f"or disable pruning by setting pruning_strategy=None."
+        )
+
+    return compounds_df, selection_pool, pruning_stats
+
+
+def _select_compounds(
+    pool: pl.DataFrame,
+    strategy: str,
+    batch_size: int,
+    score_direction: str,
+    acquisition_params: dict[str, Any]
+) -> pl.DataFrame:
+    """
+    Apply acquisition strategy to select compounds.
+
+    Handles acquisition function creation, validation, and execution.
+    Provides clear error messages for common issues like:
+    - Unknown strategy names
+    - Missing uncertainty estimates for uncertainty-based strategies
+    - Selection failures
+
+    Args:
+        pool: DataFrame with compounds (must have ID, prediction columns)
+        strategy: Acquisition strategy name
+        batch_size: Number of compounds to select
+        score_direction: 'higher' or 'lower'
+        acquisition_params: Strategy-specific parameters
+
+    Returns:
+        DataFrame with selected compounds
+
+    Raises:
+        ValueError: Unknown strategy or missing requirements
+        RuntimeError: Selection failures
+    """
+    from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
+
+    # Get acquisition class
+    try:
+        acq_class = get_acquisition_function(strategy)
+    except KeyError:
+        available = list_acquisition_functions()
+        raise ValueError(
+            f"Unknown acquisition strategy '{strategy}'. "
+            f"Available strategies: {', '.join(available)}. "
+            f"Basic strategies (any learner): greedy, random, topk. "
+            f"Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy."
+        ) from None
+
+    # Note: current_best must be set from labeled data at cycle level, not predictions
+    # This is handled in execute_cycle before calling _select_compounds
+
+    # Create acquisition instance
+    try:
+        acq_func = acq_class(score_direction=score_direction, **acquisition_params)
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Failed to create acquisition function '{strategy}': {e}. "
+            f"Check that the acquisition parameters are valid for this strategy."
+        ) from e
+    # Uniqueness of IDs in selection_pool is guaranteed by validate_compound_pool() upstream
+    acq_func._skip_unique_id_check = True
+
+    # Validate requirements
+    if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:
+        raise ValueError(
+            f"Acquisition strategy '{strategy}' requires uncertainty estimates, "
+            f"but your learner does not produce them. Use a learner that supports uncertainty "
+            f"(e.g., GaussianProcess, MCDropout, EnsembleLearner) or choose a different strategy "
+            f"(e.g., greedy, random)."
+        )
+
+    # Select compounds
+    try:
+        selected_df = acq_func.select(pool, batch_size)
+    except AcquisitionError:
+        raise
+    except (ValueError, RuntimeError, TypeError) as e:
+        raise AcquisitionError(
+            f"Acquisition strategy '{strategy}' failed during selection: {e}. "
+            f"Pool had {len(pool)} candidates. Check strategy parameters and "
+            f"ensure predictions/uncertainties are valid."
+        ) from e
+
+    if len(selected_df) == 0:
+        raise AcquisitionError(
+            f"Acquisition strategy '{strategy}' selected 0 compounds from "
+            f"{len(pool)} candidates (batch_size={batch_size}). "
+            f"Check remaining pool size and strategy parameters."
+        )
+
+    if len(selected_df) > batch_size:
+        logger.warning(
+            f"Acquisition strategy '{strategy}' selected {len(selected_df)} compounds, "
+            f"expected {batch_size}. Truncating to batch_size."
+        )
+        selected_df = selected_df.head(batch_size)
+
+    logger.debug(f"Selected {len(selected_df)} compounds using '{strategy}' acquisition")
+
+    return selected_df
+
+
+def _train_learner(
+    *,
+    learner: Learner,
+    labeled_df: pl.DataFrame,
+    target_col: str,
+    featurizer: str | None,
+    cache_dir: Path,
+    n_jobs: int,
+    feature_type: str,
+    cycle: int,
+) -> tuple[float, float]:
+    """Train the learner on labeled compounds.
+
+    Owns try/except #1 (training) and the `training_time` +
+    `feature_extraction_time` (training portion) stopwatches.
+
+    Returns:
+        (training_time, train_feature_time)
+    """
+    learner._feature_type = feature_type
+
+    # Extract features and train learner.
+    # Feature-extraction time is tracked separately from learner-side
+    # training time so that `feature_extraction_time` (HDF5 cache speedup)
+    # can be reported independently in cycle metrics.
+    training_start_time = time.time()
+    train_feature_time = 0.0
+    try:
+        training_targets = labeled_df[target_col].to_numpy()
+        training_smiles = labeled_df['SMILES'].to_list()
+
+        if learner.requires_smiles():
+            if featurizer is not None:
+                _t0 = time.time()
+                training_features = extract_features(
+                    training_smiles,
+                    featurizer,
+                    cache_dir=cache_dir,
+                    n_jobs=n_jobs,
+                    preferred_dtype=learner.preferred_feature_dtype(),
+                )
+                train_feature_time += time.time() - _t0
+                logger.info(
+                    f"Training {learner.get_name()} on {len(labeled_df)} compounds "
+                    f"(SMILES + {training_features.shape[1]}-D descriptors)"
+                )
+            else:
+                training_features = None
+                logger.info(
+                    f"Training {learner.get_name()} on {len(labeled_df)} compounds"
+                )
+
+            learner.train(
+                features=training_features,
+                targets=training_targets,
+                smiles=training_smiles
+            )
+            logger.debug(f"Model trained on {len(training_smiles)} compounds")
+        else:
+            if featurizer is None:
+                raise ValueError(
+                    f"featurizer is required for {learner.get_name()} because it is a "
+                    f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
+                    f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
+                    f"a featurizer (featurizer=None)."
+                )
+
+            _t0 = time.time()
+            training_features = extract_features(
+                training_smiles,
+                featurizer,
+                cache_dir=cache_dir,
+                n_jobs=n_jobs,
+                preferred_dtype=learner.preferred_feature_dtype(),
+            )
+            train_feature_time += time.time() - _t0
+            logger.debug(f"Extracted {featurizer} features: {len(labeled_df)} training compounds")
+
+            logger.info(f"Training {learner.get_name()} on {len(labeled_df)} compounds ({featurizer})")
+            learner.train(training_features, training_targets)
+            logger.debug(f"Model trained on features shape: {training_features.shape}, targets shape: {training_targets.shape}")
+    except (LearnerError, FeatureExtractionError):
+        raise
+    except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
+        logger.error(f"Training failed in cycle {cycle}: {e}")
+        err = LearnerError(
+            f"Training failed in cycle {cycle}: {e}. "
+            f"Check that the training data is valid, the featurizer is compatible "
+            f"with the learner, and there are enough labeled compounds."
+        )
+        err.add_note(f"Failed during cycle {cycle} with {len(labeled_df)} labeled compounds")
+        raise err from e
+
+    # Carve feature-extraction time out of training_time so the two metrics
+    # are mutually exclusive (required for stacked-bar compute breakdowns).
+    training_time = max(0.0, (time.time() - training_start_time) - train_feature_time)
+    logger.info(f"Training complete ({training_time:.2f}s)")
+    return training_time, train_feature_time
+
+
+def _predict_pool(
+    *,
+    learner: Learner,
+    prediction_pool: pl.DataFrame,
+    featurizer: str | None,
+    cache_dir: Path,
+    memory_safety_factor: float,
+    n_jobs: int,
+    cycle: int,
+) -> tuple[pl.DataFrame, float, float, list[int]]:
+    """Generate predictions (and optionally uncertainties) for the unlabeled pool.
+
+    Owns try/except #2 (predict) and the `prediction_time` +
+    `feature_extraction_time` (predict portion) stopwatches. Does NOT handle
+    the empty-pool short-circuit (orchestrator owns that path).
+
+    Returns:
+        (cycle_predictions, prediction_time, predict_feature_time, valid_compound_ids)
+    """
+    prediction_start_time = time.time()
     try:
         (
             predictions,
@@ -336,69 +922,31 @@ def execute_cycle(
         pred_data['uncertainty'] = uncertainties
     cycle_predictions = pl.DataFrame(pred_data)
 
-    parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
+    return cycle_predictions, prediction_time, predict_feature_time, valid_compound_ids
 
-    selection_pool_cols = ['ID', 'prediction'] + (
-        ['uncertainty'] if uncertainties is not None else []
-    )
-    selection_pool = (
-        compounds_df
-        .filter(pl.col('status') == 'unlabeled')
-        .select(['ID', 'SMILES'])
-        .join(cycle_predictions, on='ID', how='inner')
-        .select(['ID', 'SMILES'] + [c for c in selection_pool_cols if c != 'ID'])
-    )
 
-    if len(selection_pool) == 0:
-        raise AcquisitionError(
-            f"No unlabeled compounds with predictions available for selection in cycle {cycle}. "
-            f"The compound pool may be exhausted. Consider reducing n_cycles or increasing "
-            f"the pool size. Current pool: {len(unlabeled_df)} unlabeled, "
-            f"{len(labeled_df)} labeled."
-        )
+def _select_and_measure(
+    *,
+    compounds_df: pl.DataFrame,
+    selection_pool: pl.DataFrame,
+    cycle_predictions: pl.DataFrame,
+    cycle: int,
+    config: CycleConfig,
+    target_col: str,
+    score_direction: str,
+    original_pool_size: int,
+    oracle: Oracle,
+) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None]:
+    """Compute batch size, run acquisition, measure via oracle, update master_df.
 
-    logger.debug(f"Selection pool: {len(selection_pool)} unlabeled compounds with predictions")
+    Owns try/except #3 (oracle), the `acquisition_time` and `oracle_time`
+    stopwatches. Try/except #6 + #7 stay inside `_select_compounds`
+    (transitive ownership).
 
-    # Step 8: Apply Pruning (If Specified)
-    pruning_stats = {'pruned_count': 0, 'pruned_ids': []}
-    unlabeled_before_prune = len(selection_pool)
-
-    if config.pruning_strategy:
-        logger.debug(f"Pruning design space with '{config.pruning_strategy}' strategy")
-
-        uncertainty_values = None
-        if 'uncertainty' in selection_pool.columns:
-            uncertainty_values = selection_pool['uncertainty'].to_numpy()
-
-        selection_pool, pruning_stats = _apply_pruning(
-            selection_pool,
-            selection_pool['prediction'].to_numpy(),
-            uncertainty_values,
-            config.pruning_strategy,
-            config.pruning_params or {},
-            score_direction
-        )
-
-        pruned_ids = pruning_stats['pruned_ids']
-        if pruned_ids:
-            compounds_df = update_status(
-                compounds_df, pruned_ids, 'pruned', cycle, target_col, None
-            )
-
-        if pruning_stats['pruned_count'] > 0:
-            prune_pct = (pruning_stats['pruned_count'] / unlabeled_before_prune) * 100
-            logger.debug(f"Pruned {pruning_stats['pruned_count']} compounds ({prune_pct:.1f}% of unlabeled pool)")
-
-        logger.debug(f"Pruning parameters: {config.pruning_params}")
-        logger.debug(f"Pool before pruning: {unlabeled_before_prune}, after pruning: {len(selection_pool)}")
-
-    if len(selection_pool) == 0:
-        raise PruningError(
-            f"No compounds remaining after pruning in cycle {cycle}. "
-            f"Pruning removed all {unlabeled_before_prune} candidates. "
-            f"Reduce pruning_fraction (current: {config.pruning_params.get('pruning_fraction', 'N/A') if config.pruning_params else 'N/A'}) "
-            f"or disable pruning by setting pruning_strategy=None."
-        )
+    Returns:
+        (compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions)
+    """
+    from learnm8.core.dataframe_ops import update_status
 
     # Step 9: Calculate Batch Size from Fraction
     batch_size = min(
@@ -511,417 +1059,4 @@ def execute_cycle(
         target_series
     )
 
-    # Step 14: Calculate Cycle Metrics
-    evaluation_start_time = time.time()
-    metrics = _calculate_cycle_metrics(
-        compounds_df,
-        cycle,
-        config.strategy,
-        predictions,
-        uncertainties,
-        selected_ids,
-        pruning_stats.get('pruned_ids', []),
-        target_col,
-        score_direction
-    )
-
-    # Step 14b: Enhance with evaluation metrics (mode-aware)
-    # Predictions are joined from cycle_predictions (temp DF) rather than read
-    # from prediction_cycle_N columns, which no longer exist on the master DF.
-    try:
-        labeled_with_pred = (
-            compounds_df.filter(pl.col('status') == 'labeled')
-            .select(['ID', 'SMILES', target_col])
-            .join(
-                cycle_predictions.select(['ID', 'prediction']),
-                on='ID',
-                how='inner',
-            )
-        )
-
-        if len(labeled_with_pred) > 0:
-            eval_predictions = labeled_with_pred['prediction'].to_numpy()
-            eval_ground_truth = labeled_with_pred[target_col].to_numpy()
-
-            valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
-
-            if np.sum(valid_mask) > 0:
-                selected_for_eval = compounds_df.filter(
-                    pl.col('ID').is_in(selected_ids)
-                ).select(['ID', 'SMILES', target_col])
-
-                pool_df_for_eval = None
-                original_pool_for_eval = None
-
-                if oracle_type == 'benchmark' and original_pool is not None:
-                    pool_df_for_eval = cycle_predictions.select(['ID', 'prediction'])
-                    original_pool_for_eval = original_pool
-
-                cumulative_selected_compounds = compounds_df.filter(
-                    pl.col('status') == 'labeled'
-                ).select(['ID', 'SMILES'])
-
-                eval_metrics = evaluate_cycle(
-                    cycle=cycle,
-                    predictions=eval_predictions[valid_mask],
-                    ground_truth=eval_ground_truth[valid_mask],
-                    labeled_data=labeled_with_pred.select(['ID', 'SMILES', target_col]),
-                    selected_compounds=selected_for_eval,
-                    target_col=target_col,
-                    oracle_type=oracle_type,
-                    ground_truth_data=original_pool_for_eval,
-                    pool_df=pool_df_for_eval,
-                    uncertainties=uncertainties if uncertainties is not None else None,
-                    cumulative_selected_compounds=cumulative_selected_compounds,
-                    advanced_metrics=False,
-                    disable_molecular_similarity=disable_molecular_similarity,
-                    score_direction=score_direction,
-                    cumulative_selected_ids=cumulative_selected_ids,
-                    cumulative_labeled_count=int(compounds_df.filter(pl.col('status') == 'labeled').height),
-                    run_cache=run_cache,
-                    featurizer=featurizer_obj,
-                    cache_dir=cache_dir,
-                    random_state=random_state,
-                )
-
-                metrics.update(eval_metrics)
-    except (ValueError, RuntimeError, TypeError, ArithmeticError, KeyError, pl.exceptions.ColumnNotFoundError) as e:
-        logger.warning(f"Failed to calculate enhanced evaluation metrics in cycle {cycle}: {e}")
-
-    evaluation_time = time.time() - evaluation_start_time
-
-    # Calculate total cycle time
-    total_time = time.time() - cycle_start_time
-
-    # Add timing metrics. `feature_extraction_time` is the wall-clock seconds
-    # spent in `extract_features` across both training-side and prediction-side
-    # calls; it is carved out of `training_time` and `prediction_time` so the
-    # four compute-component metrics can be summed for stacked-bar breakdowns
-    # (publication Fig. 5 panel C, HDF5 cache speedup).
-    feature_extraction_time = train_feature_time + predict_feature_time
-    metrics['training_time'] = training_time
-    metrics['prediction_time'] = prediction_time
-    metrics['acquisition_time'] = acquisition_time
-    metrics['oracle_time'] = oracle_time
-    metrics['evaluation_time'] = evaluation_time
-    metrics['feature_extraction_time'] = feature_extraction_time
-    metrics['total_time'] = total_time
-
-    # Parquet path and cycle-time prediction capture for selected compounds.
-    # selected_predictions is a tiny DF (~batch_size rows) used by save_results()
-    # to build selection_history.csv without re-reading the parquet file.
-    metrics['parquet_path'] = parquet_path
-    metrics['selected_predictions'] = selected_predictions
-
-    # Step 15: Log Cycle Metrics
-    parts = []
-    for key, val in metrics.items():
-        if key in ('parquet_path', 'selected_predictions'):
-            continue
-        if isinstance(val, float):
-            parts.append(f"{key}={val:.4f}")
-        else:
-            parts.append(f"{key}={val}")
-    logger.info(f"Cycle {cycle} metrics: " + ", ".join(parts))
-
-    # Step 16: Return Results
-    total_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
-    total_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
-    logger.info(f"Cycle {cycle} complete: {total_labeled} labeled, {total_unlabeled} unlabeled remaining")
-
-    logger.debug(f"Oracle measured {len(selected_ids)} compounds for property: {target_col}")
-
-    return compounds_df, metrics
-
-
-def _calculate_cycle_metrics(
-    compounds_df: pl.DataFrame,
-    cycle: int,
-    strategy: str,
-    predictions: np.ndarray,
-    uncertainties: np.ndarray | None,
-    selected_ids: list[str],
-    pruned_ids: list[str],
-    target_col: str,
-    score_direction: str
-) -> dict[str, Any]:
-    """
-    Calculate comprehensive metrics for the cycle.
-
-    Provides statistics about:
-    - Cycle info (cycle number, strategy, batch size)
-    - Pool statistics (remaining/cumulative counts)
-    - Pruning statistics
-    - Prediction statistics (mean, std, min, max, median)
-    - Uncertainty statistics (if available)
-    - Measured value statistics for this cycle
-    - Best value found so far
-
-    Args:
-        compounds_df: Master DataFrame with all compound states
-        cycle: Current cycle number
-        strategy: Acquisition strategy used
-        predictions: Prediction array from learner
-        uncertainties: Uncertainty array (None if not available)
-        selected_ids: IDs of compounds selected this cycle
-        pruned_ids: IDs of compounds pruned this cycle
-        target_col: Target property column name
-        score_direction: 'higher' or 'lower'
-
-    Returns:
-        Dictionary with comprehensive cycle metrics
-    """
-    metrics = {}
-
-    # Basic cycle info
-    metrics['cycle'] = cycle
-    metrics['strategy'] = strategy
-    metrics['batch_size'] = len(selected_ids)
-    metrics['selected_count'] = len(selected_ids)
-
-    # Pool statistics
-    metrics['remaining_unlabeled'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
-    metrics['cumulative_labeled'] = int(compounds_df.filter(pl.col('status') == 'labeled').height)
-    metrics['cumulative_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
-    metrics['pool_size'] = int(compounds_df.filter(pl.col('status') == 'unlabeled').height)
-
-    # Pruning statistics
-    metrics['pruned_count'] = len(pruned_ids)
-    metrics['pruned_ids'] = pruned_ids
-
-    # Selection statistics
-    metrics['selected_ids'] = selected_ids
-
-    # Prediction statistics (with NaN safeguards)
-    if predictions is not None and len(predictions) > 0:
-        metrics['prediction_mean'] = float(np.nanmean(predictions)) if not np.all(np.isnan(predictions)) else None
-        metrics['prediction_std'] = float(np.nanstd(predictions)) if not np.all(np.isnan(predictions)) else None
-        metrics['prediction_min'] = float(np.nanmin(predictions)) if not np.all(np.isnan(predictions)) else None
-        metrics['prediction_max'] = float(np.nanmax(predictions)) if not np.all(np.isnan(predictions)) else None
-        metrics['prediction_median'] = float(np.nanmedian(predictions)) if not np.all(np.isnan(predictions)) else None
-    else:
-        metrics['prediction_mean'] = None
-        metrics['prediction_std'] = None
-        metrics['prediction_min'] = None
-        metrics['prediction_max'] = None
-        metrics['prediction_median'] = None
-
-    # Uncertainty statistics (with NaN safeguards)
-    if uncertainties is not None and len(uncertainties) > 0:
-        metrics['uncertainty_mean'] = float(np.nanmean(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
-        metrics['uncertainty_std'] = float(np.nanstd(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
-        metrics['uncertainty_min'] = float(np.nanmin(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
-        metrics['uncertainty_max'] = float(np.nanmax(uncertainties)) if not np.all(np.isnan(uncertainties)) else None
-        metrics['has_uncertainty'] = True
-    else:
-        metrics['has_uncertainty'] = False
-
-    # Measured value statistics (for selected compounds this cycle, with NaN safeguards)
-    measured_values = compounds_df.filter(
-        pl.col('ID').is_in(selected_ids)
-    )[target_col].to_numpy()
-
-    if len(measured_values) > 0:
-        metrics['measured_mean'] = float(np.nanmean(measured_values)) if not np.all(np.isnan(measured_values)) else None
-        metrics['measured_std'] = float(np.nanstd(measured_values)) if not np.all(np.isnan(measured_values)) else None
-        metrics['measured_min'] = float(np.nanmin(measured_values)) if not np.all(np.isnan(measured_values)) else None
-        metrics['measured_max'] = float(np.nanmax(measured_values)) if not np.all(np.isnan(measured_values)) else None
-        if not np.all(np.isnan(measured_values)):
-            metrics['measured_best'] = float(
-                np.nanmax(measured_values) if score_direction == 'higher' else np.nanmin(measured_values)
-            )
-        else:
-            metrics['measured_best'] = None
-    else:
-        metrics['measured_mean'] = None
-        metrics['measured_std'] = None
-        metrics['measured_min'] = None
-        metrics['measured_max'] = None
-        metrics['measured_best'] = None
-
-    # Best so far (across all labeled compounds, with NaN safeguards)
-    all_labeled_values = compounds_df.filter(
-        pl.col('status') == 'labeled'
-    )[target_col].to_numpy()
-
-    if len(all_labeled_values) > 0 and not np.all(np.isnan(all_labeled_values)):
-        metrics['best_so_far'] = float(
-            np.nanmax(all_labeled_values) if score_direction == 'higher' else np.nanmin(all_labeled_values)
-        )
-    else:
-        metrics['best_so_far'] = None
-
-    return metrics
-
-
-def _apply_pruning(
-    pool: pl.DataFrame,
-    predictions: np.ndarray,
-    uncertainties: np.ndarray | None,
-    strategy: str,
-    params: dict[str, Any],
-    score_direction: str
-) -> tuple[pl.DataFrame, dict[str, Any]]:
-    """
-    Apply pruning strategy to reduce selection pool.
-
-    Gracefully degrades on error - returns original pool with warning rather than failing.
-    This ensures pruning failures don't stop the active learning cycle.
-
-    Args:
-        pool: DataFrame with compounds to prune (must have ID column)
-        predictions: Prediction values for compounds
-        uncertainties: Uncertainty values (None if not available)
-        strategy: Pruning strategy name
-        params: Strategy-specific parameters
-        score_direction: 'higher' or 'lower'
-
-    Returns:
-        (pruned_pool_df, pruning_stats_dict)
-
-    Pruning stats include:
-        - pruned_count: Number of compounds removed
-        - pruned_ids: List of removed compound IDs
-        - original_count: Original pool size
-        - remaining_count: Pool size after pruning
-        - pruning_fraction: Fraction of compounds removed
-    """
-    from learnm8.pruning import create_pruning_strategy
-
-    try:
-        params_with_direction = params.copy()
-        params_with_direction['score_direction'] = score_direction
-
-        pruner = create_pruning_strategy(
-            strategy_name=strategy,
-            parameters=params_with_direction
-        )
-
-        pruned_pool = pruner.prune(pool, predictions, uncertainties)
-
-        pruned_ids = list(set(pool['ID']) - set(pruned_pool['ID']))
-
-        pruning_stats = {
-            'pruned_count': len(pruned_ids),
-            'pruned_ids': pruned_ids,
-            'original_count': len(pool),
-            'remaining_count': len(pruned_pool),
-            'pruning_fraction': len(pruned_ids) / len(pool) if len(pool) > 0 else 0.0
-        }
-
-        logger.debug(
-            f"Pruning with '{strategy}': {len(pool)} → {len(pruned_pool)} compounds "
-            f"({pruning_stats['pruning_fraction']:.1%} removed)"
-        )
-
-        return pruned_pool, pruning_stats
-
-    except PruningError:
-        raise
-    except (ValueError, RuntimeError, TypeError) as e:
-        logger.error(f"Pruning failed with strategy '{strategy}': {e}")
-        err = PruningError(
-            f"Pruning failed with strategy '{strategy}': {e}. "
-            f"Check pruning parameters (e.g., pruning_fraction must be 0.0-0.9). "
-            f"To disable pruning, set pruning_strategy=None."
-        )
-        err.add_note(f"Pruning failed on pool of {len(pool)} compounds with params: {params}")
-        raise err from e
-
-
-def _select_compounds(
-    pool: pl.DataFrame,
-    strategy: str,
-    batch_size: int,
-    score_direction: str,
-    acquisition_params: dict[str, Any]
-) -> pl.DataFrame:
-    """
-    Apply acquisition strategy to select compounds.
-
-    Handles acquisition function creation, validation, and execution.
-    Provides clear error messages for common issues like:
-    - Unknown strategy names
-    - Missing uncertainty estimates for uncertainty-based strategies
-    - Selection failures
-
-    Args:
-        pool: DataFrame with compounds (must have ID, prediction columns)
-        strategy: Acquisition strategy name
-        batch_size: Number of compounds to select
-        score_direction: 'higher' or 'lower'
-        acquisition_params: Strategy-specific parameters
-
-    Returns:
-        DataFrame with selected compounds
-
-    Raises:
-        ValueError: Unknown strategy or missing requirements
-        RuntimeError: Selection failures
-    """
-    from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
-
-    # Get acquisition class
-    try:
-        acq_class = get_acquisition_function(strategy)
-    except KeyError:
-        available = list_acquisition_functions()
-        raise ValueError(
-            f"Unknown acquisition strategy '{strategy}'. "
-            f"Available strategies: {', '.join(available)}. "
-            f"Basic strategies (any learner): greedy, random, topk. "
-            f"Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy."
-        ) from None
-
-    # Note: current_best must be set from labeled data at cycle level, not predictions
-    # This is handled in execute_cycle before calling _select_compounds
-
-    # Create acquisition instance
-    try:
-        acq_func = acq_class(score_direction=score_direction, **acquisition_params)
-    except (ValueError, TypeError) as e:
-        raise ValueError(
-            f"Failed to create acquisition function '{strategy}': {e}. "
-            f"Check that the acquisition parameters are valid for this strategy."
-        ) from e
-    # Uniqueness of IDs in selection_pool is guaranteed by validate_compound_pool() upstream
-    acq_func._skip_unique_id_check = True
-
-    # Validate requirements
-    if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:
-        raise ValueError(
-            f"Acquisition strategy '{strategy}' requires uncertainty estimates, "
-            f"but your learner does not produce them. Use a learner that supports uncertainty "
-            f"(e.g., GaussianProcess, MCDropout, EnsembleLearner) or choose a different strategy "
-            f"(e.g., greedy, random)."
-        )
-
-    # Select compounds
-    try:
-        selected_df = acq_func.select(pool, batch_size)
-    except AcquisitionError:
-        raise
-    except (ValueError, RuntimeError, TypeError) as e:
-        raise AcquisitionError(
-            f"Acquisition strategy '{strategy}' failed during selection: {e}. "
-            f"Pool had {len(pool)} candidates. Check strategy parameters and "
-            f"ensure predictions/uncertainties are valid."
-        ) from e
-
-    if len(selected_df) == 0:
-        raise AcquisitionError(
-            f"Acquisition strategy '{strategy}' selected 0 compounds from "
-            f"{len(pool)} candidates (batch_size={batch_size}). "
-            f"Check remaining pool size and strategy parameters."
-        )
-
-    if len(selected_df) > batch_size:
-        logger.warning(
-            f"Acquisition strategy '{strategy}' selected {len(selected_df)} compounds, "
-            f"expected {batch_size}. Truncating to batch_size."
-        )
-        selected_df = selected_df.head(batch_size)
-
-    logger.debug(f"Selected {len(selected_df)} compounds using '{strategy}' acquisition")
-
-    return selected_df
+    return compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions
