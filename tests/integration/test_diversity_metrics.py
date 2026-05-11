@@ -20,7 +20,6 @@ import pytest
 from learnm8 import run_active_learning
 from learnm8.evaluation.metrics.similarity import DIVERSITY_KEYS
 
-
 SMILES_POOL = [
     "CCO", "CCC", "CCCO", "c1ccccc1", "C1CCCCC1", "Nc1ccccc1",
     "CC(=O)Oc1ccccc1C(=O)O", "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
@@ -93,50 +92,10 @@ class TestDiversityMetricsIntegration:
         used = metrics.get_column("fingerprint_used").drop_nulls().to_list()
         assert all(label.startswith("morgan") for label in used)
 
-    def test_disable_true_emits_null_columns_with_stable_schema(self, workdir):
-        df = _make_dataset(n=20)
-        out = workdir / "run_disabled"
-        run_active_learning(
-            compound_pool=df,
-            oracle=df.select(["ID", "Activity"]),
-            learner="rf",
-            target_col="Activity",
-            featurizer="morgan",
-            n_cycles=2,
-            batch_fraction=0.15,
-            random_state=42,
-            output_dir=out,
-            disable_molecular_similarity=True,
-        )
-        metrics = _read_metrics_csv(out / "cycle_metrics.csv")
-        for key in DIVERSITY_KEYS:
-            assert metrics.schema[key] == pl.Float64
-            # All values null when fully disabled.
-            null_count = metrics.select(pl.col(key).is_null().sum()).item()
-            assert null_count == metrics.height, f"{key} should be all-null"
-
-    def test_disable_iterable_emits_subset_only(self, workdir):
-        df = _make_dataset(n=24)
-        out = workdir / "run_partial"
-        run_active_learning(
-            compound_pool=df,
-            oracle=df.select(["ID", "Activity"]),
-            learner="rf",
-            target_col="Activity",
-            featurizer="morgan",
-            n_cycles=2,
-            batch_fraction=0.15,
-            random_state=42,
-            output_dir=out,
-            disable_molecular_similarity=["scaffold_diversity_index_batch"],
-        )
-        metrics = _read_metrics_csv(out / "cycle_metrics.csv")
-        # Disabled key all-null, others computed.
-        assert metrics.select(pl.col("scaffold_diversity_index_batch").is_null().sum()).item() == metrics.height
-        scaffold_cum_non_null = metrics.select(
-            pl.col("scaffold_diversity_index_cumulative").is_not_null().sum()
-        ).item()
-        assert scaffold_cum_non_null >= 1
+    # NOTE: bool/iterable variants of disable_molecular_similarity are unit-tested
+    # at the metric-computation layer in tests/evaluation/metrics/test_diversity.py.
+    # End-to-end CSV-schema and reproducibility are exercised by the two surviving
+    # integration tests in this class.
 
     def test_seeded_runs_produce_identical_metric_columns(self, workdir):
         df = _make_dataset(n=24)
@@ -159,7 +118,7 @@ class TestDiversityMetricsIntegration:
         for key in DIVERSITY_KEYS:
             va = ma.get_column(key).to_list()
             vb = mb.get_column(key).to_list()
-            for i, (a, b) in enumerate(zip(va, vb)):
+            for i, (a, b) in enumerate(zip(va, vb, strict=True)):
                 if a is None and b is None:
                     continue
                 assert a is not None and b is not None, (

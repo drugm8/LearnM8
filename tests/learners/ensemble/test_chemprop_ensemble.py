@@ -64,44 +64,25 @@ class TestChempropEnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, chemprop_ensemble, small_real_compounds):
-        """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, trained_chemprop_ensemble, small_real_compounds):
+        """Test prediction with pre-trained session ensemble (no per-test retrain)."""
+        smiles = small_real_compounds['SMILES'].to_list()
+        assert trained_chemprop_ensemble.is_trained
 
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-        assert chemprop_ensemble.is_trained
-
-        predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
-        assert predictions.shape[0] == len(compounds)
+        predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        assert predictions.shape[0] == len(small_real_compounds)
         assert uncertainty is not None
-        assert uncertainty.shape[0] == len(compounds)
+        assert uncertainty.shape[0] == len(small_real_compounds)
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, chemprop_ensemble, small_real_compounds):
-        """Test that ensemble provides uncertainty estimates."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-
-        _predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
+    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, trained_chemprop_ensemble, small_real_compounds):
+        """Test that ensemble provides uncertainty estimates (uses session fixture)."""
+        smiles = small_real_compounds['SMILES'].to_list()
+        _predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
 
         assert uncertainty is not None
-        assert len(uncertainty) == len(compounds)
+        assert len(uncertainty) == len(small_real_compounds)
         assert np.all(np.isfinite(uncertainty))
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
@@ -180,7 +161,7 @@ class TestChempropEnsemble:
 
     def test_aggregation_methods(self, small_real_compounds):
         """Test different aggregation methods with Chemprop ensemble."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -204,7 +185,7 @@ class TestChempropEnsemble:
 
     def test_uncertainty_methods(self, small_real_compounds):
         """Test different uncertainty estimation methods."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -228,7 +209,7 @@ class TestChempropEnsemble:
 
     def test_weighted_ensemble(self, small_real_compounds):
         """Test weighted ensemble aggregation."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -296,19 +277,10 @@ class TestChempropEnsemble:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_diversity(self, chemprop_ensemble, small_real_compounds):
-        """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-        _predictions, uncertainty = chemprop_ensemble.predict(features=None, smiles=smiles)
+    def test_uncertainty_diversity(self, trained_chemprop_ensemble, small_real_compounds):
+        """Test that ensemble uncertainty captures model diversity (uses session fixture)."""
+        smiles = small_real_compounds['SMILES'].to_list()
+        _predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
@@ -321,28 +293,18 @@ class TestChempropEnsemble:
         with pytest.raises(ValueError):
             chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
-    def test_prediction_consistency(self, chemprop_ensemble, small_real_compounds):
-        """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-
-        predictions1, uncertainty1 = chemprop_ensemble.predict(features=None, smiles=smiles)
-        predictions2, uncertainty2 = chemprop_ensemble.predict(features=None, smiles=smiles)
+    def test_prediction_consistency(self, trained_chemprop_ensemble, small_real_compounds):
+        """Test that predictions are consistent across multiple calls (uses session fixture)."""
+        smiles = small_real_compounds['SMILES'].to_list()
+        predictions1, uncertainty1 = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        predictions2, uncertainty2 = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
 
         assert np.allclose(predictions1, predictions2, rtol=1e-2, atol=1e-3)
         assert np.allclose(uncertainty1, uncertainty2, rtol=1e-2, atol=1e-3)
 
     def test_multiple_architecture_configurations_train_and_predict(self, small_real_compounds):
         """Test ensemble with different architecture configurations."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))

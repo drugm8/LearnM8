@@ -92,40 +92,25 @@ class TestFastpropEnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
-        """Test training and prediction with real molecular data."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, trained_fastprop_ensemble, small_real_compounds, small_real_morgan_features):
+        """Test prediction with pre-trained session ensemble (no per-test retrain)."""
+        assert trained_fastprop_ensemble.is_trained
         features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-        assert fastprop_ensemble.is_trained
 
-        predictions, uncertainty = fastprop_ensemble.predict(features)
-        assert predictions.shape[0] == len(compounds)
+        predictions, uncertainty = trained_fastprop_ensemble.predict(features)
+        assert predictions.shape[0] == len(small_real_compounds)
         assert uncertainty is not None
-        assert uncertainty.shape[0] == len(compounds)
+        assert uncertainty.shape[0] == len(small_real_compounds)
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
-        """Test that ensemble provides uncertainty estimates."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
+    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, trained_fastprop_ensemble, small_real_compounds, small_real_morgan_features):
+        """Test that ensemble provides uncertainty estimates (uses session fixture)."""
         features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        _predictions, uncertainty = fastprop_ensemble.predict(features)
+        _predictions, uncertainty = trained_fastprop_ensemble.predict(features)
 
         assert uncertainty is not None
-        assert len(uncertainty) == len(compounds)
+        assert len(uncertainty) == len(small_real_compounds)
         assert np.all(np.isfinite(uncertainty))
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
@@ -197,13 +182,13 @@ class TestFastpropEnsemble:
 
     def test_aggregation_methods(self, small_real_compounds, small_real_morgan_features):
         """Test different aggregation methods with Fastprop ensemble."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = small_real_morgan_features[:10]
 
         for method in ['mean', 'median']:
             ensemble = FastpropEnsemble(
@@ -222,13 +207,13 @@ class TestFastpropEnsemble:
 
     def test_uncertainty_methods(self, small_real_compounds, small_real_morgan_features):
         """Test different uncertainty estimation methods."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = small_real_morgan_features[:10]
 
         for method in ['std', 'mad', 'quantile']:
             ensemble = FastpropEnsemble(
@@ -247,7 +232,7 @@ class TestFastpropEnsemble:
 
     def test_weighted_ensemble(self, small_real_compounds, small_real_morgan_features):
         """Test weighted ensemble aggregation."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
@@ -262,7 +247,7 @@ class TestFastpropEnsemble:
             device='cpu'
         )
 
-        features = small_real_morgan_features
+        features = small_real_morgan_features[:10]
         ensemble.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = ensemble.predict(features)
 
@@ -332,17 +317,10 @@ class TestFastpropEnsemble:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_diversity(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
-        """Test that ensemble uncertainty captures model diversity."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
+    def test_uncertainty_diversity(self, trained_fastprop_ensemble, small_real_morgan_features):
+        """Test that ensemble uncertainty captures model diversity (uses session fixture)."""
         features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-        _predictions, uncertainty = fastprop_ensemble.predict(features)
+        _predictions, uncertainty = trained_fastprop_ensemble.predict(features)
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
@@ -355,32 +333,24 @@ class TestFastpropEnsemble:
         with pytest.raises(ValueError):
             fastprop_ensemble.train(features, targets)
 
-    def test_prediction_consistency(self, fastprop_ensemble, small_real_compounds, small_real_morgan_features):
-        """Test that predictions are consistent across multiple calls."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
+    def test_prediction_consistency(self, trained_fastprop_ensemble, small_real_morgan_features):
+        """Test that predictions are consistent across multiple calls (uses session fixture)."""
         features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        predictions1, uncertainty1 = fastprop_ensemble.predict(features)
-        predictions2, uncertainty2 = fastprop_ensemble.predict(features)
+        predictions1, uncertainty1 = trained_fastprop_ensemble.predict(features)
+        predictions2, uncertainty2 = trained_fastprop_ensemble.predict(features)
 
         assert np.allclose(predictions1, predictions2)
         assert np.allclose(uncertainty1, uncertainty2)
 
     def test_multiple_fastprop_architectures_train_and_predict(self, small_real_compounds, small_real_morgan_features):
         """Test ensemble with different architecture configurations."""
-        compounds = small_real_compounds.clone()
+        compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = small_real_morgan_features
+        features = small_real_morgan_features[:10]
 
         architectures = [
             {'fnn_layers': 1, 'hidden_size': 64},

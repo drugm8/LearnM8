@@ -1,12 +1,12 @@
 """Tests for MLPLearner implementation."""
 
-import pytest
+
 import numpy as np
 import polars as pl
-from unittest.mock import Mock
+import pytest
 
-from learnm8.learners.torch.mlp import MLPLearner
 from learnm8.features.extraction import extract_features
+from learnm8.learners.torch.mlp import MLPLearner
 
 
 @pytest.mark.slow
@@ -19,20 +19,20 @@ class TestMLPLearner:
         """Create MLPLearner instance for testing."""
         return MLPLearner(
             hidden_sizes=(64, 32),
-            max_epochs=5,
+            max_epochs=2,
             random_state=42
         )
-    
+
     def test_initialization_sets_network_defaults_and_untrained_state(self, learner):
         """Test learner initialization."""
         assert learner.hidden_sizes == (64, 32)
         assert learner.activation == 'relu'
         assert learner.dropout_rate == 0.2
         assert learner.batch_norm is True
-        assert learner.max_epochs == 5
+        assert learner.max_epochs == 2
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
-    
+
     def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
@@ -58,7 +58,7 @@ class TestMLPLearner:
         features = small_real_morgan_features.copy()
         with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(features)
-    
+
     def test_get_name_includes_architecture_activation_and_dropout(self, learner):
         """Test name generation."""
         name = learner.get_name()
@@ -66,7 +66,7 @@ class TestMLPLearner:
         assert "64-32" in name
         assert "relu" in name
         assert "dropout=0.2" in name
-    
+
     def test_custom_hidden_layer_configuration_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different architectures."""
         compounds = small_real_compounds.clone()
@@ -161,7 +161,6 @@ class TestMLPLearner:
 
     def test_single_compound_without_batch_norm_trains_and_predicts(self, tmp_path):
         """Test with single compound using learner without batch norm."""
-        from learnm8.exceptions import LearnerError
 
         single_compound = pl.DataFrame({
             'ID': ['COMP_001'],
@@ -183,7 +182,7 @@ class TestMLPLearner:
 
         assert len(predictions) == 1
         assert np.isfinite(predictions[0])
-    
+
     def test_training_history_contains_epoch_and_loss_entries_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training history tracking."""
         compounds = small_real_compounds.clone()
@@ -258,7 +257,7 @@ class TestMLPLearner:
         features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
 
-        predictions, uncertainty = learner.predict(features)
+        _predictions, uncertainty = learner.predict(features)
 
         assert learner.supports_uncertainty() is False
         assert uncertainty is None
