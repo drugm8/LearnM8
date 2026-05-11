@@ -124,6 +124,7 @@ class SkfpFeaturizer(Featurizer):
                     LearnM8Warning,
                     stacklevel=2,
                 )
+                self.random_state = None
                 self.conformer_gen = ConformerGenerator(
                     n_jobs=n_jobs, **self.conformer_params
                 )
@@ -284,7 +285,7 @@ class SkfpFeaturizer(Featurizer):
             'n_jobs': self.n_jobs,
         }
 
-        if self.requires_3d():
+        if self.requires_3d() and self.random_state is not None:
             config['random_state'] = self.random_state
 
         if self.conformer_params:
