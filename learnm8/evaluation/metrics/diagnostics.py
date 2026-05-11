@@ -83,7 +83,7 @@ def compute_selected_percentile(
         counts_at_or_below = np.searchsorted(sorted_pool, selected_scores, side='right')
         percentiles = counts_at_or_below / n * 100.0
 
-    return float(np.mean(percentiles))
+    return float(np.mean(percentiles, dtype=np.float64))
 
 
 def compute_prediction_entropy(

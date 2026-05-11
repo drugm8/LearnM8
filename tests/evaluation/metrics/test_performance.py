@@ -76,6 +76,13 @@ class TestPerformanceMetrics:
         result = calculate_average_score(scores_with_nan)
         assert np.isnan(result)
 
+    def test_average_score_float64_accumulator(self):
+        rng = np.random.default_rng(42)
+        scores = rng.uniform(-100.0, 100.0, size=2_000_000).astype(np.float32)
+        result = calculate_average_score(scores)
+        expected = float(np.mean(scores, dtype=np.float64))
+        assert_allclose(result, expected, rtol=0.0, atol=1e-12)
+
     def test_mape_calculation(self):
         """Test Mean Absolute Percentage Error calculation."""
         y_true = np.array([1.0, 2.0, 3.0, 4.0])
