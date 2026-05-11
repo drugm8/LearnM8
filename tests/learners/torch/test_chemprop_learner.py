@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import polars as pl
 from pathlib import Path
 
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
@@ -61,9 +62,11 @@ class TestChempropLearnerBasic:
             learner.predict(features, smiles=None)
 
     def test_predict_raises_before_training(self):
+        from learnm8.exceptions import LearnerError
+
         learner = ChempropLearner(max_epochs=2)
 
-        with pytest.raises(RuntimeError, match="must be trained"):
+        with pytest.raises(LearnerError, match="must be trained"):
             learner.predict(features=None, smiles=['CC', 'CCO'])
 
 
@@ -314,17 +317,15 @@ class TestChempropLearnerEarlyStopping:
 class TestChempropLearnerWithDescriptors:
     """Test ChempropLearner with extra descriptors (x_d)."""
 
-    def test_train_predict_with_morgan_descriptors(self, small_real_compounds, tmp_path):
+    def test_train_predict_with_morgan_descriptors(self, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with Morgan fingerprints as x_d."""
-        from learnm8.features.extraction import extract_features
-
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
 
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:10].copy()
 
         learner.train(features=features, targets=targets, smiles=smiles)
 
@@ -356,10 +357,8 @@ class TestChempropLearnerWithDescriptors:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_descriptor_dimension_validation_train_without_predict_with(self, small_real_compounds, tmp_path):
+    def test_descriptor_dimension_validation_train_without_predict_with(self, small_real_compounds, small_real_morgan_features):
         """Test error when trained without descriptors but predict with descriptors."""
-        from learnm8.features.extraction import extract_features
-
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
 
@@ -368,28 +367,26 @@ class TestChempropLearnerWithDescriptors:
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:10].copy()
 
         with pytest.raises(ValueError, match="trained without descriptors"):
             learner.predict(features=features, smiles=smiles)
 
-    def test_descriptor_dimension_validation_train_with_predict_without(self, small_real_compounds, tmp_path):
+    def test_descriptor_dimension_validation_train_with_predict_without(self, small_real_compounds, small_real_morgan_features):
         """Test error when trained with descriptors but predict without descriptors."""
-        from learnm8.features.extraction import extract_features
-
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
 
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:10].copy()
         learner.train(features=features, targets=targets, smiles=smiles)
 
         with pytest.raises(ValueError, match="trained with descriptors"):
             learner.predict(features=None, smiles=smiles)
 
-    def test_descriptor_dimension_mismatch(self, small_real_compounds, tmp_path):
+    def test_descriptor_dimension_mismatch(self, small_real_compounds, small_real_morgan_features, tmp_path):
         """Test error on dimension mismatch between training and prediction."""
         from learnm8.features.extraction import extract_features
 
@@ -399,7 +396,7 @@ class TestChempropLearnerWithDescriptors:
         smiles = compounds['SMILES'].to_list()[:10]
         targets = compounds['Activity'].to_numpy()[:10]
 
-        train_features = extract_features(smiles, 'morgan', tmp_path)
+        train_features = small_real_morgan_features[:10].copy()
         learner.train(features=train_features, targets=targets, smiles=smiles)
 
         test_features = extract_features(smiles, 'maccs', tmp_path)
@@ -425,10 +422,8 @@ class TestChempropLearnerWithDescriptors:
             assert predictions.shape == (10,)
             assert np.all(np.isfinite(predictions))
 
-    def test_early_stopping_with_descriptors(self, small_real_compounds, tmp_path):
+    def test_early_stopping_with_descriptors(self, small_real_compounds, small_real_morgan_features):
         """Test early stopping works correctly with descriptors."""
-        from learnm8.features.extraction import extract_features
-
         learner = ChempropLearner(
             max_epochs=20,
             early_stopping=True,
@@ -439,7 +434,7 @@ class TestChempropLearnerWithDescriptors:
 
         smiles = compounds['SMILES'].to_list()[:20]
         targets = compounds['Activity'].to_numpy()[:20]
-        features = extract_features(smiles, 'morgan', tmp_path)
+        features = small_real_morgan_features[:20].copy()
 
         learner.train(features=features, targets=targets, smiles=smiles)
 
@@ -600,7 +595,6 @@ class TestChempropLearnerPerformanceConfig:
         assert learner.pin_memory is False
 
     def test_train_predict_with_performance_params(self, small_real_compounds):
-        import polars as pl
         learner = ChempropLearner(
             max_epochs=5,
             batch_size=8,
