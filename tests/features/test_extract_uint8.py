@@ -15,19 +15,21 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
-from learnm8.features.skfp_2d.morgan import MorganFeaturizer
 
 SMILES = ['CCO', 'CCC', 'CCN', 'CCCl', 'c1ccccc1', 'CCOC', 'CCOCC', 'CCS']
 
 
 @pytest.mark.unit
 def test_morgan_packed_returns_uint8_when_requested(tmp_path: Path):
-    feat = MorganFeaturizer(fp_size=512)
+    feat = create_featurizer('morgan', fp_size=512)
     extract_features(SMILES, feat, cache_dir=tmp_path)  # warm cache
 
     out_u8 = extract_features(SMILES, feat, cache_dir=tmp_path, preferred_dtype='uint8')
-    out_f32 = extract_features(SMILES, feat, cache_dir=tmp_path, preferred_dtype='float32')
+    out_f32 = extract_features(
+        SMILES, feat, cache_dir=tmp_path, preferred_dtype='float32'
+    )
 
     assert out_u8.dtype == np.uint8
     assert out_u8.shape == out_f32.shape
@@ -36,14 +38,16 @@ def test_morgan_packed_returns_uint8_when_requested(tmp_path: Path):
 
 @pytest.mark.unit
 def test_morgan_count_csr_falls_back_to_float32(tmp_path: Path, caplog):
-    feat = MorganFeaturizer(count=True, fp_size=512)
+    feat = create_featurizer('morgan', count=True, fp_size=512)
     extract_features(SMILES, feat, cache_dir=tmp_path)
     caplog.clear()
     with caplog.at_level(logging.DEBUG, logger='learnm8.features.cache'):
-        out = extract_features(SMILES, feat, cache_dir=tmp_path, preferred_dtype='uint8')
+        out = extract_features(
+            SMILES, feat, cache_dir=tmp_path, preferred_dtype='uint8'
+        )
     assert out.dtype == np.float32
     assert any('uint8' in record.getMessage().lower() for record in caplog.records), (
-        "expected a debug log mentioning the uint8→float32 fallback for csr_uint16 storage"
+        'expected a debug log mentioning the uint8→float32 fallback for csr_uint16 storage'
     )
 
 
@@ -51,9 +55,8 @@ def test_morgan_count_csr_falls_back_to_float32(tmp_path: Path, caplog):
 def test_mordred_continuous_falls_back_to_float32(tmp_path: Path, caplog):
     """Mordred storage_dtype is float32 — uint8 request must fall back."""
     pytest.importorskip('mordred')
-    from learnm8.features.skfp_2d.mordred import MordredFeaturizer
 
-    feat = MordredFeaturizer()
+    feat = create_featurizer('mordred')
     smiles_subset = SMILES[:3]
     extract_features(smiles_subset, feat, cache_dir=tmp_path)
     caplog.clear()

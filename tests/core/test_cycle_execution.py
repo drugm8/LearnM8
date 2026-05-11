@@ -6,8 +6,9 @@ Tests execute_cycle function with real molecular data, focusing on integration a
 
 import pytest
 import numpy as np
-import pandas as pd
 import polars as pl
+
+from learnm8.exceptions import LearnerError
 from unittest.mock import Mock
 
 from learnm8.core.cycle import execute_cycle
@@ -20,10 +21,7 @@ def create_test_master_df(compounds, initial_labeled_count=3):
 
     initial_compounds = compounds.slice(0, initial_labeled_count)
     initial_ids = initial_compounds['ID'].to_list()
-    initial_values = pd.Series(
-        np.random.uniform(0.1, 0.9, initial_labeled_count),
-        index=initial_ids
-    )
+    initial_values = dict(zip(initial_ids, np.random.uniform(0.1, 0.9, initial_labeled_count)))
 
     return initialize_master_dataframe(
         valid_compounds=compounds,
@@ -69,7 +67,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -118,7 +116,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -167,7 +165,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -204,7 +202,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=1,
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Validate returned master_df unchanged
@@ -247,7 +245,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
 
             assert metrics['selected_count'] == expected_selected
@@ -262,7 +260,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.9, 0.1], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.9, 0.1]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -286,7 +284,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='lower',
-            mode='run'
+            oracle_type='run'
         )
 
         assert metrics['selected_count'] == 2
@@ -303,7 +301,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.3, 0.7], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -327,7 +325,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -350,7 +348,7 @@ class TestCycleExecution:
         target_col='Activity'
         ,
         initial_labeled_ids=[],
-        initial_measurements=pd.Series(dtype='float64')
+        initial_measurements={}
     )
 
         oracle = mock_oracle
@@ -359,7 +357,7 @@ class TestCycleExecution:
         config = CycleConfig(strategy='greedy', batch_fraction=0.5)
 
         # Cycle 0 should raise error if no labeled compounds (this validates initialization check)
-        with pytest.raises(RuntimeError, match="No labeled compounds available"):
+        with pytest.raises(LearnerError, match="No labeled compounds available"):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=0,
@@ -371,7 +369,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
     
     def test_prediction_statistics_calculation(self, tmp_path, mock_oracle, mock_learner_with_uncertainty):
@@ -384,7 +382,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -408,7 +406,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         assert 'prediction_mean' in metrics
@@ -433,7 +431,7 @@ class TestCycleExecution:
             'SMILES': ['CCO'] * 10,
         })
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.1, 0.5, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -453,7 +451,7 @@ class TestCycleExecution:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
         )
 
         assert 'feature_extraction_time' in metrics
@@ -482,7 +480,7 @@ class TestCycleExecution:
         })
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -510,7 +508,7 @@ class TestCycleExecution:
                 cache_dir=tmp_path,
                 original_pool_size=len(compounds),
                 score_direction='higher',
-                mode='run'
+                oracle_type='run'
             )
 
             assert metrics['strategy'] == strategy
@@ -551,7 +549,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -567,7 +565,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -607,7 +605,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify status changed from 'unlabeled' to 'labeled' for selected compounds
@@ -650,7 +648,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify original master_df unchanged (functional update)
@@ -679,7 +677,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.2, 0.5, 0.8], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -704,7 +702,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -737,7 +735,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -764,7 +762,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=tmp_path,
         )
 
@@ -793,7 +791,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = pd.Series([0.3, 0.6, 0.9], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -820,7 +818,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=tmp_path,
         )
@@ -849,7 +847,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 5 labeled
         initial_ids = compounds['ID'].head(5).to_list()
-        initial_values = pd.Series([0.2, 0.4, 0.6, 0.8, 1.0], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.2, 0.4, 0.6, 0.8, 1.0]))
         master_df_run = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -883,7 +881,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             output_dir=run_dir,
         )
 
@@ -899,7 +897,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='benchmark',
+            oracle_type='benchmark',
             original_pool=compounds,
             output_dir=benchmark_dir,
         )
@@ -933,7 +931,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 2 labeled initially
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = pd.Series([0.3, 0.7], index=initial_ids)
+        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
         master_df = initialize_master_dataframe(
         valid_compounds=compounds,
         target_col='Activity'
@@ -958,7 +956,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Get compounds selected in cycle 0 (newly labeled, excluding initially labeled)
@@ -991,7 +989,7 @@ class TestMasterDataFrameCycleIntegration:
             cache_dir=tmp_path,
             original_pool_size=len(compounds),
             score_direction='higher',
-            mode='run'
+            oracle_type='run'
         )
 
         # Verify compounds from cycle 0 still have their original selected_cycle and labeled_cycle

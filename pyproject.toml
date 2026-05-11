@@ -21,7 +21,10 @@ dependencies = [
     "polars>=1.0.0",
     "pyarrow>=15.0.0",
     "pandas>=1.5.0",
-    "numpy>=1.20.0",
+    # Floors bumped by spec 022 for bit-exact ndtr/erfc behaviour
+    # and stable np.random.default_rng seed-array semantics (NEP-19).
+    "numpy>=2.0.0",
+    "scipy>=1.11.0",
     "scikit-learn>=1.0.0",
     "rdkit>=2022.03.0",
     "joblib>=1.0.0",
@@ -93,11 +96,7 @@ markers = [
     "unit: Unit tests for individual components",
     "integration: Integration tests for complete workflows",
     "slow: Slow running tests (performance, large datasets)",
-    "property: Property-based tests using Hypothesis",
-    "scientific: Scientific validation tests",
-    "benchmark: Performance benchmark tests",
     "molecular: Tests requiring molecular chemistry libraries (RDKit)",
-    "gpu: Tests requiring CUDA GPU",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

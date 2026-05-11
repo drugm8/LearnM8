@@ -1,7 +1,7 @@
 """XGBoost ensemble learner for LearnM8 framework."""
 
 from ..sklearn.xgboost_learner import XGBoostLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class XGBEnsemble(EnsembleLearner):
@@ -10,21 +10,27 @@ class XGBEnsemble(EnsembleLearner):
     def __init__(self,
                  learning_rates: list[float] | None = None,
                  random_states: list[int] | None = None,
+                 random_state: int = 42,
                  device: str = 'cpu',
                  **kwargs):
         """Initialize XGB ensemble.
 
         Args:
             learning_rates: List of learning rates for diversity (default: [0.05, 0.1, 0.2])
-            random_states: List of random states for diversity (default: [42, 123, 456])
+            random_states: Explicit list of member seeds. When None (default),
+                seeds are derived from ``random_state`` via the unified offset
+                scheme ``[base, base+81, base+314, ...]``.
+            random_state: Base seed for member-seed derivation (default: 42).
+                Ignored when ``random_states`` is provided explicitly.
             device: Compute device for XGBoost members ('cpu', 'cuda', or 'auto').
                 'auto' resolves to 'cpu' — explicit GPU selection requires 'cuda'.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if learning_rates is None:
             learning_rates = [0.05, 0.1, 0.2]
-        if random_states is None:
-            random_states = [42, 123, 456]
+        random_states = _derive_random_states(
+            random_state, len(learning_rates), override=random_states
+        )
 
         resolved_device = 'cpu' if device == 'auto' else device
 

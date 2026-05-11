@@ -1,7 +1,7 @@
 """Linear Regression ensemble learner for LearnM8 framework."""
 
 from ..sklearn.linear_regression import LinearRegressionLearner
-from .ensemble import EnsembleLearner
+from .ensemble import EnsembleLearner, _derive_random_states
 
 
 class LREnsemble(EnsembleLearner):
@@ -10,13 +10,18 @@ class LREnsemble(EnsembleLearner):
     def __init__(self,
                  regularization_strengths: list[float] | None = None,
                  random_states: list[int] | None = None,
+                 random_state: int = 42,
                  device: str = 'cpu',
                  **kwargs):
         """Initialize LR ensemble.
 
         Args:
             regularization_strengths: List of alpha values for Ridge regression (default: [0.1, 1.0, 10.0])
-            random_states: List of random states for diversity (default: [42, 123, 456])
+            random_states: Explicit list of member seeds. When None (default),
+                seeds are derived from ``random_state`` via the unified offset
+                scheme ``[base, base+81, base+314, ...]``.
+            random_state: Base seed for member-seed derivation (default: 42).
+                Ignored when ``random_states`` is provided explicitly.
             device: Compute device for members ('cpu', 'cuda', or 'auto').
                 'auto' resolves to CPU (LinearRegressionLearner).
                 'cuda' creates RidgeCumlLearner members with GPU acceleration.
@@ -24,8 +29,9 @@ class LREnsemble(EnsembleLearner):
         """
         if regularization_strengths is None:
             regularization_strengths = [0.1, 1.0, 10.0]
-        if random_states is None:
-            random_states = [42, 123, 456]
+        random_states = _derive_random_states(
+            random_state, len(regularization_strengths), override=random_states
+        )
 
         learners = []
         if device == 'cuda':

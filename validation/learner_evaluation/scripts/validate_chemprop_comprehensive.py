@@ -39,8 +39,8 @@ from validation.lib.heatmap_utils import (
 console = Console()
 warnings.filterwarnings('ignore')
 
-from learnm8 import setup_logging
-setup_logging(level='INFO')
+from learnm8.utils.logging import configure_learnm8_logging
+configure_learnm8_logging(level='INFO')
 
 RANDOM_SEEDS = [42, 123, 456]
 

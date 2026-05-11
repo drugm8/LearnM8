@@ -237,7 +237,9 @@ class TestSimulatedAnnealingAcquisition:
         pred_with_nan = compounds_nan.get_column('prediction').to_numpy().copy()
         pred_with_nan[0] = np.nan
         compounds_nan = compounds_nan.with_columns(pl.Series('prediction', pred_with_nan))
-        with pytest.raises(ValueError, match="Predictions contain NaN values"):
+        # Feature 019: secondary-guard LearnerError at acquisition layer.
+        from learnm8.exceptions import LearnerError
+        with pytest.raises(LearnerError, match=r"\[secondary-guard\] Predictions contain NaN"):
             acq.select(compounds_nan, n_select=5)
 
     def test_temperature_calculation(self):

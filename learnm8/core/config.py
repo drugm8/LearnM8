@@ -156,7 +156,9 @@ def parse_cycle_schedule(
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
     initial_strategy: str = 'random',
-    **kwargs
+    acquisition_params: dict | None = None,
+    pruning_strategy: str | None = None,
+    pruning_params: dict | None = None,
 ) -> list[CycleConfig]:
     """Convert either advanced API (cycles list) or simple API (individual parameters) to unified List[CycleConfig].
 
@@ -173,7 +175,9 @@ def parse_cycle_schedule(
         n_cycles: Simple API - Total number of cycles
         batch_fraction: Simple API - Batch fraction for ALL cycles (including cycle 0)
         initial_strategy: Simple API - Strategy for cycle 0 (default: 'random')
-        **kwargs: Additional parameters passed to CycleConfig (pruning_strategy, acquisition_params, etc.)
+        acquisition_params: Parameters for acquisition strategy
+        pruning_strategy: Pruning strategy name
+        pruning_params: Parameters for pruning strategy
 
     Returns:
         List of CycleConfig objects, each with n_cycles=1 (expanded from multi-cycle configs)
@@ -199,28 +203,6 @@ def parse_cycle_schedule(
         >>> # Returns: 8 CycleConfig objects, each with n_cycles=1
     """
     logger.debug(f"Parsing cycle schedule: cycles={cycles is not None}, strategy='{strategy}', n_cycles={n_cycles}")
-
-    VALID_CYCLE_PARAMS = {'pruning_strategy', 'pruning_params', 'acquisition_params'}
-
-    cycle_kwargs = {}
-    invalid_kwargs = {}
-
-    for key, value in kwargs.items():
-        if key in VALID_CYCLE_PARAMS:
-            cycle_kwargs[key] = value
-        else:
-            invalid_kwargs[key] = value
-
-    if invalid_kwargs:
-        import warnings
-        warnings.warn(
-            f"Invalid cycle parameters ignored: {', '.join(invalid_kwargs.keys())}. "
-            f"Valid cycle parameters are: {', '.join(sorted(VALID_CYCLE_PARAMS))}. "
-            f"These parameters have no effect and will be removed in a future version.",
-            UserWarning,
-            stacklevel=2
-        )
-        logger.warning(f"Invalid cycle parameters ignored: {', '.join(invalid_kwargs.keys())}")
 
     if cycles is not None:
         if not isinstance(cycles, list):
@@ -262,7 +244,9 @@ def parse_cycle_schedule(
         strategy=initial_strategy,
         n_cycles=1,
         batch_fraction=batch_fraction,
-        **cycle_kwargs
+        acquisition_params=acquisition_params,
+        pruning_strategy=pruning_strategy,
+        pruning_params=pruning_params,
     )
     schedule.append(config_0)
     logger.debug(f"Created CycleConfig(strategy='{config_0.strategy}', n_cycles={config_0.n_cycles}, "
@@ -274,7 +258,9 @@ def parse_cycle_schedule(
             strategy=strategy,
             n_cycles=1,
             batch_fraction=batch_fraction,
-            **cycle_kwargs
+            acquisition_params=acquisition_params,
+            pruning_strategy=pruning_strategy,
+            pruning_params=pruning_params,
         )
         schedule.append(config_i)
         logger.debug(f"Created CycleConfig(strategy='{config_i.strategy}', n_cycles={config_i.n_cycles}, "

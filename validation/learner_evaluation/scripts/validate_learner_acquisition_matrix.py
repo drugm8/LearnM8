@@ -30,8 +30,8 @@ from validation.lib.seed_aggregation import (
 )
 
 
-from learnm8 import setup_logging
-setup_logging(level='INFO')
+from learnm8.utils.logging import configure_learnm8_logging
+configure_learnm8_logging(level='INFO')
 
 DATASET_NAME = 'ampc_30k'
 N_CYCLES = 10

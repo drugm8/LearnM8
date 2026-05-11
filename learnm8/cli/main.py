@@ -1,15 +1,13 @@
 """Comprehensive CLI for LearnM8 active learning.
 
-Provides three subcommands:
+Provides two subcommands:
 - run: Execute active learning experiment
-- list: List available components (learners, acquisition, featurizers, schedules)
 - validate: Validate compound pool before running
 
 Supports multiple input modes:
 - Simple: Basic parameters (n_cycles, batch_fraction)
 - Advanced: Cycle specification string ("random:0.02 greedy:0.01*5")
 - Config file: YAML or JSON configuration
-- Predefined schedules: quick, standard, intensive, diverse
 
 Features:
 - Rich output with tables and progress bars
@@ -30,7 +28,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.traceback import install
 
-from learnm8.acquisition import list_acquisition_functions
 from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig, parse_cycle_spec
 from learnm8.core.validation import validate_compound_pool
@@ -65,14 +62,6 @@ Examples:
 
   # From config file
   learnm8 run --config experiment.yaml
-
-  # Predefined schedule
-  learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf \\
-    --schedule intensive
-
-  # List available components
-  learnm8 list learners
-  learnm8 list acquisition
 
   # Validate compounds
   learnm8 validate compounds.csv --featurizer morgan -o validation_results/
@@ -131,74 +120,11 @@ def load_config_file(config_path: Path) -> dict:
         raise ConfigurationError(f"Failed to parse config file: {e}") from e
 
 
-def get_predefined_schedule(name: str) -> list:
-    """Return predefined cycle schedules.
-
-    Available schedules:
-    - quick: 5 cycles - fast exploration
-    - standard: 10 cycles - balanced approach
-    - intensive: 20 cycles - thorough screening
-    - diverse: 10 cycles - mixed diversity methods
-
-    Args:
-        name: Schedule name
-
-    Returns:
-        List of CycleConfig objects
-
-    Raises:
-        ValueError: If schedule name not recognized
-    """
-    available_acquisitions = set(list_acquisition_functions())
-
-    schedules = {
-        'quick': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('greedy', n_cycles=4, batch_fraction=0.01)
-        ],
-        'standard': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('greedy', n_cycles=9, batch_fraction=0.01)
-        ],
-        'intensive': [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=19, batch_fraction=0.005)
-        ],
-    }
-
-    if 'bitbirch' in available_acquisitions:
-        schedules['diverse'] = [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('bitbirch', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=3, batch_fraction=0.01),
-            CycleConfig('ucb', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)
-        ]
-    else:
-        console.print("[yellow]Warning:[/yellow] BitBIRCH not available; using random sampling in 'diverse' schedule")
-        schedules['diverse'] = [
-            CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-            CycleConfig('random', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=3, batch_fraction=0.01),
-            CycleConfig('ucb', n_cycles=2, batch_fraction=0.01),
-            CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)
-        ]
-
-    if name not in schedules:
-        available = ', '.join(sorted(schedules.keys()))
-        raise ValueError(
-            f"Unknown schedule '{name}'. Available schedules: {available}"
-        )
-
-    return schedules[name]
-
-
 def create_parser() -> argparse.ArgumentParser:
-    """Create argument parser with three subcommands.
+    """Create argument parser with two subcommands.
 
     Subcommands:
     - run: Execute active learning experiment
-    - list: List available components
     - validate: Validate compound pool
 
     Returns:
@@ -281,11 +207,6 @@ def create_parser() -> argparse.ArgumentParser:
         '--cycles',
         type=str,
         help='Cycle specification: string format "random:0.02 greedy:0.01*5" or list of dicts/CycleConfig from config file'
-    )
-    cycle_group.add_argument(
-        '--schedule',
-        choices=['quick', 'standard', 'intensive', 'diverse'],
-        help='Predefined schedule'
     )
     cycle_group.add_argument(
         '--config',
@@ -377,22 +298,10 @@ def create_parser() -> argparse.ArgumentParser:
         help='Random seed (default: 42)'
     )
     advanced_group.add_argument(
-        '--mode',
-        choices=['run', 'benchmark'],
-        help='Execution mode (auto-detected if not specified)'
-    )
-    advanced_group.add_argument(
         '--memory-safety-factor',
         type=float,
         default=0.7,
         help='Fraction of available memory to use for prediction batching (default: 0.7)'
-    )
-
-    list_parser = subparsers.add_parser('list', help='List available components')
-    list_parser.add_argument(
-        'component',
-        choices=['learners', 'acquisition', 'featurizers', 'schedules'],
-        help='Component type'
     )
 
     validate_parser = subparsers.add_parser('validate', help='Validate compound pool using datamol SMILES validation')
@@ -426,6 +335,56 @@ def create_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def _print_learnm8_error(error: Exception) -> None:
+    if isinstance(error, ConfigurationError):
+        console.print(f"[red]Configuration error:[/red] {error}")
+        sys.exit(2)
+    elif isinstance(error, (ValidationError, FeatureExtractionError)):
+        if isinstance(error, ValidationError):
+            console.print(f"[red]Validation error:[/red] {error}")
+        else:
+            console.print(f"[red]Feature extraction error:[/red] {error}")
+        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
+        sys.exit(1)
+    elif isinstance(error, LearnM8Error):
+        label = type(error).__name__
+        if 'Learner' in label:
+            console.print(f"[red]Training/prediction error:[/red] {error}")
+        else:
+            console.print(f"[red]Error:[/red] {error}")
+        sys.exit(1)
+    else:
+        console.print_exception()
+        sys.exit(1)
+
+
+def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None, cycles: list | None) -> dict:
+    return dict(
+        compound_pool=args.compound_pool,
+        oracle=args.oracle,
+        learner=args.learner,
+        target_col=args.target_col,
+        featurizer=args.featurizer,
+        smiles_column=getattr(args, 'smiles_col', None),
+        id_column=getattr(args, 'id_col', None),
+        cycles=cycles,
+        n_cycles=args.n_cycles,
+        batch_fraction=args.batch_fraction,
+        strategy=args.strategy,
+        initial_strategy=args.initial_strategy,
+        score_direction=args.score_direction,
+        output_dir=args.output,
+        cache_dir=getattr(args, 'cache_dir', None),
+        random_state=args.random_state,
+        pruning_fraction=args.pruning_fraction,
+        pruning_strategy=args.pruning_strategy,
+        acquisition_params=acquisition_params,
+        memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
+        n_jobs=getattr(args, 'n_jobs', -1),
+        device=getattr(args, 'device', 'auto'),
+    )
 
 
 def cmd_run(args: argparse.Namespace):
@@ -484,9 +443,6 @@ def cmd_run(args: argparse.Namespace):
             else:
                 console.print("[red]Error:[/red] Unsupported cycles type. Must be string spec or list.")
                 sys.exit(1)
-        elif args.schedule:
-            console.print(f"[cyan]Using predefined schedule:[/cyan] {args.schedule}")
-            cycles = get_predefined_schedule(args.schedule)
         else:
             console.print(f"[cyan]Using simple mode[/cyan] ({args.n_cycles} cycles)")
             cycles = None
@@ -504,7 +460,7 @@ def cmd_run(args: argparse.Namespace):
         table.add_row("Total Cycles", str(len(cycles) if cycles else args.n_cycles))
         pruning_text = f"{args.pruning_fraction:.1%} per cycle" if args.pruning_fraction else "Disabled"
         table.add_row("Pruning", pruning_text)
-        table.add_row("Mode", args.mode or "Auto-detect")
+        table.add_row("Oracle Type", "Derived from oracle")
 
         console.print(table)
 
@@ -516,6 +472,8 @@ def cmd_run(args: argparse.Namespace):
                 console.print(f"[red]Error:[/red] Invalid JSON in --acquisition-params: {e}")
                 sys.exit(1)
 
+        run_kwargs = _build_run_kwargs(args, acquisition_params, cycles)
+
         if not args.quiet:
             with Progress(
                 SpinnerColumn(),
@@ -525,31 +483,7 @@ def cmd_run(args: argparse.Namespace):
                 task = progress.add_task("Running active learning...", total=None)
 
                 try:
-                    results = run_active_learning(
-                        compound_pool=args.compound_pool,
-                        oracle=args.oracle,
-                        learner=args.learner,
-                        target_col=args.target_col,
-                        featurizer=args.featurizer,
-                        smiles_column=getattr(args, 'smiles_col', None),
-                        id_column=getattr(args, 'id_col', None),
-                        cycles=cycles,
-                        n_cycles=args.n_cycles,
-                        batch_fraction=args.batch_fraction,
-                        strategy=args.strategy,
-                        initial_strategy=args.initial_strategy,
-                        score_direction=args.score_direction,
-                        mode=args.mode,
-                        output_dir=args.output,
-                        cache_dir=getattr(args, 'cache_dir', None),
-                        random_state=args.random_state,
-                        pruning_fraction=args.pruning_fraction,
-                        pruning_strategy=args.pruning_strategy,
-                        acquisition_params=acquisition_params,
-                        memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
-                        n_jobs=getattr(args, 'n_jobs', -1),
-                        device=getattr(args, 'device', 'auto')
-                    )
+                    results = run_active_learning(**run_kwargs)
                     progress.update(task, completed=True, description="[green]✓ Complete")
                 except KeyboardInterrupt:
                     progress.stop()
@@ -557,31 +491,7 @@ def cmd_run(args: argparse.Namespace):
                     sys.exit(1)
         else:
             try:
-                results = run_active_learning(
-                    compound_pool=args.compound_pool,
-                    oracle=args.oracle,
-                    learner=args.learner,
-                    target_col=args.target_col,
-                    featurizer=args.featurizer,
-                    smiles_column=getattr(args, 'smiles_col', None),
-                    id_column=getattr(args, 'id_col', None),
-                    cycles=cycles,
-                    n_cycles=args.n_cycles,
-                    batch_fraction=args.batch_fraction,
-                    strategy=args.strategy,
-                    initial_strategy=args.initial_strategy,
-                    score_direction=args.score_direction,
-                    mode=args.mode,
-                    output_dir=args.output,
-                    cache_dir=getattr(args, 'cache_dir', None),
-                    random_state=args.random_state,
-                    pruning_fraction=args.pruning_fraction,
-                    pruning_strategy=args.pruning_strategy,
-                    acquisition_params=acquisition_params,
-                    memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
-                    n_jobs=getattr(args, 'n_jobs', -1),
-                    device=getattr(args, 'device', 'auto')
-                )
+                results = run_active_learning(**run_kwargs)
             except KeyboardInterrupt:
                 console.print("\n[yellow]Experiment interrupted by user[/yellow]")
                 sys.exit(1)
@@ -620,119 +530,8 @@ def cmd_run(args: argparse.Namespace):
 
         console.print(f"\n[green]📁 All results saved to:[/green] {results['output_dir']}")
 
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(2)
-    except ValidationError as e:
-        console.print(f"[red]Validation error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except FeatureExtractionError as e:
-        console.print(f"[red]Feature extraction error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except LearnM8Error as e:
-        label = type(e).__name__
-        if 'Learner' in label:
-            console.print(f"[red]Training/prediction error:[/red] {e}")
-        else:
-            console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-    except Exception:
-        console.print_exception()
-        sys.exit(1)
-
-
-def cmd_list(args: argparse.Namespace):
-    """Handle list subcommand.
-
-    Args:
-        args: Parsed command-line arguments
-    """
-    if args.component == 'learners':
-        from learnm8.api import list_available_learners
-        learners = list_available_learners()
-        console.print("[bold cyan]Available Learners:[/bold cyan]")
-        if not learners:
-            console.print("  [yellow]No learners available (check dependencies)[/yellow]")
-        for learner in learners:
-            console.print(f"  • {learner}")
-
-    elif args.component == 'acquisition':
-        strategies = list_acquisition_functions()
-        console.print("[bold cyan]Available Acquisition Strategies:[/bold cyan]")
-        for strategy in strategies:
-            console.print(f"  • {strategy}")
-
-    elif args.component == 'featurizers':
-        from rich.table import Table
-
-        from learnm8.features import FEATURIZER_REGISTRY, list_available_featurizers
-
-        available = list_available_featurizers()
-
-        table = Table(title="Available Molecular Featurizers", show_header=True, header_style="bold cyan")
-        table.add_column("Name", style="blue", no_wrap=True)
-        table.add_column("Type", style="green")
-        table.add_column("Dimension", justify="right", style="yellow")
-        table.add_column("Feature Type", style="magenta")
-        table.add_column("Description", style="white")
-
-        # Add 2D featurizers
-        for name in available['2d']:
-            if name in FEATURIZER_REGISTRY:
-                featurizer_class = FEATURIZER_REGISTRY[name]
-                try:
-                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
-                    dim = temp_feat.get_dimension()
-                    feature_type = temp_feat.feature_type
-                    desc = {
-                        'morgan': 'Circular fingerprints (ECFP4)',
-                        'ecfp': 'Circular fingerprints (ECFP4)',
-                        'ecfp6': 'Extended circular fingerprints (radius=3)',
-                        'morgan_feat': 'Morgan with feature vectors',
-                        'maccs': 'MACCS structural keys',
-                        'avalon': 'Avalon fingerprints',
-                        'atom_pair': 'Atom pair fingerprints',
-                        'topological_torsion': 'Topological torsion fingerprints',
-                        'rdkit': 'RDKit fingerprints',
-                        'pubchem': 'PubChem fingerprints',
-                        'mordred': 'Mordred molecular descriptors',
-                        'descriptors': 'Mordred molecular descriptors'
-                    }.get(name, '')
-                    table.add_row(name, "2D", str(dim), feature_type, desc)
-                except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "2D", "N/A", "N/A", "")
-
-        # Add 3D featurizers
-        for name in available['3d']:
-            if name in FEATURIZER_REGISTRY:
-                featurizer_class = FEATURIZER_REGISTRY[name]
-                try:
-                    temp_feat = featurizer_class(n_jobs=1) if callable(featurizer_class) else featurizer_class
-                    dim = temp_feat.get_dimension()
-                    feature_type = temp_feat.feature_type
-                    desc = {
-                        'whim': 'WHIM 3D molecular descriptors',
-                        'usr': 'USR 3D shape descriptors',
-                        'e3fp': 'Extended 3D fingerprints'
-                    }.get(name, '')
-                    table.add_row(name, "3D", str(dim), feature_type, desc)
-                except (ValueError, RuntimeError, TypeError, AttributeError):
-                    table.add_row(name, "3D", "N/A", "N/A", "")
-
-        console.print(table)
-
-    elif args.component == 'schedules':
-        schedules = {
-            'quick': '5 cycles - fast exploration',
-            'standard': '10 cycles - balanced',
-            'intensive': '20 cycles - thorough',
-            'diverse': '10 cycles - mixed diversity methods'
-        }
-        console.print("[bold cyan]Available Schedules:[/bold cyan]")
-        for name, desc in schedules.items():
-            console.print(f"  • [blue]{name}:[/blue] {desc}")
+    except (LearnM8Error, Exception) as e:
+        _print_learnm8_error(e)
 
 
 def cmd_validate(args: argparse.Namespace):
@@ -808,27 +607,8 @@ def cmd_validate(args: argparse.Namespace):
 
             console.print(f"\n[green]Report saved to:[/green] {report_path}")
 
-    except ConfigurationError as e:
-        console.print(f"[red]Configuration error:[/red] {e}")
-        sys.exit(2)
-    except ValidationError as e:
-        console.print(f"[red]Validation error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except FeatureExtractionError as e:
-        console.print(f"[red]Feature extraction error:[/red] {e}")
-        console.print("[dim]Hint: run [bold]learnm8 validate[/bold] to check your compound pool[/dim]")
-        sys.exit(1)
-    except LearnM8Error as e:
-        label = type(e).__name__
-        if 'Learner' in label:
-            console.print(f"[red]Training/prediction error:[/red] {e}")
-        else:
-            console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-    except Exception:
-        console.print_exception()
-        sys.exit(1)
+    except (LearnM8Error, Exception) as e:
+        _print_learnm8_error(e)
 
 
 def main():
@@ -848,8 +628,6 @@ def main():
 
     if args.command == 'run':
         cmd_run(args)
-    elif args.command == 'list':
-        cmd_list(args)
     elif args.command == 'validate':
         cmd_validate(args)
     else:

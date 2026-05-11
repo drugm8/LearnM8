@@ -1,11 +1,13 @@
 """CSV-based oracle for looking up pre-computed compound properties."""
 
 import logging
+import warnings
 from pathlib import Path
 
 import polars as pl
 
 from learnm8.core.interfaces import Oracle
+from learnm8.exceptions import LearnM8Warning
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,20 @@ class CSVOracle(Oracle):
             if 'ID' in self.ground_truth.columns:
                 self.ground_truth = self.ground_truth.drop('ID')
             self.ground_truth = self.ground_truth.rename({id_column: 'ID'})
+
+        # Deduplicate on 'ID' to make oracle joins deterministic. Polars hash-joins
+        # against a right-side with duplicate keys fan out non-deterministically;
+        # keeping only the first occurrence eliminates that source of run-to-run
+        # divergence and matches the documented oracle contract (one value per ID).
+        deduped = self.ground_truth.unique(subset='ID', keep='first')
+        n_dup = self.ground_truth.height - deduped.height
+        if n_dup > 0:
+            warnings.warn(
+                f"Oracle CSV contained {n_dup} duplicate IDs; first occurrence kept.",
+                LearnM8Warning,
+                stacklevel=2,
+            )
+            self.ground_truth = deduped
 
     def known_ids(self) -> set:
         """IDs the oracle can measure (rows with invalid/null targets are dropped at init)."""

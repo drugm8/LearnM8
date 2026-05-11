@@ -1,17 +1,15 @@
-import numpy as np
-import pandas as pd
 import polars as pl
 import pytest
 
-from learnm8.core.data_structures import (
+from learnm8.core.dataframe_ops import (
+    get_compounds_by_status,
+    update_status,
+)
+from learnm8.core.initialization import (
     STATUS_LABELED,
     STATUS_PRUNED,
     STATUS_UNLABELED,
     validate_master_dataframe,
-)
-from learnm8.core.dataframe_ops import (
-    get_compounds_by_status,
-    update_status,
 )
 from tests.fixtures.master_dataframe import create_initialized_master_df
 
@@ -22,7 +20,7 @@ def test_initialize_master_dataframe(sample_compounds):
     """Test initialization with valid compound pool."""
     all_ids = sample_compounds.get_column('ID').to_list()
     initial_ids = all_ids[:2]
-    initial_values = pd.Series([0.5, 0.7], index=initial_ids)
+    initial_values = dict(zip(initial_ids, [0.5, 0.7]))
 
     master_df = create_initialized_master_df(
         valid_compounds=sample_compounds,
@@ -65,7 +63,7 @@ def test_initialize_master_dataframe_empty_initial(sample_compounds):
         valid_compounds=sample_compounds,
         target_col='Activity',
         initial_labeled_ids=[],
-        initial_measurements=pd.Series(dtype='float64'),
+        initial_measurements={},
     )
 
     # All compounds should be unlabeled
@@ -128,7 +126,7 @@ def test_update_compound_status_to_labeled(sample_master_df):
         .to_list()
     )
     compound_ids = unlabeled_ids[:2]
-    target_values = pd.Series([0.8, 0.9], index=compound_ids)
+    target_values = dict(zip(compound_ids, [0.8, 0.9]))
 
     updated_df = update_status(
         df=sample_master_df,
@@ -219,7 +217,7 @@ def test_validate_master_dataframe_valid(sample_master_df):
 
 def test_validate_master_dataframe_missing_columns():
     """Test validation with missing columns."""
-    invalid_df = pd.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+    invalid_df = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
 
     with pytest.raises(ValueError, match='missing required columns'):
         validate_master_dataframe(invalid_df)
@@ -266,7 +264,7 @@ def test_immutability(sample_master_df):
         new_status=STATUS_LABELED,
         cycle=0,
         target_col='Activity',
-        target_values=pd.Series([0.5], index=[target_id]),
+        target_values={target_id: 0.5},
     )
 
     # Verify original DataFrame unchanged (compare column by column due to categorical dtype)
@@ -282,7 +280,7 @@ def test_immutability(sample_master_df):
 
 def test_large_dataset():
     """Test with large dataset (10K compounds)."""
-    large_pool = pd.DataFrame(
+    large_pool = pl.DataFrame(
         {
             'ID': [f'COMP_{i:06d}' for i in range(10000)],
             'SMILES': [f'C{i}' for i in range(10000)],
@@ -290,7 +288,7 @@ def test_large_dataset():
     )
 
     initial_ids = [f'COMP_{i:06d}' for i in range(100)]
-    initial_values = pd.Series([float(i) * 0.01 for i in range(100)], index=initial_ids)
+    initial_values = dict(zip(initial_ids, [float(i) * 0.01 for i in range(100)]))
 
     # Test initialization
     master_df = create_initialized_master_df(

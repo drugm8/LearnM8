@@ -80,7 +80,7 @@ class TestCycleBatchPrediction:
             cache_dir=tmp_path,
             original_pool_size=len(initialized_compounds),
             score_direction='higher',
-            mode='run',
+            oracle_type='run',
             memory_safety_factor=0.7
         )
 

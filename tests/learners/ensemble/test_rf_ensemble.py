@@ -38,7 +38,7 @@ class TestRFEnsemble:
         """Test RFEnsemble initialization with default parameters."""
         assert len(rf_ensemble.learners) == 3
         assert rf_ensemble.n_estimators == 10
-        assert rf_ensemble.random_states == [42, 123, 456]
+        assert rf_ensemble.random_states == [42, 123, 356]
         assert rf_ensemble.aggregation_method == 'mean'
         assert rf_ensemble.uncertainty_method == 'std'
         assert not rf_ensemble.is_trained
@@ -66,7 +66,7 @@ class TestRFEnsemble:
             random_states.append(learner.random_state)
 
         assert len(set(random_states)) == 3
-        assert random_states == [42, 123, 456]
+        assert random_states == [42, 123, 356]
 
     def test_get_name_includes_model_count_and_estimator_count(self, rf_ensemble):
         """Test name generation."""

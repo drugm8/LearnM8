@@ -1,4 +1,4 @@
-"""Diagnostic cycle metrics — feature 014.
+"""Diagnostic cycle metrics — feature 014, refined in feature 019.
 
 Two pure functions and one trivial helper used by ``evaluate_cycle``:
 
@@ -6,12 +6,15 @@ Two pure functions and one trivial helper used by ``evaluate_cycle``:
   compounds against the full pool's true score distribution. Benchmark mode
   only — returns ``None`` when ground truth is unavailable. Honours
   ``score_direction`` so that ``100`` always means "best".
-- ``compute_prediction_entropy``: Shannon entropy (base 2) of the model's
-  predictions over the **unlabeled subset** of the pool, computed via a
-  50-bin density histogram. Returns ``None`` when no unlabeled compound is
-  available.
+- ``compute_prediction_entropy``: Shannon entropy (units: nats) of the model's
+  predictions over the **unlabeled subset** of the pool, computed via a fixed
+  50-bin count histogram with post-normalisation smoothing. Scale-invariant by
+  construction; units changed from bits → nats in feature 019 for cross-contract
+  consistency with ``EntropyAcquisition``.
 
-See ``specs/014-diagnostic-metrics/spec.md`` for the full requirements.
+See ``specs/014-diagnostic-metrics/spec.md`` and
+``specs/019-math-correctness/contracts/prediction_entropy.md`` for the full
+requirements.
 """
 
 from __future__ import annotations
@@ -80,7 +83,7 @@ def compute_selected_percentile(
         counts_at_or_below = np.searchsorted(sorted_pool, selected_scores, side='right')
         percentiles = counts_at_or_below / n * 100.0
 
-    return float(np.mean(percentiles))
+    return float(np.mean(percentiles, dtype=np.float64))
 
 
 def compute_prediction_entropy(
@@ -88,22 +91,30 @@ def compute_prediction_entropy(
     cumulative_selected_ids: set | None = None,
     n_bins: int = 50,
 ) -> float | None:
-    """Shannon entropy (base 2, bits) of the model's predictions over unlabeled pool.
+    """Shannon entropy (units: nats) of the model's predictions over unlabeled pool.
 
-    Histogram is density-normalised over ``n_bins`` equal-width bins. A small
-    additive smoothing (``+ 1e-10``) keeps the entropy finite when bins are
-    empty (e.g. all predictions identical).
+    Bin count is fixed at 50 to preserve scale-invariance: data-dependent rules
+    (Sturges, Freedman-Diaconis) would defeat the property ``H(p) == H(c·p)``
+    by yielding different bin counts at different scales. Histogram is built
+    with ``density=False`` (counts), normalised to probabilities, then smoothed
+    with ``+1e-10/n_bins`` AFTER normalisation and renormalised so
+    ``Σ p log p`` is unbiased. Units are nats (base = e), matching
+    ``EntropyAcquisition`` and ``scipy.stats.norm.entropy``.
+
+    Predictions are guaranteed to be NaN-free upstream (cycle.py FR-005 guard);
+    the previous internal silent-NaN filter has been removed.
 
     Args:
         pool_df: Pool predictions DataFrame with at least ``ID`` and
             ``prediction`` columns. ``None`` to skip.
         cumulative_selected_ids: IDs of compounds already labeled (excluded
             from the histogram). ``None`` keeps the full pool.
-        n_bins: Number of histogram bins (default ``50``).
+        n_bins: Number of histogram bins (default ``50``; fixed for cross-run
+            comparability — see contract).
 
     Returns:
-        Entropy in bits (``>= 0``), or ``None`` if the pool / unlabeled subset
-        is unavailable.
+        Entropy in nats (``>= 0``, ``≤ log(n_bins)``), or ``None`` if the
+        pool / unlabeled subset is unavailable.
     """
     if pool_df is None or len(pool_df) == 0:
         return None
@@ -119,9 +130,19 @@ def compute_prediction_entropy(
         return None
 
     preds = unlabeled.get_column('prediction').to_numpy()
-    preds = preds[~np.isnan(preds)]
     if len(preds) == 0:
         return None
 
-    hist, _ = np.histogram(preds, bins=n_bins, density=True)
-    return float(stats.entropy(hist + 1e-10, base=2))
+    # Spec US3 #2: constant predictions → exactly 0.0 (no smoothing bias).
+    if preds.size > 0 and float(preds.min()) == float(preds.max()):
+        return 0.0
+
+    counts, _edges = np.histogram(preds, bins=n_bins, density=False)
+    total = int(counts.sum())
+    if total == 0:
+        return None
+    probs = counts.astype(np.float64)
+    probs /= total
+    probs += 1e-10 / n_bins
+    probs /= probs.sum()
+    return float(stats.entropy(probs))

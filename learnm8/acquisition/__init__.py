@@ -23,7 +23,6 @@ __all__ = [
     # Base classes
     'AcquisitionFunction',
     # Diversity-based acquisition functions
-    'BitBIRCHAcquisition',
     'EntropyAcquisition',
     'ExpectedImprovementAcquisition',
     # Basic acquisition functions

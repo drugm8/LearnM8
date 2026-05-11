@@ -45,7 +45,8 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from learnm8 import CycleConfig, run_active_learning, setup_logging
+from learnm8 import CycleConfig, run_active_learning
+from learnm8.utils.logging import configure_learnm8_logging
 from learnm8.learners import (
     DecisionTreeLearner,
     EnsembleLearner,
@@ -619,7 +620,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    setup_logging(level='INFO')
+    configure_learnm8_logging(level='INFO')
 
     models_to_run = None
     if args.models:

@@ -49,9 +49,10 @@ from __future__ import annotations
 import inspect
 import logging
 import time
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 import polars as pl
 
@@ -62,10 +63,10 @@ from learnm8.core.initialization import (
     select_initial_batch,
 )
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
-from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
+from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.learners import (
     DecisionTreeLearner,
@@ -190,8 +191,9 @@ def _create_learner(
     Automatically detects whether learner accepts random_state (singular)
     or random_states (plural) parameter through signature inspection.
 
-    For ensemble learners requiring random_states, derives a deterministic
-    list from the provided random_state: [seed, seed+81, seed+314]
+    For ensemble learners, the constructor itself derives a deterministic
+    member-seed list from `random_state` via the unified offset scheme
+    `[base, base+81, base+314, ...]` (see `_derive_random_states`).
 
     Supported learner shortcuts:
     - 'rf': Random Forest
@@ -266,17 +268,23 @@ def _create_learner(
         if 'device' in params:
             kwargs['device'] = device
 
-        if 'random_states' in params:
-            random_states = [random_state, random_state + 81, random_state + 314]
-            logger.debug(
-                f"Creating {learner_class.__name__} with random_states={random_states} "
-                f"(derived from random_state={random_state})"
-            )
-            return learner_class(random_states=random_states, **kwargs)
-
-        elif 'random_state' in params:
+        # Prefer the unified `random_state` (singular) path: ensemble constructors
+        # derive their internal `random_states` list from this single seed via the
+        # shared `_derive_random_states` helper (offsets 0, 81, 314). This collapses
+        # the two historically competing schemes into one source of truth so direct
+        # construction and factory construction always agree.
+        if 'random_state' in params:
             logger.debug(f"Creating {learner_class.__name__} with random_state={random_state}")
             return learner_class(random_state=random_state, **kwargs)
+
+        elif 'random_states' in params:
+            from learnm8.learners.ensemble.ensemble import _derive_random_states
+            random_states = _derive_random_states(random_state, 3)
+            logger.debug(
+                f"Creating {learner_class.__name__} with random_states={random_states} "
+                f"(legacy path; class lacks `random_state` parameter)"
+            )
+            return learner_class(random_states=random_states, **kwargs)
 
         else:
             logger.debug(f"Creating {learner_class.__name__} without random state parameter")
@@ -289,17 +297,295 @@ def _create_learner(
         ) from e
 
 
+def _validate_pool(
+    compound_pool: pl.DataFrame,
+    oracle: Oracle,
+    target_col: str,
+    n_jobs: int,
+) -> Any:
+    validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
+
+    oracle_ids = oracle.known_ids()
+    if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
+        valid_pool = validation_result.valid_compounds
+        keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
+        n_unmeasurable = int((~keep_mask).sum())
+        if n_unmeasurable > 0:
+            unmeasurable = valid_pool.filter(~keep_mask)
+            kept = valid_pool.filter(keep_mask)
+            reason = "Not present in oracle ground truth (missing target value)"
+            for cid in unmeasurable['ID'].to_list():
+                validation_result.validation_errors[str(cid)] = reason
+            if len(validation_result.invalid_compounds) > 0:
+                validation_result.invalid_compounds = pl.concat(
+                    [validation_result.invalid_compounds, unmeasurable], how='vertical'
+                )
+            else:
+                validation_result.invalid_compounds = unmeasurable
+            validation_result.valid_compounds = kept
+            logger.warning(
+                f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
+                f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
+                f"Pool size: {len(kept)} measurable compounds."
+            )
+
+        if (
+            target_col in validation_result.valid_compounds.columns
+            and validation_result.valid_compounds[target_col].dtype == pl.Utf8
+        ):
+            validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
+                pl.col(target_col).cast(pl.Float64, strict=False)
+            )
+
+    return validation_result
+
+
+def _build_cycle_schedule(
+    cycles: list[CycleConfig] | None,
+    strategy: str,
+    n_cycles: int,
+    batch_fraction: float,
+    initial_strategy: str,
+    acquisition_params: dict | None,
+    pruning_strategy: str | None,
+    pruning_params: dict | None,
+    pruning_fraction: float | None,
+) -> list[CycleConfig]:
+    if pruning_fraction is not None or pruning_strategy is not None:
+        if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
+            raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
+
+        if pruning_strategy is None:
+            pruning_strategy = 'score'
+        if pruning_params is None:
+            pruning_params = {}
+
+        if pruning_fraction is not None:
+            pruning_params['pruning_fraction'] = pruning_fraction
+
+        fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
+        logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
+
+    cycle_schedule = parse_cycle_schedule(
+        cycles=cycles,
+        strategy=strategy,
+        n_cycles=n_cycles,
+        batch_fraction=batch_fraction,
+        initial_strategy=initial_strategy,
+        acquisition_params=acquisition_params,
+        pruning_strategy=pruning_strategy,
+        pruning_params=pruning_params,
+    )
+
+    if len(cycle_schedule) == 0:
+        raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
+
+    return cycle_schedule
+
+
+def _initialize_active_learning(
+    validation_result: Any,
+    oracle: Oracle,
+    target_col: str,
+    cycle_schedule: list[CycleConfig],
+    featurizer_obj: Featurizer | None,
+    cache_dir: Path,
+    random_state: int,
+    score_direction: str,
+    oracle_type: str,
+    run_cache: RunCache,
+    disable_molecular_similarity: bool | Iterable[str],
+) -> tuple[pl.DataFrame, list[dict[str, Any]], pl.DataFrame | None, int]:
+    compounds_df = initialize_master_dataframe_empty(
+        validation_result.valid_compounds,
+        target_col
+    )
+
+    expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
+    if not expected_cols.issubset(compounds_df.columns):
+        missing = expected_cols - set(compounds_df.columns)
+        raise ValueError(
+            f"Master DataFrame missing required columns: {missing}. "
+            f"This is an internal error — initialization may have failed. "
+            f"Check that target_col='{target_col}' matches a column in your data."
+        )
+
+    init_config = cycle_schedule[0]
+
+    logger.info(
+        f"Cycle 0 (initialization) config: "
+        f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
+    )
+
+    original_pool = validation_result.valid_compounds.clone() if oracle_type == 'benchmark' else None
+    original_pool_size = len(validation_result.valid_compounds)
+
+    compounds_df, cycle_0_metrics = select_initial_batch(
+        compounds_df=compounds_df,
+        oracle=oracle,
+        target_col=target_col,
+        strategy=init_config.strategy,
+        batch_fraction=init_config.batch_fraction,
+        featurizer=featurizer_obj.get_name() if featurizer_obj else None,
+        cache_dir=cache_dir,
+        original_pool_size=original_pool_size,
+        random_state=random_state,
+        acquisition_params=init_config.acquisition_params,
+        score_direction=score_direction,
+        oracle_type=oracle_type,
+        original_pool=original_pool,
+        run_cache=run_cache,
+        featurizer_obj=featurizer_obj,
+        disable_molecular_similarity=disable_molecular_similarity,
+    )
+
+    all_metrics = [cycle_0_metrics]
+    logger.info(
+        f"Cycle 0 metrics captured: "
+        f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
+        f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
+    )
+
+    return compounds_df, all_metrics, original_pool, original_pool_size
+
+
+def _execute_loop(
+    compounds_df: pl.DataFrame,
+    all_metrics: list[dict[str, Any]],
+    cycle_schedule: list[CycleConfig],
+    learner: Learner,
+    oracle: Oracle,
+    target_col: str,
+    featurizer_obj: Featurizer | None,
+    cache_dir: Path,
+    original_pool_size: int,
+    score_direction: str,
+    oracle_type: str,
+    original_pool: pl.DataFrame | None,
+    memory_safety_factor: float,
+    run_cache: RunCache,
+    disable_molecular_similarity: bool | Iterable[str],
+    random_state: int,
+    n_jobs: int,
+    output_dir: Path,
+    feature_type: str,
+) -> tuple[pl.DataFrame, list[dict[str, Any]], list[Path]]:
+    cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+    prediction_files: list[Path] = []
+    total_cycles = len(cycle_schedule)
+
+    for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
+        logger.info("─────────────────────────────────────────────────────────────")
+        logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
+        logger.info("─────────────────────────────────────────────────────────────")
+
+        try:
+            previous_metrics = all_metrics[-1] if all_metrics else None
+
+            compounds_df, metrics = execute_cycle(
+                compounds_df=compounds_df,
+                cycle=cycle_num,
+                config=config,
+                learner=learner,
+                oracle=oracle,
+                target_col=target_col,
+                featurizer=featurizer_obj.get_name() if featurizer_obj else None,
+                cache_dir=cache_dir,
+                original_pool_size=original_pool_size,
+                score_direction=score_direction,
+                oracle_type=oracle_type,
+                original_pool=original_pool,
+                cumulative_selected_ids=cumulative_selected_ids,
+                memory_safety_factor=memory_safety_factor,
+                run_cache=run_cache,
+                featurizer_obj=featurizer_obj,
+                disable_molecular_similarity=disable_molecular_similarity,
+                random_state=random_state,
+                previous_metrics=previous_metrics,
+                n_jobs=n_jobs,
+                output_dir=output_dir,
+                feature_type=feature_type,
+            )
+            all_metrics.append(metrics)
+
+            cycle_parquet_path = metrics.get('parquet_path')
+            if cycle_parquet_path is not None:
+                prediction_files.append(cycle_parquet_path)
+
+            cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+
+            if metrics['remaining_unlabeled'] == 0:
+                logger.info("Pool exhausted, stopping early")
+                break
+
+        except LearnM8Error as e:
+            e.add_note(
+                f"Failed during cycle {cycle_num} of {total_cycles} "
+                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+            )
+            raise
+        except (ValueError, RuntimeError, TypeError, OSError) as e:
+            logger.error(f"Cycle {cycle_num} failed: {e}")
+            err = LearnM8Error(
+                f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
+                f"Check the error details above for the specific cause."
+            )
+            err.add_note(
+                f"Failed during cycle {cycle_num} of {total_cycles} "
+                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+            )
+            raise err from e
+
+    return compounds_df, all_metrics, prediction_files
+
+
+def _save_results(
+    compounds_df: pl.DataFrame,
+    all_metrics: list[dict[str, Any]],
+    validation_result: Any,
+    target_col: str,
+    featurizer_obj: Featurizer | None,
+    score_direction: str,
+    oracle_type: str,
+    random_state: int,
+    learner: Learner,
+    oracle: Oracle,
+    output_dir: Path,
+) -> dict[str, Path]:
+    config_dict = {
+        'target_col': target_col,
+        'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
+        'score_direction': score_direction,
+        'oracle_type': oracle_type,
+        'n_cycles': len(all_metrics),
+        'random_state': random_state,
+        'learner': learner.__class__.__name__,
+        'oracle': oracle.__class__.__name__
+    }
+
+    saved_files = save_results(
+        compounds_df, all_metrics, validation_result, config_dict, output_dir
+    )
+
+    logger.info(f"All results saved to: {output_dir}")
+    logger.debug("Saved files:")
+    for file_type, file_path in saved_files.items():
+        logger.debug(f"  {file_type}: {file_path}")
+
+    return saved_files
+
+
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
-    mode: str
+    oracle_type: str
 ) -> dict[str, Any]:
     """Calculate aggregate metrics across all cycles.
 
     Args:
         all_metrics: List of cycle metrics dictionaries
         compounds_df: Final master DataFrame
-        mode: Execution mode ('run' or 'benchmark')
+        oracle_type: Oracle type ('run' or 'benchmark')
 
     Returns:
         Dictionary with aggregate metrics
@@ -322,7 +608,7 @@ def _calculate_aggregate_metrics(
         best_cycle = next((i for i, m in enumerate(all_metrics) if m.get('best_so_far') == best_values[-1]), None)
         agg['best_compound_found_cycle'] = best_cycle
 
-    if mode == 'benchmark':
+    if oracle_type == 'benchmark':
         top10_disc_values = [m.get('top_10_discovery') for m in all_metrics if m.get('top_10_discovery') is not None]
         if top10_disc_values:
             agg['final_top_10_discovery'] = top10_disc_values[-1]
@@ -338,9 +624,13 @@ def _calculate_aggregate_metrics(
             agg['final_cumulative_ef'] = cumulative_ef_values[-1]
             agg['avg_cumulative_ef'] = float(np.mean(cumulative_ef_values))
 
-        batch_avg_ratio_values = [m.get('batch_avg_score_ratio') for m in all_metrics if m.get('batch_avg_score_ratio') is not None]
-        if batch_avg_ratio_values:
-            agg['avg_batch_score_ratio'] = float(np.mean(batch_avg_ratio_values))
+        batch_improvement_values = [
+            m.get('batch_score_improvement_ratio')
+            for m in all_metrics
+            if m.get('batch_score_improvement_ratio') is not None
+        ]
+        if batch_improvement_values:
+            agg['avg_batch_score_improvement_ratio'] = float(np.mean(batch_improvement_values))
 
         unlabeled_spearman_values = [m.get('unlabeled_spearman_correlation') for m in all_metrics if m.get('unlabeled_spearman_correlation') is not None]
         if unlabeled_spearman_values:
@@ -381,7 +671,7 @@ def run_active_learning(
     initial_strategy: str = 'random',
     # Common parameters
     score_direction: str = 'higher',
-    mode: Literal['run', 'benchmark'] | None = None,
+
     output_dir: str | Path | None = None,
     cache_dir: str | Path | None = None,
     random_state: int = 42,
@@ -400,7 +690,6 @@ def run_active_learning(
     device: str = 'auto',
     # Diversity metrics (feature 013)
     disable_molecular_similarity: bool | Iterable[str] = False,
-    **kwargs
 ) -> dict[str, Any]:
     """Execute active learning experiment.
 
@@ -498,15 +787,6 @@ def run_active_learning(
 
         score_direction: Optimization direction ('higher' or 'lower')
 
-        mode: Execution mode:
-            - None: Auto-detect from oracle type
-            - 'run': Production screening (basic metrics only, no ground truth needed)
-            - 'benchmark': Evaluation (includes discovery/ranking metrics using ground truth)
-
-            Note: Both modes predict on unlabeled compounds only. The difference is in
-            metric computation: benchmark mode calculates additional discovery and ranking
-            metrics using the ground truth reference (original_pool).
-
         output_dir: Output directory path
             If None, auto-generates timestamped directory
 
@@ -534,8 +814,6 @@ def run_active_learning(
             batching (0.0, 1.0]. Default 0.7. Higher values use more memory for
             larger batches. Use 0.85 on dedicated hardware, 0.5 on shared clusters.
 
-        **kwargs: Additional parameters passed to cycle execution
-
     Returns:
         Dictionary with:
             - compounds_df: Final master DataFrame (narrow: 7 base columns + target)
@@ -558,8 +836,8 @@ def run_active_learning(
         **Oracle Auto-Detection:**
         - When oracle=None and compound_pool is a CSV path → uses that CSV as benchmark oracle
         - When oracle=None and compound_pool is a DataFrame → raises error (oracle required)
-        - CSV oracle files automatically trigger benchmark mode
-        - Python function oracles (module.py:function) automatically trigger run mode
+        - CSV oracle files → benchmark mode (includes discovery/ranking metrics)
+        - Python function oracles (module.py:function) → run mode (basic metrics only)
 
         **Other Notes:**
         - Pruning is enabled automatically if pruning_fraction is provided
@@ -634,15 +912,11 @@ def run_active_learning(
                 f"Ensure your data has 'ID' (unique identifier) and 'SMILES' (molecular structure) columns."
             )
 
-        mode_detected = False
-
         if oracle is None:
             logger.debug("Oracle not provided, attempting auto-detection from compound_pool")
             if original_compound_pool_path is not None:
                 oracle = CSVOracle(str(original_compound_pool_path), id_column=id_column or 'ID')
-                mode = 'benchmark'
-                mode_detected = True
-                logger.debug("Auto-detected CSV oracle from compound pool, mode=benchmark")
+                logger.debug("Auto-detected CSV oracle from compound pool")
             else:
                 raise ValueError(
                     "Oracle is required when compound_pool is a DataFrame. "
@@ -654,10 +928,7 @@ def run_active_learning(
             oracle_path = Path(oracle)
             if oracle_path.suffix == '.csv':
                 oracle = CSVOracle(str(oracle_path))
-                if mode is None:
-                    mode = 'benchmark'
-                    mode_detected = True
-                logger.debug(f"Using CSV oracle: {oracle_path}, mode={mode}")
+                logger.debug(f"Using CSV oracle: {oracle_path}")
             else:
                 if ':' not in str(oracle):
                     raise ValueError(
@@ -668,28 +939,17 @@ def run_active_learning(
                 module_path, function_name = str(oracle).split(':', 1)
                 from learnm8.oracles.python_oracle import PythonOracle
                 oracle = PythonOracle(module_path, function_name)
-                if mode is None:
-                    mode = 'run'
-                    mode_detected = True
-                logger.debug(f"Using Python oracle: {module_path}:{function_name}, mode={mode}")
+                logger.debug(f"Using Python oracle: {module_path}:{function_name}")
         elif isinstance(oracle, Oracle):
             logger.debug(f"Using provided oracle instance: {oracle.__class__.__name__}")
-            if mode is None:
-                mode = 'run'
         elif isinstance(oracle, pl.DataFrame):
-            # DataFrame oracle for benchmark mode (in-memory)
             logger.debug("Creating in-memory oracle from DataFrame")
-            # Note: CSVOracle already imported at module level
-            # Save to temp file for CSVOracle
             import tempfile
             with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
                 temp_oracle_path = Path(f.name)
                 oracle.write_csv(temp_oracle_path)
             oracle = CSVOracle(str(temp_oracle_path))
-            if mode is None:
-                mode = 'benchmark'
-                mode_detected = True
-            logger.debug(f"Created CSV oracle from DataFrame, mode={mode}")
+            logger.debug("Created CSV oracle from DataFrame")
         else:
             raise TypeError(
                 f"oracle must be None, str, Path, DataFrame, or Oracle instance, "
@@ -698,14 +958,7 @@ def run_active_learning(
                 f"or pass an Oracle instance."
             )
 
-        logger.debug(f"Detected {mode} mode (oracle type: {type(oracle).__name__})")
-
-        if mode is None:
-            mode = 'run'
-        elif mode_detected:
-            pass
-        else:
-            pass
+        oracle_type: Literal['run', 'benchmark'] = 'benchmark' if isinstance(oracle, CSVOracle) else 'run'
 
         if isinstance(learner, str):
             learner_str = learner
@@ -767,8 +1020,8 @@ def run_active_learning(
                         f"Valid options: {featurizer_options}. "
                         f"Use 'learnm8 list featurizers' to see all available featurizers."
                     )
-                featurizer_class = FEATURIZER_REGISTRY[featurizer]
-                featurizer_obj = featurizer_class(n_jobs=n_jobs)
+                from learnm8.features import create_featurizer
+                featurizer_obj = create_featurizer(featurizer, n_jobs=n_jobs)
                 logger.debug(f"Instantiated featurizer: {featurizer_obj.get_name()}")
             else:
                 from learnm8.core.interfaces import Featurizer
@@ -780,6 +1033,8 @@ def run_active_learning(
                     )
                 featurizer_obj = featurizer
                 logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
+
+        feature_type = featurizer_obj.feature_type if featurizer_obj else 'binary'
 
         if not (0.0 < memory_safety_factor <= 1.0):
             raise ConfigurationError(
@@ -796,7 +1051,7 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 1: Validating compound pool")
         logger.info("═══════════════════════════════════════════════════════════════")
-        validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
+        validation_result = _validate_pool(compound_pool, oracle, target_col, n_jobs)
 
         if len(validation_result.valid_compounds) == 0:
             logger.error(
@@ -813,125 +1068,38 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
-        oracle_ids = oracle.known_ids()
-        if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
-            valid_pool = validation_result.valid_compounds
-            keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
-            n_unmeasurable = int((~keep_mask).sum())
-            if n_unmeasurable > 0:
-                unmeasurable = valid_pool.filter(~keep_mask)
-                kept = valid_pool.filter(keep_mask)
-                reason = "Not present in oracle ground truth (missing target value)"
-                for cid in unmeasurable['ID'].to_list():
-                    validation_result.validation_errors[str(cid)] = reason
-                if len(validation_result.invalid_compounds) > 0:
-                    validation_result.invalid_compounds = pl.concat(
-                        [validation_result.invalid_compounds, unmeasurable], how='vertical'
-                    )
-                else:
-                    validation_result.invalid_compounds = unmeasurable
-                validation_result.valid_compounds = kept
-                logger.warning(
-                    f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
-                    f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
-                    f"Pool size: {len(kept)} measurable compounds."
-                )
-
-            if (
-                target_col in validation_result.valid_compounds.columns
-                and validation_result.valid_compounds[target_col].dtype == pl.Utf8
-            ):
-                validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
-                    pl.col(target_col).cast(pl.Float64, strict=False)
-                )
+        cycle_schedule = _build_cycle_schedule(
+            cycles=cycles,
+            strategy=strategy,
+            n_cycles=n_cycles,
+            batch_fraction=batch_fraction,
+            initial_strategy=initial_strategy,
+            acquisition_params=acquisition_params,
+            pruning_strategy=pruning_strategy,
+            pruning_params=pruning_params,
+            pruning_fraction=pruning_fraction,
+        )
 
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
         logger.info("═══════════════════════════════════════════════════════════════")
 
-        compounds_df = initialize_master_dataframe_empty(
-            validation_result.valid_compounds,
-            target_col
-        )
-
-        expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
-        if not expected_cols.issubset(compounds_df.columns):
-            missing = expected_cols - set(compounds_df.columns)
-            raise ValueError(
-                f"Master DataFrame missing required columns: {missing}. "
-                f"This is an internal error — initialization may have failed. "
-                f"Check that target_col='{target_col}' matches a column in your data."
-            )
-
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
         logger.info("═══════════════════════════════════════════════════════════════")
 
-        if pruning_fraction is not None or pruning_strategy is not None:
-            if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
-                raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
-
-            if pruning_strategy is None:
-                pruning_strategy = 'score'
-            if pruning_params is None:
-                pruning_params = {}
-
-            if pruning_fraction is not None:
-                pruning_params['pruning_fraction'] = pruning_fraction
-
-            kwargs['pruning_strategy'] = pruning_strategy
-            kwargs['pruning_params'] = pruning_params
-
-            fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
-            logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
-
-        if acquisition_params is not None:
-            kwargs['acquisition_params'] = acquisition_params
-
-        cycle_schedule = parse_cycle_schedule(
-            cycles, strategy, n_cycles, batch_fraction,
-            initial_strategy,
-            **kwargs
-        )
-
-        if len(cycle_schedule) == 0:
-            raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
-
-        init_config = cycle_schedule[0]
-
-        logger.info(
-            f"Cycle 0 (initialization) config: "
-            f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
-        )
-
-        original_pool = validation_result.valid_compounds.clone() if mode == 'benchmark' else None
-        original_pool_size = len(validation_result.valid_compounds)
-
-        compounds_df, cycle_0_metrics = select_initial_batch(
-            compounds_df=compounds_df,
+        compounds_df, all_metrics, original_pool, original_pool_size = _initialize_active_learning(
+            validation_result=validation_result,
             oracle=oracle,
             target_col=target_col,
-            strategy=init_config.strategy,
-            batch_fraction=init_config.batch_fraction,
-            featurizer=featurizer_obj.get_name() if featurizer_obj else None,
-            cache_dir=cache_dir,
-            original_pool_size=original_pool_size,
-            random_state=random_state,
-            acquisition_params=init_config.acquisition_params,
-            score_direction=score_direction,
-            mode=mode,
-            original_pool=original_pool,
-            run_cache=run_cache,
+            cycle_schedule=cycle_schedule,
             featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            random_state=random_state,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            run_cache=run_cache,
             disable_molecular_similarity=disable_molecular_similarity,
-        )
-
-        # Initialize metrics list with cycle 0
-        all_metrics = [cycle_0_metrics]
-        logger.info(
-            f"Cycle 0 metrics captured: "
-            f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
-            f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
         )
 
         logger.info("═══════════════════════════════════════════════════════════════")
@@ -953,74 +1121,30 @@ def run_active_learning(
         logger.info("Phase 4: Active Learning Cycles")
         logger.info("═══════════════════════════════════════════════════════════════")
 
-        cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
-        prediction_files: list[Path] = []
-
-        for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
-            logger.info("─────────────────────────────────────────────────────────────")
-            logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
-            logger.info("─────────────────────────────────────────────────────────────")
-
-            try:
-                # Get previous metrics for change indicators in logging
-                previous_metrics = all_metrics[-1] if all_metrics else None
-
-                compounds_df, metrics = execute_cycle(
-                    compounds_df=compounds_df,
-                    cycle=cycle_num,
-                    config=config,
-                    learner=learner,
-                    oracle=oracle,
-                    target_col=target_col,
-                    featurizer=featurizer_obj.get_name() if featurizer_obj else None,
-                    cache_dir=cache_dir,
-                    original_pool_size=original_pool_size,
-                    score_direction=score_direction,
-                    mode=mode,
-                    original_pool=original_pool,
-                    cumulative_selected_ids=cumulative_selected_ids,
-                    memory_safety_factor=memory_safety_factor,
-                    run_cache=run_cache,
-                    featurizer_obj=featurizer_obj,
-                    disable_molecular_similarity=disable_molecular_similarity,
-                    random_state=random_state,
-                    previous_metrics=previous_metrics,
-                    n_jobs=n_jobs,
-                    output_dir=output_dir,
-                )
-                all_metrics.append(metrics)
-
-                cycle_parquet_path = metrics.get('parquet_path')
-                if cycle_parquet_path is not None:
-                    prediction_files.append(cycle_parquet_path)
-
-                # Update cumulative_selected_ids after cycle
-                cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
-
-                if metrics['remaining_unlabeled'] == 0:
-                    logger.info("Pool exhausted, stopping early")
-                    break
-
-            except LearnM8Error as e:
-                e.add_note(
-                    f"Failed during cycle {cycle_num} of {total_cycles} "
-                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
-                )
-                raise
-            except (ValueError, RuntimeError, TypeError, OSError) as e:
-                logger.error(f"Cycle {cycle_num} failed: {e}")
-                err = LearnM8Error(
-                    f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
-                    f"Check the error details above for the specific cause."
-                )
-                err.add_note(
-                    f"Failed during cycle {cycle_num} of {total_cycles} "
-                    f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
-                )
-                raise err from e
+        compounds_df, all_metrics, prediction_files = _execute_loop(
+            compounds_df=compounds_df,
+            all_metrics=all_metrics,
+            cycle_schedule=cycle_schedule,
+            learner=learner,
+            oracle=oracle,
+            target_col=target_col,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            original_pool_size=original_pool_size,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            original_pool=original_pool,
+            memory_safety_factor=memory_safety_factor,
+            run_cache=run_cache,
+            disable_molecular_similarity=disable_molecular_similarity,
+            random_state=random_state,
+            n_jobs=n_jobs,
+            output_dir=output_dir,
+            feature_type=feature_type,
+        )
 
         logger.debug("Calculating aggregate metrics")
-        aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, mode)
+        aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, oracle_type)
 
         if aggregate_metrics:
             logger.debug("Aggregate metrics:")
@@ -1040,25 +1164,20 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 5: Saving Results")
         logger.info("═══════════════════════════════════════════════════════════════")
-        config_dict = {
-            'target_col': target_col,
-            'featurizer': featurizer_obj.get_name() if featurizer_obj else None,
-            'score_direction': score_direction,
-            'mode': mode,
-            'n_cycles': len(all_metrics),
-            'random_state': random_state,
-            'learner': learner.__class__.__name__,
-            'oracle': oracle.__class__.__name__
-        }
 
-        saved_files = save_results(
-            compounds_df, all_metrics, validation_result, config_dict, output_dir
+        saved_files = _save_results(
+            compounds_df=compounds_df,
+            all_metrics=all_metrics,
+            validation_result=validation_result,
+            target_col=target_col,
+            featurizer_obj=featurizer_obj,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            random_state=random_state,
+            learner=learner,
+            oracle=oracle,
+            output_dir=output_dir,
         )
-
-        logger.info(f"All results saved to: {output_dir}")
-        logger.debug("Saved files:")
-        for file_type, file_path in saved_files.items():
-            logger.debug(f"  {file_type}: {file_path}")
 
         return {
             'compounds_df': compounds_df,

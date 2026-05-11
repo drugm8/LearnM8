@@ -94,9 +94,15 @@ def test_uint8_value_above_255_raises_feature_extraction_error(tmp_path: Path):
     bad = np.array([[260.0, 1.0, 2.0]], dtype=np.float32)
     feat = _FakeUint8Featurizer(bad, dim=3, name='fake_uint8_overflow')
 
-    extract_features(['CCO'], _FakeUint8Featurizer(
-        np.array([[1.0, 2.0, 3.0]], dtype=np.float32), dim=3, name='fake_uint8_overflow',
-    ), cache_dir=tmp_path)
+    extract_features(
+        ['CCO'],
+        _FakeUint8Featurizer(
+            np.array([[1.0, 2.0, 3.0]], dtype=np.float32),
+            dim=3,
+            name='fake_uint8_overflow',
+        ),
+        cache_dir=tmp_path,
+    )
     cache_file = tmp_path / 'features_fake_uint8_overflow.h5'
     with h5py.File(cache_file, 'r') as f:
         pre_features = np.asarray(f['features'][:])
@@ -104,7 +110,7 @@ def test_uint8_value_above_255_raises_feature_extraction_error(tmp_path: Path):
         pre_row_index = np.asarray(f['row_index'][:])
         pre_write_epoch = int(f.attrs['write_epoch'])
 
-    with pytest.raises(FeatureExtractionError, match=r"260|out of range|exceeds"):
+    with pytest.raises(FeatureExtractionError, match=r'260|out of range|exceeds'):
         extract_features(['CCNew'], feat, cache_dir=tmp_path)
 
     with h5py.File(cache_file, 'r') as f:
@@ -115,14 +121,14 @@ def test_uint8_value_above_255_raises_feature_extraction_error(tmp_path: Path):
     np.testing.assert_array_equal(pre_features, post_features)
     np.testing.assert_array_equal(pre_hash_index, post_hash_index)
     np.testing.assert_array_equal(pre_row_index, post_row_index)
-    assert pre_write_epoch == post_write_epoch, "write_epoch advanced despite raise"
+    assert pre_write_epoch == post_write_epoch, 'write_epoch advanced despite raise'
 
 
 @pytest.mark.unit
 def test_uint8_negative_value_raises(tmp_path: Path):
     bad = np.array([[-1.0, 2.0, 3.0]], dtype=np.float32)
     feat = _FakeUint8Featurizer(bad, dim=3, name='fake_uint8_negative')
-    with pytest.raises(FeatureExtractionError, match=r"-1|out of range|negative|range"):
+    with pytest.raises(FeatureExtractionError, match=r'-1|out of range|negative|range'):
         extract_features(['CCO'], feat, cache_dir=tmp_path)
 
 
@@ -146,7 +152,7 @@ def test_uint8_100k_warm_read_under_half_second(tmp_path: Path):
     values = rng.integers(0, 27, size=(n_unique, dim)).astype(np.float32)
     feat = _FakeUint8Featurizer(values, dim=dim, name='perf_uint8_100k')
 
-    smiles_unique = [f"C{'C' * i}O" for i in range(n_unique)]
+    smiles_unique = [f'C{"C" * i}O' for i in range(n_unique)]
     smiles_all = (smiles_unique * (100_000 // n_unique + 1))[:100_000]
 
     extract_features(smiles_unique, feat, cache_dir=tmp_path)
@@ -155,4 +161,4 @@ def test_uint8_100k_warm_read_under_half_second(tmp_path: Path):
     warm = extract_features(smiles_all, feat, cache_dir=tmp_path)
     elapsed = time.perf_counter() - t0
     assert warm.shape == (100_000, dim)
-    assert elapsed < 0.5, f"100k uint8 warm read took {elapsed:.3f}s (target <0.5s)"
+    assert elapsed < 0.5, f'100k uint8 warm read took {elapsed:.3f}s (target <0.5s)'

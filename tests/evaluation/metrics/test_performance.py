@@ -40,30 +40,48 @@ class TestPerformanceMetrics:
 
     def test_spearman_correlation_edge_cases(self):
         """Test Spearman correlation edge cases."""
-        # Constant values
         x_const = np.array([5, 5, 5, 5])
         y_var = np.array([1, 2, 3, 4])
         result = calculate_spearman_correlation(x_const, y_var)
-        assert result == 0.0  # Function returns 0.0 for undefined correlation
+        assert result is None
 
-        # Empty arrays - function handles gracefully and returns 0.0
         result = calculate_spearman_correlation(np.array([]), np.array([]))
-        assert result == 0.0
+        assert result is None
 
-        # Single value - function handles gracefully and returns 0.0
         result = calculate_spearman_correlation(np.array([1]), np.array([2]))
-        assert result == 0.0
+        assert result is None
+
+    def test_spearman_constant_predictions_returns_none(self):
+        y_true = np.array([1.0, 2.0, 3.0])
+        y_pred = np.array([0.5, 0.5, 0.5])
+        result = calculate_spearman_correlation(y_true, y_pred)
+        assert result is None
+
+    def test_spearman_n_lt_2_returns_none(self):
+        assert calculate_spearman_correlation(np.array([1.0]), np.array([2.0])) is None
+        assert calculate_spearman_correlation(np.array([]), np.array([])) is None
 
     def test_average_score_calculation(self):
-        """Test average score calculation."""
+        """Test average score calculation.
+
+        Feature 019: NaN values now propagate (no silent np.nanmean filter).
+        Predictions are guaranteed to be NaN-free upstream by cycle.py FR-005.
+        """
         scores = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         result = calculate_average_score(scores)
         assert_allclose(result, 3.0)
 
-        # With NaN values
+        # With NaN values, mean propagates NaN (silent filter removed in feature 019).
         scores_with_nan = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
         result = calculate_average_score(scores_with_nan)
-        assert_allclose(result, 3.0)  # Should ignore NaN
+        assert np.isnan(result)
+
+    def test_average_score_float64_accumulator(self):
+        rng = np.random.default_rng(42)
+        scores = rng.uniform(-100.0, 100.0, size=2_000_000).astype(np.float32)
+        result = calculate_average_score(scores)
+        expected = float(np.mean(scores, dtype=np.float64))
+        assert_allclose(result, expected, rtol=0.0, atol=1e-12)
 
     def test_mape_calculation(self):
         """Test Mean Absolute Percentage Error calculation."""

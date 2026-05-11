@@ -1,6 +1,7 @@
 """Centralized logging configuration with Rich formatting support."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Literal
@@ -9,17 +10,43 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 
-def is_running_in_jupyter() -> bool:
-    """Detect if code is running in Jupyter notebook/lab."""
-    try:
-        from IPython import get_ipython
-        ipython = get_ipython()
-        if ipython is None:
-            return False
-        return ipython.__class__.__name__ == 'ZMQInteractiveShell'
-    except ImportError:
-        return False
+def detect_jupyter_environment() -> bool:
+    """
+    Detect if code is running in a Jupyter notebook environment.
 
+    Returns:
+        bool: True if running in Jupyter, False otherwise
+    """
+    jupyter_indicators = [
+        'IPY_PARENT',
+        'JUPYTER_COLUMNS',
+        'JPY_PARENT_PID',
+        'JUPYTER_RUNTIME_DIR',
+    ]
+
+    for indicator in jupyter_indicators:
+        if indicator in os.environ:
+            return True
+
+    try:
+        import IPython
+        ipy = IPython.get_ipython()
+        if ipy is not None:
+            if hasattr(ipy, 'kernel'):
+                return True
+            if ipy.__class__.__name__ == 'ZMQInteractiveShell':
+                return True
+    except ImportError:
+        pass
+
+    try:
+        import ipykernel.kernelapp
+        if hasattr(ipykernel.kernelapp, 'IPKernelApp') and ipykernel.kernelapp.IPKernelApp.initialized():
+            return True
+    except (ImportError, AttributeError):
+        pass
+
+    return False
 
 def configure_learnm8_logging(
     output_dir: Path | None = None,
@@ -83,7 +110,7 @@ def configure_learnm8_logging(
 
     if console_type != 'none':
         if console_type == 'auto':
-            use_rich = not is_running_in_jupyter()
+            use_rich = not detect_jupyter_environment()
         elif console_type == 'rich':
             use_rich = True
         else:
@@ -115,63 +142,6 @@ def get_logger(name: str = "learnm8") -> logging.Logger:
     return logging.getLogger(name)
 
 
-
-def log_error_to_stderr(message: str) -> None:
-    """Log error messages to stderr without Rich formatting."""
-    logging.getLogger('learnm8').error(message)
-
-
 def log_warning(logger: logging.Logger, message: str) -> None:
     """Log warning message with appropriate styling."""
     logger.warning(f"[yellow]Warning:[/yellow] {message}")
-
-
-def log_success(logger: logging.Logger, message: str) -> None:
-    """Log success message with appropriate styling."""
-    logger.info(f"[bold green]✓[/bold green] {message}")
-
-
-def log_file_operation(logger: logging.Logger, operation: str, path: str) -> None:
-    """Log file operations (save, load, etc.)."""
-    logger.info(f"{operation}: [dim]{path}[/dim]")
-
-
-def setup_logging(
-    level: str = "INFO",
-    show_time: bool = True,
-    show_path: bool = False,
-    console: Console | None = None
-) -> logging.Logger:
-    """
-    Backward compatibility wrapper for configure_learnm8_logging().
-
-    DEPRECATED: Use configure_learnm8_logging() instead.
-    """
-    return configure_learnm8_logging(
-        level=level,
-        console_type='rich',
-        show_time=show_time
-    )
-
-
-def setup_logging_for_environment(
-    logger: logging.Logger,
-    output_dir: Path | None = None,
-    level: str = "INFO",
-    show_time: bool = True
-):
-    """
-    Backward compatibility wrapper for configure_learnm8_logging().
-
-    DEPRECATED: Use configure_learnm8_logging() instead.
-
-    Note: This function previously returned a list of handlers, but the new
-    implementation does not support this. It now returns None for compatibility.
-    """
-    configure_learnm8_logging(
-        output_dir=output_dir,
-        level=level,
-        console_type='auto',
-        show_time=show_time
-    )
-    return []

@@ -43,7 +43,6 @@ from .exceptions import (
     AcquisitionError,
     ConfigurationError,
     ConvergenceWarning,
-    DataConversionWarning,
     FeatureExtractionError,
     LearnerError,
     LearnM8Error,
@@ -89,7 +88,6 @@ from .oracles.python_oracle import PythonOracle
 from .pruning import DesignSpacePruner, ScoreBasedPruner
 
 # Utility functions
-from .utils.logging import setup_logging
 
 __all__ = [
     'AcquisitionError',
@@ -98,7 +96,6 @@ __all__ = [
     'ConvergenceWarning',
     'CycleConfig',
     'DTEnsemble',
-    'DataConversionWarning',
     'DesignSpacePruner',
     'EnsembleLearner',
     'EntropyAcquisition',
@@ -133,6 +130,5 @@ __all__ = [
     'XGBoostLearner',
     'extract_features',
     'run_active_learning',
-    'setup_logging',
     'validate_compound_pool',
 ]

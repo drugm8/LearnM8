@@ -26,7 +26,6 @@ from .matrix_visualizations import (
     generate_comprehensive_visualizations,
 )
 from .plot_generator import (
-    create_animations,
     create_comprehensive_validation_plot,
     create_embedding_plots,
 )
@@ -41,7 +40,6 @@ __all__ = [
     'calculate_cumulative_timing',
     'create_all_cost_performance_plots',
     'create_all_heatmaps',
-    'create_animations',
     'create_comprehensive_validation_plot',
     'create_efficiency_heatmap',
     'create_embedding_plots',

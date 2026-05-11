@@ -17,12 +17,9 @@ Performance characteristics:
 
 import logging
 
-import pandas as pd
 import polars as pl
 
-from learnm8.utils.polars_utils import map_values_via_join
-
-from .data_structures import VALID_STATUSES
+from .initialization import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
 
@@ -85,23 +82,31 @@ def _update_status_inplace(
         )
 
         if target_values is not None:
-            # Handle both dict and Series input for backward compatibility
             if isinstance(target_values, dict):
                 id_to_value = target_values
             elif isinstance(target_values, pl.Series):
-                # For Series, zip IDs with values
-                id_to_value = dict(zip(compound_ids, target_values.to_list()))
-            elif isinstance(target_values, pd.Series):
-                # For pandas Series, use to_dict() for index-value mapping
-                id_to_value = target_values.to_dict()
+                id_to_value = dict(zip(compound_ids, target_values.to_list(), strict=True))
             else:
                 raise TypeError(
-                    f"target_values must be dict, pl.Series, or pd.Series, "
+                    f"target_values must be dict or pl.Series, "
                     f"got {type(target_values).__name__}. "
-                    f"Pass measured values as a Polars Series, pandas Series, or dict mapping ID → value."
+                    f"Pass measured values as a Polars Series or dict mapping ID → value."
                 )
 
-            df = map_values_via_join(df, id_to_value, 'ID', target_col)
+            lookup_df = pl.DataFrame({
+                'ID': list(id_to_value.keys()),
+                f'{target_col}_new': list(id_to_value.values())
+            })
+            df = df.join(lookup_df, on='ID', how='left')
+            if target_col in df.columns:
+                df = df.with_columns(
+                    pl.coalesce(
+                        pl.col(f'{target_col}_new'),
+                        pl.col(target_col)
+                    ).alias(target_col)
+                ).drop(f'{target_col}_new')
+            else:
+                df = df.rename({f'{target_col}_new': target_col})
 
     elif new_status == 'pruned':
         df = df.with_columns(
@@ -122,7 +127,7 @@ def update_status(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: pl.Series | pd.Series | dict | None = None
+    target_values: pl.Series | dict | None = None
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
@@ -135,7 +140,7 @@ def update_status(
         new_status: New status ('labeled', 'unlabeled', or 'pruned')
         cycle: Current cycle number
         target_col: Name of target column (e.g., 'Activity')
-        target_values: Optional Series (Polars or Pandas) or dict with target values indexed by compound ID
+        target_values: Optional Series (Polars) or dict with target values indexed by compound ID
 
     Returns:
         Updated DataFrame (new copy)

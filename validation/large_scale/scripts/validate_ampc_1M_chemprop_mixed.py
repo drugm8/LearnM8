@@ -41,8 +41,8 @@ from validation.lib import (
 
 warnings.filterwarnings('ignore')
 
-from learnm8 import setup_logging
-setup_logging(level='INFO')
+from learnm8.utils.logging import configure_learnm8_logging
+configure_learnm8_logging(level='INFO')
 
 
 def print_header():

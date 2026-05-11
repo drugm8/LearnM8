@@ -6,6 +6,7 @@ import pytest
 from scipy.stats import norm
 
 from learnm8.acquisition import ProbabilityImprovementAcquisition
+from learnm8.exceptions import LearnerError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -48,7 +49,13 @@ class TestProbabilityImprovementAcquisition:
         assert len(selected) == 2
         assert selected.get_column('acquisition_score')[0] >= selected.get_column('acquisition_score')[1]
 
-    def test_probability_improvement_zero_uncertainty_maps_positive_improvement_to_one(self, small_real_compounds):
+    def test_pi_returns_zero_when_sigma_is_zero(self, small_real_compounds):
+        """Spec 022 FR-006: Botorch σ=0 → PI=0 convention.
+
+        Replaces the prior σ=0 → indicator(improvement > 0) semantics.
+        PI of a perfectly-deterministic candidate is 0 by the same Botorch
+        convention as EI — when σ=0 there is no uncertainty information.
+        """
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(2).clone(),
             [12.0, 8.0],
@@ -57,7 +64,7 @@ class TestProbabilityImprovementAcquisition:
 
         result = ProbabilityImprovementAcquisition(current_best=10.0, xi=0.0).select(compounds, n_select=2).sort('ID')
 
-        assert result.get_column('acquisition_score').to_list() == [1.0, 0.0]
+        assert result.get_column('acquisition_score').to_list() == [0.0, 0.0]
 
     def test_probability_improvement_rejects_missing_current_best(self, compounds_with_uncertainty):
         with pytest.raises(ValueError, match='requires \'current_best\' parameter'):
@@ -93,3 +100,12 @@ class TestProbabilityImprovementAcquisition:
 
         score = result.filter(pl.col('prediction') == 12.0).get_column('acquisition_score')[0]
         assert np.isclose(score, expected_score, rtol=1e-5)
+
+    def test_inf_uncertainty_raises_learner_error(self, small_real_compounds):
+        compounds = _pool_with_predictions_and_uncertainty(
+            small_real_compounds.head(3).clone(),
+            [1.0, 2.0, 3.0],
+            [1.0, np.inf, 1.0],
+        )
+        with pytest.raises(LearnerError, match='Inf uncertainties'):
+            ProbabilityImprovementAcquisition(current_best=0.5).select(compounds, n_select=2)

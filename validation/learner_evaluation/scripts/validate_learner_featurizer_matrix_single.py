@@ -21,8 +21,8 @@ from validation.lib.matrix_visualizations import (
 )
 from validation.lib.seed_aggregation import aggregate_seed_results
 
-from learnm8 import setup_logging
-setup_logging(level='INFO')
+from learnm8.utils.logging import configure_learnm8_logging
+configure_learnm8_logging(level='INFO')
 
 
 DATASET_NAME = 'ampc_30k'

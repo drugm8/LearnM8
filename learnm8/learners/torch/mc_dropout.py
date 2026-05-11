@@ -26,13 +26,15 @@ class MCDropoutLearner(TorchLearner):
     an ensemble of predictions for uncertainty estimation.
     """
 
-    def __init__(self,
-                 hidden_sizes: tuple[int, ...] = (256, 128),
-                 dropout_rate: float = 0.2,
-                 n_dropout_samples: int = 100,
-                 activation: str = 'relu',
-                 batch_norm: bool = False,
-                 **kwargs):
+    def __init__(
+        self,
+        hidden_sizes: tuple[int, ...] = (256, 128),
+        dropout_rate: float = 0.2,
+        n_dropout_samples: int = 100,
+        activation: str = 'relu',
+        batch_norm: bool = False,
+        **kwargs,
+    ):
         """Initialize Monte Carlo Dropout learner.
 
         Args:
@@ -56,7 +58,7 @@ class MCDropoutLearner(TorchLearner):
             'relu': nn.ReLU,
             'tanh': nn.Tanh,
             'gelu': nn.GELU,
-            'leaky_relu': nn.LeakyReLU
+            'leaky_relu': nn.LeakyReLU,
         }.get(activation, nn.ReLU)
 
     def _create_model(self, input_size: int) -> nn.Module:
@@ -107,7 +109,9 @@ class MCDropoutLearner(TorchLearner):
         for module in model.modules():
             if isinstance(module, nn.Linear):
                 if self.activation == 'relu':
-                    nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
+                    nn.init.kaiming_normal_(
+                        module.weight, mode='fan_in', nonlinearity='relu'
+                    )
                 else:
                     nn.init.xavier_normal_(module.weight)
 
@@ -133,8 +137,8 @@ class MCDropoutLearner(TorchLearner):
         """
         if not self.is_trained:
             raise LearnerError(
-                f"{self.get_name()} must be trained before prediction. "
-                f"Call train() with labeled data first."
+                f'{self.get_name()} must be trained before prediction. '
+                f'Call train() with labeled data first.'
             )
 
         try:
@@ -163,6 +167,10 @@ class MCDropoutLearner(TorchLearner):
 
             predictions_array = np.array(predictions_list)
             mean_predictions = np.mean(predictions_array, axis=0)
+            # ddof=0 (NumPy/BoTorch convention); biased ~18% low at K=3.
+            # Switch to ddof=1 if downstream consumers need unbiased sigma.
+            # Epistemic-only variance (Gal & Ghahramani 2016 minus tau^-1).
+            # Acceptable for AL selection; not calibrated absolute uncertainty.
             uncertainties = np.std(predictions_array, axis=0)
 
             if np.isscalar(mean_predictions):
@@ -174,16 +182,18 @@ class MCDropoutLearner(TorchLearner):
                 mean_predictions, uncertainties
             )
 
-            logger.debug(f"Predicted {len(mean_predictions)} samples with {self.get_name()} "
-                        f"using {self.n_dropout_samples} MC samples")
+            logger.debug(
+                f'Predicted {len(mean_predictions)} samples with {self.get_name()} '
+                f'using {self.n_dropout_samples} MC samples'
+            )
 
             return mean_predictions, uncertainties
 
         except (ValueError, RuntimeError, TypeError) as e:
-            logger.error(f"Failed to predict with {self.get_name()}: {e}")
+            logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
-                f"Prediction failed for {self.get_name()} on {len(features)} samples: {e}. "
-                f"Check that the input features have the same shape as training features."
+                f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}. '
+                f'Check that the input features have the same shape as training features.'
             ) from e
 
     def supports_uncertainty(self) -> bool:
@@ -193,4 +203,4 @@ class MCDropoutLearner(TorchLearner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         hidden_str = '-'.join(map(str, self.hidden_sizes))
-        return f"MCDropout({hidden_str},samples={self.n_dropout_samples},dropout={self.dropout_rate})"
+        return f'MCDropout({hidden_str},samples={self.n_dropout_samples},dropout={self.dropout_rate})'

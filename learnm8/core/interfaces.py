@@ -181,50 +181,6 @@ class Learner(ABC):
         }
 
 
-class AcquisitionFunction(ABC):
-    """Base class for compound selection strategies.
-
-    Acquisition functions determine which compounds to select for labeling
-    in each active learning cycle based on model predictions and optionally
-    uncertainty estimates.
-    """
-
-    @abstractmethod
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
-        """
-        Select compounds for labeling.
-
-        Args:
-            compounds: Polars DataFrame with 'ID', 'SMILES', 'prediction' columns
-                      May also contain 'uncertainty' column if available
-            n_select: Number of compounds to select
-
-        Returns:
-            Polars DataFrame subset with selected compounds
-
-        Raises:
-            ValueError: If required columns are missing or n_select is invalid
-            RuntimeError: If selection fails
-        """
-        pass
-
-    def requires_uncertainty(self) -> bool:
-        """Return True if this acquisition function requires uncertainty estimates.
-
-        Returns:
-            Boolean indicating if uncertainty column is required
-        """
-        return False
-
-    def get_name(self) -> str:
-        """Return a descriptive name for this acquisition function.
-
-        Returns:
-            String identifier for the acquisition function
-        """
-        return self.__class__.__name__
-
-
 class Featurizer(ABC):
     """Base class for all molecular featurizers.
 

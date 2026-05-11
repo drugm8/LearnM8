@@ -286,3 +286,6 @@ class TestMLPLearner:
         learner.train(features_1d.reshape(-1, 1), targets)
         predictions, _ = learner.predict(features_1d.reshape(-1, 1))
         assert len(predictions) == 10
+
+    def test_preferred_feature_dtype_is_float32(self, learner):
+        assert learner.preferred_feature_dtype() == 'float32'

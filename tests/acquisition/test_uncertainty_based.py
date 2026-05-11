@@ -100,7 +100,10 @@ class TestUncertaintyBasedIntegration:
             pl.lit(float('nan')).alias('uncertainty')
         )
 
-        with pytest.raises((ValueError, RuntimeError)):
+        # Feature 019: NaN at acquisition layer hits the secondary-guard
+        # LearnerError; canonical fail-fast lives in cycle.py.
+        from learnm8.exceptions import LearnerError
+        with pytest.raises((ValueError, RuntimeError, LearnerError)):
             acq.select(compounds, n_select=5)
 
 
