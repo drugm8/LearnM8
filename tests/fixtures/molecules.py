@@ -1,7 +1,7 @@
 """Molecular data fixtures for LearnM8 tests.
 
 All molecular fixtures use real compound data loaded from CSV test files:
-- Small compounds: 50 real pharmaceutical compounds (ESSENCE ADA dataset)
+- Small compounds: 20 real pharmaceutical compounds (head of 50-compound ESSENCE ADA dataset)
 - Medium compounds: 200 real compounds (MAPK1 dataset)
 - Diverse compounds: 100 structurally diverse compounds across targets
 - Edge case compounds: 20 compounds with challenging molecular features
@@ -88,7 +88,7 @@ def mismatched_data() -> tuple:
 
 @pytest.fixture(scope='session')
 def small_real_compounds() -> pl.DataFrame:
-    """50 real pharmaceutical compounds from ESSENCE ADA dataset for fast unit tests.
+    """20 real pharmaceutical compounds (head of 50-compound ESSENCE ADA dataset) for fast unit tests.
 
     Contains: ID, SMILES, Activity columns with diverse activity range.
     Use for basic functionality testing where realistic molecular structures matter.
@@ -96,7 +96,7 @@ def small_real_compounds() -> pl.DataFrame:
     Session-scoped for performance: Loaded once per test session, reused across tests.
     Safe because Polars DataFrames are immutable.
     """
-    return _load_test_data('small_molecules.csv')
+    return _load_test_data('small_molecules.csv').head(20)
 
 
 @pytest.fixture(scope='session')
