@@ -49,9 +49,10 @@ from __future__ import annotations
 import inspect
 import logging
 import time
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 import polars as pl
 
@@ -62,10 +63,10 @@ from learnm8.core.initialization import (
     select_initial_batch,
 )
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
-from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
+from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.learners import (
     DecisionTreeLearner,
