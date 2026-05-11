@@ -454,6 +454,32 @@ class TestPredictWithBatching:
         ):
             predict_with_batching(pool, learner, "morgan", tmp_path)
 
+    def test_uncertainty_misalignment_raises_learner_error(self, tmp_path):
+        n = 40
+        pool = self._make_pool(n)
+        learner = self._make_learner(supports_uncertainty=True)
+
+        call_idx = [0]
+
+        def misaligned_predict(features):
+            call_idx[0] += 1
+            batch_n = len(features)
+            if call_idx[0] == 1:
+                return np.ones(batch_n), None
+            return np.ones(batch_n), np.ones(batch_n)
+
+        learner.predict.side_effect = misaligned_predict
+
+        small_memory = int(2048 * 8 * 1.3 * 12)
+
+        with (
+            patch("learnm8.core.batching.get_available_memory", return_value=small_memory),
+            patch("learnm8.core.batching.extract_features",
+                  side_effect=lambda smiles, *a, **kw: np.ones((len(smiles), 2048))),
+            pytest.raises(LearnerError, match="uncertain.*None"),
+        ):
+            predict_with_batching(pool, learner, "morgan", tmp_path)
+
     def test_info_logging_emitted(self, tmp_path):
         n = 10
         pool = self._make_pool(n)

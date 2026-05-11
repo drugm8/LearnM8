@@ -406,7 +406,19 @@ def predict_with_batching(
 
         all_predictions.append(chunk_preds)
         all_valid_ids.extend(chunk_df["ID"].to_list())
-        if has_uncertainty and chunk_uncerts is not None:
+        if has_uncertainty:
+            if chunk_uncerts is None:
+                raise LearnerError(
+                    f"Chunk {_chunk_idx}: learner declared supports_uncertainty()=True "
+                    f"but returned None uncertainties. Every chunk must return non-None "
+                    f"uncertainties of equal length to predictions."
+                )
+            if len(chunk_uncerts) != len(chunk_preds):
+                raise LearnerError(
+                    f"Chunk {_chunk_idx}: uncertainty length {len(chunk_uncerts)} "
+                    f"mismatches prediction length {len(chunk_preds)}. "
+                    f"Both arrays must have the same number of rows."
+                )
             all_uncertainties.append(chunk_uncerts)
 
     predictions = (
