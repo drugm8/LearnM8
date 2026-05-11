@@ -273,7 +273,8 @@ class EnsembleLearner(Learner):
             Uncertainty estimates
         """
         if self.uncertainty_method == 'std':
-            # Standard deviation across models
+            # ddof=0 (NumPy/BoTorch convention); biased ~18% low at K=3.
+            # Switch to ddof=1 if downstream consumers need unbiased σ.
             return np.std(predictions_array, axis=0)
 
         elif self.uncertainty_method == 'mad':

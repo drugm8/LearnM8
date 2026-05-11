@@ -163,6 +163,10 @@ class MCDropoutLearner(TorchLearner):
 
             predictions_array = np.array(predictions_list)
             mean_predictions = np.mean(predictions_array, axis=0)
+            # ddof=0 (NumPy/BoTorch convention); biased ~18% low at K=3.
+            # Switch to ddof=1 if downstream consumers need unbiased σ.
+            # Epistemic-only variance (Gal & Ghahramani 2016 minus τ⁻¹).
+            # Acceptable for AL selection; not calibrated absolute uncertainty.
             uncertainties = np.std(predictions_array, axis=0)
 
             if np.isscalar(mean_predictions):
