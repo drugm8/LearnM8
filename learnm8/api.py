@@ -289,6 +289,49 @@ def _create_learner(
         ) from e
 
 
+def _validate_pool(
+    compound_pool: pl.DataFrame,
+    oracle: Oracle,
+    target_col: str,
+    n_jobs: int,
+) -> Any:
+    validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
+
+    oracle_ids = oracle.known_ids()
+    if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
+        valid_pool = validation_result.valid_compounds
+        keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
+        n_unmeasurable = int((~keep_mask).sum())
+        if n_unmeasurable > 0:
+            unmeasurable = valid_pool.filter(~keep_mask)
+            kept = valid_pool.filter(keep_mask)
+            reason = "Not present in oracle ground truth (missing target value)"
+            for cid in unmeasurable['ID'].to_list():
+                validation_result.validation_errors[str(cid)] = reason
+            if len(validation_result.invalid_compounds) > 0:
+                validation_result.invalid_compounds = pl.concat(
+                    [validation_result.invalid_compounds, unmeasurable], how='vertical'
+                )
+            else:
+                validation_result.invalid_compounds = unmeasurable
+            validation_result.valid_compounds = kept
+            logger.warning(
+                f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
+                f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
+                f"Pool size: {len(kept)} measurable compounds."
+            )
+
+        if (
+            target_col in validation_result.valid_compounds.columns
+            and validation_result.valid_compounds[target_col].dtype == pl.Utf8
+        ):
+            validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
+                pl.col(target_col).cast(pl.Float64, strict=False)
+            )
+
+    return validation_result
+
+
 def _calculate_aggregate_metrics(
     all_metrics: list[dict[str, Any]],
     compounds_df: pl.DataFrame,
@@ -761,7 +804,7 @@ def run_active_learning(
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 1: Validating compound pool")
         logger.info("═══════════════════════════════════════════════════════════════")
-        validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
+        validation_result = _validate_pool(compound_pool, oracle, target_col, n_jobs)
 
         if len(validation_result.valid_compounds) == 0:
             logger.error(
@@ -777,38 +820,6 @@ def run_active_learning(
 
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
-
-        oracle_ids = oracle.known_ids()
-        if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
-            valid_pool = validation_result.valid_compounds
-            keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
-            n_unmeasurable = int((~keep_mask).sum())
-            if n_unmeasurable > 0:
-                unmeasurable = valid_pool.filter(~keep_mask)
-                kept = valid_pool.filter(keep_mask)
-                reason = "Not present in oracle ground truth (missing target value)"
-                for cid in unmeasurable['ID'].to_list():
-                    validation_result.validation_errors[str(cid)] = reason
-                if len(validation_result.invalid_compounds) > 0:
-                    validation_result.invalid_compounds = pl.concat(
-                        [validation_result.invalid_compounds, unmeasurable], how='vertical'
-                    )
-                else:
-                    validation_result.invalid_compounds = unmeasurable
-                validation_result.valid_compounds = kept
-                logger.warning(
-                    f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
-                    f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
-                    f"Pool size: {len(kept)} measurable compounds."
-                )
-
-            if (
-                target_col in validation_result.valid_compounds.columns
-                and validation_result.valid_compounds[target_col].dtype == pl.Utf8
-            ):
-                validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
-                    pl.col(target_col).cast(pl.Float64, strict=False)
-                )
 
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
