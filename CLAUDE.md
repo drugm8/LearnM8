@@ -166,7 +166,7 @@ LearnM8Error(Exception)
 - **Run mode** (Python oracle): basic metrics only. Auto-detected, overridable.
 
 ### Feature Caching
-HDF5-based v2 schema (bit-packed), 100x speedup on reuse. Persists across sessions. Use `cache_dir=Path('.shared_cache')`.
+HDF5-based v3 schema (bit-packed, 128-bit BLAKE2b cache keys), 100x speedup on reuse. Persists across sessions. Use `cache_dir=Path('.shared_cache')`.
 
 **Storage dtypes** (`Featurizer.get_storage_dtype()`):
 
@@ -175,7 +175,7 @@ HDF5-based v2 schema (bit-packed), 100x speedup on reuse. Persists across sessio
 - `uint8` — small-range integer counts (e.g. ERG, MQNs sub-ranges)
 - `csr_uint16` — sparse integer count vectors stored as CSR
 
-**v2 schema** (single 2-D `features` dataset per featurizer + side `hash_index`/`row_index`): Blosc-LZ4 level 5 + byte-shuffle, sorted-index reads, 16 MiB chunk cache, `fcntl.flock` concurrency, fail-fast on corruption with 1 transient retry. `schema_version=2` root attr; non-v2 files renamed to `<name>.h5.v<N>.bak` via `os.replace`.
+**v3 schema** (single 2-D `features` dataset per featurizer + side `hash_index`/`row_index`): Blosc-LZ4 level 5 + byte-shuffle, sorted-index reads, 16 MiB chunk cache, `fcntl.flock` concurrency, fail-fast on corruption. `schema_version=3` root attr. `/hash_index` dtype `S16` (128-bit BLAKE2b digests, sorted lex ascending). Strong-ref `OrderedDict` LRU (cap=`DEFAULT_HASH_INDEX_LRU_MAX=4`, `threading.Lock`-guarded) keyed on (path, mtime_ns, write_epoch). v2 caches auto-migrate to `<name>.h5.hash64.bak` on first open; refused with `PersistenceError` if `.bak` already exists. Unknown / future schemas renamed to `<name>.h5.v<N>.bak`. **NFS / Lustre / GlusterFS NOT supported** (`fcntl.flock` has undefined semantics on shared filesystems).
 
 ### Prediction Persistence
 
@@ -268,6 +268,7 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 
 ## Recent Changes
 
+- **020 Cache integrity at 100M scale** — bumped HDF5 cache `schema_version` from 2 to 3. `/hash_index` widened from `uint64` to `S16` (128-bit BLAKE2b digests), collision probability at N=10**8 drops from ~2.7e-4 to ~1.5e-23. Replaced the prior weakref hash_index cache with a strong-ref `OrderedDict` LRU (`DEFAULT_HASH_INDEX_LRU_MAX=4`, ~6.4 GB headroom at 100M) guarded by `threading.Lock`; entries auto-evict on `write_epoch` bump or mtime change. v2 caches auto-migrate to `<name>.h5.hash64.bak` on first open under `LOCK_EX`; an existing `.bak` raises `PersistenceError` (no data clobber). 3D featurizers (whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape) gain `random_state: int = 0xf00d` (`DEFAULT_3D_RANDOM_STATE`, RDKit ETKDG convention) forwarded to `ConformerGenerator` with try/except fallback for scikit-fingerprints<1.18.0; recorded in `get_config()` only when `requires_3d()` is True so cache keys disambiguate different seeds without invalidating 2D caches. Single-node single-filesystem only — NFS/Lustre/GlusterFS NOT supported.
 - **017 Count-FP storage routing + uint8 tree inputs** — fixed silent count-fingerprint corruption: `MorganFeaturizer`, `MACCSFeaturizer`, `AtomPairFeaturizer`, `TopologicalTorsionFeaturizer` now flip `feature_type` to `'continuous'` and route to `csr_uint16` (Morgan/AtomPair/TopTorsion) or `uint8` (MACCS) storage when `count=True`. **Severity callout**: any user previously running `count=True` had `np.packbits` truncate every nonzero count to a single bit; legacy `packed_uint8` cache files are auto-migrated to `<name>.h5.dim*.bak` on first open with the new code. Added `Learner.preferred_feature_dtype()` (default `'float32'`); tree learners (RF, XGB, DT, AdvancedRF) override to `'uint8'` for binary features and `extract_features(..., preferred_dtype='uint8')` skips the float32 inflation — 4× working-set reduction on a 2048-bit Morgan matrix. `_preprocess_features` now has a uint8 fast path that skips `np.isnan`/`np.nan_to_num` and preserves the compact dtype through the zero-variance mask. CSR / float32 storage transparently fall back to float32.
 - **016 Storage dtype expansion** (merged) — added `uint8` and `csr_uint16` storage paths to v2 cache for small-range integer counts and sparse integer vectors. `fingerprint_used` label appends `_uint8` / `_csruint16` dtype tokens. ERG, MQNs, pharmacophore, physiochemical featurizers updated.
 - **015 Bit-packed cache v2** (merged) — rewrote `learnm8/features/cache.py` from v1 (per-molecule float32 dataset) to v2 (single 2-D `features` dataset per featurizer + side `hash_index`/`row_index` + `np.packbits` for binary). Blosc-LZ4 level 5 + byte-shuffle, `fcntl.flock` concurrency, fail-fast on corruption with 1 transient retry, `schema_version=2` root attr, `os.replace` to `.bak` for non-v2 files. Added `Featurizer.get_storage_dtype()` on the abstract interface. Public `extract_features(...)` signature unchanged. Performance: 1M-row Morgan-2048 warm read <5 s, 100M-row open <1 s, ≤30 GB on-disk at 100M.

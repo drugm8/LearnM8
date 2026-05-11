@@ -1,8 +1,8 @@
-import pytest
-import numpy as np
-from pathlib import Path
 
-from learnm8.features.extraction import extract_features, _get_optimal_n_jobs
+import numpy as np
+import pytest
+
+from learnm8.features.extraction import _get_optimal_n_jobs, extract_features
 
 
 @pytest.mark.integration

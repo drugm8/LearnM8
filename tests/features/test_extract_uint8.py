@@ -9,13 +9,13 @@ For featurizers whose storage is ``float32`` (e.g. mordred) or ``csr_uint16``
 
 from __future__ import annotations
 
-from learnm8.features import create_featurizer
 import logging
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
 
 SMILES = ['CCO', 'CCC', 'CCN', 'CCCl', 'c1ccccc1', 'CCOC', 'CCOCC', 'CCS']

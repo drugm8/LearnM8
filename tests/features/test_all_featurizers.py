@@ -1,10 +1,9 @@
 import pytest
-import numpy as np
+
 from learnm8.features import (
-    create_featurizer,
-    FEATURIZER_REGISTRY,
     FEATURIZERS_2D,
     FEATURIZERS_3D,
+    create_featurizer,
 )
 
 

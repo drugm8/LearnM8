@@ -1,8 +1,10 @@
 """Test Featurizer interface compliance and base functionality."""
 
-import pytest
-import numpy as np
 from abc import ABC
+
+import numpy as np
+import pytest
+
 from learnm8.core.interfaces import Featurizer
 
 
