@@ -45,7 +45,14 @@ class SkfpFeaturizer(Featurizer):
         fingerprint_instance,
         auto_generate_conformers: bool = True,
         conformer_params: dict[str, Any] | None = None,
-        n_jobs: int = -1
+        n_jobs: int = -1,
+        verbose: int = 0,
+        *,
+        storage_dtype: str,
+        feature_type: str,
+        fingerprint_name: str,
+        fingerprint_params: dict[str, Any],
+        description: str | None = None,
     ):
         """Initialize scikit-fingerprints wrapper.
 
@@ -53,10 +60,18 @@ class SkfpFeaturizer(Featurizer):
             fingerprint_instance: Initialized scikit-fingerprints fingerprint
                                 object (e.g., ECFPFingerprint(radius=3))
             auto_generate_conformers: Auto-generate conformers for 3D
-                                     fingerprints (default: True)
+                                      fingerprints (default: True)
             conformer_params: Optional dict of parameters for ConformerGenerator
                             (e.g., {'num_conformers': 1, 'optimize_force_field': 'UFF'})
             n_jobs: Number of parallel jobs (-1 for all cores)
+            verbose: Verbosity level for scikit-fingerprints logging (default: 0)
+            storage_dtype: Storage dtype for feature cache ('packed_uint8',
+                          'float32', 'csr_uint16', etc.)
+            feature_type: Feature type identifier ('binary' or 'continuous')
+            fingerprint_name: Canonical name for this fingerprint (e.g., 'morgan')
+            fingerprint_params: Parameters used to construct the fingerprint
+                               instance, for cache key generation
+            description: Human-readable description for CLI display
 
         Note:
             If fingerprint.requires_conformers=True and
@@ -67,13 +82,18 @@ class SkfpFeaturizer(Featurizer):
         self.auto_generate_conformers = auto_generate_conformers
         self.conformer_params = conformer_params or {}
         self.n_jobs = n_jobs
+        self.verbose = verbose
+        self._storage_dtype = storage_dtype
+        self._feature_type = feature_type
+        self._fingerprint_name = fingerprint_name
+        self._fingerprint_params = fingerprint_params
+        self._description = description
 
         self.mol_from_smiles = MolFromSmilesTransformer()
 
         if self.requires_3d() and auto_generate_conformers:
             self.conformer_gen = ConformerGenerator(
-                n_jobs=n_jobs,
-                **self.conformer_params
+                n_jobs=n_jobs, **self.conformer_params
             )
         else:
             self.conformer_gen = None
@@ -99,10 +119,10 @@ class SkfpFeaturizer(Featurizer):
         for smiles in smiles_list:
             if len(smiles) > MAX_SMILES_LENGTH:
                 raise FeatureExtractionError(
-                    f"SMILES string length {len(smiles)} exceeds maximum allowed "
-                    f"length of {MAX_SMILES_LENGTH} characters. "
-                    f"This limit exists to prevent excessive memory usage. "
-                    f"Check your input data for unusually long SMILES strings."
+                    f'SMILES string length {len(smiles)} exceeds maximum allowed '
+                    f'length of {MAX_SMILES_LENGTH} characters. '
+                    f'This limit exists to prevent excessive memory usage. '
+                    f'Check your input data for unusually long SMILES strings.'
                 )
 
         if len(smiles_list) == 0:
@@ -114,17 +134,17 @@ class SkfpFeaturizer(Featurizer):
             if self.requires_3d():
                 if self.conformer_gen is None:
                     raise FeatureExtractionError(
-                        f"{self.get_name()} requires 3D conformers but conformer generation "
-                        f"is disabled (auto_generate_conformers=False). "
-                        f"Set auto_generate_conformers=True to enable automatic conformer "
-                        f"generation, or provide molecules with pre-computed conformers. "
+                        f'{self.get_name()} requires 3D conformers but conformer generation '
+                        f'is disabled (auto_generate_conformers=False). '
+                        f'Set auto_generate_conformers=True to enable automatic conformer '
+                        f'generation, or provide molecules with pre-computed conformers. '
                         f"Alternatively, use a 2D featurizer (e.g., 'morgan', 'ecfp') "
-                        f"that does not require conformers."
+                        f'that does not require conformers.'
                     )
 
                 logger.debug(
-                    f"Generating conformers for {len(smiles_list)} molecules "
-                    f"(3D fingerprint: {self.get_name()})"
+                    f'Generating conformers for {len(smiles_list)} molecules '
+                    f'(3D fingerprint: {self.get_name()})'
                 )
                 mols = self.conformer_gen.transform(mols)
 
@@ -133,27 +153,25 @@ class SkfpFeaturizer(Featurizer):
         except FeatureExtractionError:
             raise
         except (ValueError, RuntimeError, TypeError) as e:
-            logger.error(f"Feature extraction failed: {e}")
+            logger.error(f'Feature extraction failed: {e}')
             raise FeatureExtractionError(
-                f"Feature extraction failed for {self.get_name()} on "
-                f"{len(smiles_list)} compounds: {e}. "
+                f'Feature extraction failed for {self.get_name()} on '
+                f'{len(smiles_list)} compounds: {e}. '
                 f"Check SMILES validity with 'learnm8 validate your_file.csv'. "
-                f"If using a 3D featurizer, check conformer generation settings."
+                f'If using a 3D featurizer, check conformer generation settings.'
             ) from None
 
         if features is None or len(features) == 0:
             raise FeatureExtractionError(
-                f"No valid features generated by {self.get_name()} for "
-                f"{len(smiles_list)} input compounds. All SMILES may be invalid. "
+                f'No valid features generated by {self.get_name()} for '
+                f'{len(smiles_list)} input compounds. All SMILES may be invalid. '
                 f"Run 'learnm8 validate your_file.csv' to check SMILES validity."
             )
 
         features_array = np.array(features, dtype=np.float32)
 
         if np.any(~np.isfinite(features_array)):
-            logger.warning(
-                f"Non-finite values detected in {self.get_name()} features"
-            )
+            logger.warning(f'Non-finite values detected in {self.get_name()} features')
 
         return features_array
 
@@ -186,23 +204,24 @@ class SkfpFeaturizer(Featurizer):
                 return params['n_features']
             else:
                 raise AttributeError(
-                    f"Cannot determine feature dimension for {self.get_name()}. "
-                    f"The fingerprint object lacks any of the expected attributes: "
-                    f"n_features_out, n_features_out_, fp_size, or n_features. "
-                    f"Ensure the fingerprint class is a valid scikit-fingerprints object."
+                    f'Cannot determine feature dimension for {self.get_name()}. '
+                    f'The fingerprint object lacks any of the expected attributes: '
+                    f'n_features_out, n_features_out_, fp_size, or n_features. '
+                    f'Ensure the fingerprint class is a valid scikit-fingerprints object.'
                 )
 
     @property
     def feature_type(self) -> str:
-        return 'binary'
+        return self._feature_type
 
     def get_storage_dtype(self) -> str:
-        # WHY: SkfpFeaturizer subclasses set feature_type at class level
-        # (binary fingerprints vs continuous descriptors). Routing through
-        # this attribute means binary featurizers get packed storage automatically;
-        # custom non-skfp Featurizer subclasses producing binary output must
-        # override get_storage_dtype() directly to opt in.
-        return 'packed_uint8' if self.feature_type == 'binary' else 'float32'
+        return self._storage_dtype
+
+    def get_description(self) -> str:
+        return self._description if self._description else self.get_name()
+
+    def get_name(self) -> str:
+        return self._fingerprint_name
 
     def requires_3d(self) -> bool:
         """Check if fingerprint requires 3D conformers.
@@ -251,4 +270,5 @@ class SkfpFeaturizer(Featurizer):
             List of booleans indicating validity of each SMILES
         """
         from rdkit import Chem
+
         return [Chem.MolFromSmiles(s) is not None for s in smiles_list]
