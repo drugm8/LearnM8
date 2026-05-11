@@ -332,6 +332,49 @@ def _validate_pool(
     return validation_result
 
 
+def _build_cycle_schedule(
+    cycles: list[CycleConfig] | None,
+    strategy: str,
+    n_cycles: int,
+    batch_fraction: float,
+    initial_strategy: str,
+    acquisition_params: dict | None,
+    pruning_strategy: str | None,
+    pruning_params: dict | None,
+    pruning_fraction: float | None,
+) -> list[CycleConfig]:
+    if pruning_fraction is not None or pruning_strategy is not None:
+        if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
+            raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
+
+        if pruning_strategy is None:
+            pruning_strategy = 'score'
+        if pruning_params is None:
+            pruning_params = {}
+
+        if pruning_fraction is not None:
+            pruning_params['pruning_fraction'] = pruning_fraction
+
+        fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
+        logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
+
+    cycle_schedule = parse_cycle_schedule(
+        cycles=cycles,
+        strategy=strategy,
+        n_cycles=n_cycles,
+        batch_fraction=batch_fraction,
+        initial_strategy=initial_strategy,
+        acquisition_params=acquisition_params,
+        pruning_strategy=pruning_strategy,
+        pruning_params=pruning_params,
+    )
+
+    if len(cycle_schedule) == 0:
+        raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
+
+    return cycle_schedule
+
+
 def _initialize_active_learning(
     validation_result: Any,
     oracle: Oracle,
@@ -887,22 +930,7 @@ def run_active_learning(
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
 
-        if pruning_fraction is not None or pruning_strategy is not None:
-            if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
-                raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
-
-            if pruning_strategy is None:
-                pruning_strategy = 'score'
-            if pruning_params is None:
-                pruning_params = {}
-
-            if pruning_fraction is not None:
-                pruning_params['pruning_fraction'] = pruning_fraction
-
-            fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
-            logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
-
-        cycle_schedule = parse_cycle_schedule(
+        cycle_schedule = _build_cycle_schedule(
             cycles=cycles,
             strategy=strategy,
             n_cycles=n_cycles,
@@ -911,10 +939,8 @@ def run_active_learning(
             acquisition_params=acquisition_params,
             pruning_strategy=pruning_strategy,
             pruning_params=pruning_params,
+            pruning_fraction=pruning_fraction,
         )
-
-        if len(cycle_schedule) == 0:
-            raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
 
         logger.info("═══════════════════════════════════════════════════════════════")
         logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
