@@ -56,7 +56,7 @@ def _extract_features_with_featurizer(
     smiles_list: list[str],
     featurizer: Featurizer,
     n_jobs: int = -1,
-    show_progress: bool = False
+    show_progress: bool = False,
 ) -> np.ndarray:
     """
     Internal function for feature extraction using Featurizer instance.
@@ -75,11 +75,11 @@ def _extract_features_with_featurizer(
 
     if len(smiles_list) > 1000:
         logger.info(
-            f"Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds..."
+            f'Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds...'
         )
     else:
         logger.debug(
-            f"Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds"
+            f'Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds'
         )
 
     try:
@@ -88,13 +88,13 @@ def _extract_features_with_featurizer(
         raise
     except (ValueError, RuntimeError, TypeError) as e:
         raise FeatureExtractionError(
-            f"Feature extraction failed for {featurizer.get_name()} on "
-            f"{len(smiles_list)} compounds: {e}. "
+            f'Feature extraction failed for {featurizer.get_name()} on '
+            f'{len(smiles_list)} compounds: {e}. '
             f"Check SMILES validity with 'learnm8 validate your_file.csv'."
         ) from None
 
     logger.debug(
-        f"Feature matrix shape: {features_array.shape}, dtype: {features_array.dtype}"
+        f'Feature matrix shape: {features_array.shape}, dtype: {features_array.dtype}'
     )
     return features_array
 
@@ -144,37 +144,39 @@ def extract_features(
     """
     if len(smiles_list) == 0:
         if isinstance(featurizer, str):
-            from learnm8.features import FEATURIZER_REGISTRY
+            from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
+
             if featurizer not in FEATURIZER_REGISTRY:
                 from learnm8.features import list_available_featurizers
+
                 available = list_available_featurizers()
                 all_featurizers = ', '.join(sorted(available['all']))
                 raise ValueError(
                     f"Unknown featurizer: '{featurizer}'. "
-                    f"Available featurizers: {all_featurizers}. "
+                    f'Available featurizers: {all_featurizers}. '
                     f"Run 'learnm8 list featurizers' to see all options."
                 )
-            featurizer_obj = FEATURIZER_REGISTRY[featurizer](n_jobs=1)
+            featurizer_obj = create_featurizer(featurizer, n_jobs=1)
         else:
             featurizer_obj = featurizer
         dim = featurizer_obj.get_dimension()
         return np.empty((0, dim), dtype=np.float32)
 
     if isinstance(featurizer, str):
-        from learnm8.features import FEATURIZER_REGISTRY
+        from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 
         if featurizer not in FEATURIZER_REGISTRY:
             from learnm8.features import list_available_featurizers
+
             available = list_available_featurizers()
             all_featurizers = ', '.join(sorted(available['all']))
             raise ValueError(
                 f"Unknown featurizer: '{featurizer}'. "
-                f"Available featurizers: {all_featurizers}. "
+                f'Available featurizers: {all_featurizers}. '
                 f"Run 'learnm8 list featurizers' to see all options."
             )
 
-        featurizer_class = FEATURIZER_REGISTRY[featurizer]
-        featurizer_obj = featurizer_class(n_jobs=n_jobs)
+        featurizer_obj = create_featurizer(featurizer, n_jobs=n_jobs)
 
     elif isinstance(featurizer, Featurizer):
         featurizer_obj = featurizer
@@ -182,8 +184,8 @@ def extract_features(
     else:
         raise TypeError(
             f"featurizer must be a string name (e.g., 'morgan') or a Featurizer instance, "
-            f"got {type(featurizer).__name__}. "
-            f"Use a string for built-in featurizers or pass a custom Featurizer object."
+            f'got {type(featurizer).__name__}. '
+            f'Use a string for built-in featurizers or pass a custom Featurizer object.'
         )
 
     return _extract_features_with_featurizer(

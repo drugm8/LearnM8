@@ -8,13 +8,13 @@ import h5py
 import numpy as np
 import pytest
 
-from learnm8.features import MACCSFeaturizer, MordredFeaturizer, MorganFeaturizer
+from learnm8.features import create_featurizer
 from learnm8.features.extraction import extract_features
 
 
 @pytest.mark.unit
 def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     cold = extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
 
     assert cold.shape == (3, 2048)
@@ -41,7 +41,7 @@ def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_maccs_166_non_multiple_of_8_roundtrip(tmp_path: Path):
-    feat = MACCSFeaturizer(n_jobs=1)
+    feat = create_featurizer('maccs', n_jobs=1)
     cold = extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
 
     bit_count = feat.get_dimension()
@@ -60,7 +60,7 @@ def test_maccs_166_non_multiple_of_8_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_mordred_float32_roundtrip(tmp_path: Path):
-    feat = MordredFeaturizer(n_jobs=1)
+    feat = create_featurizer('mordred', n_jobs=1)
     cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
 
     assert cold.dtype == np.float32
@@ -76,7 +76,7 @@ def test_mordred_float32_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_mixed_hit_miss_preserves_order(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
     direct = feat.transform(['CCO', 'CCCC', 'CCC'])
 
@@ -86,7 +86,7 @@ def test_mixed_hit_miss_preserves_order(tmp_path: Path):
 
 @pytest.mark.unit
 def test_single_smiles_roundtrip(tmp_path: Path):
-    feat = MorganFeaturizer(radius=2, fp_size=2048, n_jobs=1)
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
     warm = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert np.array_equal(cold, warm)

@@ -882,8 +882,8 @@ def run_active_learning(
                         f"Valid options: {featurizer_options}. "
                         f"Use 'learnm8 list featurizers' to see all available featurizers."
                     )
-                featurizer_class = FEATURIZER_REGISTRY[featurizer]
-                featurizer_obj = featurizer_class(n_jobs=n_jobs)
+                from learnm8.features import create_featurizer
+                featurizer_obj = create_featurizer(featurizer, n_jobs=n_jobs)
                 logger.debug(f"Instantiated featurizer: {featurizer_obj.get_name()}")
             else:
                 from learnm8.core.interfaces import Featurizer

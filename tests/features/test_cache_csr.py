@@ -43,7 +43,9 @@ class _FakeCsrFeaturizer(Featurizer):
         return 'csr_uint16'
 
 
-def _sparse_binary_matrix(n_rows: int, dim: int, density: float, seed: int = 0) -> np.ndarray:
+def _sparse_binary_matrix(
+    n_rows: int, dim: int, density: float, seed: int = 0
+) -> np.ndarray:
     rng = np.random.default_rng(seed)
     out = (rng.random((n_rows, dim)) < density).astype(np.float32)
     return out
@@ -53,7 +55,7 @@ def _sparse_binary_matrix(n_rows: int, dim: int, density: float, seed: int = 0) 
 def test_csr_cold_then_warm_round_trip_bit_exact(tmp_path: Path):
     values = _sparse_binary_matrix(n_rows=10, dim=2048, density=0.015, seed=1)
     feat = _FakeCsrFeaturizer(values, dim=2048, name='fake_csr_round_trip')
-    smiles = [f"CCO{'C' * i}" for i in range(10)]
+    smiles = [f'CCO{"C" * i}' for i in range(10)]
 
     cold = extract_features(smiles, feat, cache_dir=tmp_path)
     warm = extract_features(smiles, feat, cache_dir=tmp_path)
@@ -87,7 +89,7 @@ def test_csr_storage_layout_attr_written(tmp_path: Path):
 def test_csr_density_above_50pct_raises(tmp_path: Path):
     values = _sparse_binary_matrix(n_rows=4, dim=64, density=0.6, seed=3)
     feat = _FakeCsrFeaturizer(values, dim=64, name='fake_csr_density')
-    with pytest.raises(FeatureExtractionError, match=r"density|0\.5|50%"):
+    with pytest.raises(FeatureExtractionError, match=r'density|0\.5|50%'):
         extract_features(['CCO', 'CCC', 'CCN', 'CCCl'], feat, cache_dir=tmp_path)
 
 
@@ -110,13 +112,14 @@ def test_csr_density_check_does_not_corrupt_existing_file(tmp_path: Path):
 
     bad_values = _sparse_binary_matrix(n_rows=2, dim=64, density=0.7, seed=5)
     bad_feat = _FakeCsrFeaturizer(bad_values, dim=64, name='fake_csr_no_corrupt')
-    with pytest.raises(FeatureExtractionError, match=r"density|0\.5|50%"):
+    with pytest.raises(FeatureExtractionError, match=r'density|0\.5|50%'):
         extract_features(['CCBr', 'CCI'], bad_feat, cache_dir=tmp_path)
 
     with h5py.File(cache_file, 'r') as f:
         for key in ('csr_data', 'csr_indices', 'csr_indptr', 'hash_index', 'row_index'):
-            np.testing.assert_array_equal(pre[key], np.asarray(f[key][:]),
-                                           err_msg=f"{key} changed despite raise")
+            np.testing.assert_array_equal(
+                pre[key], np.asarray(f[key][:]), err_msg=f'{key} changed despite raise'
+            )
         assert pre['write_epoch'] == int(f.attrs['write_epoch'])
 
 
@@ -125,7 +128,7 @@ def test_csr_value_above_uint8_raises(tmp_path: Path):
     values = np.zeros((1, 64), dtype=np.float32)
     values[0, 5] = 300.0
     feat = _FakeCsrFeaturizer(values, dim=64, name='fake_csr_overflow')
-    with pytest.raises(FeatureExtractionError, match=r"300|255|out of range|exceeds"):
+    with pytest.raises(FeatureExtractionError, match=r'300|255|out of range|exceeds'):
         extract_features(['CCO'], feat, cache_dir=tmp_path)
 
 
@@ -134,7 +137,7 @@ def test_csr_dim_above_65535_raises_configuration_error(tmp_path: Path):
     values = np.zeros((1, 70_000), dtype=np.float32)
     values[0, 100] = 1.0
     feat = _FakeCsrFeaturizer(values, dim=70_000, name='fake_csr_huge_dim')
-    with pytest.raises(ConfigurationError, match=r"65535|65536|dim|dimension|uint16"):
+    with pytest.raises(ConfigurationError, match=r'65535|65536|dim|dimension|uint16'):
         extract_features(['CCO'], feat, cache_dir=tmp_path)
 
 
@@ -159,7 +162,7 @@ def test_csr_indptr_invariant_holds_after_two_writes(tmp_path: Path):
     assert indptr.shape[0] == n_rows + 1
     assert int(indptr[0]) == 0
     assert int(indptr[-1]) == n_data == n_indices
-    assert np.all(np.diff(indptr.astype(np.int64)) >= 0), "indptr not monotone"
+    assert np.all(np.diff(indptr.astype(np.int64)) >= 0), 'indptr not monotone'
 
 
 @pytest.mark.unit
@@ -184,9 +187,9 @@ def test_csr_caller_order_preserved_with_duplicate_smiles(tmp_path: Path):
 @pytest.mark.unit
 def test_csr_back_compat_dense_v2_file_reads_unchanged(tmp_path: Path):
     """A dense v2 file (no `storage_layout` attr) defaults to `dense`."""
-    from learnm8.features import MorganFeaturizer
+    from learnm8.features import create_featurizer
 
-    feat = MorganFeaturizer(n_jobs=1)
+    feat = create_featurizer('morgan', n_jobs=1)
     cold = extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
 
     cache_file = tmp_path / 'features_morgan.h5'
@@ -214,12 +217,14 @@ def test_csr_100k_pharmacophore_cache_size_under_200mb(tmp_path: Path):
         values[r, cols] = 1.0
 
     feat = _FakeCsrFeaturizer(values, dim=dim, name='perf_csr_pharmacophore_100k')
-    smiles = [f"C{'C' * (i % 200)}O" for i in range(n_rows)]
+    smiles = [f'C{"C" * (i % 200)}O' for i in range(n_rows)]
 
     extract_features(smiles, feat, cache_dir=tmp_path)
     cache_file = tmp_path / 'features_perf_csr_pharmacophore_100k.h5'
     size_mb = cache_file.stat().st_size / (1024 * 1024)
-    assert size_mb <= 200, f"100k pharmacophore CSR cache size {size_mb:.1f} MB > 200 MB"
+    assert size_mb <= 200, (
+        f'100k pharmacophore CSR cache size {size_mb:.1f} MB > 200 MB'
+    )
 
 
 @pytest.mark.slow
@@ -246,7 +251,7 @@ def test_csr_100k_pharmacophore_warm_read_under_two_seconds(tmp_path: Path):
         values[r, cols] = 1.0
 
     feat = _FakeCsrFeaturizer(values, dim=dim, name='perf_csr_pharmacophore_warm')
-    smiles = [f"C{'C' * (i % 200)}O_perf{i}" for i in range(n_rows)]
+    smiles = [f'C{"C" * (i % 200)}O_perf{i}' for i in range(n_rows)]
 
     t_cold0 = time.perf_counter()
     extract_features(smiles, feat, cache_dir=tmp_path)
@@ -258,7 +263,7 @@ def test_csr_100k_pharmacophore_warm_read_under_two_seconds(tmp_path: Path):
     assert warm.shape == (n_rows, dim)
     if warm_elapsed >= 2.0:
         assert warm_elapsed < 0.6 * cold_elapsed, (
-            f"100k pharmacophore warm read took {warm_elapsed:.3f}s "
-            f"(spec target <2s; commodity-hardware fallback gate: <0.6 * cold "
-            f"= {0.6 * cold_elapsed:.3f}s; cold={cold_elapsed:.3f}s)"
+            f'100k pharmacophore warm read took {warm_elapsed:.3f}s '
+            f'(spec target <2s; commodity-hardware fallback gate: <0.6 * cold '
+            f'= {0.6 * cold_elapsed:.3f}s; cold={cold_elapsed:.3f}s)'
         )

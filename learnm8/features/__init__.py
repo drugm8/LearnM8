@@ -1,149 +1,573 @@
 """
 Feature extraction module for molecular fingerprints and descriptors.
 
-This module provides both functional API (extract_features) and class-based API (Featurizer).
-All 43 scikit-fingerprints featurizers available, including 9 3D conformational types.
+This module provides a config-driven factory for all scikit-fingerprints
+featurizers. The ~1,700 LOC of thin wrapper classes have been replaced by a
+single _FEATURIZER_CONFIG dict and a create_featurizer() factory function.
 """
 
-from learnm8.core.interfaces import Featurizer
+from difflib import get_close_matches
+from types import MappingProxyType
+from typing import Any
 
-# Base class
+from skfp.fingerprints import (
+    AtomPairFingerprint,
+    AutocorrFingerprint,
+    AvalonFingerprint,
+    BCUT2DFingerprint,
+    E3FPFingerprint,
+    ECFPFingerprint,
+    ElectroShapeFingerprint,
+    ERGFingerprint,
+    EStateFingerprint,
+    FunctionalGroupsFingerprint,
+    GETAWAYFingerprint,
+    GhoseCrippenFingerprint,
+    KlekotaRothFingerprint,
+    LaggnerFingerprint,
+    LayeredFingerprint,
+    LingoFingerprint,
+    MACCSFingerprint,
+    MAPFingerprint,
+    MHFPFingerprint,
+    MordredFingerprint,
+    MORSEFingerprint,
+    MQNsFingerprint,
+    PatternFingerprint,
+    PharmacophoreFingerprint,
+    PhysiochemicalPropertiesFingerprint,
+    PubChemFingerprint,
+    RDFFingerprint,
+    RDKit2DDescriptorsFingerprint,
+    RDKitFingerprint,
+    SECFPFingerprint,
+    TopologicalTorsionFingerprint,
+    USRCATFingerprint,
+    USRFingerprint,
+    VSAFingerprint,
+    WHIMFingerprint,
+)
+
+from learnm8.exceptions import ConfigurationError
 from learnm8.features.base import SkfpFeaturizer
 from learnm8.features.extraction import extract_features
 
-# 2D featurizers - Topological
-from learnm8.features.skfp_2d.atom_pair import AtomPairFeaturizer
-from learnm8.features.skfp_2d.avalon import AvalonFeaturizer
-from learnm8.features.skfp_2d.bcut2d import BCUT2DFeaturizer
-from learnm8.features.skfp_2d.erg import ERGFeaturizer
-from learnm8.features.skfp_2d.estate import EStateFeaturizer
-from learnm8.features.skfp_2d.functional_groups import FunctionalGroupsFeaturizer
-from learnm8.features.skfp_2d.ghose_crippen import GhoseCrippenFeaturizer
-from learnm8.features.skfp_2d.klekota_roth import KlekotaRothFeaturizer
-from learnm8.features.skfp_2d.laggner import LaggnerFeaturizer
-from learnm8.features.skfp_2d.layered import LayeredFeaturizer
-from learnm8.features.skfp_2d.lingo import LingoFeaturizer
-from learnm8.features.skfp_2d.maccs import MACCSFeaturizer
-
-# 2D featurizers - Hashed
-from learnm8.features.skfp_2d.map4 import MAP4Featurizer
-from learnm8.features.skfp_2d.mhfp import MHFPFeaturizer
-
-# 2D featurizers - Descriptors
-from learnm8.features.skfp_2d.mordred import MordredFeaturizer
-
-# 2D featurizers - Circular and structural keys
-from learnm8.features.skfp_2d.morgan import MorganFeaturizer
-from learnm8.features.skfp_2d.mqns import MQNsFeaturizer
-from learnm8.features.skfp_2d.pattern import PatternFeaturizer
-from learnm8.features.skfp_2d.pharmacophore import PharmacophoreFeaturizer
-from learnm8.features.skfp_2d.physiochemical import PhysiochemicalPropertiesFeaturizer
-from learnm8.features.skfp_2d.pubchem import PubChemFeaturizer
-from learnm8.features.skfp_2d.rdkit import RDKitFeaturizer
-from learnm8.features.skfp_2d.rdkit_2d_descriptors import RDKit2DDescriptorsFeaturizer
-from learnm8.features.skfp_2d.secfp import SECFPFeaturizer
-from learnm8.features.skfp_2d.topological_torsion import TopologicalTorsionFeaturizer
-from learnm8.features.skfp_2d.vsa import VSAFeaturizer
-from learnm8.features.skfp_3d.autocorr import AutocorrFeaturizer
-from learnm8.features.skfp_3d.e3fp import E3FPFeaturizer
-from learnm8.features.skfp_3d.electroshape import ElectroShapeFeaturizer
-from learnm8.features.skfp_3d.getaway import GETAWAYFeaturizer
-from learnm8.features.skfp_3d.morse import MORSEFeaturizer
-from learnm8.features.skfp_3d.rdf import RDFFeaturizer
-from learnm8.features.skfp_3d.usr import USRFeaturizer
-from learnm8.features.skfp_3d.usrcat import USRCATFeaturizer
-
-# 3D featurizers
-from learnm8.features.skfp_3d.whim import WHIMFeaturizer
+__all__: list[str] = []
 
 
-# Wrapper classes for registry entries with custom defaults
-class ECFP6Featurizer(MorganFeaturizer):
-    def __init__(self, **kwargs):
-        kwargs.setdefault('radius', 3)
-        super().__init__(**kwargs)
+def _morgan_defaults() -> dict[str, Any]:
+    return {
+        'radius': 2,
+        'fp_size': 2048,
+        'include_chirality': False,
+        'use_bond_types': True,
+        'use_features': False,
+        'count': False,
+        'n_jobs': -1,
+        'verbose': 0,
+        'auto_generate_conformers': False,
+    }
 
 
-class MorganFeatFeaturizer(MorganFeaturizer):
-    def __init__(self, **kwargs):
-        kwargs.setdefault('use_features', True)
-        super().__init__(**kwargs)
+def _atom_pair_defaults() -> dict[str, Any]:
+    return {
+        'fp_size': 2048,
+        'min_distance': 1,
+        'max_distance': 30,
+        'include_chirality': False,
+        'use_2D': True,
+        'count': False,
+        'n_jobs': -1,
+        'verbose': 0,
+        'auto_generate_conformers': False,
+    }
 
 
-FEATURIZER_REGISTRY = {
-    # Circular fingerprints
-    'morgan': MorganFeaturizer,
-    'ecfp': MorganFeaturizer,
-    'ecfp6': ECFP6Featurizer,
-    'morgan_feat': MorganFeatFeaturizer,
+def _topological_torsion_defaults() -> dict[str, Any]:
+    return {
+        'fp_size': 2048,
+        'include_chirality': False,
+        'count': False,
+        'n_jobs': -1,
+        'verbose': 0,
+        'auto_generate_conformers': False,
+    }
 
-    # Structural keys
-    'maccs': MACCSFeaturizer,
-    'pubchem': PubChemFeaturizer,
-    'klekota_roth': KlekotaRothFeaturizer,
-    'laggner': LaggnerFeaturizer,
 
-    # Topological
-    'avalon': AvalonFeaturizer,
-    'atom_pair': AtomPairFeaturizer,
-    'topological_torsion': TopologicalTorsionFeaturizer,
-    'rdkit': RDKitFeaturizer,
-    'pattern': PatternFeaturizer,
-    'layered': LayeredFeaturizer,
+def _simple_2d_defaults(**extra: Any) -> dict[str, Any]:
+    d: dict[str, Any] = {'n_jobs': -1, 'verbose': 0, 'auto_generate_conformers': False}
+    d.update(extra)
+    return d
 
-    # Hashed fingerprints
-    'map4': MAP4Featurizer,
-    'mhfp': MHFPFeaturizer,
-    'secfp': SECFPFeaturizer,
-    'lingo': LingoFeaturizer,
-    'erg': ERGFeaturizer,
 
-    # 2D Descriptors
-    'mordred': MordredFeaturizer,
-    'descriptors': MordredFeaturizer,
-    'rdkit_2d_descriptors': RDKit2DDescriptorsFeaturizer,
-    'estate': EStateFeaturizer,
-    'ghose_crippen': GhoseCrippenFeaturizer,
-    'mqns': MQNsFeaturizer,
-    'vsa': VSAFeaturizer,
-    'bcut2d': BCUT2DFeaturizer,
-    'physiochemical': PhysiochemicalPropertiesFeaturizer,
-    'pharmacophore': PharmacophoreFeaturizer,
-    'functional_groups': FunctionalGroupsFeaturizer,
+def _3d_defaults(**extra: Any) -> dict[str, Any]:
+    d: dict[str, Any] = {
+        'auto_generate_conformers': True,
+        'num_conformers': 1,
+        'optimize_force_field': None,
+        'n_jobs': -1,
+        'verbose': 0,
+    }
+    d.update(extra)
+    return d
 
-    # 3D fingerprints
-    'whim': WHIMFeaturizer,
-    'usr': USRFeaturizer,
-    'usrcat': USRCATFeaturizer,
-    'e3fp': E3FPFeaturizer,
-    'getaway': GETAWAYFeaturizer,
-    'morse': MORSEFeaturizer,
-    'rdf': RDFFeaturizer,
-    'autocorr': AutocorrFeaturizer,
-    'electroshape': ElectroShapeFeaturizer,
-}
 
-FEATURIZERS_3D = [
-    'whim', 'usr', 'usrcat', 'e3fp', 'getaway', 'morse',
-    'rdf', 'autocorr', 'electroshape'
+_FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
+    {
+        # ── Circular fingerprints ──────────────────────────────────────────
+        'morgan': {
+            'cls': ECFPFingerprint,
+            'defaults': _morgan_defaults(),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'ECFP4 circular fingerprints (2048-bit)',
+        },
+        'ecfp': {
+            'cls': ECFPFingerprint,
+            'defaults': _morgan_defaults(),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'ECFP4 circular fingerprints (2048-bit)',
+        },
+        'ecfp6': {
+            'cls': ECFPFingerprint,
+            'defaults': {**_morgan_defaults(), 'radius': 3},
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'ECFP6 circular fingerprints (2048-bit)',
+        },
+        'morgan_feat': {
+            'cls': ECFPFingerprint,
+            'defaults': {**_morgan_defaults(), 'use_features': True},
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'FCFP4 circular fingerprints (2048-bit, feature-based)',
+        },
+        # ── Structural keys ────────────────────────────────────────────────
+        'maccs': {
+            'cls': MACCSFingerprint,
+            'defaults': _simple_2d_defaults(count=False),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {'storage_dtype': 'uint8', 'feature_type': 'continuous'},
+            'description': 'MACCS structural keys (167 predefined patterns)',
+        },
+        'pubchem': {
+            'cls': PubChemFingerprint,
+            'defaults': _simple_2d_defaults(count=False),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'PubChem CACTVS fingerprints (881 structural keys)',
+        },
+        'klekota_roth': {
+            'cls': KlekotaRothFingerprint,
+            'defaults': _simple_2d_defaults(count=False),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Klekota-Roth substructure fingerprints (4860-bit)',
+        },
+        'laggner': {
+            'cls': LaggnerFingerprint,
+            'defaults': _simple_2d_defaults(count=False),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Laggner substructure fingerprints (307-bit)',
+        },
+        # ── Topological ────────────────────────────────────────────────────
+        'avalon': {
+            'cls': AvalonFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=512, count=False),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Avalon fingerprints (512-bit)',
+        },
+        'atom_pair': {
+            'cls': AtomPairFingerprint,
+            'defaults': _atom_pair_defaults(),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'Atom pair fingerprints (2048-bit)',
+        },
+        'topological_torsion': {
+            'cls': TopologicalTorsionFingerprint,
+            'defaults': _topological_torsion_defaults(),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
+            'description': 'Topological torsion fingerprints (2048-bit)',
+        },
+        'rdkit': {
+            'cls': RDKitFingerprint,
+            'defaults': _simple_2d_defaults(
+                fp_size=2048,
+                min_path=1,
+                max_path=7,
+                linear_paths_only=False,
+                use_bond_order=True,
+                count=False,
+            ),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'RDKit topological fingerprints (2048-bit)',
+        },
+        'pattern': {
+            'cls': PatternFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=2048),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Pattern fingerprints (2048-bit)',
+        },
+        'layered': {
+            'cls': LayeredFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=2048),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Layered fingerprints (2048-bit)',
+        },
+        # ── Hashed fingerprints ────────────────────────────────────────────
+        'map4': {
+            'cls': MAPFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=2048, radius=2),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'MAP4 MinHashed atom-pair fingerprints (2048-bit)',
+        },
+        'mhfp': {
+            'cls': MHFPFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=2048, radius=3),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'MHFP MinHashed fingerprints (2048-bit)',
+        },
+        'secfp': {
+            'cls': SECFPFingerprint,
+            'defaults': _simple_2d_defaults(fp_size=2048, radius=3),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'SECFP SMILES extended connectivity fingerprints (2048-bit)',
+        },
+        'lingo': {
+            'cls': LingoFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': False,
+            'description': 'Lingo SMILES substring fingerprints',
+        },
+        'erg': {
+            'cls': ERGFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'ERG extended reduced graph fingerprints',
+        },
+        # ── 2D Descriptors ─────────────────────────────────────────────────
+        'mordred': {
+            'cls': MordredFingerprint,
+            'defaults': _simple_2d_defaults(ignore_3D=True),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Mordred 2D molecular descriptors (1613-D)',
+        },
+        'descriptors': {
+            'cls': MordredFingerprint,
+            'defaults': _simple_2d_defaults(ignore_3D=True),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Mordred 2D molecular descriptors (1613-D)',
+        },
+        'rdkit_2d_descriptors': {
+            'cls': RDKit2DDescriptorsFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'RDKit 2D molecular descriptors (~200-D)',
+        },
+        'estate': {
+            'cls': EStateFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'EState electrotopological state indices (79-D)',
+        },
+        'ghose_crippen': {
+            'cls': GhoseCrippenFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Ghose-Crippen LogP atomic contributions',
+        },
+        'mqns': {
+            'cls': MQNsFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'uint8',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'MQNs molecular quantum numbers (42-D)',
+        },
+        'vsa': {
+            'cls': VSAFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'VSA Van der Waals surface area descriptors',
+        },
+        'bcut2d': {
+            'cls': BCUT2DFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'BCUT2D Burden-CAS-UT descriptors',
+        },
+        'physiochemical': {
+            'cls': PhysiochemicalPropertiesFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'csr_uint16',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Physiochemical molecular properties',
+        },
+        'pharmacophore': {
+            'cls': PharmacophoreFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'csr_uint16',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Pharmacophore feature patterns',
+        },
+        'functional_groups': {
+            'cls': FunctionalGroupsFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Functional group presence patterns',
+        },
+        # ── 3D fingerprints ────────────────────────────────────────────────
+        'whim': {
+            'cls': WHIMFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'WHIM 3D weighted holistic invariant molecular descriptors (114-D)',
+        },
+        'usr': {
+            'cls': USRFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'USR 3D ultrafast shape recognition descriptors (12-D)',
+        },
+        'usrcat': {
+            'cls': USRCATFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'USRCAT 3D ultrafast shape recognition with CREDO atom types (60-D)',
+        },
+        'e3fp': {
+            'cls': E3FPFingerprint,
+            'defaults': _3d_defaults(fp_size=2048, level=5, radius_multiplier=1.718),
+            'storage_dtype': 'packed_uint8',
+            'feature_type': 'binary',
+            'requires_conformers': True,
+            'description': 'E3FP extended 3D fingerprints (2048-bit)',
+        },
+        'getaway': {
+            'cls': GETAWAYFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'GETAWAY 3D geometry, topology, and atom-weights assembly descriptors',
+        },
+        'morse': {
+            'cls': MORSEFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'MORSE 3D molecule representation of structures based on electron diffraction',
+        },
+        'rdf': {
+            'cls': RDFFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'RDF 3D radial distribution function descriptors',
+        },
+        'autocorr': {
+            'cls': AutocorrFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'Autocorr 3D autocorrelation descriptors',
+        },
+        'electroshape': {
+            'cls': ElectroShapeFingerprint,
+            'defaults': _3d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': True,
+            'description': 'ElectroShape 3D electrostatic shape descriptors (15-D)',
+        },
+    }
+)
+
+FEATURIZER_REGISTRY: frozenset[str] = frozenset(_FEATURIZER_CONFIG.keys())
+
+FEATURIZERS_3D: list[str] = [
+    'whim',
+    'usr',
+    'usrcat',
+    'e3fp',
+    'getaway',
+    'morse',
+    'rdf',
+    'autocorr',
+    'electroshape',
 ]
 
-FEATURIZERS_2D = [
-    name for name in FEATURIZER_REGISTRY
-    if name not in FEATURIZERS_3D
+FEATURIZERS_2D: list[str] = [
+    name for name in _FEATURIZER_CONFIG if name not in FEATURIZERS_3D
 ]
 
 
-def list_available_featurizers() -> dict:
-    """List all registered featurizer names categorized by type.
+def _apply_param_mappings(name: str, kwargs: dict[str, Any]) -> None:
+    if name in ('morgan', 'ecfp', 'ecfp6', 'morgan_feat'):
+        if 'use_features' in kwargs:
+            kwargs['use_pharmacophoric_invariants'] = kwargs.pop('use_features')
+    elif name == 'atom_pair' and 'use_2D' in kwargs:
+        kwargs['use_3D'] = not kwargs.pop('use_2D')
+    elif name in ('mordred', 'descriptors') and 'ignore_3D' in kwargs:
+        kwargs['use_3D'] = not kwargs.pop('ignore_3D')
 
-    Returns:
-        Dictionary with '2d' and '3d' keys containing sorted lists
-    """
+
+def create_featurizer(name: str, **overrides: Any) -> SkfpFeaturizer:
+    if name not in _FEATURIZER_CONFIG:
+        available = sorted(_FEATURIZER_CONFIG.keys())
+        suggestions = get_close_matches(name, available, n=5)
+        raise ConfigurationError(
+            f"Unknown featurizer: '{name}'. "
+            f'Available: {", ".join(available[:10])}... '
+            f'{"Did you mean: " + ", ".join(suggestions) + "?" if suggestions else ""}'
+            f"Use 'learnm8 list featurizers' to see all options."
+        )
+
+    config = _FEATURIZER_CONFIG[name]
+    defaults: dict[str, Any] = dict(config['defaults'])
+
+    allowed = set(defaults.keys())
+    unknown = set(overrides.keys()) - allowed
+    if unknown:
+        raise TypeError(
+            f'create_featurizer({name!r}) got unexpected keyword arguments: '
+            f'{", ".join(sorted(unknown))}. '
+            f'Allowed: {", ".join(sorted(allowed))}.'
+        )
+
+    defaults.update(overrides)
+
+    conformer_keys = {
+        'auto_generate_conformers',
+        'num_conformers',
+        'optimize_force_field',
+    }
+    fp_kwargs = {k: v for k, v in defaults.items() if k not in conformer_keys}
+
+    auto_generate_conformers = defaults.get('auto_generate_conformers', False)
+    num_conformers = defaults.get('num_conformers', 1)
+    optimize_force_field = defaults.get('optimize_force_field')
+
+    conformer_params: dict[str, Any] = {}
+    if num_conformers != 1:
+        conformer_params['num_conformers'] = num_conformers
+    if optimize_force_field:
+        conformer_params['optimize_force_field'] = optimize_force_field
+
+    _apply_param_mappings(name, fp_kwargs)
+
+    count = fp_kwargs.get('count', False)
+    storage_dtype: str = config['storage_dtype']
+    feature_type: str = config['feature_type']
+    if count and 'count_override' in config:
+        storage_dtype = config['count_override']['storage_dtype']
+        feature_type = config['count_override']['feature_type']
+
+    fingerprint_instance = config['cls'](**fp_kwargs)
+
+    return SkfpFeaturizer(
+        fingerprint_instance,
+        auto_generate_conformers=auto_generate_conformers,
+        conformer_params=conformer_params if conformer_params else None,
+        n_jobs=fp_kwargs.get('n_jobs', -1),
+        verbose=fp_kwargs.get('verbose', 0),
+        storage_dtype=storage_dtype,
+        feature_type=feature_type,
+        fingerprint_name=name,
+        fingerprint_params=fp_kwargs.copy(),
+        description=config.get('description'),
+    )
+
+
+def list_available_featurizers() -> dict[str, list[str]]:
     return {
         '2d': sorted(FEATURIZERS_2D),
         '3d': sorted(FEATURIZERS_3D),
-        'all': sorted(FEATURIZER_REGISTRY.keys())
+        'all': sorted(FEATURIZER_REGISTRY),
     }
 
 
@@ -151,51 +575,8 @@ __all__ = [
     'FEATURIZERS_2D',
     'FEATURIZERS_3D',
     'FEATURIZER_REGISTRY',
-    # Topological
-    'AtomPairFeaturizer',
-    'AutocorrFeaturizer',
-    'AvalonFeaturizer',
-    'BCUT2DFeaturizer',
-    'E3FPFeaturizer',
-    # Wrapper classes
-    'ECFP6Featurizer',
-    'ERGFeaturizer',
-    'EStateFeaturizer',
-    'ElectroShapeFeaturizer',
-    'Featurizer',
-    'FunctionalGroupsFeaturizer',
-    'GETAWAYFeaturizer',
-    'GhoseCrippenFeaturizer',
-    'KlekotaRothFeaturizer',
-    'LaggnerFeaturizer',
-    'LayeredFeaturizer',
-    'LingoFeaturizer',
-    'MACCSFeaturizer',
-    # Hashed
-    'MAP4Featurizer',
-    'MHFPFeaturizer',
-    'MORSEFeaturizer',
-    'MQNsFeaturizer',
-    # Descriptors
-    'MordredFeaturizer',
-    'MorganFeatFeaturizer',
-    # Circular and structural keys
-    'MorganFeaturizer',
-    'PatternFeaturizer',
-    'PharmacophoreFeaturizer',
-    'PhysiochemicalPropertiesFeaturizer',
-    'PubChemFeaturizer',
-    'RDFFeaturizer',
-    'RDKit2DDescriptorsFeaturizer',
-    'RDKitFeaturizer',
-    'SECFPFeaturizer',
     'SkfpFeaturizer',
-    'TopologicalTorsionFeaturizer',
-    'USRCATFeaturizer',
-    'USRFeaturizer',
-    'VSAFeaturizer',
-    # 3D featurizers
-    'WHIMFeaturizer',
+    'create_featurizer',
     'extract_features',
     'list_available_featurizers',
 ]
