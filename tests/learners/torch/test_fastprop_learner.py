@@ -112,7 +112,7 @@ class TestFastpropLearner:
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
 
-    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -120,11 +120,7 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
@@ -136,15 +132,13 @@ class TestFastpropLearner:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        features = extract_features(
-            small_real_compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        from learnm8.exceptions import LearnerError
 
-        with pytest.raises(RuntimeError, match="Model must be trained before prediction"):
+        features = small_real_morgan_features.copy()
+
+        with pytest.raises(LearnerError, match="Model must be trained before prediction"):
             learner.predict(features)
 
     def test_get_name_includes_layer_count_and_hidden_size(self, learner):
@@ -158,7 +152,7 @@ class TestFastpropLearner:
         """Verify single model returns False for uncertainty support."""
         assert learner.supports_uncertainty() is False
 
-    def test_morgan_features(self, tmp_path, small_real_compounds):
+    def test_morgan_features(self, small_real_compounds, small_real_morgan_features):
         """Test with morgan fingerprints (2048-bit)."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -173,11 +167,7 @@ class TestFastpropLearner:
             random_state=42
         )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
@@ -242,7 +232,7 @@ class TestFastpropLearner:
         assert predictions.shape[0] == len(compounds)
         assert np.all(np.isfinite(predictions))
 
-    def test_multiple_fastprop_architectures_train_and_predict(self, tmp_path, small_real_compounds):
+    def test_multiple_fastprop_architectures_train_and_predict(self, small_real_compounds, small_real_morgan_features):
         """Test with different fnn_layers and hidden_size."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -258,11 +248,7 @@ class TestFastpropLearner:
                 random_state=42
             )
 
-            features = extract_features(
-                compounds['SMILES'].to_list(),
-                'morgan',
-                tmp_path
-            )
+            features = small_real_morgan_features.copy()
 
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
@@ -271,7 +257,7 @@ class TestFastpropLearner:
             assert learner.hidden_size == hidden_size
             assert predictions.shape[0] == len(compounds)
 
-    def test_clamp_input_flag(self, tmp_path, small_real_compounds):
+    def test_clamp_input_flag(self, small_real_compounds, small_real_morgan_features):
         """Test clamp_input=True vs False."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -288,11 +274,7 @@ class TestFastpropLearner:
                 random_state=42
             )
 
-            features = extract_features(
-                compounds['SMILES'].to_list(),
-                'morgan',
-                tmp_path
-            )
+            features = small_real_morgan_features.copy()
 
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
@@ -300,7 +282,7 @@ class TestFastpropLearner:
             assert learner.clamp_input == clamp_input
             assert predictions.shape[0] == len(compounds)
 
-    def test_early_stopping_configuration_trains_successfully(self, tmp_path, small_real_compounds):
+    def test_early_stopping_configuration_trains_successfully(self, small_real_compounds, small_real_morgan_features):
         """Verify early stopping prevents full epoch training."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -316,17 +298,13 @@ class TestFastpropLearner:
             random_state=42
         )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
 
         assert learner.is_trained
 
-    def test_cpu_device(self, tmp_path, small_real_compounds):
+    def test_cpu_device(self, small_real_compounds, small_real_morgan_features):
         """Test explicit CPU device."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -342,11 +320,7 @@ class TestFastpropLearner:
             random_state=42
         )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
@@ -354,7 +328,7 @@ class TestFastpropLearner:
         assert str(learner.device) == 'cpu'
         assert predictions.shape[0] == len(compounds)
 
-    def test_auto_device(self, tmp_path, small_real_compounds):
+    def test_auto_device(self, small_real_compounds, small_real_morgan_features):
         """Test auto device detection."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -370,11 +344,7 @@ class TestFastpropLearner:
             random_state=42
         )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
@@ -429,7 +399,7 @@ class TestFastpropLearner:
         with pytest.raises(ValueError, match="Features and targets must have same length"):
             learner.train(features, targets)
 
-    def test_uncertainty_consistency(self, learner, small_real_compounds, tmp_path):
+    def test_uncertainty_consistency(self, learner, small_real_compounds, small_real_morgan_features):
         """Verify uncertainty is always None for single model."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -437,11 +407,7 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         _predictions, uncertainty = learner.predict(features)
@@ -459,7 +425,7 @@ class TestFastpropLearner:
         learner = FastpropLearner(enable_aggressive_gc=False)
         assert learner.enable_aggressive_gc is False
 
-    def test_cleanup_gpu_memory_called_after_training(self, tmp_path, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, small_real_morgan_features, monkeypatch):
         """Verify _cleanup_gpu_memory is called after training when enabled."""
         cleanup_called = []
 
@@ -481,18 +447,14 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
 
         assert len(cleanup_called) > 0
         assert any('after training' in ctx for ctx in cleanup_called)
 
-    def test_cleanup_gpu_memory_called_after_prediction(self, tmp_path, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, small_real_morgan_features, monkeypatch):
         """Verify _cleanup_gpu_memory is called after prediction when enabled."""
         cleanup_called = []
 
@@ -512,11 +474,7 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
 
@@ -528,7 +486,7 @@ class TestFastpropLearner:
         assert len(cleanup_called) > 0
         assert any('after prediction' in ctx for ctx in cleanup_called)
 
-    def test_cleanup_not_called_when_disabled(self, tmp_path, small_real_compounds, monkeypatch):
+    def test_cleanup_not_called_when_disabled(self, small_real_compounds, small_real_morgan_features, monkeypatch):
         """Verify _cleanup_gpu_memory is a no-op when enable_aggressive_gc=False."""
         learner = FastpropLearner(
             fnn_layers=2,
@@ -555,18 +513,14 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner.train(features, compounds['Activity'].to_numpy())
         learner.predict(features)
 
         assert len(cleanup_did_work) == 0
 
-    def test_predictions_unaffected_by_gc(self, tmp_path, small_real_compounds):
+    def test_predictions_unaffected_by_gc(self, small_real_compounds, small_real_morgan_features):
         """Verify predictions are identical with GC enabled vs disabled."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -574,11 +528,7 @@ class TestFastpropLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(
-            compounds['SMILES'].to_list(),
-            'morgan',
-            tmp_path
-        )
+        features = small_real_morgan_features.copy()
 
         learner_gc_on = FastpropLearner(
             fnn_layers=2,
@@ -602,16 +552,14 @@ class TestFastpropLearner:
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-5)
 
-    def test_train_creates_validation_split(self, small_real_compounds, tmp_path):
+    def test_train_creates_validation_split(self, small_real_compounds, small_real_morgan_features):
         """Verify EarlyStopping monitors validation_mse_scaled_loss with sufficient samples."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
-        features = extract_features(
-            compounds['SMILES'].to_list(), 'morgan', tmp_path
-        )
+        features = small_real_morgan_features.copy()
         learner = FastpropLearner(
             fnn_layers=1, hidden_size=64, max_epochs=5,
             val_fraction=0.1, random_state=42
@@ -648,16 +596,14 @@ class TestFastpropLearner:
         captured = capsys.readouterr()
         assert 'min_samples_for_split' in captured.out
 
-    def test_val_fraction_zero_disables_validation(self, small_real_compounds, tmp_path):
+    def test_val_fraction_zero_disables_validation(self, small_real_compounds, small_real_morgan_features):
         """Verify val_fraction=0.0 trains without validation regardless of sample count."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
-        features = extract_features(
-            compounds['SMILES'].to_list(), 'morgan', tmp_path
-        )
+        features = small_real_morgan_features.copy()
         learner = FastpropLearner(
             fnn_layers=1, hidden_size=64, max_epochs=3,
             val_fraction=0.0, random_state=42

@@ -21,7 +21,7 @@ class TestMCDropoutLearner:
         return MCDropoutLearner(
             hidden_sizes=(64, 32),
             n_dropout_samples=20,
-            max_epochs=5,
+            max_epochs=2,
             random_state=42
         )
 
@@ -32,11 +32,11 @@ class TestMCDropoutLearner:
         assert learner.n_dropout_samples == 20
         assert learner.activation == 'relu'
         assert learner.batch_norm is False
-        assert learner.max_epochs == 5
+        assert learner.max_epochs == 2
         assert not learner.is_trained
         assert learner.supports_uncertainty() is True
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -44,7 +44,7 @@ class TestMCDropoutLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
         assert learner.model is not None
@@ -56,7 +56,7 @@ class TestMCDropoutLearner:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_mc_dropout_uncertainty_varies_across_compounds_and_remains_finite(self, learner, small_real_compounds, tmp_path):
+    def test_mc_dropout_uncertainty_varies_across_compounds_and_remains_finite(self, learner, small_real_compounds, small_real_morgan_features):
         """Test that MC Dropout uncertainty estimates are reasonable."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -64,7 +64,7 @@ class TestMCDropoutLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
@@ -72,7 +72,7 @@ class TestMCDropoutLearner:
         assert np.all(np.isfinite(predictions))
         assert np.all(np.isfinite(uncertainty))
 
-    def test_dropout_samples_effect(self, tmp_path, small_real_compounds):
+    def test_dropout_samples_effect(self, small_real_compounds, small_real_morgan_features):
         """Test effect of different numbers of dropout samples."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -80,7 +80,7 @@ class TestMCDropoutLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
 
         learner_few = MCDropoutLearner(
             hidden_sizes=(32,),
@@ -107,9 +107,9 @@ class TestMCDropoutLearner:
         assert np.all(unc_few >= 0)
         assert np.all(unc_many >= 0)
 
-    def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(features)
 
@@ -121,7 +121,7 @@ class TestMCDropoutLearner:
         assert "samples=20" in name
         assert "dropout=0.2" in name
 
-    def test_custom_architecture_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
+    def test_custom_architecture_configuration_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different architectures."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -138,7 +138,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
@@ -148,7 +148,7 @@ class TestMCDropoutLearner:
         assert predictions.shape[0] == len(compounds)
         assert uncertainty.shape[0] == len(compounds)
 
-    def test_dropout_rate_effect(self, tmp_path, small_real_compounds):
+    def test_dropout_rate_effect(self, small_real_compounds, small_real_morgan_features):
         """Test effect of different dropout rates."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -165,7 +165,7 @@ class TestMCDropoutLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            features = small_real_morgan_features.copy()
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, uncertainty = learner.predict(features)
 
@@ -214,7 +214,7 @@ class TestMCDropoutLearner:
         assert np.all(unc1 >= 0)
         assert np.all(unc2 >= 0)
 
-    def test_deterministic_with_same_seed(self, tmp_path, small_real_compounds):
+    def test_deterministic_with_same_seed(self, small_real_compounds, small_real_morgan_features):
         """Test reproducibility with same random seed."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -233,7 +233,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner1.train(features, compounds['Activity'].to_numpy())
         learner2.train(features, compounds['Activity'].to_numpy())
 
@@ -265,7 +265,7 @@ class TestMCDropoutLearner:
         learner.train(features_1d, targets)
         assert learner.is_trained
 
-    def test_batchnorm_eval_during_predict(self, tmp_path, small_real_compounds):
+    def test_batchnorm_eval_during_predict(self, small_real_compounds, small_real_morgan_features):
         """Test that BatchNorm layers are in eval mode during MC predict."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -281,7 +281,7 @@ class TestMCDropoutLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, uncertainty = learner.predict(features)
 
@@ -293,7 +293,7 @@ class TestMCDropoutLearner:
         assert np.any(uncertainty > 0)
         assert np.all(np.isfinite(predictions))
 
-    def test_uncertainty_nonnegative_nonzero(self, learner, tmp_path, small_real_compounds):
+    def test_uncertainty_nonnegative_nonzero(self, learner, small_real_compounds, small_real_morgan_features):
         """Test that uncertainty values are non-negative and non-zero for reasonable inputs."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -301,7 +301,7 @@ class TestMCDropoutLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         _, uncertainty = learner.predict(features)
 
