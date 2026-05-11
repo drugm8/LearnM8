@@ -274,7 +274,7 @@ class EnsembleLearner(Learner):
         """
         if self.uncertainty_method == 'std':
             # ddof=0 (NumPy/BoTorch convention); biased ~18% low at K=3.
-            # Switch to ddof=1 if downstream consumers need unbiased σ.
+            # Switch to ddof=1 if downstream consumers need unbiased sigma.
             return np.std(predictions_array, axis=0)
 
         elif self.uncertainty_method == 'mad':
@@ -299,7 +299,9 @@ class EnsembleLearner(Learner):
 
     def memory_profile(self, n_features: int) -> dict[str, int | float]:
         profiles = [m.memory_profile(n_features) for m in self.learners]
-        return max(profiles, key=lambda p: p['bytes_per_sample'] * p['working_multiplier'])
+        return max(
+            profiles, key=lambda p: p['bytes_per_sample'] * p['working_multiplier']
+        )
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""

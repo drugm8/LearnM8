@@ -235,7 +235,7 @@ class TestSelectInitialBatch:
             }
         )
 
-        with pytest.raises(ValueError, match="Calculated batch size is 0"):
+        with pytest.raises(ValueError, match="Selection pool is empty"):
             select_initial_batch(
                 compounds_df=empty_df,
                 oracle=mock_oracle,

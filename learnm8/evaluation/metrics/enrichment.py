@@ -11,12 +11,20 @@ import polars as pl
 from learnm8.exceptions import ValidationError
 from learnm8.utils.logging import get_logger, log_warning
 
-ScoreDirection = Literal["higher", "lower"]
+ScoreDirection = Literal['higher', 'lower']
 
 _NUMERIC_DTYPES = (
-    pl.Int8, pl.Int16, pl.Int32, pl.Int64,
-    pl.UInt8, pl.UInt16, pl.UInt32, pl.UInt64,
-    pl.Float32, pl.Float64, pl.Boolean,
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+    pl.Float32,
+    pl.Float64,
+    pl.Boolean,
 )
 
 
@@ -28,8 +36,8 @@ def _count_actives_numpy(activity_arr: np.ndarray) -> int:
     """
     if activity_arr.dtype.kind not in ('i', 'u', 'f', 'b'):
         raise ValidationError(
-            f"activity column has non-numeric dtype {activity_arr.dtype}; "
-            f"expected numeric (int/float) or boolean"
+            f'activity column has non-numeric dtype {activity_arr.dtype}; '
+            f'expected numeric (int/float) or boolean'
         )
     coerced = activity_arr.astype(np.int64, copy=False)
     return int((coerced == 1).sum())
@@ -45,13 +53,17 @@ def _active_expr(col_name: str, df: pl.DataFrame) -> pl.Expr:
     if not isinstance(dtype, _NUMERIC_DTYPES):
         raise ValidationError(
             f"activity column '{col_name}' has non-numeric dtype {dtype}; "
-            f"expected numeric (int/float) or boolean"
+            f'expected numeric (int/float) or boolean'
         )
     return pl.col(col_name).cast(pl.Int64, strict=False) == 1
 
 
-def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
-                               percentile: float, score_direction: str = 'higher') -> float:
+def calculate_enrichment_factor(
+    scores: np.ndarray,
+    labels: np.ndarray,
+    percentile: float,
+    score_direction: str = 'higher',
+) -> float:
     """
     Calculate Enrichment Factor for virtual screening.
 
@@ -67,7 +79,7 @@ def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
         Enrichment factor value
     """
     if not 0 < percentile <= 100:
-        raise ValueError("Percentile must be between 0 and 100")
+        raise ValueError('Percentile must be between 0 and 100')
 
     # Sort by scores according to direction
     if score_direction == 'lower':
@@ -94,8 +106,13 @@ def calculate_enrichment_factor(scores: np.ndarray, labels: np.ndarray,
     return round(ef, 3)
 
 
-def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.DataFrame,
-                           k: int, target_col: str, score_direction: str = 'higher') -> float:
+def calculate_top_k_overlap(
+    predictions_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
+    k: int,
+    target_col: str,
+    score_direction: str = 'higher',
+) -> float:
     """
     Calculate percentage overlap between top-k predicted and true compounds.
 
@@ -111,9 +128,7 @@ def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.Da
     """
     # Merge predictions with ground truth
     merged = predictions_df.join(
-        ground_truth_df.select(['ID', target_col]),
-        on='ID',
-        how='inner'
+        ground_truth_df.select(['ID', target_col]), on='ID', how='inner'
     )
 
     # Handle empty data case
@@ -122,11 +137,17 @@ def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.Da
 
     if len(merged) < k:
         logger = get_logger()
-        log_warning(logger, f"Only {len(merged)} compounds available, using all for top-k calculation")
+        log_warning(
+            logger,
+            f'Only {len(merged)} compounds available, using all for top-k calculation',
+        )
         k = len(merged)
 
     # Ensure prediction column is numeric
-    if merged.get_column('prediction').dtype != pl.Float64 and merged.get_column('prediction').dtype != pl.Float32:
+    if (
+        merged.get_column('prediction').dtype != pl.Float64
+        and merged.get_column('prediction').dtype != pl.Float32
+    ):
         merged = merged.with_columns(
             pl.col('prediction').cast(pl.Float64, strict=False)
         )
@@ -135,7 +156,7 @@ def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.Da
             return 0.0
 
     # Sort by scores
-    descending = (score_direction == 'higher')
+    descending = score_direction == 'higher'
 
     # Get top k by predictions
     top_k_predicted = set(
@@ -160,8 +181,12 @@ def calculate_top_k_overlap(predictions_df: pl.DataFrame, ground_truth_df: pl.Da
     return round(overlap_percentage, 2)
 
 
-def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth_df: pl.DataFrame,
-                                    target_col: str, score_direction: str = 'higher') -> dict:
+def calculate_multiple_top_k_overlaps(
+    predictions_df: pl.DataFrame,
+    ground_truth_df: pl.DataFrame,
+    target_col: str,
+    score_direction: str = 'higher',
+) -> dict:
     """
     Calculate multiple top-K overlaps for different K values.
 
@@ -176,9 +201,7 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
     """
     # Merge predictions with ground truth
     merged = predictions_df.join(
-        ground_truth_df.select(['ID', target_col]),
-        on='ID',
-        how='inner'
+        ground_truth_df.select(['ID', target_col]), on='ID', how='inner'
     )
     n_total = len(merged)
 
@@ -188,11 +211,14 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
             'top_1000_overlap': 0.0,
             'top_0_1_percent_overlap': 0.0,
             'top_1_percent_overlap': 0.0,
-            'top_10_percent_overlap': 0.0
+            'top_10_percent_overlap': 0.0,
         }
 
     # Ensure prediction column is numeric
-    if merged.get_column('prediction').dtype != pl.Float64 and merged.get_column('prediction').dtype != pl.Float32:
+    if (
+        merged.get_column('prediction').dtype != pl.Float64
+        and merged.get_column('prediction').dtype != pl.Float32
+    ):
         merged = merged.with_columns(
             pl.col('prediction').cast(pl.Float64, strict=False)
         )
@@ -204,7 +230,7 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
                 'top_1000_overlap': 0.0,
                 'top_0_1_percent_overlap': 0.0,
                 'top_1_percent_overlap': 0.0,
-                'top_10_percent_overlap': 0.0
+                'top_10_percent_overlap': 0.0,
             }
 
     # Define K values: fixed numbers and percentages
@@ -212,13 +238,13 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
         'top_100_overlap': min(100, n_total),
         'top_1000_overlap': min(1000, n_total),
         'top_0_1_percent_overlap': max(1, int(n_total * 0.001)),  # 0.1%
-        'top_1_percent_overlap': max(1, int(n_total * 0.01)),     # 1%
-        'top_10_percent_overlap': max(1, int(n_total * 0.10))     # 10%
+        'top_1_percent_overlap': max(1, int(n_total * 0.01)),  # 1%
+        'top_10_percent_overlap': max(1, int(n_total * 0.10)),  # 10%
     }
 
     # Use stable Polars sort (same approach as calculate_multiple_top_k_discovery_rates)
     # to ensure deterministic top-K selection under tied scores.
-    descending = (score_direction == 'higher')
+    descending = score_direction == 'higher'
     max_k = max(k_values.values())
     pred_sorted_ids = (
         merged.sort('prediction', descending=descending)
@@ -245,8 +271,9 @@ def calculate_multiple_top_k_overlaps(predictions_df: pl.DataFrame, ground_truth
     return results
 
 
-def calculate_multiple_enrichment_factors(scores: np.ndarray, labels: np.ndarray,
-                                        score_direction: str = 'higher') -> dict:
+def calculate_multiple_enrichment_factors(
+    scores: np.ndarray, labels: np.ndarray, score_direction: str = 'higher'
+) -> dict:
     """
     Calculate multiple enrichment factors at fixed percentiles: 5%, 1%, 0.5%, 0.1%.
 
@@ -265,20 +292,20 @@ def calculate_multiple_enrichment_factors(scores: np.ndarray, labels: np.ndarray
         try:
             ef_value = calculate_enrichment_factor(scores, labels, p, score_direction)
             # Create key name (e.g., 5.0 -> ef_5, 0.5 -> ef_0_5)
-            key = f"ef_{str(p).replace('.', '_')}"
+            key = f'ef_{str(p).replace(".", "_")}'
             results[key] = ef_value
         except (ValueError, TypeError, ZeroDivisionError) as e:
             logger = get_logger()
-            key = f"ef_{str(p).replace('.', '_')}"
-            log_warning(logger, f"Could not calculate {key}: {e}. Setting to 0.0.")
+            key = f'ef_{str(p).replace(".", "_")}'
+            log_warning(logger, f'Could not calculate {key}: {e}. Setting to 0.0.')
             results[key] = 0.0
 
     return results
 
 
-def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
-                                            target_col: str,
-                                            score_direction: str = 'higher') -> dict:
+def calculate_ground_truth_enrichment_factors(
+    ground_truth_df: pl.DataFrame, target_col: str, score_direction: str = 'higher'
+) -> dict:
     """
     Calculate ground truth enrichment factors using true target scores vs Activity labels.
     These remain constant across all cycles since they're based on ground truth data.
@@ -298,7 +325,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
             'ground_truth_ef_5_0': None,
             'ground_truth_ef_1_0': None,
             'ground_truth_ef_0_5': None,
-            'ground_truth_ef_0_1': None
+            'ground_truth_ef_0_1': None,
         }
 
     # Remove any NaN values for calculation
@@ -311,7 +338,7 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
             'ground_truth_ef_5_0': None,
             'ground_truth_ef_1_0': None,
             'ground_truth_ef_0_5': None,
-            'ground_truth_ef_0_1': None
+            'ground_truth_ef_0_1': None,
         }
 
     # Use target scores as screening scores and Activity as binary labels
@@ -326,12 +353,12 @@ def calculate_ground_truth_enrichment_factors(ground_truth_df: pl.DataFrame,
         try:
             ef_value = calculate_enrichment_factor(scores, labels, p, score_direction)
             # Create key name with ground_truth prefix - use consistent naming with other EF functions
-            key = f"ground_truth_ef_{str(p).replace('.', '_')}"
+            key = f'ground_truth_ef_{str(p).replace(".", "_")}'
             results[key] = ef_value
         except (ValueError, TypeError, ZeroDivisionError) as e:
             logger = get_logger()
-            key = f"ground_truth_ef_{str(p).replace('.', '_')}"
-            log_warning(logger, f"Could not calculate {key}: {e}. Setting to None.")
+            key = f'ground_truth_ef_{str(p).replace(".", "_")}'
+            log_warning(logger, f'Could not calculate {key}: {e}. Setting to None.')
             results[key] = None
 
     return results
@@ -341,7 +368,7 @@ def calculate_multiple_top_k_discovery_rates(
     selected_ids: set,
     ground_truth_df: pl.DataFrame,
     target_column: str,
-    score_direction: str = 'higher'
+    score_direction: str = 'higher',
 ) -> dict:
     """
     Calculate discovery rates at multiple K values (both fixed and percentage-based).
@@ -365,7 +392,7 @@ def calculate_multiple_top_k_discovery_rates(
         - top_10_pct_discovery: Discovery rate for top-10% compounds (%)
     """
     n_total = len(ground_truth_df)
-    descending = (score_direction == 'higher')
+    descending = score_direction == 'higher'
 
     # Define K values: fixed numbers and percentages
     k_values = {
@@ -373,8 +400,8 @@ def calculate_multiple_top_k_discovery_rates(
         'top_100_discovery': min(100, n_total),
         'top_1000_discovery': min(1000, n_total),
         'top_0_1_pct_discovery': max(1, int(n_total * 0.001)),  # 0.1%
-        'top_1_pct_discovery': max(1, int(n_total * 0.01)),     # 1%
-        'top_10_pct_discovery': max(1, int(n_total * 0.10))     # 10%
+        'top_1_pct_discovery': max(1, int(n_total * 0.01)),  # 1%
+        'top_10_pct_discovery': max(1, int(n_total * 0.10)),  # 10%
     }
 
     max_k = max(k_values.values())
@@ -396,9 +423,7 @@ def calculate_multiple_top_k_discovery_rates(
 
 
 def calculate_cumulative_enrichment_factor(
-    selected_ids: set,
-    ground_truth_df: pl.DataFrame,
-    activity_column: str = 'Activity'
+    selected_ids: set, ground_truth_df: pl.DataFrame, activity_column: str = 'Activity'
 ) -> float:
     """
     Calculate enrichment factor of all selections vs random.
@@ -423,11 +448,15 @@ def calculate_cumulative_enrichment_factor(
     if n_selected == 0:
         return None
 
-    n_actives_found = selected_df.filter(_active_expr(activity_column, selected_df)).height
+    n_actives_found = selected_df.filter(
+        _active_expr(activity_column, selected_df)
+    ).height
 
     # Population
     n_total = len(ground_truth_df)
-    n_actives_total = ground_truth_df.filter(_active_expr(activity_column, ground_truth_df)).height
+    n_actives_total = ground_truth_df.filter(
+        _active_expr(activity_column, ground_truth_df)
+    ).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -442,8 +471,7 @@ def calculate_cumulative_enrichment_factor(
 
 
 def calculate_batch_hit_rate(
-    newly_selected_df: pl.DataFrame,
-    activity_column: str = 'Activity'
+    newly_selected_df: pl.DataFrame, activity_column: str = 'Activity'
 ) -> float:
     """
     Calculate hit rate for current batch.
@@ -464,7 +492,9 @@ def calculate_batch_hit_rate(
     if n_batch == 0:
         return None
 
-    n_actives_batch = newly_selected_df.filter(_active_expr(activity_column, newly_selected_df)).height
+    n_actives_batch = newly_selected_df.filter(
+        _active_expr(activity_column, newly_selected_df)
+    ).height
 
     batch_hit_rate = n_actives_batch / n_batch
 
@@ -474,7 +504,7 @@ def calculate_batch_hit_rate(
 def calculate_batch_enrichment_factor(
     newly_selected_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
-    activity_column: str = 'Activity'
+    activity_column: str = 'Activity',
 ) -> float:
     """
     Calculate enrichment factor for this cycle's batch.
@@ -490,8 +520,10 @@ def calculate_batch_enrichment_factor(
         Batch enrichment factor, or None if Activity column absent
     """
     # Check if Activity column present
-    if activity_column not in newly_selected_df.columns or \
-       activity_column not in ground_truth_df.columns:
+    if (
+        activity_column not in newly_selected_df.columns
+        or activity_column not in ground_truth_df.columns
+    ):
         return None
 
     # Batch statistics
@@ -499,11 +531,15 @@ def calculate_batch_enrichment_factor(
     if n_batch == 0:
         return None
 
-    n_actives_batch = newly_selected_df.filter(_active_expr(activity_column, newly_selected_df)).height
+    n_actives_batch = newly_selected_df.filter(
+        _active_expr(activity_column, newly_selected_df)
+    ).height
 
     # Population statistics
     n_total = len(ground_truth_df)
-    n_actives_total = ground_truth_df.filter(_active_expr(activity_column, ground_truth_df)).height
+    n_actives_total = ground_truth_df.filter(
+        _active_expr(activity_column, ground_truth_df)
+    ).height
 
     # Calculate EF
     if n_actives_total == 0:
@@ -518,7 +554,7 @@ def calculate_batch_enrichment_factor(
 
 
 def _validate_score_direction(score_direction: str) -> ScoreDirection:
-    if score_direction not in ("higher", "lower"):
+    if score_direction not in ('higher', 'lower'):
         raise ValueError(
             f"score_direction must be 'higher' or 'lower', got {score_direction!r}."
         )
@@ -536,7 +572,11 @@ def _improvement_ratio(
     pop_mean cases; ``± inf`` only when the improvement is genuinely unbounded
     (selected != 0 but pop == 0).
     """
-    delta = selected_mean - pop_mean if score_direction == "higher" else pop_mean - selected_mean
+    delta = (
+        selected_mean - pop_mean
+        if score_direction == 'higher'
+        else pop_mean - selected_mean
+    )
 
     if pop_mean == 0.0:
         if selected_mean == 0.0:
@@ -583,15 +623,15 @@ def calculate_score_improvement_ratio(
     direction = _validate_score_direction(score_direction)
     if len(selected_ids) == 0:
         raise ValueError(
-            "score_improvement_ratio called with empty selected_ids; "
-            "short-circuit at the call site instead."
+            'score_improvement_ratio called with empty selected_ids; '
+            'short-circuit at the call site instead.'
         )
 
-    selected_df = ground_truth_df.filter(pl.col("ID").is_in(selected_ids))
+    selected_df = ground_truth_df.filter(pl.col('ID').is_in(selected_ids))
     if len(selected_df) == 0:
         raise ValueError(
-            "score_improvement_ratio called with selected_ids that do not match "
-            "any rows in ground_truth_df; check ID consistency across pool and selection."
+            'score_improvement_ratio called with selected_ids that do not match '
+            'any rows in ground_truth_df; check ID consistency across pool and selection.'
         )
     selected_mean = float(selected_df.get_column(target_column).mean())  # type: ignore[arg-type]
     pop_mean = float(ground_truth_df.get_column(target_column).mean())  # type: ignore[arg-type]
@@ -613,8 +653,8 @@ def calculate_batch_score_improvement_ratio(
     direction = _validate_score_direction(score_direction)
     if len(newly_selected_df) == 0:
         raise ValueError(
-            "batch_score_improvement_ratio called with empty newly_selected_df; "
-            "short-circuit at the call site instead."
+            'batch_score_improvement_ratio called with empty newly_selected_df; '
+            'short-circuit at the call site instead.'
         )
     selected_mean = float(newly_selected_df.get_column(target_column).mean())  # type: ignore[arg-type]
     pop_mean = float(ground_truth_df.get_column(target_column).mean())  # type: ignore[arg-type]
@@ -626,7 +666,7 @@ def calculate_multiple_unlabeled_top_k_overlaps(
     ground_truth_df: pl.DataFrame,
     target_column: str,
     score_direction: str = 'higher',
-    merged_target: pl.DataFrame | None = None
+    merged_target: pl.DataFrame | None = None,
 ) -> dict:
     """
     Calculate top-K ranking overlaps on UNLABELED compounds only.
@@ -649,21 +689,16 @@ def calculate_multiple_unlabeled_top_k_overlaps(
         - unlabeled_top_100_overlap: Overlap percentage for top-100 (%)
         - unlabeled_top_1000_overlap: Overlap percentage for top-1000 (%)
     """
-    k_values = {
-        'unlabeled_top_100_overlap': 100,
-        'unlabeled_top_1000_overlap': 1000
-    }
+    k_values = {'unlabeled_top_100_overlap': 100, 'unlabeled_top_1000_overlap': 1000}
 
     if merged_target is None:
         merged = unlabeled_predictions_df.join(
-            ground_truth_df.select(['ID', target_column]),
-            on='ID',
-            how='inner'
+            ground_truth_df.select(['ID', target_column]), on='ID', how='inner'
         )
     else:
         merged = merged_target
 
-    descending = (score_direction == 'higher')
+    descending = score_direction == 'higher'
     n_merged = len(merged)
 
     if n_merged == 0:
@@ -700,7 +735,7 @@ def calculate_multiple_unlabeled_enrichment_factors(
     ground_truth_df: pl.DataFrame,
     activity_column: str,
     score_direction: str = 'higher',
-    merged_activity: pl.DataFrame | None = None
+    merged_activity: pl.DataFrame | None = None,
 ) -> dict:
     """
     Calculate prospective enrichment factors on UNLABELED compounds only.
@@ -727,29 +762,22 @@ def calculate_multiple_unlabeled_enrichment_factors(
     else:
         # Check if Activity column present
         if activity_column not in ground_truth_df.columns:
-            return {
-                'unlabeled_ef_1_0': None,
-                'unlabeled_ef_5_0': None
-            }
+            return {'unlabeled_ef_1_0': None, 'unlabeled_ef_5_0': None}
         merged = unlabeled_predictions_df.join(
-            ground_truth_df.select(['ID', activity_column]),
-            on='ID',
-            how='inner'
+            ground_truth_df.select(['ID', activity_column]), on='ID', how='inner'
         )
 
     if len(merged) == 0:
-        return {
-            'unlabeled_ef_1_0': None,
-            'unlabeled_ef_5_0': None
-        }
+        return {'unlabeled_ef_1_0': None, 'unlabeled_ef_5_0': None}
 
     percentiles = [1.0, 5.0]
     results = {}
-    descending = (score_direction == 'higher')
+    descending = score_direction == 'higher'
 
     # Spec 022 FR-005: one argpartition pass for max-K then sub-K slicing,
     # rather than one full sort per percentile.
     from learnm8.evaluation.metrics._topk import top_k_indices
+
     n_total = len(merged)
     pred_arr = merged.get_column('prediction').to_numpy()
     activity_arr = merged.get_column(activity_column).to_numpy()
@@ -772,7 +800,7 @@ def calculate_multiple_unlabeled_enrichment_factors(
             ef = hit_rate_selected / hit_rate_population
 
         # Create key name (1.0 -> ef_1_0, 5.0 -> ef_5_0)
-        key = f"unlabeled_ef_{str(p).replace('.', '_')}"
+        key = f'unlabeled_ef_{str(p).replace(".", "_")}'
         results[key] = round(ef, 3)
 
     return results
@@ -782,7 +810,7 @@ def calculate_unlabeled_ranking_correlation(
     unlabeled_predictions_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
     target_column: str,
-    merged_target: pl.DataFrame | None = None
+    merged_target: pl.DataFrame | None = None,
 ) -> float:
     """
     Calculate Spearman correlation on UNLABELED compounds only.
@@ -801,9 +829,7 @@ def calculate_unlabeled_ranking_correlation(
 
     if merged_target is None:
         merged = unlabeled_predictions_df.join(
-            ground_truth_df.select(['ID', target_column]),
-            on='ID',
-            how='inner'
+            ground_truth_df.select(['ID', target_column]), on='ID', how='inner'
         )
     else:
         merged = merged_target

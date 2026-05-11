@@ -48,89 +48,6 @@ def detect_jupyter_environment() -> bool:
 
     return False
 
-
-def get_console_config() -> dict:
-    """
-    Get appropriate Rich console configuration based on environment.
-
-    Returns:
-        dict: Configuration parameters for Rich Console
-    """
-    in_jupyter = detect_jupyter_environment()
-
-    config = {
-        'width': 100,
-        'legacy_windows': False,
-    }
-
-    if in_jupyter:
-        config.update({
-            'force_jupyter': True,
-            'force_terminal': False,
-        })
-    else:
-        config.update({
-            'force_terminal': True,
-            'force_jupyter': False,
-        })
-
-    return config
-
-
-def get_change_indicator_style() -> str:
-    """
-    Get appropriate change indicator style based on environment.
-
-    Returns:
-        str: 'emoji' for Jupyter environments, 'arrow' for terminal
-    """
-    return 'emoji' if detect_jupyter_environment() else 'arrow'
-
-
-def format_change_indicator(
-    diff: float,
-    is_improvement: bool,
-    style: str = 'auto',
-    stagnation_threshold: float = 0.01
-) -> tuple[str, str]:
-    """
-    Format change indicator based on environment and style preference.
-
-    Args:
-        diff: Numeric difference (positive or negative)
-        is_improvement: Whether the change represents an improvement
-        style: 'arrow', 'emoji', or 'auto' for automatic detection
-        stagnation_threshold: Absolute threshold below which change is considered stagnant (default 1%)
-
-    Returns:
-        tuple: (symbol, color) for the change indicator
-               - Green ↑/📈 for improvement
-               - Red ↓/📉 for worsening
-               - Yellow →/➡️ for stagnation (|diff| < threshold)
-    """
-    if style == 'auto':
-        style = get_change_indicator_style()
-
-    if abs(diff) < stagnation_threshold:
-        if style == 'emoji':
-            return "➡️", "yellow"
-        else:
-            return "→", "yellow"
-
-    if style == 'emoji':
-        if is_improvement:
-            symbol = "📈" if diff > 0 else "📉"
-            color = "green"
-        else:
-            symbol = "📉" if diff > 0 else "📈"
-            color = "red"
-    else:
-        symbol = "↑" if diff > 0 else "↓"
-        color = "green" if is_improvement else "red"
-
-    return symbol, color
-
-
 def configure_learnm8_logging(
     output_dir: Path | None = None,
     level: str = "INFO",
@@ -225,22 +142,6 @@ def get_logger(name: str = "learnm8") -> logging.Logger:
     return logging.getLogger(name)
 
 
-
-def log_error_to_stderr(message: str) -> None:
-    """Log error messages to stderr without Rich formatting."""
-    logging.getLogger('learnm8').error(message)
-
-
 def log_warning(logger: logging.Logger, message: str) -> None:
     """Log warning message with appropriate styling."""
     logger.warning(f"[yellow]Warning:[/yellow] {message}")
-
-
-def log_success(logger: logging.Logger, message: str) -> None:
-    """Log success message with appropriate styling."""
-    logger.info(f"[bold green]✓[/bold green] {message}")
-
-
-def log_file_operation(logger: logging.Logger, operation: str, path: str) -> None:
-    """Log file operations (save, load, etc.)."""
-    logger.info(f"{operation}: [dim]{path}[/dim]")

@@ -96,11 +96,7 @@ markers = [
     "unit: Unit tests for individual components",
     "integration: Integration tests for complete workflows",
     "slow: Slow running tests (performance, large datasets)",
-    "property: Property-based tests using Hypothesis",
-    "scientific: Scientific validation tests",
-    "benchmark: Performance benchmark tests",
     "molecular: Tests requiring molecular chemistry libraries (RDKit)",
-    "gpu: Tests requiring CUDA GPU",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

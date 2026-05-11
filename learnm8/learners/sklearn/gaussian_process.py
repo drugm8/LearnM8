@@ -79,7 +79,9 @@ class GaussianProcessLearner(SklearnLearner):
             random_state=random_state,
         )
 
-        super().__init__(model, random_state=random_state, scale_features=True, **kwargs)
+        super().__init__(
+            model, random_state=random_state, scale_features=True, **kwargs
+        )
 
         logger.debug(
             f'Initialized GaussianProcessLearner with kernel={self._kernel_config}, '
