@@ -275,6 +275,12 @@ def create_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Suppress progress output'
     )
+    output_group.add_argument(
+        '--output-format',
+        choices=['auto', 'csv', 'parquet'],
+        default='auto',
+        help='Output file format: auto (Parquet for >1M rows, CSV otherwise), csv, or parquet (default: auto)'
+    )
 
     resource_group = run_parser.add_argument_group('Resource Control')
     resource_group.add_argument(
@@ -302,6 +308,12 @@ def create_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.7,
         help='Fraction of available memory to use for prediction batching (default: 0.7)'
+    )
+    advanced_group.add_argument(
+        '--allow-large-features',
+        action='store_true',
+        default=False,
+        help='Bypass the large-feature guard that blocks descriptor-based featurizers on pools >1M compounds'
     )
 
     validate_parser = subparsers.add_parser('validate', help='Validate compound pool using datamol SMILES validation')
@@ -384,6 +396,8 @@ def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None,
         memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
         n_jobs=getattr(args, 'n_jobs', -1),
         device=getattr(args, 'device', 'auto'),
+        large_features_ack=getattr(args, 'allow_large_features', False),
+        output_format=getattr(args, 'output_format', 'auto'),
     )
 
 

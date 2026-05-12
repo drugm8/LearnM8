@@ -51,6 +51,7 @@ from skfp.fingerprints import (
 from learnm8.exceptions import ConfigurationError
 from learnm8.features.base import DEFAULT_3D_RANDOM_STATE, SkfpFeaturizer
 from learnm8.features.extraction import extract_features
+from learnm8.features.guard import check_large_feature_guard
 
 __all__: list[str] = []
 
@@ -583,6 +584,7 @@ __all__ = [
     'FEATURIZERS_2D',
     'FEATURIZERS_3D',
     'FEATURIZER_REGISTRY',
+    'check_large_feature_guard',
     'SkfpFeaturizer',
     'create_featurizer',
     'extract_features',

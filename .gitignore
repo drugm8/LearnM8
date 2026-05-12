@@ -78,6 +78,7 @@ docs/_build/
 !README.md
 !ARCHITECTURE_V1.md
 !CLAUDE.md
+!CHANGELOG.md
 
 # AI tooling
 .specify/
