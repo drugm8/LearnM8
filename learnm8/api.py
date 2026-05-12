@@ -49,9 +49,10 @@ from __future__ import annotations
 import inspect
 import logging
 import time
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 import polars as pl
 
@@ -62,10 +63,10 @@ from learnm8.core.initialization import (
     select_initial_batch,
 )
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
-from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
+from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.learners import (
     DecisionTreeLearner,
@@ -398,6 +399,9 @@ def run_active_learning(
     # Resource control
     n_jobs: int = -1,
     device: str = 'auto',
+    # Large pool / output format (feature 018)
+    large_features_ack: bool = False,
+    output_format: Literal['auto', 'csv', 'parquet'] = 'auto',
     # Diversity metrics (feature 013)
     disable_molecular_similarity: bool | Iterable[str] = False,
     **kwargs
@@ -535,6 +539,25 @@ def run_active_learning(
             larger batches. Use 0.85 on dedicated hardware, 0.5 on shared clusters.
 
         **kwargs: Additional parameters passed to cycle execution
+
+        n_jobs: Number of parallel jobs for CPU-bound operations.
+            -1 uses all available cores. 0 disables parallelism.
+            Ignored for GPU-accelerated learners (rf_fil, ridge_cuml).
+
+        device: Device to use for GPU-accelerated learners.
+            Options: 'auto' (detect), 'cpu', or 'cuda'/'gpu'.
+            Ignored for CPU-only learners.
+
+        large_features_ack: Acknowledge large-feature runs on big pools.
+            When using descriptor-class featurizers (e.g., Mordred) on pools
+            >10M compounds, the feature cache can consume >100 GB. Set to True
+            to confirm intentional use. Raises ConfigurationError if False
+            and the guard triggers. CLI equivalent: --allow-large-features.
+
+        output_format: Output file format for results.
+            'auto' uses CSV for <1M compounds, Parquet for >=1M.
+            'csv' or 'parquet' force a specific format regardless of pool size.
+            Parquet uses zstd-3 compression and streaming writes for scale.
 
     Returns:
         Dictionary with:
@@ -780,6 +803,9 @@ def run_active_learning(
                     )
                 featurizer_obj = featurizer
                 logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
+
+        from learnm8.features.guard import check_large_feature_guard
+        check_large_feature_guard(featurizer_obj, len(compound_pool), large_features_ack)
 
         if not (0.0 < memory_safety_factor <= 1.0):
             raise ConfigurationError(
@@ -1052,7 +1078,8 @@ def run_active_learning(
         }
 
         saved_files = save_results(
-            compounds_df, all_metrics, validation_result, config_dict, output_dir
+            compounds_df, all_metrics, validation_result, config_dict, output_dir,
+            output_format=output_format
         )
 
         logger.info(f"All results saved to: {output_dir}")
