@@ -7,9 +7,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-from .utils import detect_benchmark_mode
-
 logger = logging.getLogger(__name__)
+
+
+_BENCHMARK_COLS = ('top_10_percent_overlap', 'ef_1_0', 'ground_truth_ef_1_0')
+
+
+def detect_benchmark_mode(metrics_df: pl.DataFrame) -> bool:
+    return any(col in metrics_df.columns for col in _BENCHMARK_COLS)
 
 
 _PARQUET_PATTERN = re.compile(r'prediction_cycle_(\d+)\.parquet$')
@@ -398,8 +403,8 @@ def create_dashboard_animation_from_csv(
         top100_values = get_metric_values('top_100_discovery', 0.0)
         top01pct_values = get_metric_values('top_0_1_pct_discovery', 0.0)
         top1pct_values = get_metric_values('top_1_pct_discovery', 0.0)
-        batch_ratio_values = get_metric_values('batch_avg_score_ratio', 1.0)
-        cumul_ratio_values = get_metric_values('cumulative_avg_score_ratio', 1.0)
+        batch_ratio_values = get_metric_values('batch_score_improvement_ratio', 1.0)
+        cumul_ratio_values = get_metric_values('cumulative_score_improvement_ratio', 1.0)
 
         # Calculate percentage explored for x-axis coordinates
         n_total = compounds_df.height

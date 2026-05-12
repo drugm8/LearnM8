@@ -337,6 +337,17 @@ def _validate_pool(
                 pl.col(target_col).cast(pl.Float64, strict=False)
             )
 
+        if (
+            target_col not in validation_result.valid_compounds.columns
+            and isinstance(oracle, CSVOracle)
+            and target_col in oracle.ground_truth.columns
+        ):
+            validation_result.valid_compounds = validation_result.valid_compounds.join(
+                oracle.ground_truth.select(['ID', target_col]),
+                on='ID',
+                how='left',
+            )
+
     return validation_result
 
 
