@@ -144,7 +144,8 @@ def test_save_results_basic(tmp_path):
         cycle_metrics=cycle_metrics,
         validation_result=validation_result,
         config=config,
-        output_dir=tmp_path
+        output_dir=tmp_path,
+        output_format='auto',
     )
 
     assert 'compounds_final' in saved_files
@@ -156,6 +157,10 @@ def test_save_results_basic(tmp_path):
     assert saved_files['cycle_metrics'].exists()
     assert saved_files['selection_history'].exists()
     assert saved_files['config'].exists()
+
+    assert saved_files['compounds_final'].suffix == '.csv'
+    assert saved_files['cycle_metrics'].suffix == '.csv'
+    assert saved_files['selection_history'].suffix == '.csv'
 
 
 def test_save_results_compounds_final_structure(tmp_path):
@@ -183,8 +188,9 @@ def test_save_results_compounds_final_structure(tmp_path):
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan', 'n_cycles': 1}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
+    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path, output_format='auto')
 
+    assert saved_files['compounds_final'].suffix == '.csv'
     final_df = pd.read_csv(saved_files['compounds_final'], comment='#')
 
     # The slim CSV holds only the narrow base columns + target; predictions
@@ -282,8 +288,9 @@ def test_save_results_selection_history(tmp_path):
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
+    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path, output_format='auto')
 
+    assert saved_files['selection_history'].suffix == '.csv'
     history_df = pd.read_csv(saved_files['selection_history'], comment='#')
 
     assert len(history_df) == 2
@@ -407,24 +414,26 @@ def test_parquet_filename_convention(tmp_path):
 
 
 def test_parquet_schema_matches_spec(tmp_path):
-    """Written parquet has schema [ID: Utf8, prediction: Float64, uncertainty: Float64]."""
+    """Written parquet has schema [ID: Utf8, prediction: Float32, uncertainty: Float32]."""
     df = _make_predictions_df(n=4, with_uncertainty=True)
     written = write_cycle_predictions(df, tmp_path, cycle=1)
     assert written is not None
     actual = pl.read_parquet(written)
     assert actual.columns == ['ID', 'prediction', 'uncertainty']
     assert actual.schema['ID'] == pl.Utf8
-    assert actual.schema['prediction'] == pl.Float64
-    assert actual.schema['uncertainty'] == pl.Float64
+    assert actual.schema['prediction'] == pl.Float32
+    assert actual.schema['uncertainty'] == pl.Float32
 
 
 def test_parquet_roundtrip_values(tmp_path):
     """write_cycle_predictions then read returns identical values."""
+    from learnm8.core.persistence import _apply_parquet_schema
+
     df = _make_predictions_df(n=10, with_uncertainty=True)
     path = write_cycle_predictions(df, tmp_path, cycle=2)
     assert path is not None
     actual = pl.read_parquet(path).sort('ID')
-    expected = df.sort('ID')
+    expected = _apply_parquet_schema(df).sort('ID')
     assert actual.equals(expected)
 
 
@@ -442,10 +451,11 @@ def test_parquet_compression_is_zstd(tmp_path):
 
 def test_parquet_atomic_write_no_partial_file(tmp_path, monkeypatch):
     """A failed write leaves no .parquet file (only the .tmp is touched, then cleaned)."""
+    from learnm8.exceptions import PersistenceError
+
     df = _make_predictions_df(n=3)
 
     def boom(self, path, *args, **kwargs):
-        # Simulate I/O error during write_parquet on the tmp path.
         raise OSError('disk full')
 
     monkeypatch.setattr(pl.DataFrame, 'write_parquet', boom)
@@ -453,7 +463,7 @@ def test_parquet_atomic_write_no_partial_file(tmp_path, monkeypatch):
     final_path = prediction_parquet_path(tmp_path, 4)
     tmp_file = final_path.with_suffix('.parquet.tmp')
 
-    with pytest.raises(OSError, match='disk full'):
+    with pytest.raises(PersistenceError, match='Atomic write failed'):
         write_cycle_predictions(df, tmp_path, cycle=4)
 
     assert not final_path.exists(), 'final parquet should not exist after failed write'
