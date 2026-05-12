@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 
+from learnm8.exceptions import FeatureExtractionError
 from learnm8.features.extraction import _get_optimal_n_jobs, extract_features
 
 
@@ -159,7 +160,7 @@ class TestExtractFeatures:
 
         smiles_list = ['CCO', 'INVALID_SMILES', 'CCC']
 
-        with pytest.raises((ValueError, RuntimeError)):
+        with pytest.raises((ValueError, RuntimeError, FeatureExtractionError)):
             extract_features(smiles_list, 'morgan', cache_dir=tmp_path)
 
 

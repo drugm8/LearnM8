@@ -113,7 +113,7 @@ class TestAdvancedRandomForestLearner:
     def test_predict_without_training(self, learner):
         """Test error when predicting without training."""
         features = np.random.randn(5, 10)
-        with pytest.raises(RuntimeError, match='must be trained before prediction'):
+        with pytest.raises(LearnerError, match='must be trained before prediction'):
             learner.predict(features)
 
     def test_get_name_includes_estimator_depth_and_pruning_configuration(self, learner):

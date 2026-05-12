@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import polars as pl
 from learnm8.utils.data_loaders import (
@@ -89,7 +91,7 @@ class TestLoadRunData:
         csv_file.write_text("ID,SMILES\nCOMP_001,CCO\n")
         oracle_file = tmp_path / "oracle.txt"
         oracle_file.write_text("# not a python file\n")
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.WARNING, logger='learnm8.utils.data_loaders'):
             load_run_data(str(csv_file), str(oracle_file))
         assert '.py' in caplog.text or 'extension' in caplog.text.lower()
 

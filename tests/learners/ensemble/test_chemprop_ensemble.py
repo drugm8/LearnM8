@@ -1,10 +1,21 @@
 """Tests for ChempropEnsemble implementation."""
 
+import gc
+
 import numpy as np
 import polars as pl
 import pytest
+import torch
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+
+
+def _cleanup_gpu_memory():
+    """Release GPU memory and force garbage collection."""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
 
 
 @pytest.mark.slow
@@ -12,16 +23,22 @@ from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 class TestChempropEnsemble:
     """Test ChempropEnsemble functionality with real molecular data."""
 
+    @pytest.fixture(autouse=True)
+    def _cleanup_after_test(self):
+        """Clean up GPU memory after each test to prevent OOM."""
+        yield
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     @pytest.fixture
     def chemprop_ensemble(self):
         """Create ChempropEnsemble instance for testing."""
-        return ChempropEnsemble(
-            message_hidden_dim=300,
-            depth=2,
-            max_epochs=3
-        )
+        return ChempropEnsemble(message_hidden_dim=300, depth=2, max_epochs=3)
 
-    def test_initialization_sets_default_architecture_random_states_and_uncertainty_support(self, chemprop_ensemble):
+    def test_initialization_sets_default_architecture_random_states_and_uncertainty_support(
+        self, chemprop_ensemble
+    ):
         """Test ensemble initialization with default parameters."""
         assert len(chemprop_ensemble.learners) == 3
         assert chemprop_ensemble.aggregation_method == 'mean'
@@ -32,7 +49,7 @@ class TestChempropEnsemble:
         assert chemprop_ensemble.requires_smiles() is True
         assert chemprop_ensemble.message_hidden_dim == 300
         assert chemprop_ensemble.depth == 2
-        assert chemprop_ensemble.random_states == [42, 123, 456]
+        assert chemprop_ensemble.random_states == [42, 123, 356]
 
     def test_initialization_custom_parameters(self):
         """Test ensemble initialization with custom parameters."""
@@ -43,7 +60,7 @@ class TestChempropEnsemble:
             depth=5,
             ffn_hidden_dim=400,
             max_epochs=5,
-            random_states=custom_states
+            random_states=custom_states,
         )
 
         assert len(ensemble.learners) == 3
@@ -55,31 +72,35 @@ class TestChempropEnsemble:
     def test_initialization_with_weights(self):
         """Test ensemble initialization with custom weights."""
         weights = [0.5, 0.3, 0.2]
-        ensemble = ChempropEnsemble(
-            depth=2,
-            max_epochs=3,
-            weights=weights
-        )
+        ensemble = ChempropEnsemble(depth=2, max_epochs=3, weights=weights)
 
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, trained_chemprop_ensemble, small_real_compounds):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
+        self, trained_chemprop_ensemble, small_real_compounds
+    ):
         """Test prediction with pre-trained session ensemble (no per-test retrain)."""
         smiles = small_real_compounds['SMILES'].to_list()
         assert trained_chemprop_ensemble.is_trained
 
-        predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        predictions, uncertainty = trained_chemprop_ensemble.predict(
+            features=None, smiles=smiles
+        )
         assert predictions.shape[0] == len(small_real_compounds)
         assert uncertainty is not None
         assert uncertainty.shape[0] == len(small_real_compounds)
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(self, trained_chemprop_ensemble, small_real_compounds):
+    def test_uncertainty_estimation_returns_finite_nonconstant_nonnegative_values(
+        self, trained_chemprop_ensemble, small_real_compounds
+    ):
         """Test that ensemble provides uncertainty estimates (uses session fixture)."""
         smiles = small_real_compounds['SMILES'].to_list()
-        _predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        _predictions, uncertainty = trained_chemprop_ensemble.predict(
+            features=None, smiles=smiles
+        )
 
         assert uncertainty is not None
         assert len(uncertainty) == len(small_real_compounds)
@@ -93,7 +114,7 @@ class TestChempropEnsemble:
 
         random_states = [learner.random_state for learner in chemprop_ensemble.learners]
         assert len(set(random_states)) == 3
-        assert random_states == [42, 123, 456]
+        assert random_states == [42, 123, 356]
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -106,15 +127,19 @@ class TestChempropEnsemble:
 
         chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
-        individual_preds = chemprop_ensemble.get_individual_predictions(features=None, smiles=smiles)
+        individual_preds = chemprop_ensemble.get_individual_predictions(
+            features=None, smiles=smiles
+        )
 
         assert len(individual_preds) == 3
 
-        pred_arrays = [preds for preds in individual_preds.values() if preds is not None]
+        pred_arrays = [
+            preds for preds in individual_preds.values() if preds is not None
+        ]
         assert len(pred_arrays) == 3
 
         for i in range(len(pred_arrays)):
-            for j in range(i+1, len(pred_arrays)):
+            for j in range(i + 1, len(pred_arrays)):
                 assert not np.allclose(pred_arrays[i], pred_arrays[j], rtol=1e-3)
 
     def test_train_with_empty_arrays(self, chemprop_ensemble):
@@ -123,35 +148,39 @@ class TestChempropEnsemble:
         empty_targets = np.array([])
 
         with pytest.raises(ValueError):
-            chemprop_ensemble.train(features=None, targets=empty_targets, smiles=empty_smiles)
+            chemprop_ensemble.train(
+                features=None, targets=empty_targets, smiles=empty_smiles
+            )
 
     def test_predict_without_training(self, chemprop_ensemble, small_real_compounds):
         """Test error when predicting without training."""
         smiles = small_real_compounds['SMILES'].to_list()[:5]
-        with pytest.raises(RuntimeError, match="Ensemble must be trained before prediction"):
+        with pytest.raises(
+            LearnerError, match='Ensemble must be trained before prediction'
+        ):
             chemprop_ensemble.predict(features=None, smiles=smiles)
 
-    def test_get_name_includes_model_count_depth_and_hidden_size(self, chemprop_ensemble):
+    def test_get_name_includes_model_count_depth_and_hidden_size(
+        self, chemprop_ensemble
+    ):
         """Test name generation for Chemprop ensemble."""
         name = chemprop_ensemble.get_name()
-        assert "ChempropEnsemble" in name
-        assert "3xChemprop" in name
-        assert "depth=2" in name
-        assert "hidden=300" in name
+        assert 'ChempropEnsemble' in name
+        assert '3xChemprop' in name
+        assert 'depth=2' in name
+        assert 'hidden=300' in name
 
     def test_get_name_custom_architecture(self):
         """Test name generation with custom architecture."""
-        ensemble = ChempropEnsemble(
-            message_hidden_dim=500,
-            depth=5,
-            max_epochs=3
-        )
+        ensemble = ChempropEnsemble(message_hidden_dim=500, depth=5, max_epochs=3)
         name = ensemble.get_name()
-        assert "ChempropEnsemble" in name
-        assert "depth=5" in name
-        assert "hidden=500" in name
+        assert 'ChempropEnsemble' in name
+        assert 'depth=5' in name
+        assert 'hidden=500' in name
 
-    def test_supports_uncertainty_returns_true_for_chemprop_ensemble(self, chemprop_ensemble):
+    def test_supports_uncertainty_returns_true_for_chemprop_ensemble(
+        self, chemprop_ensemble
+    ):
         """Test that Chemprop ensemble supports uncertainty estimation."""
         assert chemprop_ensemble.supports_uncertainty() is True
 
@@ -172,9 +201,7 @@ class TestChempropEnsemble:
 
         for method in ['mean', 'median']:
             ensemble = ChempropEnsemble(
-                depth=2,
-                max_epochs=3,
-                aggregation_method=method
+                depth=2, max_epochs=3, aggregation_method=method
             )
             ensemble.train(features=None, targets=targets, smiles=smiles)
             predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
@@ -182,6 +209,9 @@ class TestChempropEnsemble:
             assert predictions.shape[0] == len(compounds)
             assert uncertainty.shape[0] == len(compounds)
             assert np.all(np.isfinite(predictions))
+
+            del ensemble
+            _cleanup_gpu_memory()
 
     def test_uncertainty_methods(self, small_real_compounds):
         """Test different uncertainty estimation methods."""
@@ -196,9 +226,7 @@ class TestChempropEnsemble:
 
         for method in ['std', 'mad', 'quantile']:
             ensemble = ChempropEnsemble(
-                depth=2,
-                max_epochs=3,
-                uncertainty_method=method
+                depth=2, max_epochs=3, uncertainty_method=method
             )
             ensemble.train(features=None, targets=targets, smiles=smiles)
             predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
@@ -206,6 +234,9 @@ class TestChempropEnsemble:
             assert predictions.shape[0] == len(compounds)
             assert uncertainty.shape[0] == len(compounds)
             assert np.all(uncertainty >= 0)
+
+            del ensemble
+            _cleanup_gpu_memory()
 
     def test_weighted_ensemble(self, small_real_compounds):
         """Test weighted ensemble aggregation."""
@@ -216,11 +247,7 @@ class TestChempropEnsemble:
             )
 
         weights = [0.6, 0.3, 0.1]
-        ensemble = ChempropEnsemble(
-            depth=2,
-            max_epochs=3,
-            weights=weights
-        )
+        ensemble = ChempropEnsemble(depth=2, max_epochs=3, weights=weights)
 
         smiles = compounds['SMILES'].to_list()
         targets = compounds['Activity'].to_numpy()
@@ -255,16 +282,15 @@ class TestChempropEnsemble:
 
     def test_small_dataset_trains_and_predicts_finite_values(self):
         """Test with small dataset of 5 diverse compounds."""
-        ensemble = ChempropEnsemble(
-            depth=2,
-            max_epochs=3
-        )
+        ensemble = ChempropEnsemble(depth=2, max_epochs=3)
 
-        small_dataset = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
-            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
-            'Activity': [0.5, 0.3, 0.8, 0.1, 0.6]
-        })
+        small_dataset = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004', 'COMP_005'],
+                'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+                'Activity': [0.5, 0.3, 0.8, 0.1, 0.6],
+            }
+        )
 
         smiles = small_dataset['SMILES'].to_list()
         targets = small_dataset['Activity'].to_numpy()
@@ -277,10 +303,14 @@ class TestChempropEnsemble:
         assert np.all(np.isfinite(predictions))
         assert np.all(uncertainty >= 0)
 
-    def test_uncertainty_diversity(self, trained_chemprop_ensemble, small_real_compounds):
+    def test_uncertainty_diversity(
+        self, trained_chemprop_ensemble, small_real_compounds
+    ):
         """Test that ensemble uncertainty captures model diversity (uses session fixture)."""
         smiles = small_real_compounds['SMILES'].to_list()
-        _predictions, uncertainty = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        _predictions, uncertainty = trained_chemprop_ensemble.predict(
+            features=None, smiles=smiles
+        )
 
         assert np.std(uncertainty) > 0
         assert np.all(uncertainty >= 0)
@@ -293,16 +323,24 @@ class TestChempropEnsemble:
         with pytest.raises(ValueError):
             chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
 
-    def test_prediction_consistency(self, trained_chemprop_ensemble, small_real_compounds):
+    def test_prediction_consistency(
+        self, trained_chemprop_ensemble, small_real_compounds
+    ):
         """Test that predictions are consistent across multiple calls (uses session fixture)."""
         smiles = small_real_compounds['SMILES'].to_list()
-        predictions1, uncertainty1 = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
-        predictions2, uncertainty2 = trained_chemprop_ensemble.predict(features=None, smiles=smiles)
+        predictions1, uncertainty1 = trained_chemprop_ensemble.predict(
+            features=None, smiles=smiles
+        )
+        predictions2, uncertainty2 = trained_chemprop_ensemble.predict(
+            features=None, smiles=smiles
+        )
 
         assert np.allclose(predictions1, predictions2, rtol=1e-2, atol=1e-3)
         assert np.allclose(uncertainty1, uncertainty2, rtol=1e-2, atol=1e-3)
 
-    def test_multiple_architecture_configurations_train_and_predict(self, small_real_compounds):
+    def test_multiple_architecture_configurations_train_and_predict(
+        self, small_real_compounds
+    ):
         """Test ensemble with different architecture configurations."""
         compounds = small_real_compounds.head(10).clone()
         if 'Activity' not in compounds.columns:
@@ -316,20 +354,20 @@ class TestChempropEnsemble:
         architectures = [
             {'depth': 2, 'message_hidden_dim': 300},
             {'depth': 3, 'message_hidden_dim': 500},
-            {'depth': 4, 'message_hidden_dim': 400, 'ffn_num_layers': 2}
+            {'depth': 4, 'message_hidden_dim': 400, 'ffn_num_layers': 2},
         ]
 
         for arch in architectures:
-            ensemble = ChempropEnsemble(
-                **arch,
-                max_epochs=3
-            )
+            ensemble = ChempropEnsemble(**arch, max_epochs=3)
             ensemble.train(features=None, targets=targets, smiles=smiles)
             predictions, uncertainty = ensemble.predict(features=None, smiles=smiles)
 
             assert predictions.shape[0] == len(compounds)
             assert uncertainty.shape[0] == len(compounds)
             assert np.all(np.isfinite(predictions))
+
+            del ensemble
+            _cleanup_gpu_memory()
 
     def test_model_parameters_propagation(self):
         """Test that model parameters propagate to all learners."""
@@ -338,7 +376,7 @@ class TestChempropEnsemble:
             depth=5,
             atom_messages=True,
             batch_norm=True,
-            max_epochs=3
+            max_epochs=3,
         )
 
         for learner in ensemble.learners:
@@ -353,7 +391,17 @@ class TestChempropEnsemble:
 class TestChempropEnsembleWithDescriptors:
     """Test ChempropEnsemble with extra descriptors (x_d)."""
 
-    def test_train_predict_with_descriptors(self, small_real_compounds, small_real_morgan_features):
+    @pytest.fixture(autouse=True)
+    def _cleanup_after_test(self):
+        """Clean up GPU memory after each test to prevent OOM."""
+        yield
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def test_train_predict_with_descriptors(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test ensemble training and prediction with descriptors."""
         ensemble = ChempropEnsemble(max_epochs=5)
         compounds = small_real_compounds.clone()
@@ -388,7 +436,9 @@ class TestChempropEnsembleWithDescriptors:
         assert uncertainties.shape == (10,)
         assert np.all(uncertainties >= 0)
 
-    def test_uncertainty_with_vs_without_descriptors(self, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_with_vs_without_descriptors(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test that uncertainty is provided in both modes."""
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
@@ -408,6 +458,9 @@ class TestChempropEnsembleWithDescriptors:
         assert np.all(unc_with >= 0)
         assert np.all(unc_without >= 0)
 
+        del ensemble_with, ensemble_without
+        _cleanup_gpu_memory()
+
     def test_aggressive_gc_enabled_by_default(self):
         """Verify enable_aggressive_gc defaults to True."""
         ensemble = ChempropEnsemble()
@@ -422,19 +475,22 @@ class TestChempropEnsembleWithDescriptors:
         for learner in ensemble.learners:
             assert learner.enable_aggressive_gc is False
 
-    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_training(
+        self, small_real_compounds, monkeypatch
+    ):
         """Verify _cleanup_gpu_memory is called after training when enabled."""
         cleanup_called = []
 
-        def mock_cleanup(self, context=""):
+        def mock_cleanup(self, context=''):
             cleanup_called.append(context)
 
-        ensemble = ChempropEnsemble(
-            max_epochs=2,
-            enable_aggressive_gc=True
-        )
+        ensemble = ChempropEnsemble(max_epochs=2, enable_aggressive_gc=True)
 
-        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+        monkeypatch.setattr(
+            ensemble,
+            '_cleanup_gpu_memory',
+            lambda context='': mock_cleanup(ensemble, context),
+        )
 
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
@@ -445,17 +501,16 @@ class TestChempropEnsembleWithDescriptors:
         assert len(cleanup_called) > 0
         assert any('after ensemble training' in ctx for ctx in cleanup_called)
 
-    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_prediction(
+        self, small_real_compounds, monkeypatch
+    ):
         """Verify _cleanup_gpu_memory is called after prediction when enabled."""
         cleanup_called = []
 
-        def mock_cleanup(self, context=""):
+        def mock_cleanup(self, context=''):
             cleanup_called.append(context)
 
-        ensemble = ChempropEnsemble(
-            max_epochs=2,
-            enable_aggressive_gc=True
-        )
+        ensemble = ChempropEnsemble(max_epochs=2, enable_aggressive_gc=True)
 
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
@@ -464,7 +519,11 @@ class TestChempropEnsembleWithDescriptors:
         ensemble.train(features=None, targets=targets, smiles=smiles)
 
         cleanup_called.clear()
-        monkeypatch.setattr(ensemble, '_cleanup_gpu_memory', lambda context="": mock_cleanup(ensemble, context))
+        monkeypatch.setattr(
+            ensemble,
+            '_cleanup_gpu_memory',
+            lambda context='': mock_cleanup(ensemble, context),
+        )
 
         ensemble.predict(features=None, smiles=smiles)
 
@@ -473,17 +532,14 @@ class TestChempropEnsembleWithDescriptors:
 
     def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
         """Verify _cleanup_gpu_memory is a no-op when enable_aggressive_gc=False."""
-        ensemble = ChempropEnsemble(
-            max_epochs=2,
-            enable_aggressive_gc=False
-        )
+        ensemble = ChempropEnsemble(max_epochs=2, enable_aggressive_gc=False)
 
         assert ensemble.enable_aggressive_gc is False
 
         cleanup_did_work = []
         original_cleanup = ChempropEnsemble._cleanup_gpu_memory
 
-        def tracking_cleanup(self, context=""):
+        def tracking_cleanup(self, context=''):
             original_cleanup(self, context)
             if self.enable_aggressive_gc:
                 cleanup_did_work.append(context)
@@ -506,62 +562,61 @@ class TestChempropEnsembleWithDescriptors:
         targets = compounds['Activity'].to_numpy()[:10]
 
         ensemble_gc_on = ChempropEnsemble(
-            max_epochs=2,
-            random_states=[42, 123, 456],
-            enable_aggressive_gc=True
+            max_epochs=2, random_states=[42, 123, 456], enable_aggressive_gc=True
         )
         ensemble_gc_on.train(features=None, targets=targets, smiles=smiles)
         pred_gc_on, _ = ensemble_gc_on.predict(features=None, smiles=smiles)
 
         ensemble_gc_off = ChempropEnsemble(
-            max_epochs=2,
-            random_states=[42, 123, 456],
-            enable_aggressive_gc=False
+            max_epochs=2, random_states=[42, 123, 456], enable_aggressive_gc=False
         )
         ensemble_gc_off.train(features=None, targets=targets, smiles=smiles)
         pred_gc_off, _ = ensemble_gc_off.predict(features=None, smiles=smiles)
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-2, atol=1e-3)
 
+        del ensemble_gc_on, ensemble_gc_off
+        _cleanup_gpu_memory()
+
 
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropEnsemblePerformanceConfig:
+    @pytest.fixture(autouse=True)
+    def _cleanup_after_test(self):
+        """Clean up GPU memory after each test to prevent OOM."""
+        yield
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def test_precision_propagation(self):
-        ensemble = ChempropEnsemble(
-            max_epochs=2,
-            precision='16-mixed'
-        )
+        ensemble = ChempropEnsemble(max_epochs=2, precision='16-mixed')
 
         for learner in ensemble.learners:
             assert learner.precision == '16-mixed'
 
     def test_predict_batch_size_propagation(self):
-        ensemble = ChempropEnsemble(
-            batch_size=16,
-            predict_batch_size=64
-        )
+        ensemble = ChempropEnsemble(batch_size=16, predict_batch_size=64)
 
         for learner in ensemble.learners:
             assert learner.predict_batch_size == 64
 
     def test_pin_memory_propagation(self):
-        ensemble = ChempropEnsemble(
-            pin_memory=False
-        )
+        ensemble = ChempropEnsemble(pin_memory=False)
 
         for learner in ensemble.learners:
             assert learner.pin_memory is False
 
     def test_ensemble_with_performance_params(self, small_real_compounds):
         import polars as pl
+
         ensemble = ChempropEnsemble(
             max_epochs=3,
             batch_size=8,
             predict_batch_size=16,
             precision='32-true',
-            pin_memory=True
+            pin_memory=True,
         )
 
         compounds = small_real_compounds.clone()

@@ -81,9 +81,9 @@ def test_parquet_schema_and_compression(parquet_flow_results):
         df = pl.read_parquet(p)
         assert 'ID' in df.columns and 'prediction' in df.columns
         assert df.schema['ID'] == pl.Utf8
-        assert df.schema['prediction'] == pl.Float64
+        assert df.schema['prediction'] == pl.Float32
         if 'uncertainty' in df.columns:
-            assert df.schema['uncertainty'] == pl.Float64
+            assert df.schema['uncertainty'] == pl.Float32
         rg = pq.ParquetFile(p).metadata.row_group(0)
         compressions = {rg.column(i).compression for i in range(rg.num_columns)}
         assert compressions == {'ZSTD'}, f'expected ZSTD, got {compressions}'

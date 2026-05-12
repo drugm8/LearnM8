@@ -8,6 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.ensemble.ensemble import EnsembleLearner
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
@@ -161,12 +162,12 @@ class TestEnsembleCommon:
         empty_features = np.array([]).reshape(0, 2048)
         empty_targets = np.array([])
 
-        with pytest.raises((ValueError, RuntimeError)):
+        with pytest.raises((ValueError, RuntimeError, LearnerError)):
             ensemble.train(empty_features, empty_targets)
 
     def test_predict_without_training(self, ensemble_setup, features_20):
         _, ensemble = ensemble_setup
-        with pytest.raises(RuntimeError, match='must be trained'):
+        with pytest.raises((RuntimeError, LearnerError), match='must be trained'):
             ensemble.predict(features_20)
 
     def test_untrained_ensemble_statistics_report_multiple_learners_and_untrained_state(self, ensemble_setup):

@@ -76,7 +76,7 @@ class TestGaussianProcessLearner:
 
     def test_predict_without_training(self, learner, features_25):
         """Test error when predicting without training."""
-        with pytest.raises(RuntimeError, match="must be trained before prediction"):
+        with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(features_25)
 
     def test_get_name_includes_alpha_configuration(self, learner):
@@ -189,14 +189,14 @@ class TestGaussianProcessLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(RuntimeError, match="empty dataset"):
+        with pytest.raises(LearnerError, match="empty dataset"):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(RuntimeError, match="mismatched lengths"):
+        with pytest.raises(LearnerError, match="mismatched lengths"):
             learner.train(features, targets)
 
     def test_train_with_1d_features(self, learner):
