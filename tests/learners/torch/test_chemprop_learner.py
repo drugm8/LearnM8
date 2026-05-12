@@ -1,21 +1,25 @@
-import pytest
+import gc
+
 import numpy as np
 import polars as pl
-from pathlib import Path
+import pytest
+import torch
 
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
+
+
+def _cleanup_gpu_memory():
+    """Release GPU memory and force garbage collection."""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
 
 
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropLearnerBasic:
-
     def test_initialization_sets_message_passing_hyperparameters(self):
-        learner = ChempropLearner(
-            message_hidden_dim=300,
-            depth=3,
-            max_epochs=2
-        )
+        learner = ChempropLearner(message_hidden_dim=300, depth=3, max_epochs=2)
         assert learner.message_hidden_dim == 300
         assert learner.depth == 3
         assert learner.max_epochs == 2
@@ -41,10 +45,12 @@ class TestChempropLearnerBasic:
         features = np.random.rand(10, 100)
         targets = np.random.rand(10)
 
-        with pytest.raises(ValueError, match="requires SMILES"):
+        with pytest.raises(ValueError, match='requires SMILES'):
             learner.train(features, targets, smiles=None)
 
-    def test_predict_raises_when_smiles_are_missing_after_training(self, small_real_compounds):
+    def test_predict_raises_when_smiles_are_missing_after_training(
+        self, small_real_compounds
+    ):
         learner = ChempropLearner(max_epochs=2)
 
         compounds = small_real_compounds.clone()
@@ -58,7 +64,7 @@ class TestChempropLearnerBasic:
         learner.train(features=None, targets=targets, smiles=smiles)
 
         features = np.random.rand(5, 100)
-        with pytest.raises(ValueError, match="requires SMILES"):
+        with pytest.raises(ValueError, match='requires SMILES'):
             learner.predict(features, smiles=None)
 
     def test_predict_raises_before_training(self):
@@ -66,15 +72,16 @@ class TestChempropLearnerBasic:
 
         learner = ChempropLearner(max_epochs=2)
 
-        with pytest.raises(LearnerError, match="must be trained"):
+        with pytest.raises(LearnerError, match='must be trained'):
             learner.predict(features=None, smiles=['CC', 'CCO'])
 
 
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropLearnerTrainPredict:
-
-    def test_train_and_predict_return_finite_values_without_uncertainty(self, small_real_compounds):
+    def test_train_and_predict_return_finite_values_without_uncertainty(
+        self, small_real_compounds
+    ):
         learner = ChempropLearner(max_epochs=5)
 
         compounds = small_real_compounds.clone()
@@ -97,7 +104,9 @@ class TestChempropLearnerTrainPredict:
         assert uncertainties is None
         assert np.all(np.isfinite(predictions))
 
-    def test_predict_returns_finite_values_for_unseen_compounds(self, small_real_compounds):
+    def test_predict_returns_finite_values_for_unseen_compounds(
+        self, small_real_compounds
+    ):
         learner = ChempropLearner(max_epochs=5)
 
         compounds = small_real_compounds.clone()
@@ -122,14 +131,15 @@ class TestChempropLearnerTrainPredict:
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropLearnerModelParameters:
-
-    def test_custom_architecture_parameters_train_and_predict(self, small_real_compounds):
+    def test_custom_architecture_parameters_train_and_predict(
+        self, small_real_compounds
+    ):
         learner = ChempropLearner(
             message_hidden_dim=500,
             depth=5,
             ffn_hidden_dim=400,
             ffn_num_layers=2,
-            max_epochs=3
+            max_epochs=3,
         )
 
         compounds = small_real_compounds.clone()
@@ -149,9 +159,7 @@ class TestChempropLearnerModelParameters:
 
     def test_atom_messages_mode_trains_and_predicts(self, small_real_compounds):
         learner = ChempropLearner(
-            atom_messages=True,
-            max_epochs=3,
-            early_stopping=False
+            atom_messages=True, max_epochs=3, early_stopping=False
         )
 
         compounds = small_real_compounds.clone()
@@ -169,11 +177,7 @@ class TestChempropLearnerModelParameters:
         assert predictions.shape == (len(smiles),)
 
     def test_batch_norm_enabled_trains_and_predicts(self, small_real_compounds):
-        learner = ChempropLearner(
-            batch_norm=True,
-            max_epochs=3,
-            early_stopping=False
-        )
+        learner = ChempropLearner(batch_norm=True, max_epochs=3, early_stopping=False)
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -192,9 +196,7 @@ class TestChempropLearnerModelParameters:
     def test_supported_aggregation_modes_train_and_predict(self, small_real_compounds):
         for agg in ['mean', 'sum', 'norm']:
             learner = ChempropLearner(
-                aggregation=agg,
-                max_epochs=2,
-                early_stopping=False
+                aggregation=agg, max_epochs=2, early_stopping=False
             )
 
             compounds = small_real_compounds.clone()
@@ -211,11 +213,13 @@ class TestChempropLearnerModelParameters:
 
             assert predictions.shape == (len(smiles),)
 
+            del learner
+            _cleanup_gpu_memory()
+
 
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropLearnerEarlyStopping:
-
     def test_early_stopping_enabled_by_default(self):
         learner = ChempropLearner(max_epochs=50)
         assert learner.early_stopping is True
@@ -227,7 +231,7 @@ class TestChempropLearnerEarlyStopping:
             max_epochs=100,
             early_stopping=True,
             early_stopping_patience=2,
-            val_fraction=0.2
+            val_fraction=0.2,
         )
 
         compounds = small_real_compounds.clone()
@@ -246,10 +250,7 @@ class TestChempropLearnerEarlyStopping:
 
     def test_disabling_early_stopping_runs_full_epoch_count(self, small_real_compounds):
         max_epochs = 5
-        learner = ChempropLearner(
-            max_epochs=max_epochs,
-            early_stopping=False
-        )
+        learner = ChempropLearner(max_epochs=max_epochs, early_stopping=False)
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -265,12 +266,10 @@ class TestChempropLearnerEarlyStopping:
         assert learner.is_trained is True
         assert learner.trainer.current_epoch == max_epochs
 
-    def test_validation_split_configuration_trains_successfully(self, small_real_compounds):
-        learner = ChempropLearner(
-            max_epochs=2,
-            early_stopping=True,
-            val_fraction=0.2
-        )
+    def test_validation_split_configuration_trains_successfully(
+        self, small_real_compounds
+    ):
+        learner = ChempropLearner(max_epochs=2, early_stopping=True, val_fraction=0.2)
 
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -292,7 +291,7 @@ class TestChempropLearnerEarlyStopping:
             early_stopping=True,
             early_stopping_patience=5,
             early_stopping_min_delta=0.001,
-            val_fraction=0.15
+            val_fraction=0.15,
         )
 
         compounds = small_real_compounds.clone()
@@ -317,7 +316,9 @@ class TestChempropLearnerEarlyStopping:
 class TestChempropLearnerWithDescriptors:
     """Test ChempropLearner with extra descriptors (x_d)."""
 
-    def test_train_predict_with_morgan_descriptors(self, small_real_compounds, small_real_morgan_features):
+    def test_train_predict_with_morgan_descriptors(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test training and prediction with Morgan fingerprints as x_d."""
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
@@ -338,7 +339,9 @@ class TestChempropLearnerWithDescriptors:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_train_predict_without_descriptors_backward_compat(self, small_real_compounds):
+    def test_train_predict_without_descriptors_backward_compat(
+        self, small_real_compounds
+    ):
         """Test backward compatibility - training without descriptors."""
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
@@ -357,7 +360,9 @@ class TestChempropLearnerWithDescriptors:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_descriptor_dimension_validation_train_without_predict_with(self, small_real_compounds, small_real_morgan_features):
+    def test_descriptor_dimension_validation_train_without_predict_with(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test error when trained without descriptors but predict with descriptors."""
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
@@ -369,10 +374,12 @@ class TestChempropLearnerWithDescriptors:
 
         features = small_real_morgan_features[:10].copy()
 
-        with pytest.raises(ValueError, match="trained without descriptors"):
+        with pytest.raises(ValueError, match='trained without descriptors'):
             learner.predict(features=features, smiles=smiles)
 
-    def test_descriptor_dimension_validation_train_with_predict_without(self, small_real_compounds, small_real_morgan_features):
+    def test_descriptor_dimension_validation_train_with_predict_without(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test error when trained with descriptors but predict without descriptors."""
         learner = ChempropLearner(max_epochs=5)
         compounds = small_real_compounds.clone()
@@ -383,10 +390,12 @@ class TestChempropLearnerWithDescriptors:
         features = small_real_morgan_features[:10].copy()
         learner.train(features=features, targets=targets, smiles=smiles)
 
-        with pytest.raises(ValueError, match="trained with descriptors"):
+        with pytest.raises(ValueError, match='trained with descriptors'):
             learner.predict(features=None, smiles=smiles)
 
-    def test_descriptor_dimension_mismatch(self, small_real_compounds, small_real_morgan_features, tmp_path):
+    def test_descriptor_dimension_mismatch(
+        self, small_real_compounds, small_real_morgan_features, tmp_path
+    ):
         """Test error on dimension mismatch between training and prediction."""
         from learnm8.features.extraction import extract_features
 
@@ -401,10 +410,12 @@ class TestChempropLearnerWithDescriptors:
 
         test_features = extract_features(smiles, 'maccs', tmp_path)
 
-        with pytest.raises(ValueError, match="Feature dimension mismatch"):
+        with pytest.raises(ValueError, match='Feature dimension mismatch'):
             learner.predict(features=test_features, smiles=smiles)
 
-    def test_multiple_descriptor_featurizers_train_and_predict(self, small_real_compounds, tmp_path):
+    def test_multiple_descriptor_featurizers_train_and_predict(
+        self, small_real_compounds, tmp_path
+    ):
         """Test compatibility with different featurizer types."""
         from learnm8.features.extraction import extract_features
 
@@ -422,13 +433,18 @@ class TestChempropLearnerWithDescriptors:
             assert predictions.shape == (10,)
             assert np.all(np.isfinite(predictions))
 
-    def test_early_stopping_with_descriptors(self, small_real_compounds, small_real_morgan_features):
+            del learner
+            _cleanup_gpu_memory()
+
+    def test_early_stopping_with_descriptors(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test early stopping works correctly with descriptors."""
         learner = ChempropLearner(
             max_epochs=20,
             early_stopping=True,
             early_stopping_patience=3,
-            val_fraction=0.2
+            val_fraction=0.2,
         )
         compounds = small_real_compounds.clone()
 
@@ -455,19 +471,22 @@ class TestChempropLearnerWithDescriptors:
         learner = ChempropLearner(enable_aggressive_gc=False)
         assert learner.enable_aggressive_gc is False
 
-    def test_cleanup_gpu_memory_called_after_training(self, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_training(
+        self, small_real_compounds, monkeypatch
+    ):
         """Verify _cleanup_gpu_memory is called after training when enabled."""
         cleanup_called = []
 
-        def mock_cleanup(self, context=""):
+        def mock_cleanup(self, context=''):
             cleanup_called.append(context)
 
-        learner = ChempropLearner(
-            max_epochs=2,
-            enable_aggressive_gc=True
-        )
+        learner = ChempropLearner(max_epochs=2, enable_aggressive_gc=True)
 
-        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+        monkeypatch.setattr(
+            learner,
+            '_cleanup_gpu_memory',
+            lambda context='': mock_cleanup(learner, context),
+        )
 
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
@@ -478,17 +497,16 @@ class TestChempropLearnerWithDescriptors:
         assert len(cleanup_called) > 0
         assert any('after training' in ctx for ctx in cleanup_called)
 
-    def test_cleanup_gpu_memory_called_after_prediction(self, small_real_compounds, monkeypatch):
+    def test_cleanup_gpu_memory_called_after_prediction(
+        self, small_real_compounds, monkeypatch
+    ):
         """Verify _cleanup_gpu_memory is called after prediction when enabled."""
         cleanup_called = []
 
-        def mock_cleanup(self, context=""):
+        def mock_cleanup(self, context=''):
             cleanup_called.append(context)
 
-        learner = ChempropLearner(
-            max_epochs=2,
-            enable_aggressive_gc=True
-        )
+        learner = ChempropLearner(max_epochs=2, enable_aggressive_gc=True)
 
         compounds = small_real_compounds.clone()
         smiles = compounds['SMILES'].to_list()[:10]
@@ -497,7 +515,11 @@ class TestChempropLearnerWithDescriptors:
         learner.train(features=None, targets=targets, smiles=smiles)
 
         cleanup_called.clear()
-        monkeypatch.setattr(learner, '_cleanup_gpu_memory', lambda context="": mock_cleanup(learner, context))
+        monkeypatch.setattr(
+            learner,
+            '_cleanup_gpu_memory',
+            lambda context='': mock_cleanup(learner, context),
+        )
 
         learner.predict(features=None, smiles=smiles)
 
@@ -506,17 +528,14 @@ class TestChempropLearnerWithDescriptors:
 
     def test_cleanup_not_called_when_disabled(self, small_real_compounds, monkeypatch):
         """Verify _cleanup_gpu_memory is a no-op when enable_aggressive_gc=False."""
-        learner = ChempropLearner(
-            max_epochs=2,
-            enable_aggressive_gc=False
-        )
+        learner = ChempropLearner(max_epochs=2, enable_aggressive_gc=False)
 
         assert learner.enable_aggressive_gc is False
 
         cleanup_did_work = []
         original_cleanup = ChempropLearner._cleanup_gpu_memory
 
-        def tracking_cleanup(self, context=""):
+        def tracking_cleanup(self, context=''):
             original_cleanup(self, context)
             if self.enable_aggressive_gc:
                 cleanup_did_work.append(context)
@@ -539,28 +558,26 @@ class TestChempropLearnerWithDescriptors:
         targets = compounds['Activity'].to_numpy()[:10]
 
         learner_gc_on = ChempropLearner(
-            max_epochs=2,
-            random_state=42,
-            enable_aggressive_gc=True
+            max_epochs=2, random_state=42, enable_aggressive_gc=True
         )
         learner_gc_on.train(features=None, targets=targets, smiles=smiles)
         pred_gc_on, _ = learner_gc_on.predict(features=None, smiles=smiles)
 
         learner_gc_off = ChempropLearner(
-            max_epochs=2,
-            random_state=42,
-            enable_aggressive_gc=False
+            max_epochs=2, random_state=42, enable_aggressive_gc=False
         )
         learner_gc_off.train(features=None, targets=targets, smiles=smiles)
         pred_gc_off, _ = learner_gc_off.predict(features=None, smiles=smiles)
 
         assert np.allclose(pred_gc_on, pred_gc_off, rtol=1e-2, atol=1e-3)
 
+        del learner_gc_on, learner_gc_off
+        _cleanup_gpu_memory()
+
 
 @pytest.mark.slow
 @pytest.mark.integration
 class TestChempropLearnerPerformanceConfig:
-
     def test_default_predict_batch_size_is_four_times_training_batch_size(self):
         learner = ChempropLearner(batch_size=32)
         assert learner.predict_batch_size == 128
@@ -571,6 +588,7 @@ class TestChempropLearnerPerformanceConfig:
 
     def test_precision_auto_cpu(self, monkeypatch):
         import torch
+
         monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
         learner = ChempropLearner(precision='auto')
         assert learner.precision == '32-true'
@@ -583,7 +601,7 @@ class TestChempropLearnerPerformanceConfig:
         assert learner.precision == '32-true'
 
     def test_precision_invalid(self):
-        with pytest.raises(ValueError, match="Invalid precision"):
+        with pytest.raises(ValueError, match='Invalid precision'):
             ChempropLearner(precision='invalid')
 
     def test_pin_memory_defaults_to_true(self):
@@ -600,7 +618,7 @@ class TestChempropLearnerPerformanceConfig:
             batch_size=8,
             predict_batch_size=16,
             precision='32-true',
-            pin_memory=True
+            pin_memory=True,
         )
 
         compounds = small_real_compounds.clone()

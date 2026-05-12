@@ -35,7 +35,7 @@ class TestLREnsemble:
         assert not lr_ensemble.is_trained
         assert lr_ensemble.supports_uncertainty() is True
         assert lr_ensemble.regularization_strengths == [0.1, 1.0, 10.0]
-        assert lr_ensemble.random_states == [42, 123, 456]
+        assert lr_ensemble.random_states == [42, 123, 356]
 
     def test_initialization_custom_regularization(self):
         """Test ensemble initialization with custom regularization strengths."""

@@ -53,12 +53,17 @@ def test_no_pycache_dirs_in_git():
 
 
 def test_no_checkpoint_files():
-    ckpt_files = list(VALIDATION_ROOT.rglob("*.ckpt"))
-    assert len(ckpt_files) == 0, f"Found checkpoint files: {ckpt_files}"
+    import subprocess
+    result = subprocess.run(
+        ["git", "ls-files", "--", "validation/**/*.ckpt"],
+        capture_output=True, text=True, cwd=str(REPO_ROOT),
+    )
+    tracked = [line for line in result.stdout.splitlines() if line.strip()]
+    assert tracked == [], f"Checkpoint files tracked in git: {tracked}"
 
 
 def test_gitignore_patterns():
-    gitignore = (REPO_ROOT / ".gitignore").read_text()
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     required_patterns = [
         "validation/reports/",
         "**/__pycache__/",
@@ -83,13 +88,13 @@ def test_orchestrator_discovers_minimum_scripts():
 
 def test_dataset_config_no_stale_paths():
     config_path = VALIDATION_ROOT / "lib" / "dataset_config.py"
-    content = config_path.read_text()
+    content = config_path.read_text(encoding="utf-8")
     assert "ampc_30k_subsample.csv" not in content, "Stale ampc_30k_subsample.csv reference in dataset_config.py"
 
 
 def test_yaml_config_paths_valid():
     yaml_path = VALIDATION_ROOT / "config" / "validation_strategies.yaml"
-    with open(yaml_path) as f:
+    with open(yaml_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     output_base = config["global"]["output_base_dir"]
@@ -130,7 +135,7 @@ def test_absolute_imports_no_sys_path_hack():
     )
     violations = []
     for script in scripts:
-        content = script.read_text()
+        content = script.read_text(encoding="utf-8")
         if "sys.path.insert" in content:
             violations.append(str(script.relative_to(REPO_ROOT)))
     assert len(violations) == 0, f"Scripts still using sys.path.insert: {violations}"

@@ -562,7 +562,7 @@ class TestFastpropLearner:
         features = small_real_morgan_features.copy()
         learner = FastpropLearner(
             fnn_layers=1, hidden_size=64, max_epochs=5,
-            val_fraction=0.1, random_state=42
+            val_fraction=0.3, random_state=42
         )
         learner.train(features, compounds['Activity'].to_numpy())
         es_callbacks = [

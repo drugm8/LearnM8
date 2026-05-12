@@ -38,8 +38,11 @@ def test_morgan_packed_returns_uint8_when_requested(tmp_path: Path):
 
 @pytest.mark.unit
 def test_morgan_count_csr_falls_back_to_float32(tmp_path: Path, caplog):
+    from learnm8.features import cache as _cache_mod
+
     feat = create_featurizer('morgan', count=True, fp_size=512)
     extract_features(SMILES, feat, cache_dir=tmp_path)
+    _cache_mod._uint8_fallback_warned.clear()
     caplog.clear()
     with caplog.at_level(logging.DEBUG, logger='learnm8.features.cache'):
         out = extract_features(

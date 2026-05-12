@@ -144,10 +144,14 @@ class TestDecisionTreeLearner:
         features = small_real_morgan_features
         targets = compounds['Activity'].to_numpy()
 
-        learner_shallow = DecisionTreeLearner(max_depth=2, random_state=42)
+        learner_shallow = DecisionTreeLearner(
+            max_depth=2, min_samples_split=2, min_samples_leaf=1, random_state=42
+        )
         learner_shallow.train(features, targets)
 
-        learner_deep = DecisionTreeLearner(max_depth=20, random_state=42)
+        learner_deep = DecisionTreeLearner(
+            max_depth=20, min_samples_split=2, min_samples_leaf=1, random_state=42
+        )
         learner_deep.train(features, targets)
 
         assert learner_shallow.model.get_depth() <= 2

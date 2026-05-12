@@ -159,5 +159,5 @@ class TestEnsembleLearner:
         targets = np.random.rand(10)
         ensemble = EnsembleLearner(base_learners)
 
-        with pytest.raises((ValueError, RuntimeError)):
+        with pytest.raises(LearnerError, match='Features must be 2D'):
             ensemble.train(features_1d, targets)

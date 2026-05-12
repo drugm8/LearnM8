@@ -634,7 +634,7 @@ class TestEdgeCaseHandling:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(AcquisitionError, match="Predictions contain NaN values"):
+        with pytest.raises(LearnerError, match="NaN predictions detected"):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,

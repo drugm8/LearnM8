@@ -134,7 +134,7 @@ class TestPythonOracleMeasure:
         )
         oracle = PythonOracle(module_path=str(f))
         compounds = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})
-        with pytest.raises(RuntimeError, match="Oracle function failed"):
+        with pytest.raises(OracleError, match="Oracle function failed"):
             oracle.measure(compounds, ['score'])
 
     def test_measure_invalid_return_type(self, tmp_path):
