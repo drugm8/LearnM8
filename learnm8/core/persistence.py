@@ -15,19 +15,129 @@ All CSV files include metadata comments for self-documentation.
 No query classes - files are directly usable with pandas, Excel, etc.
 """
 
+import errno
 import json
 import logging
+import os
+import shutil
+import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import polars as pl
 
 from learnm8.evaluation.metrics.similarity import DIVERSITY_KEYS
-from learnm8.exceptions import PersistenceError
+from learnm8.exceptions import LearnM8Warning, PersistenceError
 
 from .validation import ValidationResult
 
 logger = logging.getLogger(__name__)
+
+PARQUET_ROW_THRESHOLD = 1_000_000
+PARQUET_COMPRESSION = 'zstd'
+PARQUET_COMPRESSION_LEVEL = 3
+
+
+def _atomic_write(final_path: Path, write_fn: Callable[[Path], None]) -> None:
+    tmp_path = final_path.with_name(f'{final_path.name}.tmp')
+
+    if tmp_path.exists():
+        logger.info('Overwriting orphan .tmp file: %s', tmp_path)
+        tmp_path.unlink(missing_ok=True)
+
+    try:
+        write_fn(tmp_path)
+
+        fd_tmp = os.open(tmp_path, os.O_RDONLY)
+        os.fsync(fd_tmp)
+        os.close(fd_tmp)
+
+        fd_dir = os.open(tmp_path.parent, os.O_RDONLY)
+        os.fsync(fd_dir)
+        os.close(fd_dir)
+
+        try:
+            os.replace(tmp_path, final_path)
+        except OSError as e:
+            if e.errno == errno.EXDEV:
+                warnings.warn(
+                    f'Atomic rename failed (cross-device); '
+                    f'fell back to copy+unlink. '
+                    f'Consider placing temp in {final_path.parent}.',
+                    LearnM8Warning,
+                    stacklevel=2,
+                )
+                shutil.copyfile(tmp_path, final_path)
+                tmp_path.unlink()
+            else:
+                raise
+
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise PersistenceError(f'Atomic write failed for {final_path}') from None
+
+
+def _resolve_output_format(
+    fmt: Literal['auto', 'csv', 'parquet'],
+    n_rows: int,
+    file_label: str,
+) -> tuple[Literal['csv', 'parquet'], str | None]:
+    if file_label == 'cycle_metrics':
+        return ('csv', None)
+
+    if fmt == 'parquet':
+        return ('parquet', None)
+
+    if fmt == 'csv':
+        if n_rows > PARQUET_ROW_THRESHOLD:
+            size_gb = n_rows * 100 / (1024**3)
+            warning = (
+                f"Writing {n_rows:,} rows as CSV for '{file_label}'; "
+                f'estimated ~{size_gb:.1f} GB. '
+                f"Consider output_format='parquet'."
+            )
+            return ('csv', warning)
+        return ('csv', None)
+
+    if n_rows > PARQUET_ROW_THRESHOLD:
+        return ('parquet', None)
+
+    return ('csv', None)
+
+
+def _build_parquet_metadata(config: dict[str, Any], n_rows: int) -> dict[str, str]:
+    return {
+        'featurizer': str(config.get('featurizer', 'unknown')),
+        'target_column': str(config.get('target_col', 'target')),
+        'n_cycles': str(config.get('n_cycles', 0)),
+        'n_compounds': str(n_rows),
+        'column_guide_ID': 'Unique compound identifier',
+        'column_guide_SMILES': 'Molecular structure',
+        'column_guide_status': 'labeled/unlabeled/pruned',
+    }
+
+
+def _write_metadata_json(path: Path, data: dict[str, str]) -> None:
+    with open(str(path), 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def _apply_parquet_schema(df: pl.DataFrame) -> pl.DataFrame:
+    KNOWN_DTYPES: dict[str, pl.PolarsDataType] = {
+        'ID': pl.Utf8,
+        'SMILES': pl.Utf8,
+        'status': pl.Utf8,
+        'labeled_cycle': pl.Int64,
+        'selected_cycle': pl.Int64,
+        'pruned_cycle': pl.Int64,
+    }
+    for col in df.columns:
+        if col in KNOWN_DTYPES:
+            df = df.with_columns(df[col].cast(KNOWN_DTYPES[col], strict=False))
+        elif col.startswith('prediction') or col.startswith('uncertainty'):
+            df = df.with_columns(df[col].cast(pl.Float32, strict=False))
+    return df
 
 
 def prediction_parquet_path(output_dir: Path, cycle: int) -> Path:
@@ -44,11 +154,7 @@ def write_cycle_predictions(
     output_dir: Path | None,
     cycle: int,
 ) -> Path | None:
-    """Write cycle predictions to parquet with atomic temp-file-then-rename.
-
-    Writes to ``<path>.parquet.tmp`` first, then renames to the final path
-    on success. On exception, the ``.tmp`` file is removed before re-raising
-    so partial writes never appear as completed parquet files.
+    """Write cycle predictions to parquet via atomic write.
 
     Args:
         cycle_predictions: DataFrame with columns ID, prediction,
@@ -58,20 +164,20 @@ def write_cycle_predictions(
 
     Returns:
         Path to the written parquet, or None if output_dir is None.
-
-    Raises:
-        OSError: If writing or renaming fails (after cleanup).
     """
     if output_dir is None:
         return None
+    df = _apply_parquet_schema(cycle_predictions)
     parquet_path = prediction_parquet_path(output_dir, cycle)
-    tmp_path = parquet_path.with_suffix('.parquet.tmp')
-    try:
-        cycle_predictions.write_parquet(tmp_path, compression='zstd')
-        tmp_path.rename(parquet_path)
-    except Exception:
-        tmp_path.unlink(missing_ok=True)
-        raise
+
+    def _write_fn(p: Path) -> None:
+        df.write_parquet(
+            p,
+            compression=PARQUET_COMPRESSION,
+            compression_level=PARQUET_COMPRESSION_LEVEL,
+        )
+
+    _atomic_write(parquet_path, _write_fn)
     return parquet_path
 
 
@@ -107,7 +213,7 @@ def _add_csv_metadata(file_path: Path, metadata: dict[str, Any]) -> None:
             f.writelines(lines)
 
     except OSError as e:
-        logger.warning(f"Failed to add metadata to {file_path}: {e}")
+        logger.warning(f'Failed to add metadata to {file_path}: {e}')
 
 
 def _organize_columns(df: pl.DataFrame, column_groups: list[list[str]]) -> pl.DataFrame:
@@ -148,7 +254,9 @@ def save_results(
     cycle_metrics: list[dict[str, Any]],
     validation_result: ValidationResult,
     config: dict[str, Any],
-    output_dir: Path
+    output_dir: Path,
+    *,
+    output_format: Literal['auto', 'csv', 'parquet'] = 'auto',
 ) -> dict[str, Path]:
     """
     Save all experiment results to organized CSV files with metadata.
@@ -216,30 +324,40 @@ def save_results(
     output_dir.mkdir(parents=True, exist_ok=True)
     saved_files = {}
 
-    logger.info("═══════════════════════════════════════════════════════════════")
-    logger.info("Phase 5: Saving Results")
-    logger.info("═══════════════════════════════════════════════════════════════")
+    logger.info('═══════════════════════════════════════════════════════════════')
+    logger.info('Phase 5: Saving Results')
+    logger.info('═══════════════════════════════════════════════════════════════')
 
     target_col = config.get('target_col', 'target')
     featurizer = config.get('featurizer', 'unknown')
     n_cycles = config.get('n_cycles', len(cycle_metrics))
     score_direction = config.get('score_direction', 'higher')
-
     try:
         base_cols = [
-            'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle', target_col,
+            'ID',
+            'SMILES',
+            'status',
+            'labeled_cycle',
+            'selected_cycle',
+            'pruned_cycle',
+            target_col,
         ]
         compounds_final = _organize_columns(compounds_df.clone(), [base_cols])
 
-        final_path = output_dir / 'compounds_final.csv'
-        compounds_final.write_csv(final_path)
+        n_rows = len(compounds_final)
+        fmt, warning_msg = _resolve_output_format(
+            output_format, n_rows, 'compounds_final'
+        )
+
+        if warning_msg:
+            warnings.warn(warning_msg, LearnM8Warning, stacklevel=2)
 
         n_labeled = compounds_df.filter(pl.col('status') == 'labeled').height
         n_unlabeled = compounds_df.filter(pl.col('status') == 'unlabeled').height
         n_pruned = compounds_df.filter(pl.col('status') == 'pruned').height
 
         metadata = {
-            'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
+            'Read Hint': "Use pandas.read_csv(path, comment='#') to ignore metadata comments",
             'Target': target_col,
             'Featurizer': featurizer,
             'Score Direction': score_direction,
@@ -259,15 +377,54 @@ def save_results(
             target_col: 'Measured target value',
             'Predictions': 'Per-cycle predictions stored in prediction_cycle_N.parquet files',
         }
-        _add_csv_metadata(final_path, metadata)
+
+        if fmt == 'csv':
+            ext = '.csv'
+            final_path = output_dir / f'compounds_final{ext}'
+
+            def _csv_write_fn(p: Path) -> None:
+                compounds_final.write_csv(p)
+                _add_csv_metadata(p, metadata)
+
+            _atomic_write(final_path, _csv_write_fn)
+        else:
+            ext = '.parquet'
+            final_path = output_dir / f'compounds_final{ext}'
+
+            df_typed = _apply_parquet_schema(compounds_final)
+            if n_rows > PARQUET_ROW_THRESHOLD:
+                _atomic_write(
+                    final_path,
+                    lambda p: df_typed.lazy().sink_parquet(
+                        p,
+                        compression=PARQUET_COMPRESSION,
+                        compression_level=PARQUET_COMPRESSION_LEVEL,
+                    ),
+                )
+                sidecar_path = final_path.with_name(f'{final_path.name}.metadata.json')
+                metadata_kv = _build_parquet_metadata(config, n_rows)
+                _atomic_write(
+                    sidecar_path,
+                    lambda p: _write_metadata_json(p, metadata_kv),
+                )
+            else:
+                _atomic_write(
+                    final_path,
+                    lambda p: df_typed.write_parquet(
+                        p,
+                        compression=PARQUET_COMPRESSION,
+                        compression_level=PARQUET_COMPRESSION_LEVEL,
+                        metadata=_build_parquet_metadata(config, n_rows),
+                    ),
+                )
 
         saved_files['compounds_final'] = final_path
-        logger.debug(f"Saved compounds_final.csv: {len(compounds_final)} compounds")
-        logger.info(f"Saved compounds_final.csv ({len(compounds_final)} compounds)")
+        logger.debug(f'Saved compounds_final{ext}: {len(compounds_final)} compounds')
+        logger.info(f'Saved compounds_final{ext} ({len(compounds_final)} compounds)')
 
     except OSError as e:
-        logger.error(f"Failed to save compounds_final.csv: {e}")
-        raise PersistenceError(f"Failed to save compounds_final.csv: {e}") from e
+        logger.error(f'Failed to save compounds_final{ext}: {e}')
+        raise PersistenceError(f'Failed to save compounds_final{ext}: {e}') from e
 
     try:
         # Drop non-serializable values before constructing the DataFrame:
@@ -276,7 +433,8 @@ def save_results(
         sanitized_metrics = []
         for cm in cycle_metrics:
             cm_copy = {
-                k: v for k, v in cm.items()
+                k: v
+                for k, v in cm.items()
                 if k not in ('selected_predictions', 'parquet_path')
             }
             sanitized_metrics.append(cm_copy)
@@ -299,19 +457,45 @@ def save_results(
         if cols_to_drop:
             metrics_df = metrics_df.drop(cols_to_drop)
 
-        core_cols = ['cycle', 'strategy', 'batch_size', 'selected_count', 'remaining_unlabeled',
-                    'cumulative_labeled', 'cumulative_pruned']
-        pred_cols = ['prediction_mean', 'prediction_std', 'prediction_min', 'prediction_max', 'prediction_median']
-        unc_cols = ['uncertainty_mean', 'uncertainty_std', 'uncertainty_min', 'uncertainty_max']
-        measured_cols = ['measured_mean', 'measured_std', 'measured_min', 'measured_max',
-                        'measured_best', 'best_so_far']
-        metrics_df = _organize_columns(metrics_df, [core_cols, pred_cols, unc_cols, measured_cols])
+        core_cols = [
+            'cycle',
+            'strategy',
+            'batch_size',
+            'selected_count',
+            'remaining_unlabeled',
+            'cumulative_labeled',
+            'cumulative_pruned',
+        ]
+        pred_cols = [
+            'prediction_mean',
+            'prediction_std',
+            'prediction_min',
+            'prediction_max',
+            'prediction_median',
+        ]
+        unc_cols = [
+            'uncertainty_mean',
+            'uncertainty_std',
+            'uncertainty_min',
+            'uncertainty_max',
+        ]
+        measured_cols = [
+            'measured_mean',
+            'measured_std',
+            'measured_min',
+            'measured_max',
+            'measured_best',
+            'best_so_far',
+        ]
+        metrics_df = _organize_columns(
+            metrics_df, [core_cols, pred_cols, unc_cols, measured_cols]
+        )
+
+        _resolve_output_format(output_format, len(metrics_df), 'cycle_metrics')
 
         metrics_path = output_dir / 'cycle_metrics.csv'
-        metrics_df.write_csv(metrics_path)
-
-        metadata = {
-            'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
+        metrics_metadata = {
+            'Read Hint': "Use pandas.read_csv(path, comment='#') to ignore metadata comments",
             'Description': 'Per-cycle performance metrics',
             '': '',
             'Key Metrics': '',
@@ -325,48 +509,50 @@ def save_results(
             'prediction_*': 'Statistics of model predictions',
             'uncertainty_*': 'Statistics of model uncertainties',
             'measured_*': 'Statistics of oracle measurements',
-            'best_so_far': 'Best measured value found so far'
+            'best_so_far': 'Best measured value found so far',
         }
-        _add_csv_metadata(metrics_path, metadata)
+
+        def _metrics_write_fn(p: Path) -> None:
+            metrics_df.write_csv(p)
+            _add_csv_metadata(p, metrics_metadata)
+
+        _atomic_write(metrics_path, _metrics_write_fn)
 
         saved_files['cycle_metrics'] = metrics_path
-        logger.debug(f"Saved cycle_metrics.csv: {len(metrics_df)} cycles")
-        logger.info(f"Saved cycle_metrics.csv ({len(metrics_df)} cycles)")
+        logger.debug(f'Saved cycle_metrics.csv: {len(metrics_df)} cycles')
+        logger.info(f'Saved cycle_metrics.csv ({len(metrics_df)} cycles)')
 
     except OSError as e:
-        logger.error(f"Failed to save cycle_metrics.csv: {e}")
-        raise PersistenceError(f"Failed to save cycle_metrics.csv: {e}") from e
+        logger.error(f'Failed to save cycle_metrics.csv: {e}')
+        raise PersistenceError(f'Failed to save cycle_metrics.csv: {e}') from e
 
     try:
+        selected_compounds = compounds_df.filter(pl.col('selected_cycle') >= 0)
+        lookup = {}
+        for row in selected_compounds.iter_rows(named=True):
+            lookup[row['ID']] = (row.get('SMILES'), row.get(target_col))
+
         selection_history = []
         for cycle_data in cycle_metrics:
             cycle = cycle_data['cycle']
             strategy = cycle_data['strategy']
-
-            selected_compounds = compounds_df.filter(pl.col('selected_cycle') == cycle)
-            if selected_compounds.height == 0:
+            cycle_preds = cycle_data.get('selected_predictions')
+            if cycle_preds is None or cycle_preds.height == 0:
                 continue
-
-            cycle_selected_preds = cycle_data.get('selected_predictions')
-            if cycle_selected_preds is not None and cycle_selected_preds.height > 0:
-                pred_lookup = {
-                    row['ID']: row for row in cycle_selected_preds.iter_rows(named=True)
-                }
-            else:
-                pred_lookup = {}
-
-            for compound in selected_compounds.iter_rows(named=True):
-                pred_row = pred_lookup.get(compound['ID'], {})
-                record = {
-                    'cycle': cycle,
-                    'strategy': strategy,
-                    'ID': compound['ID'],
-                    'SMILES': compound['SMILES'],
-                    'measured_value': compound.get(target_col, None),
-                    'prediction_at_selection': pred_row.get('prediction'),
-                    'uncertainty_at_selection': pred_row.get('uncertainty'),
-                }
-                selection_history.append(record)
+            for row in cycle_preds.iter_rows(named=True):
+                cid = row['ID']
+                smiles, measured = lookup.get(cid, (None, None))
+                selection_history.append(
+                    {
+                        'cycle': cycle,
+                        'strategy': strategy,
+                        'ID': cid,
+                        'SMILES': smiles,
+                        'measured_value': measured,
+                        'prediction_at_selection': row.get('prediction'),
+                        'uncertainty_at_selection': row.get('uncertainty'),
+                    }
+                )
 
         selection_schema = {
             'cycle': pl.Int64,
@@ -375,7 +561,7 @@ def save_results(
             'SMILES': pl.Utf8,
             'measured_value': pl.Float64,
             'prediction_at_selection': pl.Float64,
-            'uncertainty_at_selection': pl.Float64
+            'uncertainty_at_selection': pl.Float64,
         }
 
         if selection_history:
@@ -383,11 +569,16 @@ def save_results(
         else:
             selection_df = pl.DataFrame(schema=selection_schema)
 
-        selection_path = output_dir / 'selection_history.csv'
-        selection_df.write_csv(selection_path)
+        n_sel_rows = len(selection_df)
+        sel_fmt, sel_warning = _resolve_output_format(
+            output_format, n_sel_rows, 'selection_history'
+        )
 
-        metadata = {
-            'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
+        if sel_warning:
+            warnings.warn(sel_warning, LearnM8Warning, stacklevel=2)
+
+        selection_metadata = {
+            'Read Hint': "Use pandas.read_csv(path, comment='#') to ignore metadata comments",
             'Description': 'Detailed selection records (one row per compound per cycle)',
             '': '',
             'Columns': '',
@@ -397,31 +588,74 @@ def save_results(
             'SMILES': 'Molecular structure',
             'measured_value': 'Oracle measurement result',
             'prediction_at_selection': 'Model prediction when selected',
-            'uncertainty_at_selection': 'Model uncertainty when selected'
+            'uncertainty_at_selection': 'Model uncertainty when selected',
         }
-        _add_csv_metadata(selection_path, metadata)
+
+        if sel_fmt == 'csv':
+            ext = '.csv'
+            selection_path = output_dir / f'selection_history{ext}'
+
+            def _sel_csv_fn(p: Path) -> None:
+                selection_df.write_csv(p)
+                _add_csv_metadata(p, selection_metadata)
+
+            _atomic_write(selection_path, _sel_csv_fn)
+        else:
+            ext = '.parquet'
+            selection_path = output_dir / f'selection_history{ext}'
+            df_typed = _apply_parquet_schema(selection_df)
+
+            if n_sel_rows > PARQUET_ROW_THRESHOLD:
+                ldf = df_typed.lazy()
+                _atomic_write(
+                    selection_path,
+                    lambda p: ldf.sink_parquet(
+                        p,
+                        compression=PARQUET_COMPRESSION,
+                        compression_level=PARQUET_COMPRESSION_LEVEL,
+                    ),
+                )
+                sel_sidecar_path = selection_path.with_name(
+                    f'{selection_path.name}.metadata.json'
+                )
+                sel_metadata_kv = _build_parquet_metadata(config, n_sel_rows)
+                _atomic_write(
+                    sel_sidecar_path,
+                    lambda p: _write_metadata_json(p, sel_metadata_kv),
+                )
+            else:
+                _atomic_write(
+                    selection_path,
+                    lambda p: df_typed.write_parquet(
+                        p,
+                        compression=PARQUET_COMPRESSION,
+                        compression_level=PARQUET_COMPRESSION_LEVEL,
+                        metadata=_build_parquet_metadata(config, n_sel_rows),
+                    ),
+                )
 
         saved_files['selection_history'] = selection_path
-        logger.debug(f"Saved selection_history.csv: {len(selection_df)} selections")
-        logger.info(f"Saved selection_history.csv ({len(selection_df)} selections)")
+        logger.debug(f'Saved selection_history{ext}: {len(selection_df)} selections')
+        logger.info(f'Saved selection_history{ext} ({len(selection_df)} selections)')
 
     except OSError as e:
-        logger.error(f"Failed to save selection_history.csv: {e}")
-        raise PersistenceError(f"Failed to save selection_history.csv: {e}") from e
+        logger.error(f'Failed to save selection_history.csv: {e}')
+        raise PersistenceError(f'Failed to save selection_history.csv: {e}') from e
 
     if validation_result.invalid_compounds.height > 0:
         try:
             invalid_df = validation_result.invalid_compounds.clone()
             # Map errors using join
             from learnm8.utils.polars_utils import map_values_via_join
-            invalid_df = map_values_via_join(invalid_df, validation_result.validation_errors, 'ID', 'error')
+
+            invalid_df = map_values_via_join(
+                invalid_df, validation_result.validation_errors, 'ID', 'error'
+            )
 
             validation_path = output_dir / 'validation_report.csv'
-            invalid_df.write_csv(validation_path)
-
             success_rate = validation_result.success_rate
-            metadata = {
-                'Read Hint': 'Use pandas.read_csv(path, comment=\'#\') to ignore metadata comments',
+            valid_metadata = {
+                'Read Hint': "Use pandas.read_csv(path, comment='#') to ignore metadata comments",
                 'Total Invalid': len(invalid_df),
                 'Success Rate': f'{success_rate:.1%}',
                 'Common Issues': 'Invalid SMILES, missing values, format errors',
@@ -429,29 +663,42 @@ def save_results(
                 'Columns': '',
                 'ID': 'Compound identifier',
                 'SMILES': 'Molecular structure (invalid)',
-                'error': 'Validation error message'
+                'error': 'Validation error message',
             }
-            _add_csv_metadata(validation_path, metadata)
+
+            def _valid_write_fn(p: Path) -> None:
+                invalid_df.write_csv(p)
+                _add_csv_metadata(p, valid_metadata)
+
+            _atomic_write(validation_path, _valid_write_fn)
 
             saved_files['validation_report'] = validation_path
-            logger.debug(f"Saved validation_report.csv: {len(invalid_df)} invalid compounds")
-            logger.info(f"Saved validation_report.csv ({len(invalid_df)} invalid compounds)")
+            logger.debug(
+                f'Saved validation_report.csv: {len(invalid_df)} invalid compounds'
+            )
+            logger.info(
+                f'Saved validation_report.csv ({len(invalid_df)} invalid compounds)'
+            )
 
         except OSError as e:
-            logger.warning(f"Failed to save validation_report.csv: {e}")
+            logger.warning(f'Failed to save validation_report.csv: {e}')
 
     try:
         config_path = output_dir / 'config.json'
-        with open(config_path, 'w') as f:
-            json.dump(config, f, indent=2)
+
+        def _config_write_fn(p: Path) -> None:
+            with open(p, 'w') as f:
+                json.dump(config, f, indent=2)
+
+        _atomic_write(config_path, _config_write_fn)
 
         saved_files['config'] = config_path
-        logger.debug("Saved config.json")
-        logger.info("Saved config.json")
+        logger.debug('Saved config.json')
+        logger.info('Saved config.json')
 
     except OSError as e:
-        logger.error(f"Failed to save config.json: {e}")
-        raise PersistenceError(f"Failed to save config.json: {e}") from e
+        logger.error(f'Failed to save config.json: {e}')
+        raise PersistenceError(f'Failed to save config.json: {e}') from e
 
-    logger.info(f"All results saved to {output_dir}")
+    logger.info(f'All results saved to {output_dir}')
     return saved_files
