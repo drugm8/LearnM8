@@ -29,15 +29,48 @@ def _discover_prediction_parquets(output_dir: Path) -> list[tuple[int, Path]]:
     return paths
 
 
+def _read_results_file(path: Path, comment_prefix: str = '#') -> pl.DataFrame:
+    """Auto-detect and read a results file as .parquet or .csv.
+
+    Args:
+        path: Path to the results file (with or without extension).
+        comment_prefix: Comment prefix for CSV metadata comments.
+
+    Returns:
+        DataFrame loaded from the file.
+
+    Raises:
+        FileNotFoundError: If the file cannot be found with any extension.
+    """
+    if path.exists():
+        if path.suffix == '.parquet':
+            return pl.scan_parquet(path).collect()
+        if path.suffix == '.csv':
+            return pl.read_csv(path, ignore_errors=True, comment_prefix=comment_prefix)
+        raise FileNotFoundError(f"Unrecognized results file extension: {path.suffix}")
+
+    parquet_path = path.with_suffix('.parquet')
+    if parquet_path.exists():
+        return pl.scan_parquet(parquet_path).collect()
+
+    csv_path = path.with_suffix('.csv')
+    if csv_path.exists():
+        return pl.read_csv(csv_path, ignore_errors=True, comment_prefix=comment_prefix)
+
+    raise FileNotFoundError(
+        f"Results file not found: {path} (tried .parquet and .csv extensions)"
+    )
+
+
 def load_csv_data(output_dir: str) -> dict:
     """Load visualization data from CSV and parquet files.
 
     Args:
-        output_dir: Directory containing CSV output files and prediction parquets
+        output_dir: Directory containing output files and prediction parquets
 
     Returns:
         Dictionary with:
-            - 'compounds': narrow master DataFrame from compounds_final.csv
+            - 'compounds': narrow master DataFrame
             - 'metrics': cycle_metrics DataFrame
             - 'selections': selection_history DataFrame
             - 'parquets': list of (cycle_number, Path) for prediction parquets
@@ -49,22 +82,16 @@ def load_csv_data(output_dir: str) -> dict:
 
     data = {}
 
-    compounds_file = output_path / 'compounds_final.csv'
-    if compounds_file.exists():
-        data['compounds'] = pl.read_csv(compounds_file, comment_prefix='#')
-    else:
-        raise FileNotFoundError(f"Required file not found: {compounds_file}")
+    compounds_file = output_path / 'compounds_final'
+    data['compounds'] = _read_results_file(compounds_file)
 
-    metrics_file = output_path / 'cycle_metrics.csv'
-    if metrics_file.exists():
-        data['metrics'] = pl.read_csv(metrics_file, comment_prefix='#')
-    else:
-        raise FileNotFoundError(f"Required file not found: {metrics_file}")
+    metrics_file = output_path / 'cycle_metrics'
+    data['metrics'] = _read_results_file(metrics_file)
 
-    selection_file = output_path / 'selection_history.csv'
-    if selection_file.exists():
-        data['selections'] = pl.read_csv(selection_file, comment_prefix='#')
-    else:
+    selection_file = output_path / 'selection_history'
+    try:
+        data['selections'] = _read_results_file(selection_file)
+    except FileNotFoundError:
         logger.warning(f"Selection history not found: {selection_file}")
         data['selections'] = pl.DataFrame()
 
