@@ -10,6 +10,7 @@ from learnm8.core.interfaces import Featurizer
 # Base class
 from learnm8.features.base import SkfpFeaturizer
 from learnm8.features.extraction import extract_features
+from learnm8.features.guard import check_large_feature_guard
 
 # 2D featurizers - Topological
 from learnm8.features.skfp_2d.atom_pair import AtomPairFeaturizer
@@ -156,6 +157,7 @@ __all__ = [
     'AutocorrFeaturizer',
     'AvalonFeaturizer',
     'BCUT2DFeaturizer',
+    'check_large_feature_guard',
     'E3FPFeaturizer',
     # Wrapper classes
     'ECFP6Featurizer',
