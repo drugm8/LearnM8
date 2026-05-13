@@ -144,7 +144,7 @@ class TestEvaluateCycleDiagnosticKeys:
         export_metrics_csv([cycle_metrics], str(csv_path), oracle_type='benchmark',
                             target_col='Activity')
 
-        # comment_prefix='#' to skip metadata header lines emitted by export_metrics_csv
+        # comment_prefix='#' retained defensively; export_metrics_csv now writes a pure CSV
         df = pl.read_csv(csv_path, comment_prefix='#')
         for col in ('selected_percentile', 'prediction_entropy', 'pool_size_after_prune'):
             assert col in df.columns, f"CSV missing column: {col}"

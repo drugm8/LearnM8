@@ -539,15 +539,17 @@ def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', p
 
 def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: str = 'auto', score_direction: str = 'higher', target_col: str = 'Activity') -> None:
 	"""
-	Export enhanced cycle metrics to CSV file with metadata and mode-specific organization.
+	Export enhanced cycle metrics to CSV file with mode-specific column organization.
 
 	Args:
 		all_cycle_metrics: List of cycle metrics dictionaries
 		output_path: Path to output CSV file
-		oracle_type: Oracle type ('run', 'benchmark', 'auto')
-		score_direction: Score direction ('higher' or 'lower')
-		target_col: Target property column name
+		oracle_type: retained for backwards compatibility; no longer affects output
+		score_direction: retained for backwards compatibility; no longer affects output
+		target_col: retained for backwards compatibility; no longer affects output
 	"""
+	del oracle_type, score_direction, target_col
+
 	if not all_cycle_metrics:
 		logger.warning("No metrics to export")
 		return
@@ -555,26 +557,6 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 	try:
 		metrics_df = pl.DataFrame(all_cycle_metrics)
 
-		# Add metadata as comments at the top
-		with open(output_path, 'w') as f:
-			f.write("# LearnM8 Active Learning Cycle Metrics\n")
-			f.write(f"# Oracle Type: {oracle_type}\n")
-			f.write(f"# Target Column: {target_col}\n")
-			f.write(f"# Score Direction: {score_direction} is better\n")
-			f.write(f"# Total Cycles: {len(all_cycle_metrics)}\n")
-
-			# Add uncertainty availability info
-			has_uncertainty = any(m.get('uncertainty_mean') is not None for m in all_cycle_metrics)
-			f.write(f"# Uncertainty Available: {has_uncertainty}\n")
-
-			# Add mode-specific info
-			if oracle_type == 'benchmark':
-				has_topk = any('top_k_overlap_100' in m for m in all_cycle_metrics)
-				has_ef = any('enrichment_factor_5_percent' in m for m in all_cycle_metrics)
-				f.write(f"# Benchmark Metrics Available: Top-K={has_topk}, EF={has_ef}\n")
-			f.write("#\n")
-
-		# Organize columns by category for better readability
 		core_cols = ['cycle', 'strategy', 'batch_fraction', 'selected_count', 'remaining_pool', 'cumulative_labeled', 'batch_size']
 		selection_cols = [col for col in metrics_df.columns if col in ['avg_score_selected', 'ground_truth_avg_score', 'uncertainty_mean', 'uncertainty_std']]
 		molecular_cols = [col for col in metrics_df.columns if 'diversity' in col or 'similarity' in col or 'novelty' in col]
@@ -583,15 +565,10 @@ def export_metrics_csv(all_cycle_metrics: list, output_path: str, oracle_type: s
 		ground_truth_cols = [col for col in metrics_df.columns if 'ground_truth_ef' in col]
 		other_cols = [col for col in metrics_df.columns if col not in core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols]
 
-		# Reorder columns for logical grouping
 		ordered_cols = core_cols + selection_cols + molecular_cols + discovery_cols + unlabeled_ranking_cols + ground_truth_cols + other_cols
 		metrics_df = metrics_df.select([col for col in ordered_cols if col in metrics_df.columns])
 
-		# Append the DataFrame (without header since we added metadata)
-		# Note: Polars write_csv doesn't support append mode, so we'll use manual approach
-		csv_content = metrics_df.write_csv(include_header=True)
-		with open(output_path, 'a') as f:
-			f.write(csv_content)
+		metrics_df.write_csv(output_path)
 
 		logger.info(f"Exported {len(all_cycle_metrics)} cycles of enhanced metrics to {output_path}")
 	except (ValueError, TypeError, KeyError, OSError) as e:

@@ -517,27 +517,9 @@ def save_results(
         _resolve_output_format(output_format, len(metrics_df), 'cycle_metrics')
 
         metrics_path = output_dir / 'cycle_metrics.csv'
-        metrics_metadata = {
-            'Read Hint': "Use pandas.read_csv(path, comment='#') to ignore metadata comments",
-            'Description': 'Per-cycle performance metrics',
-            '': '',
-            'Key Metrics': '',
-            'cycle': 'Cycle number',
-            'strategy': 'Acquisition strategy used',
-            'batch_size': 'Compounds selected this cycle',
-            'selected_count': 'Total compounds selected',
-            'remaining_unlabeled': 'Unlabeled compounds remaining',
-            'cumulative_labeled': 'Total labeled compounds',
-            'cumulative_pruned': 'Total pruned compounds',
-            'prediction_*': 'Statistics of model predictions',
-            'uncertainty_*': 'Statistics of model uncertainties',
-            'measured_*': 'Statistics of oracle measurements',
-            'best_so_far': 'Best measured value found so far',
-        }
 
         def _metrics_write_fn(p: Path) -> None:
             metrics_df.write_csv(p)
-            _add_csv_metadata(p, metrics_metadata)
 
         _atomic_write(metrics_path, _metrics_write_fn)
 
