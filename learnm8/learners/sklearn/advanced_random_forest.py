@@ -14,6 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from learnm8.exceptions import LearnerError
 
 from ..base import SklearnLearner, _preprocess_features
+from ._tree_uncertainty import fused_mean_std
 
 logger = logging.getLogger(__name__)
 
@@ -136,15 +137,13 @@ class AdvancedRandomForestLearner(SklearnLearner):
                     f'Cannot compute tree-level uncertainty.'
                 )
 
-            predictions = self.model.predict(preprocessed)
-
-            tree_predictions = np.array(
-                [tree.predict(preprocessed) for tree in self.model.estimators_]
+            n_jobs = getattr(self.model, 'n_jobs', -1) or -1
+            predictions, uncertainty = fused_mean_std(
+                self.model.estimators_, preprocessed, n_jobs=n_jobs
             )
             logger.debug(
                 f'Computing uncertainty from {len(self.model.estimators_)} trees'
             )
-            uncertainty = np.std(tree_predictions, axis=0, ddof=0)
 
             pred_time = time.time() - start_time
             logger.debug(
