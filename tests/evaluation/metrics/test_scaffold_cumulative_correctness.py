@@ -61,8 +61,8 @@ def test_scaffold_cumulative_incremental_matches_one_shot() -> None:
         disable = (
             "mean_tanimoto_similarity_sampled_batch",
             "mean_tanimoto_similarity_sampled_cumulative",
-            "bit_marginal_entropy_batch",
-            "bit_marginal_entropy_cumulative",
+            "bit_position_uniformity_entropy_batch",
+            "bit_position_uniformity_entropy_cumulative",
         )
         result = compute_diversity_metrics(
             newly_selected_df=new_batch,

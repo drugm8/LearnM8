@@ -179,7 +179,7 @@ HDF5-based v3 schema (bit-packed, 128-bit BLAKE2b cache keys), 100x speedup on r
 
 ### Prediction Persistence
 
-Per-cycle predictions are written to parquet files (`prediction_cycle_N.parquet`) under the output directory and joined transiently for selection/evaluation. The master DataFrame stays at a constant 8 columns regardless of cycle count (no `prediction_cycle_N` / `uncertainty_cycle_N` accumulation).
+Per-cycle predictions are written to parquet files (`prediction_cycle_N.parquet`) under the output directory and joined transiently for selection/evaluation. The master DataFrame stays at a constant 7 columns (`ID`, `SMILES`, `status`, `labeled_cycle`, `selected_cycle`, `pruned_cycle`, `<target_col>`) regardless of cycle count (no `prediction_cycle_N` / `uncertainty_cycle_N` accumulation).
 
 ### GPU Memory Management
 PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True` by default. Cleans GPU memory after train/predict. Safe, best-effort, negligible overhead.
@@ -234,7 +234,7 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 
 **ChempropLearner:** Single MPNN model, works directly with SMILES (`requires_smiles()=True`), no uncertainty. Registered as `'chemprop'`.
 
-**ChempropEnsemble:** 3 ChempropLearner instances (seeds 42, 123, 456), uncertainty via std dev. Registered as `'chemprop_ensemble'`.
+**ChempropEnsemble:** 3 ChempropLearner instances (seeds 42, 123, 356 — `base_seed + ENSEMBLE_SEED_OFFSETS` where offsets are `(0, 81, 314)`), uncertainty via std dev. Registered as `'chemprop_ensemble'`.
 
 Both support optional `features` as extra descriptors (`x_d`). When `featurizer` is provided, features are concatenated with graph representations (hybrid mode).
 
@@ -274,7 +274,7 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 - **015 Bit-packed cache v2** (merged) — rewrote `learnm8/features/cache.py` from v1 (per-molecule float32 dataset) to v2 (single 2-D `features` dataset per featurizer + side `hash_index`/`row_index` + `np.packbits` for binary). Blosc-LZ4 level 5 + byte-shuffle, `fcntl.flock` concurrency, fail-fast on corruption with 1 transient retry, `schema_version=2` root attr, `os.replace` to `.bak` for non-v2 files. Added `Featurizer.get_storage_dtype()` on the abstract interface. Public `extract_features(...)` signature unchanged. Performance: 1M-row Morgan-2048 warm read <5 s, 100M-row open <1 s, ≤30 GB on-disk at 100M.
 - **014 Diagnostic metrics** — added `feature_extraction_time` and additional diagnostic cycle metrics (`learnm8/evaluation/metrics/diagnostics.py`).
 - **013 Diversity metrics overhaul** — replaced legacy `intra_batch_diversity`/`inter_cycle_similarity`/`batch_novelty_score` with three rigorously-defined diversity primitives (`mean_tanimoto_similarity_sampled`, `scaffold_diversity_index`, `shannon_entropy_diversity`), each emitted twice per cycle (batch + cumulative = 6 keys) plus a `fingerprint_used` provenance column. Adaptive Tanimoto pair sampling, online Shannon accumulator, explicit `RunCache` lifetime. < 1 s per cycle at 100k cumulative. Flag accepts `bool | Iterable[str]` for per-metric opt-out. Featurizer-dependence caveat: metric values depend on the fingerprint used; comparing the same column across runs with DIFFERENT featurizers is NOT valid — audit via `fingerprint_used` column.
-- **008 Parquet predictions** — per-cycle predictions persist to `prediction_cycle_N.parquet` files (joined transiently); master DataFrame stays at constant 8 columns. Migration tooling: `scripts/migrate_to_parquet.py`, `scripts/migrate_validation_reports.py`.
+- **008 Parquet predictions** — per-cycle predictions persist to `prediction_cycle_N.parquet` files (joined transiently); master DataFrame stays at constant 7 columns. Migration tooling: `scripts/migrate_to_parquet.py`, `scripts/migrate_validation_reports.py`.
 - **Oracle.known_ids** — added to `Oracle` interface; implemented on `CSVOracle` for pool reconciliation.
 - Centralized exception hierarchy in `learnm8/exceptions.py` (ERR-001)
 - Migrated build config from `setup.py`/`pytest.ini` to `pyproject.toml`

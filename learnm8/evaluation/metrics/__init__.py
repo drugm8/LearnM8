@@ -35,7 +35,6 @@ from .enrichment import (
 )
 from .performance import (
     calculate_average_score,
-    calculate_mape,
     calculate_spearman_correlation,
 )
 from .similarity import (
@@ -54,7 +53,6 @@ __all__ = [
     'calculate_cumulative_enrichment_factor',
     'calculate_enrichment_factor',
     'calculate_ground_truth_enrichment_factors',
-    'calculate_mape',
     'calculate_multiple_enrichment_factors',
     'calculate_multiple_top_k_discovery_rates',
     'calculate_multiple_top_k_overlaps',

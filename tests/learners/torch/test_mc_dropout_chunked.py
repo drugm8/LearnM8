@@ -63,6 +63,33 @@ class TestMCDropoutChunked:
         assert np.any(unc_full > 0)
 
     @pytest.mark.unit
+    def test_predict_is_reproducible_across_calls(self):
+        X, y = _make_data(100, 10)
+        learner = _make_trained_learner(X, y)
+        learner.predict_batch_size = 13
+
+        preds_a, unc_a = learner.predict(X)
+        preds_b, unc_b = learner.predict(X)
+
+        # Repeated predict() on the same input gives identical mean and sigma.
+        np.testing.assert_array_equal(preds_a, preds_b)
+        np.testing.assert_array_equal(unc_a, unc_b)
+
+    @pytest.mark.unit
+    def test_predict_does_not_perturb_global_rng(self):
+        import torch
+
+        X, y = _make_data(50, 10)
+        learner = _make_trained_learner(X, y)
+
+        torch.manual_seed(12345)
+        before = torch.get_rng_state()
+        learner.predict(X)
+        after = torch.get_rng_state()
+
+        assert torch.equal(before, after)
+
+    @pytest.mark.unit
     @pytest.mark.parametrize(
         'n_samples,predict_batch_size',
         [

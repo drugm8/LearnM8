@@ -365,15 +365,17 @@ def select_initial_batch(
 
     logger.info(f'Measuring {len(selected_ids)} selected compounds...')
 
-    # Create temporary mapping to preserve selected_ids order
-    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+    # Restore selected_ids order; a missing ID raises rather than mis-sorting.
+    from learnm8.core.cycle import build_selection_order_lookup
+
+    order_lookup = build_selection_order_lookup(selected_ids, context='Initial-batch')
 
     selected_compounds = (
         compounds_df.filter(pl.col('ID').is_in(selected_ids))
         .select(['ID', 'SMILES'])
         .with_columns(
             pl.col('ID')
-            .map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64)
+            .map_elements(order_lookup, return_dtype=pl.Int64)
             .alias('_order')
         )
         .sort('_order')

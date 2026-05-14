@@ -116,14 +116,16 @@ class SkfpFeaturizer(Featurizer):
             except TypeError as e:
                 if 'random_state' not in str(e):
                     raise
-                warnings.warn(
+                fallback_msg = (
                     'scikit-fingerprints<1.18.0 detected; ConformerGenerator '
                     'does not accept random_state. 3D fingerprints will be '
-                    'non-deterministic. Upgrade with: '
-                    'pip install -U scikit-fingerprints',
-                    LearnM8Warning,
-                    stacklevel=2,
+                    'NON-DETERMINISTIC and feature-cache reproducibility is '
+                    'forfeited. Upgrade with: pip install -U scikit-fingerprints'
                 )
+                warnings.warn(fallback_msg, LearnM8Warning, stacklevel=2)
+                # Also emit a structured log warning so the determinism loss is
+                # visible in log pipelines that suppress Python warnings.
+                logger.warning(fallback_msg)
                 self.random_state = None
                 self.conformer_gen = ConformerGenerator(
                     n_jobs=n_jobs, **self.conformer_params
@@ -203,8 +205,28 @@ class SkfpFeaturizer(Featurizer):
 
         features_array = np.array(features, dtype=np.float32)
 
-        if np.any(~np.isfinite(features_array)):
-            logger.warning(f'Non-finite values detected in {self.get_name()} features')
+        nonfinite_rows = np.where(~np.isfinite(features_array).all(axis=1))[0]
+        if nonfinite_rows.size > 0:
+            example_idx = int(nonfinite_rows[0])
+            if self._feature_type == 'binary':
+                # Binary fingerprints are 0/1 by construction; NaN/Inf here means
+                # genuine corruption. Fail fast so it never reaches the cache.
+                raise FeatureExtractionError(
+                    f'Non-finite values (NaN/Inf) in binary fingerprint '
+                    f'{self.get_name()} for {nonfinite_rows.size} of '
+                    f"{len(smiles_list)} compounds — first offender: "
+                    f"'{smiles_list[example_idx]}'. Caching aborted to avoid "
+                    f'poisoning the cache with invalid rows. '
+                    f"Run 'learnm8 validate your_file.csv' to check SMILES validity."
+                )
+            # Continuous/descriptor featurizers (e.g. mordred) legitimately emit
+            # NaN for descriptors that cannot be computed; the learner-side
+            # median imputer handles these. Warn but do not abort.
+            logger.warning(
+                f'Non-finite values in {self.get_name()} features for '
+                f'{nonfinite_rows.size} of {len(smiles_list)} compounds '
+                f'(continuous featurizer; imputed downstream)'
+            )
 
         return features_array
 
@@ -277,12 +299,13 @@ class SkfpFeaturizer(Featurizer):
         Note:
             Includes fingerprint class, auto_generate_conformers flag,
             conformer generation parameters, and all fingerprint-specific
-            parameters from get_params().
+            parameters from get_params(). ``n_jobs`` is deliberately excluded:
+            it controls parallelism only and has no effect on feature values,
+            so including it would needlessly fragment the cache by core count.
         """
         config: dict[str, Any] = {
             'fingerprint_class': self.fingerprint.__class__.__name__,
             'auto_generate_conformers': self.auto_generate_conformers,
-            'n_jobs': self.n_jobs,
         }
 
         if self.requires_3d() and self.random_state is not None:
@@ -292,6 +315,10 @@ class SkfpFeaturizer(Featurizer):
             config['conformer_params'] = self.conformer_params
 
         params = self.fingerprint.get_params()
+        # Drop n_jobs: a parallelism knob that scikit-fingerprints reports via
+        # get_params() but which never changes feature values. Keeping it would
+        # fragment the cache by core count.
+        params.pop('n_jobs', None)
         config.update(params)
 
         return config

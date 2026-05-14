@@ -31,7 +31,7 @@ All other logic is identical, eliminating code duplication.
 import logging
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -47,6 +47,7 @@ from learnm8.exceptions import (
     ConfigurationError,
     FeatureExtractionError,
     LearnerError,
+    LearnM8Error,
     OracleError,
     PruningError,
 )
@@ -57,6 +58,33 @@ from learnm8.utils.numerical import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def build_selection_order_lookup(
+    selected_ids: list, context: str = 'selection'
+) -> 'Callable[[object], int]':
+    """Build a strict id->order lookup for restoring selected-batch ordering.
+
+    Returns a callable suitable for ``pl.col('ID').map_elements(...)`` that maps
+    a compound ID to its index in ``selected_ids``. Unlike a ``dict.get`` with a
+    sentinel default, a missing ID raises ``LearnM8Error`` — every selected ID
+    must originate from the master DataFrame, so a miss is a real pipeline bug
+    that must surface rather than silently mis-sort the batch.
+    """
+    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+
+    def _lookup(compound_id: object) -> int:
+        try:
+            return id_to_order[compound_id]
+        except KeyError:
+            raise LearnM8Error(
+                f'{context} compound ID {compound_id!r} is missing from the '
+                f'selection order map. Every selected ID must originate from '
+                f'the master DataFrame — this indicates a bug in the '
+                f'acquisition/selection pipeline.'
+            ) from None
+
+    return _lookup
 
 
 def execute_cycle(
@@ -309,6 +337,8 @@ def execute_cycle(
             original_pool_size=original_pool_size,
             oracle=oracle,
             random_state=random_state,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
         )
     )
 
@@ -790,6 +820,8 @@ def _select_compounds(
     acquisition_params: dict[str, Any],
     random_state: int | None = None,
     cycle_idx: int | None = None,
+    featurizer_obj: Any = None,
+    cache_dir: Path | None = None,
 ) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.
@@ -813,6 +845,9 @@ def _select_compounds(
             per-cycle seed derivation. Required for the per-cycle derivation to
             actually vary across cycles; ``None`` falls back to direct use of
             ``random_state``.
+        featurizer_obj: Optional Featurizer instance for acquisition functions
+            that need feature-space neighbors (e.g., SA with knn_features).
+        cache_dir: Directory for feature caching.
 
     Returns:
         DataFrame with selected compounds
@@ -858,7 +893,12 @@ def _select_compounds(
 
     # Create acquisition instance
     try:
-        acq_func = acq_class(score_direction=score_direction, **acquisition_params)
+        acq_func = acq_class(
+            score_direction=score_direction,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            **acquisition_params,
+        )
     except (ValueError, TypeError) as e:
         raise ValueError(
             f"Failed to create acquisition function '{strategy}': {e}. "
@@ -1103,6 +1143,8 @@ def _select_and_measure(
     original_pool_size: int,
     oracle: Oracle,
     random_state: int | None = None,
+    featurizer_obj: Any = None,
+    cache_dir: Path | None = None,
 ) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None]:
     """Compute batch size, run acquisition, measure via oracle, update master_df.
 
@@ -1160,6 +1202,8 @@ def _select_and_measure(
         acquisition_params,
         random_state=random_state,
         cycle_idx=cycle,
+        featurizer_obj=featurizer_obj,
+        cache_dir=cache_dir,
     )
 
     selected_ids = selected_df['ID'].to_list()
@@ -1182,15 +1226,15 @@ def _select_and_measure(
 
     # Step 12: Measure Selected Compounds
     oracle_start_time = time.time()
-    # Create temporary mapping to preserve selected_ids order
-    id_to_order = {id_val: idx for idx, id_val in enumerate(selected_ids)}
+    # Restore selected_ids order; a missing ID raises rather than mis-sorting.
+    order_lookup = build_selection_order_lookup(selected_ids, context='Selected')
 
     selected_compounds = (
         compounds_df.filter(pl.col('ID').is_in(selected_ids))
         .select(['ID', 'SMILES'])
         .with_columns(
             pl.col('ID')
-            .map_elements(lambda x: id_to_order.get(x, 999), return_dtype=pl.Int64)
+            .map_elements(order_lookup, return_dtype=pl.Int64)
             .alias('_order')
         )
         .sort('_order')

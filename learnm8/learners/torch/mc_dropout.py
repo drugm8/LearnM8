@@ -135,6 +135,15 @@ class MCDropoutLearner(TorchLearner):
             if isinstance(m, nn.BatchNorm1d):
                 m.eval()
 
+        # Reseed before every chunk's T-sample loop so the chunk loop is
+        # deterministic: with a fixed predict_batch_size, repeated predict()
+        # calls — and OOM-split sub-chunks — draw the identical dropout-mask
+        # sequence. Combined with the snapshot/restore in predict(), this makes
+        # MC-Dropout uncertainty reproducible across calls.
+        torch.manual_seed(self.random_state)
+        if 'cuda' in str(self.device):
+            torch.cuda.manual_seed_all(self.random_state)
+
         predictions_list = []
         with torch.no_grad():
             for _ in range(self.n_dropout_samples):
@@ -237,13 +246,26 @@ class MCDropoutLearner(TorchLearner):
                 len(X_scaled), X_scaled.shape[1]
             )
 
-            all_means = []
-            all_stds = []
-            for start_idx in range(0, len(X_scaled), batch_size):
-                chunk = X_scaled[start_idx : start_idx + batch_size]
-                mean_chunk, std_chunk = self._predict_chunk_with_oom_retry(chunk)
-                all_means.append(mean_chunk)
-                all_stds.append(std_chunk)
+            # Snapshot the global torch RNG state so MC-Dropout prediction does
+            # not perturb RNG for downstream consumers; _predict_chunk reseeds
+            # deterministically per chunk, so this also keeps repeated predict()
+            # calls reproducible.
+            cpu_rng_state = torch.get_rng_state()
+            cuda_rng_state = (
+                torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+            )
+            try:
+                all_means = []
+                all_stds = []
+                for start_idx in range(0, len(X_scaled), batch_size):
+                    chunk = X_scaled[start_idx : start_idx + batch_size]
+                    mean_chunk, std_chunk = self._predict_chunk_with_oom_retry(chunk)
+                    all_means.append(mean_chunk)
+                    all_stds.append(std_chunk)
+            finally:
+                torch.set_rng_state(cpu_rng_state)
+                if cuda_rng_state is not None:
+                    torch.cuda.set_rng_state_all(cuda_rng_state)
 
             mean_predictions = np.concatenate(all_means)
             uncertainties = np.concatenate(all_stds)

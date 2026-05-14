@@ -94,3 +94,20 @@ def test_single_smiles_roundtrip(tmp_path: Path):
     warm = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert np.array_equal(cold, warm)
     assert cold.shape == (1, 2048)
+
+
+@pytest.mark.unit
+def test_equivalent_smiles_dedup_in_cache(tmp_path: Path):
+    """Equivalent SMILES canonicalise to one cache entry (Item 2 regression)."""
+    feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
+    cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
+
+    cache_file = tmp_path / 'features_morgan.h5'
+    with h5py.File(cache_file, 'r') as f:
+        assert f['hash_index'].shape == (1,)
+
+    # "OCC" is the same molecule as "CCO" — must be a 100% cache hit, no new row.
+    warm = extract_features(['OCC'], feat, cache_dir=tmp_path)
+    assert np.array_equal(cold, warm)
+    with h5py.File(cache_file, 'r') as f:
+        assert f['hash_index'].shape == (1,), 'OCC must reuse the CCO cache entry'

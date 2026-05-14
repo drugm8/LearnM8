@@ -19,12 +19,21 @@ class TopKAcquisition(AcquisitionFunction):
     to select from different parts of the prediction distribution.
     """
 
-    def __init__(self, k_fraction: float = 0.1, score_direction: str = 'higher', **kwargs):
+    def __init__(
+        self,
+        k_fraction: float = 0.1,
+        score_direction: str = 'higher',
+        random_state: int = 42,
+        **kwargs,
+    ):
         """Initialize Top-K acquisition function.
 
         Args:
             k_fraction: Fraction of compounds to consider from the top/bottom
             score_direction: Direction of score optimization ('higher' or 'lower' is better)
+            random_state: Random seed for the random draw from the top-K pool,
+                ensuring reproducible selection when the candidate pool exceeds
+                the requested batch size.
             **kwargs: Additional parameters for compatibility
         """
         super().__init__(score_direction=score_direction, **kwargs)
@@ -35,6 +44,7 @@ class TopKAcquisition(AcquisitionFunction):
 
         self.k_fraction = k_fraction
         self.score_direction = score_direction
+        self.random_state = random_state
         # Keep backward compatibility
         self.from_top = score_direction == 'higher'
 
@@ -63,22 +73,23 @@ class TopKAcquisition(AcquisitionFunction):
 
         logger.debug(f"TopKAcquisition: k_fraction={self.k_fraction}, candidates to consider: {k_consider}")
 
-        # Sort compounds by prediction based on score direction
-        if self.score_direction == 'higher':
-            # Sort descending (highest first)
-            sorted_compounds = compounds.sort('prediction', descending=True)
-        else:
-            # Sort ascending (lowest first)
-            sorted_compounds = compounds.sort('prediction', descending=False)
+        # Sort compounds by prediction based on score direction.
+        # maintain_order=True gives a deterministic, stable tie ordering.
+        descending = self.score_direction == 'higher'
+        sorted_compounds = compounds.sort(
+            'prediction', descending=descending, maintain_order=True
+        )
 
         # Take top-K compounds
         top_k_compounds = sorted_compounds.head(k_consider)
 
-        # Randomly select from top-K
+        # Randomly select from top-K (seeded for reproducibility)
         if len(top_k_compounds) == actual_n_select:
             selected = top_k_compounds
         else:
-            selected = top_k_compounds.sample(n=actual_n_select)
+            selected = top_k_compounds.sample(
+                n=actual_n_select, seed=self.random_state
+            )
 
         # Add acquisition scores (use prediction values)
         selected = selected.with_columns(

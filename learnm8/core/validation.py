@@ -9,7 +9,46 @@ from dataclasses import dataclass
 import datamol as dm
 import polars as pl
 
+from learnm8.exceptions import ValidationError
+
 logger = logging.getLogger(__name__)
+
+
+def _validate_target_dtype(valid_df: pl.DataFrame, target_col: str) -> pl.DataFrame:
+    """Enforce a numeric target column, raising on non-numeric input.
+
+    Numeric columns pass through unchanged. Utf8 columns are strict-cast to
+    Float64 (raising ``ValidationError`` if any value fails to parse). Boolean
+    and all other dtypes are rejected — booleans must be cast to int 0/1 by the
+    caller so regression-vs-classification intent stays explicit.
+    """
+    dtype = valid_df[target_col].dtype
+
+    if dtype.is_numeric():
+        return valid_df
+
+    if dtype == pl.Boolean:
+        raise ValidationError(
+            f"Target column '{target_col}' has Boolean dtype. Cast it to an "
+            f"integer 0/1 column before running so regression-vs-classification "
+            f"intent is explicit."
+        )
+
+    if dtype == pl.Utf8:
+        try:
+            cast_col = valid_df[target_col].cast(pl.Float64, strict=True)
+        except (pl.exceptions.InvalidOperationError, pl.exceptions.ComputeError) as e:
+            raise ValidationError(
+                f"Target column '{target_col}' contains non-numeric values that "
+                f"cannot be parsed as numbers: {e}. Clean the target column so "
+                f"every value is numeric."
+            ) from None
+        return valid_df.with_columns(cast_col.alias(target_col))
+
+    raise ValidationError(
+        f"Target column '{target_col}' has unsupported dtype {dtype}. "
+        f"The target must be a numeric column."
+    )
 
 
 @dataclass
@@ -68,7 +107,8 @@ def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
 def validate_compound_pool(
     compound_pool: pl.DataFrame,
     n_jobs: int = -1,
-    progress: bool = True
+    progress: bool = True,
+    target_col: str | None = None,
 ) -> ValidationResult:
     """
     Validate compound pool with parallel datamol-based validation.
@@ -77,9 +117,15 @@ def validate_compound_pool(
         compound_pool: DataFrame with 'ID' and 'SMILES' columns
         n_jobs: Number of parallel jobs (-1 for all cores)
         progress: Show progress bar
+        target_col: If given and present in the pool, the target column dtype is
+            validated — it must be numeric (Utf8 is strict-cast to Float64).
+            Non-numeric or Boolean targets raise ``ValidationError``.
 
     Returns:
         ValidationResult with valid/invalid compounds and error messages
+
+    Raises:
+        ValidationError: If ``target_col`` is present but not a numeric column.
     """
     logger.info(f"Validating {len(compound_pool)} compounds with datamol")
 
@@ -154,6 +200,9 @@ def validate_compound_pool(
 
     valid_df = pl.DataFrame(valid_compounds, schema=compound_pool.schema) if valid_compounds else pl.DataFrame(schema=compound_pool.schema)
     smiles_invalid_df = pl.DataFrame(invalid_compounds, schema=compound_pool.schema) if invalid_compounds else pl.DataFrame(schema=compound_pool.schema)
+
+    if target_col is not None and target_col in valid_df.columns and len(valid_df) > 0:
+        valid_df = _validate_target_dtype(valid_df, target_col)
 
     # Combine duplicate errors with SMILES validation errors
     all_errors = {**dup_errors, **smiles_errors}

@@ -303,7 +303,9 @@ def _validate_pool(
     target_col: str,
     n_jobs: int,
 ) -> Any:
-    validation_result = validate_compound_pool(compound_pool, n_jobs=n_jobs, progress=True)
+    validation_result = validate_compound_pool(
+        compound_pool, n_jobs=n_jobs, progress=True, target_col=target_col
+    )
 
     oracle_ids = oracle.known_ids()
     if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
@@ -329,13 +331,8 @@ def _validate_pool(
                 f"Pool size: {len(kept)} measurable compounds."
             )
 
-        if (
-            target_col in validation_result.valid_compounds.columns
-            and validation_result.valid_compounds[target_col].dtype == pl.Utf8
-        ):
-            validation_result.valid_compounds = validation_result.valid_compounds.with_columns(
-                pl.col(target_col).cast(pl.Float64, strict=False)
-            )
+        # Target-column dtype is validated (and Utf8 strict-cast to Float64) by
+        # validate_compound_pool — see core.validation._validate_target_dtype.
 
         if (
             target_col not in validation_result.valid_compounds.columns

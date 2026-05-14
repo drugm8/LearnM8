@@ -82,3 +82,27 @@ class TestTopKAcquisition:
 
         with pytest.raises(ValueError, match='n_select must be positive'):
             TopKAcquisition().select(compounds, n_select=0)
+
+    def test_topk_is_reproducible_with_same_random_state(self, small_real_compounds):
+        compounds = _pool_with_predictions(
+            small_real_compounds.head(10).clone(),
+            np.linspace(0.1, 1.0, 10),
+        )
+        # k_fraction large enough that the candidate pool exceeds the batch,
+        # so the random .sample() path is exercised.
+        first = TopKAcquisition(k_fraction=0.8, random_state=7).select(compounds, n_select=2)
+        second = TopKAcquisition(k_fraction=0.8, random_state=7).select(compounds, n_select=2)
+
+        assert first.get_column('ID').to_list() == second.get_column('ID').to_list()
+
+    def test_topk_differs_with_different_random_state(self, small_real_compounds):
+        compounds = _pool_with_predictions(
+            small_real_compounds.head(20).clone(),
+            np.linspace(0.1, 2.0, 20),
+        )
+        a = TopKAcquisition(k_fraction=0.9, random_state=1).select(compounds, n_select=3)
+        b = TopKAcquisition(k_fraction=0.9, random_state=999).select(compounds, n_select=3)
+
+        # Not a hard guarantee, but with 18 candidates and 3 picks the odds of an
+        # identical draw under different seeds are negligible.
+        assert a.get_column('ID').to_list() != b.get_column('ID').to_list()

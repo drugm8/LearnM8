@@ -273,8 +273,15 @@ class EnsembleLearner(Learner):
             Uncertainty estimates
         """
         if self.uncertainty_method == 'std':
-            # ddof=0 (NumPy/BoTorch convention); biased ~18% low at K=3.
-            # Switch to ddof=1 if downstream consumers need unbiased sigma.
+            # ddof=0 by deliberate choice. The K ensemble members are treated as
+            # the *complete population* of models for this run, not a sample
+            # drawn from a model distribution — so the population standard
+            # deviation (divide by K) is the right estimator and needs no
+            # sample-size correction. This is also the NumPy/BoTorch default.
+            # Under the alternative "K models as samples" interpretation one
+            # would use ddof=1; for small K (e.g. 3) that scales sigma up by
+            # sqrt(K/(K-1)) ~ 1.22, which only matters for sigma-nonlinear
+            # acquisition (EI/PI), not for rank-based ones (greedy/UCB/topk).
             return np.std(predictions_array, axis=0)
 
         elif self.uncertainty_method == 'mad':

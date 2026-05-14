@@ -98,6 +98,29 @@ class TestExtractFeaturesAPI:
 
         assert np.array_equal(features_sequential, features_parallel)
 
+    def test_n_jobs_not_in_cache_key(self, small_real_compounds, tmp_path):
+        """n_jobs must not fragment the cache (Item 7).
+
+        A core-count change has no effect on feature values, so the second
+        call with a different n_jobs must be a 100% cache hit — no new rows.
+        """
+        import h5py
+
+        smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
+        extract_features(smiles, 'morgan', tmp_path, n_jobs=1)
+
+        cache_file = tmp_path / 'features_morgan.h5'
+        with h5py.File(cache_file, 'r') as f:
+            assert f['hash_index'].shape == (10,)
+
+        extract_features(smiles, 'morgan', tmp_path, n_jobs=2)
+        with h5py.File(cache_file, 'r') as f:
+            assert f['hash_index'].shape == (10,), 'n_jobs change must not add rows'
+
+        # And n_jobs is absent from the config used for the cache key.
+        feat = create_featurizer('morgan', n_jobs=4)
+        assert 'n_jobs' not in feat.get_config()
+
     @pytest.mark.slow
     def test_extract_features_with_3d_featurizer(self, small_real_compounds, tmp_path):
         """extract_features() works with 3D featurizers."""
@@ -225,3 +248,20 @@ class TestFeaturizerErrorHandling:
                 output_dir=tmp_path / 'results',
                 random_state=42,
             )
+
+    def test_non_finite_featurizer_output_raises(self, monkeypatch):
+        """Non-finite featurizer output fails fast instead of poisoning the cache."""
+        from learnm8.exceptions import FeatureExtractionError
+
+        featurizer = create_featurizer('morgan', n_jobs=1)
+        smiles = ['CCO', 'CCC', 'CCN']
+
+        def _bad_transform(mols):
+            arr = np.zeros((len(smiles), featurizer.get_dimension()), dtype=np.float32)
+            arr[1, 0] = np.nan
+            return arr
+
+        monkeypatch.setattr(featurizer.fingerprint, 'transform', _bad_transform)
+
+        with pytest.raises(FeatureExtractionError, match='[Nn]on-finite'):
+            featurizer.transform(smiles)

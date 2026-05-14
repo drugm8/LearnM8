@@ -28,7 +28,7 @@ from learnm8.evaluation.metrics.similarity import (
     _get_or_build_fps,
     _mean_tanimoto_adaptive_sampled,
     _scaffold_diversity_index,
-    _bit_marginal_entropy_from_bit_sum,
+    _bit_position_uniformity_entropy_from_bit_sum,
     compute_diversity_metrics,
 )
 
@@ -170,16 +170,16 @@ class TestScaffoldDiversityIndex:
 @pytest.mark.unit
 class TestShannonEntropy:
     def test_zero_compounds_returns_none(self):
-        assert _bit_marginal_entropy_from_bit_sum(np.zeros(8), 0) is None
+        assert _bit_position_uniformity_entropy_from_bit_sum(np.zeros(8), 0) is None
 
     def test_all_zero_bit_sum_returns_none(self):
-        assert _bit_marginal_entropy_from_bit_sum(np.zeros(8), 5) is None
+        assert _bit_position_uniformity_entropy_from_bit_sum(np.zeros(8), 5) is None
 
     def test_uniform_distribution_hits_log2_n_bits(self):
         # All bits active in all compounds → frequencies all equal → entropy = log2(n_bits).
         n_bits = 16
         bit_sum = np.full(n_bits, 5)  # 5 compounds, all bits on
-        result = _bit_marginal_entropy_from_bit_sum(bit_sum, 5)
+        result = _bit_position_uniformity_entropy_from_bit_sum(bit_sum, 5)
         assert result == pytest.approx(math.log2(n_bits))
 
     def test_upper_bound_property(self):
@@ -189,7 +189,7 @@ class TestShannonEntropy:
         n_compounds = 50
         matrix = rng.integers(0, 2, size=(n_compounds, n_bits), dtype=np.uint8)
         bit_sum = matrix.sum(axis=0)
-        result = _bit_marginal_entropy_from_bit_sum(bit_sum, n_compounds)
+        result = _bit_position_uniformity_entropy_from_bit_sum(bit_sum, n_compounds)
         assert result is not None
         assert result <= math.log2(n_bits) + 1e-9
 
@@ -288,8 +288,8 @@ class TestComputeDiversityMetricsPublic:
             random_state=42,
         )
         assert result["scaffold_diversity_index_batch"] == result["scaffold_diversity_index_cumulative"]
-        assert result["bit_marginal_entropy_batch"] == pytest.approx(
-            result["bit_marginal_entropy_cumulative"]
+        assert result["bit_position_uniformity_entropy_batch"] == pytest.approx(
+            result["bit_position_uniformity_entropy_cumulative"]
         )
 
     def test_disable_true_emits_none_for_all(self, run_cache):
@@ -318,7 +318,7 @@ class TestComputeDiversityMetricsPublic:
         assert result["scaffold_diversity_index_batch"] is None
         # Other keys should be computed.
         assert result["scaffold_diversity_index_cumulative"] is not None
-        assert result["bit_marginal_entropy_batch"] is not None
+        assert result["bit_position_uniformity_entropy_batch"] is not None
         assert result["fingerprint_used"] == "morgan_2_2048_float32"
 
     def test_disable_unknown_key_raises(self, run_cache):

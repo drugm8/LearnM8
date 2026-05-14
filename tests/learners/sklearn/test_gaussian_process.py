@@ -495,3 +495,58 @@ class TestGPFeatureScaling:
             preferred_dtype=learner.preferred_feature_dtype(),
         )
         assert features.dtype == np.float32
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+class TestGPTanimotoNoScaling:
+    """Tanimoto kernel must receive raw 0/1 vectors, not StandardScaler output."""
+
+    def test_auto_binary_disables_scaling(self):
+        learner = GaussianProcessLearner(kernel='auto', random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == 'Tanimoto'
+        assert learner.scale_features is False
+        assert learner._feature_scaler is None
+
+    def test_auto_continuous_keeps_scaling(self):
+        learner = GaussianProcessLearner(kernel='auto', random_state=42)
+        X = np.random.randn(20, 5)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._kernel_name == 'RBF'
+        assert learner.scale_features is True
+        assert learner._feature_scaler is not None
+
+    def test_explicit_tanimoto_disables_scaling(self):
+        learner = GaussianProcessLearner(kernel='tanimoto', random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._feature_scaler is None
+
+    def test_explicit_rbf_keeps_scaling(self):
+        learner = GaussianProcessLearner(kernel='rbf', random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        assert learner._feature_scaler is not None
+
+    def test_retrain_toggles_scaling_with_kernel(self):
+        learner = GaussianProcessLearner(kernel='auto', random_state=42)
+        y = np.random.randn(20)
+        learner.train(np.random.randint(0, 2, size=(20, 10)).astype(float), y)
+        assert learner._feature_scaler is None
+        learner.train(np.random.randn(20, 5), y)
+        assert learner._feature_scaler is not None
+
+    def test_tanimoto_predict_path_does_not_scale(self):
+        learner = GaussianProcessLearner(kernel='tanimoto', random_state=42)
+        X = np.random.randint(0, 2, size=(20, 10)).astype(float)
+        y = np.random.randn(20)
+        learner.train(X, y)
+        preds, unc = learner.predict(X)
+        assert np.all(np.isfinite(preds))
+        assert np.all(unc >= 0)

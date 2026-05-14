@@ -100,11 +100,13 @@ def test_empty_input_returns_empty_s16_array(morgan: SkfpFeaturizer) -> None:
 
 @pytest.mark.unit
 def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
-    """Implementation hoists ``f'_{name}_{config_hash}'`` outside the loop.
+    """Verify the digest equals the naive recipe on canonicalised SMILES.
 
-    Verify the optimised digest equals the naive ``f'{s}_{name}_{config_hash}'``
-    BLAKE2b-128 digest for every sample.
+    SMILES are canonicalised before hashing, so the expected digest is computed
+    over ``Chem.MolToSmiles(Chem.MolFromSmiles(s))`` for each sample.
     """
+    from rdkit import Chem
+
     name = morgan.get_name()
     config_hash = morgan.get_config_hash()
 
@@ -112,7 +114,7 @@ def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
     expected = np.array(
         [
             hashlib.blake2b(
-                f'{s}_{name}_{config_hash}'.encode(),
+                f'{Chem.MolToSmiles(Chem.MolFromSmiles(s))}_{name}_{config_hash}'.encode(),
                 digest_size=16,
                 usedforsecurity=False,
             ).digest()
@@ -121,3 +123,30 @@ def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
         dtype=HASH_DTYPE,
     )
     npt.assert_array_equal(optimised, expected)
+
+
+@pytest.mark.unit
+def test_equivalent_smiles_share_cache_key(morgan: SkfpFeaturizer) -> None:
+    """Equivalent SMILES representations canonicalise to the same digest."""
+    # "CCO" / "OCC" (ethanol) and two benzene spellings.
+    keys = _cache_keys_bytes16(['CCO', 'OCC', 'c1ccccc1', 'C1=CC=CC=C1'], morgan)
+    assert keys[0] == keys[1]
+    assert keys[2] == keys[3]
+    assert keys[0] != keys[2]
+
+
+@pytest.mark.unit
+def test_invalid_smiles_uses_raw_string_fallback(morgan: SkfpFeaturizer) -> None:
+    """SMILES RDKit cannot parse still get a stable, deterministic key."""
+    bad = 'not_a_valid_smiles!!!'
+    name = morgan.get_name()
+    config_hash = morgan.get_config_hash()
+    keys = _cache_keys_bytes16([bad], morgan)
+    expected = hashlib.blake2b(
+        f'{bad}_{name}_{config_hash}'.encode(),
+        digest_size=16,
+        usedforsecurity=False,
+    ).digest()
+    assert keys[0] == expected
+    # Deterministic across calls.
+    npt.assert_array_equal(keys, _cache_keys_bytes16([bad], morgan))

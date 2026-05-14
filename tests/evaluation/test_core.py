@@ -439,7 +439,7 @@ class TestSpecificExceptionHandling:
                 )
             assert result['mean_tanimoto_similarity_sampled_batch'] is None
             assert result['scaffold_diversity_index_batch'] is None
-            assert result['bit_marginal_entropy_batch'] is None
+            assert result['bit_position_uniformity_entropy_batch'] is None
             assert 'diversity' in caplog.text.lower()
 
     def test_discovery_metrics_catches_zero_division(self, caplog):
