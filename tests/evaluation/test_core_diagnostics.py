@@ -192,3 +192,38 @@ class TestEvaluateCycleNoRegression:
         # Selected = top 3 by Activity → values 1.0, 0.9796, 0.9592 (linspace 0..1, 50 pts).
         assert result['avg_score_selected'] is not None
         assert 0.9 < result['avg_score_selected'] <= 1.0
+
+
+@pytest.mark.unit
+class TestUncertaintyAwareMetrics:
+    """Feature 023 FR-011: cycle metrics dict keeps uncertainty_* keys present
+    with None values when uncertainty was skipped."""
+
+    def test_diagnostic_uq_metrics_return_none_when_uncertainty_is_none(self):
+        labeled = pl.DataFrame({
+            'ID': ['a', 'b', 'c'],
+            'SMILES': ['C', 'CC', 'CCC'],
+            'Activity': [0.1, 0.2, 0.3],
+        })
+        sel = labeled.head(2)
+        pool = _make_pool_df(20, seed=7)
+
+        result = evaluate_cycle(
+            cycle=2,
+            predictions=np.array(labeled['Activity'].to_list()),
+            ground_truth=np.array(labeled['Activity'].to_list()),
+            labeled_data=labeled,
+            selected_compounds=sel,
+            target_col='Activity',
+            ground_truth_data=None,
+            pool_df=pool,
+            cumulative_selected_ids=set(sel['ID'].to_list()),
+            uncertainties=None,  # << feature 023 contract: skip-path
+        )
+
+        # Schema-honest: uncertainty_mean / uncertainty_std keys must be
+        # present (no fabricated nulls) but None-valued (FR-011).
+        assert 'uncertainty_mean' in result
+        assert 'uncertainty_std' in result
+        assert result['uncertainty_mean'] is None
+        assert result['uncertainty_std'] is None

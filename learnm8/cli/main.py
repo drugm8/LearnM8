@@ -315,6 +315,17 @@ def create_parser() -> argparse.ArgumentParser:
         default=False,
         help='Bypass the large-feature guard that blocks descriptor-based featurizers on pools >1M compounds'
     )
+    advanced_group.add_argument(
+        '--force-uncertainty',
+        action='store_true',
+        default=False,
+        help=(
+            'Force uncertainty computation every cycle, even when the acquisition '
+            'function (e.g. greedy/random/topk) does not require it. Useful for '
+            'diagnostic / calibration analyses. Silent no-op for learners that '
+            'do not support uncertainty (chemprop, fastprop, mlp). Default: off.'
+        ),
+    )
 
     validate_parser = subparsers.add_parser('validate', help='Validate compound pool using datamol SMILES validation')
     validate_parser.add_argument(
@@ -398,6 +409,7 @@ def _build_run_kwargs(args: argparse.Namespace, acquisition_params: dict | None,
         device=getattr(args, 'device', 'auto'),
         large_features_ack=getattr(args, 'allow_large_features', False),
         output_format=getattr(args, 'output_format', 'auto'),
+        force_uncertainty=getattr(args, 'force_uncertainty', False),
     )
 
 

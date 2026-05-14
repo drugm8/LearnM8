@@ -71,7 +71,13 @@ class DecisionTreeLearner(SklearnLearner):
             return True
         return self.model.criterion == 'squared_error'
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with leaf impurity uncertainty.
 
         When ``criterion='squared_error'``, uncertainty is computed as
@@ -84,11 +90,16 @@ class DecisionTreeLearner(SklearnLearner):
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, the
+                ``model.apply()`` leaf-id lookup and impurity sqrt are
+                skipped.
 
         Returns:
             Tuple of (predictions, uncertainties). Uncertainties is None
-            if criterion is not 'squared_error'.
+            if criterion is not 'squared_error' or compute_uncertainty=False.
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -109,7 +120,7 @@ class DecisionTreeLearner(SklearnLearner):
 
             predictions = self.model.predict(preprocessed)
 
-            if self.model.criterion == 'squared_error':
+            if compute_uncertainty and self.model.criterion == 'squared_error':
                 leaf_ids = self.model.apply(preprocessed)
                 impurity = self.model.tree_.impurity[leaf_ids]
                 uncertainty = np.sqrt(np.maximum(impurity, 0.0))

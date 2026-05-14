@@ -477,6 +477,7 @@ def _execute_loop(
     n_jobs: int,
     output_dir: Path,
     feature_type: str,
+    force_uncertainty: bool = False,
 ) -> tuple[pl.DataFrame, list[dict[str, Any]], list[Path]]:
     cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
     prediction_files: list[Path] = []
@@ -513,6 +514,7 @@ def _execute_loop(
                 n_jobs=n_jobs,
                 output_dir=output_dir,
                 feature_type=feature_type,
+                force_uncertainty=force_uncertainty,
             )
             all_metrics.append(metrics)
 
@@ -703,6 +705,8 @@ def run_active_learning(
     output_format: Literal['auto', 'csv', 'parquet'] = 'auto',
     # Diversity metrics (feature 013)
     disable_molecular_similarity: bool | Iterable[str] = False,
+    # Force uncertainty computation (feature 023)
+    force_uncertainty: bool = False,
 ) -> dict[str, Any]:
     """Execute active learning experiment.
 
@@ -847,6 +851,17 @@ def run_active_learning(
             'auto' uses CSV for <1M compounds, Parquet for >=1M.
             'csv' or 'parquet' force a specific format regardless of pool size.
             Parquet uses zstd-3 compression and streaming writes for scale.
+
+        force_uncertainty: When True, learners always compute uncertainty even
+            if the acquisition function does not require it (e.g., 'greedy').
+            Useful for diagnostic / calibration analyses. Default False, in
+            which case skip-eligible learners (gp, rf, advanced_rf, dt, lr,
+            rf_fil, ridge_cuml, gpu_gp, svgp) elide uncertainty work and the
+            per-cycle parquet drops the `uncertainty` column. The cycle
+            resolves ``compute_uncertainty = force_uncertainty OR
+            acq_func.requires_uncertainty()`` once per cycle. CLI equivalent:
+            ``--force-uncertainty``. Silent no-op for learners that do not
+            support uncertainty at all (chemprop, fastprop, mlp). Feature 023.
 
     Returns:
         Dictionary with:
@@ -1178,6 +1193,7 @@ def run_active_learning(
             n_jobs=n_jobs,
             output_dir=output_dir,
             feature_type=feature_type,
+            force_uncertainty=force_uncertainty,
         )
 
         logger.debug("Calculating aggregate metrics")

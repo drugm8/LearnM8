@@ -390,18 +390,23 @@ class ChempropLearner(Learner):
 
 	def predict(self,
 				features: np.ndarray | None,
-				smiles: list[str] | None = None
+				smiles: list[str] | None = None,
+				*,
+				compute_uncertainty: bool = True,
 				) -> tuple[np.ndarray, np.ndarray | None]:
 		"""Predict on SMILES strings (no uncertainty for single model).
 
 		Args:
 			features: Optional molecular descriptors (x_d)
 			smiles: Required SMILES strings
+			compute_uncertainty: Keyword-only (feature 023). Single Chemprop
+				never produces uncertainty; no-op.
 
 		Returns:
 			predictions: Predicted values
 			uncertainties: None (single model has no uncertainty)
 		"""
+		del compute_uncertainty
 
 		if smiles is None:
 			raise ValueError("ChempropLearner requires SMILES strings")

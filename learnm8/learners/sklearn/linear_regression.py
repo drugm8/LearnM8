@@ -122,7 +122,13 @@ class LinearRegressionLearner(SklearnLearner):
         rss = float(np.sum(residuals**2))
         self._sigma_hat_sq = rss / max(n - p, 1)
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with leverage-based analytical uncertainty.
 
         Uncertainty is computed as ``sqrt(sigma_hat_sq * max(1 + h_ii, 0))``
@@ -133,10 +139,14 @@ class LinearRegressionLearner(SklearnLearner):
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, the
+                leverage solve (the dominant cost) is skipped entirely.
 
         Returns:
             Tuple of (predictions, uncertainties).
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -159,6 +169,13 @@ class LinearRegressionLearner(SklearnLearner):
                 preprocessed = self._feature_scaler.transform(preprocessed)
 
             predictions = self.model.predict(preprocessed)
+
+            if not compute_uncertainty:
+                pred_time = time.time() - start_time
+                logger.debug(
+                    f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+                )
+                return predictions, None
 
             leverages = _compute_leverages_cpu(self._L_inv, preprocessed)
             variance = self._sigma_hat_sq * np.maximum(1.0 + leverages, 0.0)

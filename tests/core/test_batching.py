@@ -350,7 +350,7 @@ class TestPredictWithBatching:
 
         call_count = []
 
-        def side_effect(features):
+        def side_effect(features, *args, **kwargs):
             call_count.append(1)
             batch_n = len(features)
             return np.arange(batch_n, dtype=float), None
@@ -392,7 +392,7 @@ class TestPredictWithBatching:
 
         call_count = [0]
 
-        def predict_side_effect(features):
+        def predict_side_effect(features, *args, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("CUDA out of memory. Tried to allocate ...")
@@ -418,7 +418,7 @@ class TestPredictWithBatching:
         learner = self._make_learner()
         call_sizes = []
 
-        def predict_side_effect(features):
+        def predict_side_effect(features, *args, **kwargs):
             batch_n = len(features)
             call_sizes.append(batch_n)
             if batch_n > MIN_BATCH_CPU:
@@ -461,7 +461,7 @@ class TestPredictWithBatching:
 
         call_idx = [0]
 
-        def misaligned_predict(features):
+        def misaligned_predict(features, *args, **kwargs):
             call_idx[0] += 1
             batch_n = len(features)
             if call_idx[0] == 1:
@@ -497,3 +497,21 @@ class TestPredictWithBatching:
         mock_logger.info.assert_called_once()
         call_args = mock_logger.info.call_args[0][0]
         assert "Batched prediction" in call_args
+
+    def test_compute_uncertainty_false_returns_none_sigmas(self, tmp_path):
+        n = 10
+        pool = self._make_pool(n)
+        learner = self._make_learner(supports_uncertainty=True)
+        learner.predict.return_value = (np.ones(n), None)
+        large_memory = 100 * 1024**3
+
+        with (
+            patch("learnm8.core.batching.get_available_memory", return_value=large_memory),
+            patch("learnm8.core.batching.extract_features", return_value=np.ones((n, 2048))),
+        ):
+            preds, uncerts, ids, feat_time = predict_with_batching(
+                pool, learner, "morgan", tmp_path, compute_uncertainty=False
+            )
+
+        assert uncerts is None
+        assert len(preds) == n

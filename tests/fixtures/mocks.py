@@ -37,8 +37,18 @@ class MockLearner(Learner):
         self._trained = True
         self._training_features = features.copy()
 
-    def predict(self, features: np.ndarray) -> tuple:
-        """Mock prediction implementation with featurizer-agnostic interface."""
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple:
+        """Mock prediction implementation with featurizer-agnostic interface.
+
+        Feature 023: accepts ``compute_uncertainty`` keyword-only argument and
+        honours it by returning None for the second tuple element when False.
+        """
         if self._fail_prediction:
             raise RuntimeError("Prediction failed (mock)")
 
@@ -51,7 +61,7 @@ class MockLearner(Learner):
         np.random.seed(42)
         predictions = np.random.uniform(0, 1, len(features))
 
-        if self._supports_uncertainty:
+        if self._supports_uncertainty and compute_uncertainty:
             uncertainties = np.random.uniform(0.1, 0.3, len(features))
             return predictions, uncertainties
         else:

@@ -373,8 +373,22 @@ class SVGPLearner(Learner):
             torch.cuda.empty_cache()
 
     def predict(
-        self, features: np.ndarray, smiles: list[str] | None = None
-    ) -> tuple[np.ndarray, np.ndarray]:
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """Predict mean and (optionally) standard deviation.
+
+        Args:
+            features: Feature matrix of shape (n_samples, n_features).
+            smiles: Unused; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, only
+                ``posterior.mean`` is accessed — variance solve is skipped
+                (FR-004 amendment / D3).
+        """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 "SVGPLearner must be trained before predict(). Call train() first."
@@ -393,7 +407,7 @@ class SVGPLearner(Learner):
             features_proc = self._feature_scaler.transform(features_proc)
 
         all_means = []
-        all_stds = []
+        all_stds: list = []
         n = features_proc.shape[0]
 
         try:
@@ -403,9 +417,13 @@ class SVGPLearner(Learner):
                     chunk, dtype=torch.float64, device=self._device
                 )
                 with torch.no_grad():
-                    preds = self._likelihood(self._model(chunk_tensor))
-                    all_means.append(preds.mean.cpu().numpy())
-                    all_stds.append(preds.variance.sqrt().cpu().numpy())
+                    if compute_uncertainty:
+                        preds = self._likelihood(self._model(chunk_tensor))
+                        all_means.append(preds.mean.cpu().numpy())
+                        all_stds.append(preds.variance.sqrt().cpu().numpy())
+                    else:
+                        posterior = self._model(chunk_tensor)
+                        all_means.append(posterior.mean.cpu().numpy())
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
                 "CUDA out of memory" in str(exc)
@@ -418,15 +436,16 @@ class SVGPLearner(Learner):
             ) from exc
 
         means = np.concatenate(all_means).astype(np.float64)
-        stds = np.concatenate(all_stds).astype(np.float64)
-
         means = means * self._target_std + self._target_mean
-        stds = stds * self._target_std
 
         if self.enable_aggressive_gc and self._device.type == "cuda":
             gc.collect()
             torch.cuda.empty_cache()
 
+        if not compute_uncertainty:
+            return means, None
+
+        stds = np.concatenate(all_stds).astype(np.float64) * self._target_std
         return means, stds
 
     def get_name(self) -> str:

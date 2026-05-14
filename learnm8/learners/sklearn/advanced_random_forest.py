@@ -97,22 +97,34 @@ class AdvancedRandomForestLearner(SklearnLearner):
         """Return True — AdvancedRF provides tree-level uncertainty estimates."""
         return True
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with tree-level uncertainty estimation.
 
-        Uncertainty is computed as ``np.std`` (ddof=0) across individual tree
-        predictions from ``model.estimators_``, matching the RandomForestLearner
-        pattern.
+        Mean predictions use sklearn's optimized ``model.predict()`` path in
+        BOTH branches (feature 023 D9 — bit-identity across the
+        ``compute_uncertainty`` toggle). Uncertainty (when requested) is
+        computed as ``np.std`` (ddof=0) across individual tree predictions
+        from ``model.estimators_``, matching the RandomForestLearner pattern.
 
         Note: uncertainty estimates are **ordinal** (useful for ranking compounds
         by relative confidence) but **not calibrated** prediction intervals.
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, the
+                per-tree loop and ``np.std`` reduction are skipped entirely.
 
         Returns:
             Tuple of (predictions, uncertainties).
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -130,6 +142,15 @@ class AdvancedRandomForestLearner(SklearnLearner):
                 feature_type=self._feature_type,
                 imputer=self._feature_imputer,
             )
+
+            predictions = self.model.predict(preprocessed)
+
+            if not compute_uncertainty:
+                pred_time = time.time() - start_time
+                logger.debug(
+                    f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+                )
+                return predictions, None
 
             if not hasattr(self.model, 'estimators_'):
                 raise LearnerError(
@@ -154,7 +175,7 @@ class AdvancedRandomForestLearner(SklearnLearner):
 
         except LearnerError:
             raise
-        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
+        except (ValueError, RuntimeError, TypeError, AttributeError, np.linalg.LinAlgError) as e:
             logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
                 f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}.'
