@@ -226,6 +226,8 @@ class RidgeCumlLearner(Learner):
         self,
         features: np.ndarray,
         smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with cuML Ridge and compute leverage-based uncertainty.
 
@@ -235,6 +237,8 @@ class RidgeCumlLearner(Learner):
         Args:
             features: Feature matrix (n_samples, n_features).
             smiles: Unused; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False the
+                (dominant) leverage solve is skipped (FR-004 amendment / D3).
 
         Returns:
             Tuple of (predictions, uncertainties) as numpy float64 arrays.
@@ -242,6 +246,7 @@ class RidgeCumlLearner(Learner):
         Raises:
             LearnerError: If the learner has not been trained or prediction fails.
         """
+        del smiles
         _validate_predict_inputs(self.is_trained, self.get_name())
 
         t0 = time.perf_counter_ns()
@@ -271,6 +276,9 @@ class RidgeCumlLearner(Learner):
             ) from exc
 
         predictions = raw_preds.astype(np.float64)
+
+        if not compute_uncertainty:
+            return predictions, None
 
         t4 = time.perf_counter_ns()
         X = features.astype(np.float64)

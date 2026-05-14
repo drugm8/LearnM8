@@ -141,7 +141,14 @@ class GaussianProcessLearner(SklearnLearner):
 
         super().train(features, targets)
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -160,6 +167,14 @@ class GaussianProcessLearner(SklearnLearner):
 
             if self._feature_scaler is not None:
                 features = self._feature_scaler.transform(features)
+
+            # Feature 023 FR-004: skip the O(n_train x n_pred) variance solve
+            # when the cycle does not need uncertainty. External validation:
+            # sklearn#31374 reports ~96% wall-clock saving for the same.
+            if not compute_uncertainty:
+                predictions = self.model.predict(features)
+                logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')
+                return predictions, None
 
             predictions, std = self.model.predict(features, return_std=True)
             logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')
