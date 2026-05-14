@@ -1,48 +1,59 @@
-name: Deploy MkDocs to GitHub Pages
+name: Deploy Zensical Docs to GitHub Pages
 
 on:
   push:
     branches:
       - main
-      - v2
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Cache dependencies
+      - name: Cache Zensical build
         uses: actions/cache@v4
         with:
-          key: mkdocs-material-${{ github.ref }}-${{ hashFiles('**/mkdocs.yml') }}
+          key: zensical-${{ github.ref }}-${{ hashFiles('zensical.toml') }}
           path: .cache
           restore-keys: |
-            mkdocs-material-${{ github.ref }}-
-            mkdocs-material-
+            zensical-${{ github.ref }}-
+            zensical-
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install mkdocs-material
+      - name: Install Zensical
+        run: pip install zensical
 
-      - name: Configure Git for deployment
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Build docs
+        run: zensical build -f zensical.toml --clean --strict
 
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
-        run: mkdocs gh-deploy --force --clean --verbose
+        id: deployment
+        uses: actions/deploy-pages@v4
