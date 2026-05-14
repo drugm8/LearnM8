@@ -322,7 +322,8 @@ class TestExecuteCycle:
             def train(self, features, targets):
                 raise RuntimeError("Training failed")
 
-            def predict(self, features):
+            def predict(self, features, smiles=None, *, compute_uncertainty=True):
+                assert isinstance(compute_uncertainty, bool)
                 return np.array([]), None
 
             def supports_uncertainty(self):
@@ -375,6 +376,51 @@ class TestExecuteCycle:
 
         assert metrics['selected_count'] == 0
         assert metrics['remaining_unlabeled'] == 0
+
+    def test_empty_cycle_schema_drops_uncertainty_column(
+        self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
+        """Feature 023 FR-009 / D5: the empty-cycle fallback predictions schema
+        must drop the uncertainty column when compute_uncertainty resolves to
+        False (greedy acquisition + no force).
+        """
+        all_labeled = sample_compounds['ID'].to_list()
+        all_values = dict(
+            zip(all_labeled, np.random.rand(len(all_labeled)), strict=False)
+        )
+        master_df = initialize_master_dataframe(
+            valid_compounds=sample_compounds,
+            target_col='Activity',
+            initial_labeled_ids=all_labeled,
+            initial_measurements=all_values,
+        )
+
+        # greedy → acq.requires_uncertainty() False; force_uncertainty=False.
+        config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
+
+        _df, metrics = execute_cycle(
+            compounds_df=master_df,
+            cycle=0,
+            config=config,
+            learner=mock_learner_with_uncertainty,
+            oracle=mock_oracle,
+            target_col='Activity',
+            featurizer='morgan',
+            cache_dir=tmp_path,
+            original_pool_size=len(sample_compounds),
+            oracle_type='run',
+            force_uncertainty=False,
+        )
+
+        # 'selected_predictions' is the empty schema-bearing DF for the empty-pool
+        # fallback path; it must NOT carry an uncertainty column when the cycle
+        # opted out of uncertainty.
+        empty = metrics['selected_predictions']
+        if empty is not None and len(empty) == 0:
+            assert 'uncertainty' not in empty.columns, (
+                'Empty-cycle predictions schema must drop uncertainty column '
+                'when compute_uncertainty=False (FR-009 / D5).'
+            )
 
 
 @pytest.mark.integration
@@ -622,7 +668,8 @@ class TestEdgeCaseHandling:
             def train(self, features, targets):
                 pass
 
-            def predict(self, features):
+            def predict(self, features, smiles=None, *, compute_uncertainty=True):
+                assert isinstance(compute_uncertainty, bool)
                 predictions = np.full(features.shape[0], np.nan)
                 return predictions, None
 
@@ -655,7 +702,8 @@ class TestEdgeCaseHandling:
             def train(self, features, targets):
                 pass
 
-            def predict(self, features):
+            def predict(self, features, smiles=None, *, compute_uncertainty=True):
+                assert isinstance(compute_uncertainty, bool)
                 predictions = np.full(features.shape[0], np.inf)
                 return predictions, None
 

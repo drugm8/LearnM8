@@ -85,6 +85,7 @@ def make_run_namespace(compound_pool, tmp_path, **overrides):
         memory_safety_factor=0.7,
         smiles_col=None,
         id_col=None,
+        force_uncertainty=False,
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -446,6 +447,73 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0
+
+    def test_force_uncertainty_flag_forwarding(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        """FR-014: --force-uncertainty must be forwarded to run_active_learning()."""
+        import learnm8.cli.main as cli_main_mod
+        from learnm8.cli.main import cmd_run
+
+        captured = {}
+
+        def fake_run(**kwargs):
+            captured.update(kwargs)
+            return {
+                'compounds_df': None,
+                'cycle_metrics': [],
+                'aggregate_metrics': {},
+                'validation_result': None,
+                'output_dir': kwargs.get('output_dir', tmp_path),
+                'saved_files': {},
+                'prediction_files': [],
+                'labeled_count': 0,
+                'unlabeled_count': 0,
+            }
+
+        monkeypatch.setattr(cli_main_mod, 'run_active_learning', fake_run)
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            n_cycles=1, batch_fraction=0.4,
+            force_uncertainty=True,
+        )
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+
+        assert captured.get('force_uncertainty') is True, (
+            'cmd_run did not forward --force-uncertainty to '
+            'run_active_learning() (FR-014).'
+        )
+
+    def test_force_uncertainty_default_false(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        """Default for --force-uncertainty must be False (FR-013)."""
+        import learnm8.cli.main as cli_main_mod
+        from learnm8.cli.main import cmd_run
+
+        captured = {}
+
+        def fake_run(**kwargs):
+            captured.update(kwargs)
+            return {
+                'compounds_df': None,
+                'cycle_metrics': [],
+                'aggregate_metrics': {},
+                'validation_result': None,
+                'output_dir': kwargs.get('output_dir', tmp_path),
+                'saved_files': {},
+                'prediction_files': [],
+                'labeled_count': 0,
+                'unlabeled_count': 0,
+            }
+
+        monkeypatch.setattr(cli_main_mod, 'run_active_learning', fake_run)
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            n_cycles=1, batch_fraction=0.4,
+        )
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert captured.get('force_uncertainty') is False
 
 
 @pytest.mark.slow

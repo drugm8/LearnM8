@@ -170,19 +170,32 @@ class RfFilLearner(SklearnLearner):
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with FIL and return per-tree uncertainty.
 
         Args:
             features: Feature matrix (n_samples, n_features).
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, the
+                ``predict_per_tree`` GPU call is replaced with the fused
+                ``model.predict`` and uncertainty is omitted (FR-004
+                amendment / D3).
 
         Returns:
             Tuple of (predictions, uncertainty) where predictions is the mean
-            across trees and uncertainty is the population std (ddof=0).
+            across trees and uncertainty is the population std (ddof=0), or
+            ``None`` when ``compute_uncertainty=False``.
 
         Raises:
             LearnerError: If model is not trained or prediction fails.
         """
+        del smiles
         _validate_predict_inputs(self.is_trained, self.get_name())
 
         t0 = time.perf_counter_ns()
@@ -196,6 +209,22 @@ class RfFilLearner(SklearnLearner):
         )
         features = features.astype(np.float32)
         t_preprocess = time.perf_counter_ns() - t0
+
+        if not compute_uncertainty:
+            # Skip path uses the fused FIL .predict() — no per-tree return,
+            # no (n_samples, n_trees) allocation.
+            def predict_mean_fn(chunk: np.ndarray) -> np.ndarray:
+                raw = self._fil_model.predict(chunk)
+                return np.asarray(raw)
+
+            predictions = _predict_with_oom_retry(features, predict_mean_fn)
+            logger.debug(
+                '%s predict: preprocess=%dns n_samples=%d',
+                self.get_name(),
+                t_preprocess,
+                features.shape[0],
+            )
+            return predictions, None
 
         n_trees = self.model.n_estimators
 

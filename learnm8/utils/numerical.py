@@ -57,12 +57,20 @@ def assert_no_nan(arr: np.ndarray, ids: IdSource, name: str) -> None:
     raise LearnerError(f"NaN {name} detected: {n} {row_word}, first IDs: {ids_str}")
 
 
-def assert_no_inf_uncertainty(uncertainties: np.ndarray, ids: IdSource) -> None:
+def assert_no_inf_uncertainty(
+    uncertainties: np.ndarray | None, ids: IdSource
+) -> None:
     """Raise :class:`LearnerError` if ``uncertainties`` contains any ±inf entry.
 
     Spec edge case: legitimate ``inf`` σ (a learner explicitly signalling
     unbounded uncertainty) must NOT be silently clamped to a finite value.
+
+    Feature 023 FR-012: ``None`` is a valid "uncertainty skipped" signal from
+    the cycle — short-circuit without raising so callers can pass-through
+    unconditionally.
     """
+    if uncertainties is None:
+        return
     indices = np.flatnonzero(np.isinf(uncertainties))
     n = int(indices.size)
     if n == 0:

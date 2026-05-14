@@ -18,7 +18,7 @@ class MockLearner(Learner):
             raise LearnerError(f'{self.name} training failed')
         self.is_trained = True
 
-    def predict(self, features, smiles=None):
+    def predict(self, features, smiles=None, *, compute_uncertainty: bool = True):
         if self.fail_on_predict:
             raise LearnerError(f'{self.name} prediction failed')
         return np.random.randn(len(features)), None

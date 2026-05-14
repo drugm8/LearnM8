@@ -202,19 +202,35 @@ class MCDropoutLearner(TorchLearner):
         std = np.concatenate([std1, std2])
         return mean, std
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix with uncertainty via Monte Carlo Dropout.
+
+        Feature 023 D4: MC Dropout stays *uniform-contract*. When
+        ``compute_uncertainty=False`` the N stochastic forward passes still
+        execute (skipping them would change the mean semantics per Gal &
+        Ghahramani 2016); only the std return is discarded.
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only. When False, returns
+                ``(mean_predictions, None)`` — but the N stochastic forward
+                passes still execute.
 
         Returns:
-            Tuple of (predictions, uncertainties) where uncertainties are
-            estimated using Monte Carlo Dropout sampling.
+            Tuple of (predictions, uncertainties) where uncertainties is
+            ``None`` if ``compute_uncertainty=False``.
 
         Raises:
             RuntimeError: If model is not trained or prediction fails
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -257,6 +273,11 @@ class MCDropoutLearner(TorchLearner):
                 f'using {self.n_dropout_samples} MC samples'
             )
 
+            # Feature 023 D4: uniform contract — discard uncertainty when
+            # the cycle opted out. The N stochastic passes still ran above
+            # (skipping them would change mean semantics).
+            if not compute_uncertainty:
+                return mean_predictions, None
             return mean_predictions, uncertainties
 
         except (ValueError, RuntimeError, TypeError) as e:
