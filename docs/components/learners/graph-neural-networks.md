@@ -200,7 +200,7 @@ ChempropEnsemble accepts **all ChempropLearner parameters** (applied to each ens
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `random_states` | List[int] | `[42, 123, 456]` | Random seeds for ensemble diversity. 3 seeds create 3 models. |
+| `random_states` | `List[int]` | `[42, 123, 456]` | Random seeds for ensemble diversity. 3 seeds create 3 models. |
 | `aggregation_method` | str | `'mean'` | How to combine predictions: `'mean'`, `'median'`. Mean typical. |
 | `uncertainty_method` | str | `'std'` | Uncertainty calculation: `'std'`, `'mad'`, `'quantile'`. Std typical. |
 

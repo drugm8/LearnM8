@@ -103,7 +103,7 @@ features = extract_features(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `smiles_list` | List[str] | Required | List of SMILES strings |
+| `smiles_list` | `List[str]` | Required | List of SMILES strings |
 | `featurizer` | str | Required | Featurizer type (`morgan`, `maccs`, `ecfp6`, `morgan_feat`, `descriptors`) |
 | `cache_dir` | Path | `.cache` | Directory for HDF5 cache files |
 | `n_jobs` | int | `-1` | Number of parallel jobs (-1 for auto-optimization) |
