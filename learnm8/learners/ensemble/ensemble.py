@@ -169,19 +169,35 @@ class EnsembleLearner(Learner):
             f'Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s'
         )
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix with ensemble uncertainty.
+
+        Feature 023 (FR-005, FR-006, D1, D10):
+        * Each member receives ``compute_uncertainty`` directly so skip-eligible
+          members can elide uncertainty compute.
+        * The outer ``_calculate_uncertainty`` std-reduction is short-circuited
+          when ``compute_uncertainty=False`` — saves ~4 GB at 100M x N-member
+          scale and matches the uniform-contract for ensembles.
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only. False → ``(mean, None)``.
 
         Returns:
-            Tuple of (predictions, uncertainties) where uncertainties are
-            estimated from ensemble variance.
+            Tuple of (predictions, uncertainties) where uncertainties is
+            ``None`` if ``compute_uncertainty=False``.
 
         Raises:
             RuntimeError: If ensemble is not trained or prediction fails
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -195,7 +211,9 @@ class EnsembleLearner(Learner):
 
             for i, learner in enumerate(self.learners):
                 try:
-                    pred, _ = learner.predict(features)
+                    pred, _ = learner.predict(
+                        features, compute_uncertainty=compute_uncertainty
+                    )
                     predictions_list.append(pred)
                 except (
                     ValueError,
@@ -210,8 +228,17 @@ class EnsembleLearner(Learner):
                     ) from e
 
             predictions_array = np.array(predictions_list)
-
             ensemble_predictions = self._aggregate_predictions(predictions_array)
+
+            if not compute_uncertainty:
+                pred_time = time.time() - start_time
+                logger.debug(
+                    f'Ensemble prediction: aggregated '
+                    f'{len(predictions_list)} predictions using '
+                    f'{self.aggregation_method} in {pred_time:.2f}s'
+                )
+                return ensemble_predictions, None
+
             uncertainties = self._calculate_uncertainty(predictions_array)
 
             logger.debug(

@@ -282,20 +282,31 @@ class GPyTorchGPLearner(Learner):
             torch.cuda.empty_cache()
 
     def predict(
-        self, features: np.ndarray, smiles: list[str] | None = None
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Predict mean and standard deviation for the given features.
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """Predict mean and (optionally) standard deviation.
 
         Args:
             features: Feature matrix of shape (n_samples, n_features).
             smiles: Unused; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, only
+                ``posterior.mean`` is accessed — ``posterior.variance`` and
+                the surrounding ``gpytorch.settings.fast_pred_var()`` context
+                are skipped (FR-004 amendment / D3). The Cholesky-backed
+                variance solve is the dominant cost.
 
         Returns:
             Tuple of (means, stds) as float64 arrays of shape (n_samples,).
+            ``stds`` is ``None`` if ``compute_uncertainty=False``.
 
         Raises:
             LearnerError: If model is not trained or GPU OOM occurs during prediction.
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError("GPyTorchGPLearner must be trained before predict(). Call train() first.")
 
@@ -314,21 +325,27 @@ class GPyTorchGPLearner(Learner):
         import gpytorch
 
         all_means = []
-        all_stds = []
+        all_stds: list = []
         n = features_proc.shape[0]
 
         try:
             for start in range(0, n, self.predict_chunk_size):
                 chunk = features_proc[start : start + self.predict_chunk_size]
                 chunk_tensor = torch.tensor(chunk, dtype=torch.float64, device=self._device)
-                with (
-                    torch.no_grad(),
-                    gpytorch.settings.fast_pred_var(),
-                    gpytorch.settings.max_root_decomposition_size(20),
-                ):
-                    preds = self._likelihood(self._model(chunk_tensor))
-                    all_means.append(preds.mean.cpu().numpy())
-                    all_stds.append(preds.variance.sqrt().cpu().numpy())
+                if compute_uncertainty:
+                    with (
+                        torch.no_grad(),
+                        gpytorch.settings.fast_pred_var(),
+                        gpytorch.settings.max_root_decomposition_size(20),
+                    ):
+                        preds = self._likelihood(self._model(chunk_tensor))
+                        all_means.append(preds.mean.cpu().numpy())
+                        all_stds.append(preds.variance.sqrt().cpu().numpy())
+                else:
+                    # Skip path: posterior.mean only — no variance solve.
+                    with torch.no_grad():
+                        posterior = self._model(chunk_tensor)
+                        all_means.append(posterior.mean.cpu().numpy())
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
                 "CUDA out of memory" in str(exc)
@@ -340,15 +357,16 @@ class GPyTorchGPLearner(Learner):
             ) from exc
 
         means = np.concatenate(all_means).astype(np.float64)
-        stds = np.concatenate(all_stds).astype(np.float64)
-
         means = means * self._target_std + self._target_mean
-        stds = stds * self._target_std
 
         if self.enable_aggressive_gc and self._device.type == "cuda":
             gc.collect()
             torch.cuda.empty_cache()
 
+        if not compute_uncertainty:
+            return means, None
+
+        stds = np.concatenate(all_stds).astype(np.float64) * self._target_std
         return means, stds
 
     def get_name(self) -> str:

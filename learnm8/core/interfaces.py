@@ -93,7 +93,11 @@ class Learner(ABC):
 
     @abstractmethod
     def predict(
-        self, features: np.ndarray, smiles: list[str] | None = None
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Predict on feature matrix or SMILES.
@@ -101,13 +105,30 @@ class Learner(ABC):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Optional SMILES strings (required by some learners)
+            compute_uncertainty: Keyword-only. When ``False``, the learner may
+                skip uncertainty-specific compute paths and return ``None`` for
+                the second tuple element. When ``True`` (default), behaviour is
+                unchanged. The active-learning cycle resolves the value as
+                ``force_uncertainty OR acq_func.requires_uncertainty()`` once
+                per cycle and threads it through.
 
         Returns:
             Tuple of (predictions, uncertainties).
-            uncertainties can be None if model doesn't provide uncertainty estimates.
+            uncertainties can be None if model doesn't provide uncertainty estimates
+            or if ``compute_uncertainty=False`` was honoured by the learner.
 
         Raises:
             RuntimeError: If model is not trained or prediction fails
+
+        Migration (0.11.0 breaking change):
+            ``compute_uncertainty`` was added as a keyword-only argument in
+            v0.11.0. Third-party ``Learner`` subclasses with the old signature
+            will raise ``TypeError: predict() got an unexpected keyword argument
+            'compute_uncertainty'`` on first call from the cycle. To migrate,
+            add ``*, compute_uncertainty: bool = True`` to your ``predict()``
+            signature; honour it where cheap, otherwise discard the uncertainty
+            before returning. See the 0.11.0 CHANGELOG entry for a 5-line diff
+            and a ``git grep`` command to locate subclasses.
         """
         pass
 

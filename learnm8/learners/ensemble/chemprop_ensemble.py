@@ -199,12 +199,15 @@ class ChempropEnsemble(EnsembleLearner):
 
 		self._cleanup_gpu_memory("after ensemble training")
 
-	def predict(self, features, smiles=None):
+	def predict(self, features, smiles=None, *, compute_uncertainty=True):
 		"""Predict with SMILES strings.
 
 		Args:
 			features: Ignored (ChempropEnsemble works with SMILES directly)
 			smiles: SMILES strings (required)
+			compute_uncertainty: Keyword-only (feature 023). When False the
+				outer std-reduction is skipped (FR-005 / D10). Threaded to
+				each member for cascade (FR-006).
 
 		Returns:
 			Tuple of (predictions, uncertainties)
@@ -215,20 +218,23 @@ class ChempropEnsemble(EnsembleLearner):
 		if not self.is_trained:
 			raise LearnerError("Ensemble must be trained before prediction")
 
-		# Get predictions from each learner
+		# Get predictions from each learner; thread compute_uncertainty.
 		predictions_list = []
 		for learner in self.learners:
-			pred, _ = learner.predict(features=None, smiles=smiles)
+			pred, _ = learner.predict(
+				features=None, smiles=smiles, compute_uncertainty=compute_uncertainty
+			)
 			predictions_list.append(pred)
 
 		predictions_array = np.array(predictions_list)
-
-		# Aggregate predictions
 		ensemble_predictions = self._aggregate_predictions(predictions_array)
+
+		if not compute_uncertainty:
+			self._cleanup_gpu_memory("after ensemble prediction")
+			return ensemble_predictions, None
+
 		uncertainties = self._calculate_uncertainty(predictions_array)
-
 		self._cleanup_gpu_memory("after ensemble prediction")
-
 		return ensemble_predictions, uncertainties
 
 	def get_individual_predictions(self, features, smiles=None):

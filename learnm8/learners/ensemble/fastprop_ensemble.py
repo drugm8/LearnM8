@@ -117,32 +117,37 @@ class FastpropEnsemble(EnsembleLearner):
 
         self._cleanup_gpu_memory('after ensemble training')
 
-    def predict(self, features):
+    def predict(self, features, smiles=None, *, compute_uncertainty=True):
         """Predict with feature matrix.
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False the
+                outer std-reduction is skipped (FR-005 / D10) and the flag is
+                threaded to each member (FR-006).
 
         Returns:
             Tuple of (predictions, uncertainties)
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError('Ensemble must be trained before prediction')
 
-        # Get predictions from each learner
         predictions_list = []
         for learner in self.learners:
-            pred, _ = learner.predict(features)
+            pred, _ = learner.predict(features, compute_uncertainty=compute_uncertainty)
             predictions_list.append(pred)
 
         predictions_array = np.array(predictions_list)
-
-        # Aggregate predictions
         ensemble_predictions = self._aggregate_predictions(predictions_array)
+
+        if not compute_uncertainty:
+            self._cleanup_gpu_memory('after ensemble prediction')
+            return ensemble_predictions, None
+
         uncertainties = self._calculate_uncertainty(predictions_array)
-
         self._cleanup_gpu_memory('after ensemble prediction')
-
         return ensemble_predictions, uncertainties
 
     def get_individual_predictions(self, features):

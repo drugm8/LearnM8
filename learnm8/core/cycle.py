@@ -110,6 +110,7 @@ def execute_cycle(
     disable_molecular_similarity: bool | Iterable[str] = False,
     random_state: int | None = None,
     feature_type: str = 'binary',
+    force_uncertainty: bool = False,
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -231,6 +232,34 @@ def execute_cycle(
         cycle=cycle,
     )
 
+    # Feature 023 D6 + FR-007: build the acquisition function once at cycle
+    # start so `requires_uncertainty()` can resolve before predict. The
+    # `current_best` derivation matches `_select_and_measure` (line ~1131).
+    acquisition_params_resolved = (config.acquisition_params or {}).copy()
+    if 'current_best' not in acquisition_params_resolved:
+        labeled_values_for_best = labeled_df[target_col].to_numpy()
+        if len(labeled_values_for_best) > 0:
+            acquisition_params_resolved['current_best'] = (
+                float(labeled_values_for_best.max())
+                if score_direction == 'higher'
+                else float(labeled_values_for_best.min())
+            )
+
+    acq_func = _build_acquisition_function(
+        strategy=config.strategy,
+        score_direction=score_direction,
+        acquisition_params=acquisition_params_resolved,
+        random_state=random_state,
+        cycle_idx=cycle,
+    )
+
+    # Feature 023 FR-007: cycle-level resolution of compute_uncertainty. The
+    # OR-precedence is asymmetric — force_uncertainty=True overrides skip even
+    # for greedy/random; uncertainty-requiring acquisitions (UCB/EI/PI/etc.)
+    # cannot be disabled. Skip-eligible learners (gp/rf/advanced_rf/dt/lr +
+    # GPU/gpytorch siblings) elide uncertainty compute when this is False.
+    compute_uncertainty = force_uncertainty or acq_func.requires_uncertainty()
+
     # Step 4: Prediction on unlabeled compounds (unified always-batch approach)
     prediction_pool = get_compounds_by_status(
         compounds_df, 'unlabeled', columns=['ID', 'SMILES']
@@ -240,9 +269,16 @@ def execute_cycle(
         logger.warning(
             f'No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.'
         )
-        empty_predictions = pl.DataFrame(
-            schema={'ID': pl.Utf8, 'prediction': pl.Float64, 'uncertainty': pl.Float64}
-        )
+        # Feature 023 D5 / FR-009: drop the uncertainty column from the
+        # empty-cycle fallback schema when the cycle opted out of uncertainty.
+        # Polars consumers downstream column-gate on `'uncertainty' in df.columns`.
+        empty_schema: dict[str, pl.PolarsDataType] = {
+            'ID': pl.Utf8,
+            'prediction': pl.Float64,
+        }
+        if compute_uncertainty:
+            empty_schema['uncertainty'] = pl.Float64
+        empty_predictions = pl.DataFrame(schema=empty_schema)
         metrics = {
             'cycle': cycle,
             'strategy': config.strategy,
@@ -256,6 +292,9 @@ def execute_cycle(
             'pruned_count': 0,
             'parquet_path': None,
             'selected_predictions': empty_predictions,
+            'has_uncertainty': False,
+            'uncertainty_mean': None,
+            'uncertainty_std': None,
         }
         return compounds_df, metrics
 
@@ -268,6 +307,7 @@ def execute_cycle(
             memory_safety_factor=memory_safety_factor,
             n_jobs=n_jobs,
             cycle=cycle,
+            compute_uncertainty=compute_uncertainty,
         )
     )
 
@@ -339,6 +379,7 @@ def execute_cycle(
             random_state=random_state,
             featurizer_obj=featurizer_obj,
             cache_dir=cache_dir,
+            acq_func=acq_func,
         )
     )
 
@@ -530,7 +571,9 @@ def _calculate_cycle_metrics(
         metrics['prediction_max'] = None
         metrics['prediction_median'] = None
 
-    # Uncertainty statistics (with NaN safeguards)
+    # Uncertainty statistics (with NaN safeguards). Feature 023 FR-011:
+    # always populate the four uncertainty_* keys (with None when uncertainty
+    # was skipped) so downstream cycle_metrics.csv schema stays stable.
     if uncertainties is not None and len(uncertainties) > 0:
         metrics['uncertainty_mean'] = (
             float(np.nanmean(uncertainties, dtype=np.float64))
@@ -554,6 +597,10 @@ def _calculate_cycle_metrics(
         )
         metrics['has_uncertainty'] = True
     else:
+        metrics['uncertainty_mean'] = None
+        metrics['uncertainty_std'] = None
+        metrics['uncertainty_min'] = None
+        metrics['uncertainty_max'] = None
         metrics['has_uncertainty'] = False
 
     # Measured value statistics (for selected compounds this cycle, with NaN safeguards)
@@ -812,6 +859,71 @@ def _apply_pruning(
     return compounds_df, selection_pool, pruning_stats
 
 
+def _build_acquisition_function(
+    *,
+    strategy: str,
+    score_direction: str,
+    acquisition_params: dict[str, Any],
+    random_state: int | None = None,
+    cycle_idx: int | None = None,
+    featurizer_obj: Any = None,
+    cache_dir: Path | None = None,
+):
+    """Construct (but do not call) an acquisition function instance.
+
+    Hoisted from _select_compounds per feature 023 D6 so the cycle can
+    pre-resolve `acq_func.requires_uncertainty()` before predict and thread
+    `compute_uncertainty` through `_predict_pool`.
+
+    Returns the configured ``AcquisitionFunction`` instance with
+    ``_skip_unique_id_check`` already set to True (uniqueness is guaranteed by
+    validate_compound_pool upstream).
+    """
+    import inspect as _inspect
+
+    from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
+
+    try:
+        acq_class = get_acquisition_function(strategy)
+    except KeyError:
+        available = list_acquisition_functions()
+        raise ValueError(
+            f"Unknown acquisition strategy '{strategy}'. "
+            f'Available strategies: {", ".join(available)}. '
+            f'Basic strategies (any learner): greedy, random, topk. '
+            f'Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy.'
+        ) from None
+
+    if (
+        random_state is not None
+        and 'random_state' not in acquisition_params
+        and 'random_state' in _inspect.signature(acq_class).parameters
+    ):
+        if cycle_idx is not None:
+            acq_seed = int(
+                np.random.default_rng([random_state, cycle_idx]).integers(2**31)
+            )
+        else:
+            acq_seed = int(random_state)
+        acquisition_params = {**acquisition_params, 'random_state': acq_seed}
+
+    try:
+        acq_func = acq_class(
+            score_direction=score_direction,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            **acquisition_params,
+        )
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Failed to create acquisition function '{strategy}': {e}. "
+            f'Check that the acquisition parameters are valid for this strategy.'
+        ) from e
+
+    acq_func._skip_unique_id_check = True
+    return acq_func
+
+
 def _select_compounds(
     pool: pl.DataFrame,
     strategy: str,
@@ -822,6 +934,7 @@ def _select_compounds(
     cycle_idx: int | None = None,
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
+    acq_func: Any = None,
 ) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.
@@ -856,56 +969,21 @@ def _select_compounds(
         ValueError: Unknown strategy or missing requirements
         RuntimeError: Selection failures
     """
-    import inspect as _inspect
-
-    from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
-
-    # Get acquisition class
-    try:
-        acq_class = get_acquisition_function(strategy)
-    except KeyError:
-        available = list_acquisition_functions()
-        raise ValueError(
-            f"Unknown acquisition strategy '{strategy}'. "
-            f'Available strategies: {", ".join(available)}. '
-            f'Basic strategies (any learner): greedy, random, topk. '
-            f'Uncertainty-based (requires supports_uncertainty=True): ucb, ei, pi, thompson, entropy.'
-        ) from None
-
-    # Per-cycle seed derivation. Inject a deterministic but cycle-distinct
-    # random_state into acquisition_params only if (a) the acquisition class
-    # accepts random_state and (b) the user has not already supplied one.
-    if (
-        random_state is not None
-        and 'random_state' not in acquisition_params
-        and 'random_state' in _inspect.signature(acq_class).parameters
-    ):
-        if cycle_idx is not None:
-            acq_seed = int(
-                np.random.default_rng([random_state, cycle_idx]).integers(2**31)
-            )
-        else:
-            acq_seed = int(random_state)
-        acquisition_params = {**acquisition_params, 'random_state': acq_seed}
-
     # Note: current_best must be set from labeled data at cycle level, not predictions
-    # This is handled in execute_cycle before calling _select_compounds
-
-    # Create acquisition instance
-    try:
-        acq_func = acq_class(
+    # This is handled in execute_cycle before calling _select_compounds.
+    # Per feature 023 D6: execute_cycle pre-builds the acquisition function so
+    # `requires_uncertainty()` can be resolved before predict; if a pre-built
+    # instance is provided we skip the re-construction here.
+    if acq_func is None:
+        acq_func = _build_acquisition_function(
+            strategy=strategy,
             score_direction=score_direction,
+            acquisition_params=acquisition_params,
+            random_state=random_state,
+            cycle_idx=cycle_idx,
             featurizer_obj=featurizer_obj,
             cache_dir=cache_dir,
-            **acquisition_params,
         )
-    except (ValueError, TypeError) as e:
-        raise ValueError(
-            f"Failed to create acquisition function '{strategy}': {e}. "
-            f'Check that the acquisition parameters are valid for this strategy.'
-        ) from e
-    # Uniqueness of IDs in selection_pool is guaranteed by validate_compound_pool() upstream
-    acq_func._skip_unique_id_check = True
 
     # Validate requirements
     if acq_func.requires_uncertainty() and 'uncertainty' not in pool.columns:
@@ -1066,6 +1144,7 @@ def _predict_pool(
     memory_safety_factor: float,
     n_jobs: int,
     cycle: int,
+    compute_uncertainty: bool = True,
 ) -> tuple[pl.DataFrame, float, float, list[int]]:
     """Generate predictions (and optionally uncertainties) for the unlabeled pool.
 
@@ -1090,6 +1169,7 @@ def _predict_pool(
             cache_dir,
             memory_safety_factor=memory_safety_factor,
             n_jobs=n_jobs,
+            compute_uncertainty=compute_uncertainty,
         )
     except (LearnerError, FeatureExtractionError):
         raise
@@ -1145,6 +1225,7 @@ def _select_and_measure(
     random_state: int | None = None,
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
+    acq_func: Any = None,
 ) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None]:
     """Compute batch size, run acquisition, measure via oracle, update master_df.
 
@@ -1194,6 +1275,15 @@ def _select_and_measure(
         f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} candidates"
     )
 
+    # If a pre-built acq_func was supplied (feature 023 D6) and the user has
+    # not customised current_best via acquisition_params, propagate the cycle's
+    # current_best onto the instance so EI/PI behave identically to the
+    # construct-on-demand path.
+    if acq_func is not None and 'current_best' in acquisition_params and hasattr(
+        acq_func, 'current_best'
+    ):
+        acq_func.current_best = acquisition_params['current_best']
+
     selected_df = _select_compounds(
         selection_pool,
         config.strategy,
@@ -1204,6 +1294,7 @@ def _select_and_measure(
         cycle_idx=cycle,
         featurizer_obj=featurizer_obj,
         cache_dir=cache_dir,
+        acq_func=acq_func,
     )
 
     selected_ids = selected_df['ID'].to_list()

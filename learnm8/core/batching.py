@@ -188,12 +188,17 @@ def _predict_chunk(
     cache_dir: Path,
     show_progress: bool = False,
     n_jobs: int = -1,
+    compute_uncertainty: bool = True,
 ) -> tuple[np.ndarray, np.ndarray | None, float]:
     """Generate predictions for a chunk of compounds.
 
     Returns a 3-tuple ``(predictions, uncertainties, feature_extraction_time)``.
     The third element is the wall-clock seconds spent inside ``extract_features``
     so callers can report it separately from learner-side prediction time.
+
+    ``compute_uncertainty`` (feature 023) is forwarded to ``learner.predict``
+    as a keyword-only argument so skip-eligible learners can elide
+    uncertainty-specific compute paths.
     """
     chunk_smiles = chunk_df['SMILES'].to_list()
     feature_time = 0.0
@@ -213,7 +218,11 @@ def _predict_chunk(
             feature_time = time.time() - t0
         else:
             chunk_features = None
-        preds, uncerts = learner.predict(features=chunk_features, smiles=chunk_smiles)
+        preds, uncerts = learner.predict(
+            features=chunk_features,
+            smiles=chunk_smiles,
+            compute_uncertainty=compute_uncertainty,
+        )
         return preds, uncerts, feature_time
     else:
         if featurizer is None:
@@ -233,7 +242,9 @@ def _predict_chunk(
             preferred_dtype=preferred_dtype,
         )
         feature_time = time.time() - t0
-        preds, uncerts = learner.predict(chunk_features)
+        preds, uncerts = learner.predict(
+            chunk_features, compute_uncertainty=compute_uncertainty
+        )
         return preds, uncerts, feature_time
 
 
@@ -264,6 +275,7 @@ def _predict_chunk_with_oom_retry(
     n_samples: int,
     n_features: int,
     device: str,
+    compute_uncertainty: bool = True,
 ) -> tuple[np.ndarray, np.ndarray | None, float]:
     try:
         return _predict_chunk(
@@ -272,6 +284,7 @@ def _predict_chunk_with_oom_retry(
             featurizer,
             cache_dir,
             n_jobs=n_jobs,
+            compute_uncertainty=compute_uncertainty,
         )
     except (RuntimeError, MemoryError) as e:
         if not _is_oom_error(e):
@@ -343,6 +356,7 @@ def predict_with_batching(
     cache_dir: Path,
     memory_safety_factor: float = DEFAULT_SAFETY_FACTOR,
     n_jobs: int = 1,
+    compute_uncertainty: bool = True,
 ) -> tuple[np.ndarray, np.ndarray | None, list, float]:
     """Memory-safe batched prediction with OOM recovery.
 
@@ -353,13 +367,19 @@ def predict_with_batching(
         cache_dir: Feature cache directory.
         memory_safety_factor: Fraction of available memory to use.
         n_jobs: Number of parallel workers.
+        compute_uncertainty: Forwarded to ``learner.predict`` per chunk
+            (feature 023). When False, the post-chunk
+            ``supports_uncertainty()``-based stack invariant is also relaxed:
+            every chunk must return ``None`` for uncertainty (uniform
+            skip-path contract). Default True preserves prior behaviour.
 
     Returns:
         Tuple of ``(predictions, uncertainties_or_none, valid_ids,
         feature_extraction_time)``. The fourth element is the wall-clock seconds
         spent in ``extract_features`` summed across all chunks (including
         OOM-retry sub-chunks), so the caller can report it independently of
-        learner-side prediction time.
+        learner-side prediction time. When ``compute_uncertainty`` is False
+        ``uncertainties_or_none`` is always ``None``.
 
     Raises:
         LearnerError: If OOM persists at minimum batch size.
@@ -388,7 +408,11 @@ def predict_with_batching(
 
     all_predictions: list[np.ndarray] = []
     all_uncertainties: list[np.ndarray] = []
-    has_uncertainty = learner.supports_uncertainty()
+    # Feature 023: `has_uncertainty` is the cross-chunk invariant — when the
+    # cycle asked for uncertainty AND the learner supports it, every chunk
+    # MUST return non-None uncertainties. When compute_uncertainty=False the
+    # contract is uniform: every chunk returns None.
+    expect_uncertainty = learner.supports_uncertainty() and compute_uncertainty
     all_valid_ids: list = []
     feature_extraction_time = 0.0
 
@@ -405,12 +429,13 @@ def predict_with_batching(
             n_samples,
             n_features,
             device,
+            compute_uncertainty=compute_uncertainty,
         )
         feature_extraction_time += chunk_feat_time
 
         all_predictions.append(chunk_preds)
         all_valid_ids.extend(chunk_df['ID'].to_list())
-        if has_uncertainty:
+        if expect_uncertainty:
             if chunk_uncerts is None:
                 raise LearnerError(
                     f'Chunk {_chunk_idx}: learner declared supports_uncertainty()=True '

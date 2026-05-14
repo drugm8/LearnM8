@@ -83,12 +83,20 @@ class RandomForestLearner(SklearnLearner):
         """Return True — RF provides tree-level uncertainty estimates."""
         return True
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with tree-level uncertainty estimation.
 
-        Mean predictions use sklearn's optimized ``model.predict()`` path.
-        Uncertainty is computed as ``np.std`` (ddof=0) across individual tree
-        predictions from ``model.estimators_``.
+        Mean predictions use sklearn's optimized ``model.predict()`` path in
+        BOTH branches (feature 023 D9 — bit-identity across the
+        ``compute_uncertainty`` toggle). Uncertainty (when requested) is
+        computed as ``np.std`` (ddof=0) across individual tree predictions
+        from ``model.estimators_``.
 
         Note: uncertainty estimates are **ordinal** (useful for ranking compounds
         by relative confidence) but **not calibrated** prediction intervals.
@@ -97,14 +105,22 @@ class RandomForestLearner(SklearnLearner):
 
         Args:
             features: Feature matrix (n_samples, n_features)
+            smiles: Ignored; present for interface compatibility.
+            compute_uncertainty: Keyword-only (feature 023). When False, the
+                per-tree loop and ``np.std`` reduction are skipped entirely;
+                the unconditional gain is allocation elision of the
+                ``(n_trees, n_samples)`` array — wall-time scales with
+                ``n_jobs``.
 
         Returns:
             Tuple of (predictions, uncertainties) where uncertainties is the
-            population std across individual tree predictions.
+            population std across individual tree predictions, or ``None`` if
+            ``compute_uncertainty=False``.
 
         Raises:
             LearnerError: If model not trained or estimators_ unavailable.
         """
+        del smiles
         if not self.is_trained:
             raise LearnerError(
                 f'{self.get_name()} must be trained before prediction. '
@@ -123,6 +139,19 @@ class RandomForestLearner(SklearnLearner):
                 feature_type=self._feature_type,
                 imputer=self._feature_imputer,
             )
+
+            # D9: unified mean source — both branches derive `predictions` from
+            # the joblib-parallel `model.predict` path so the
+            # `compute_uncertainty` toggle never flips top-K selections at ULP
+            # precision.
+            predictions = self.model.predict(preprocessed)
+
+            if not compute_uncertainty:
+                pred_time = time.time() - start_time
+                logger.debug(
+                    f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
+                )
+                return predictions, None
 
             if not hasattr(self.model, 'estimators_'):
                 raise LearnerError(
@@ -147,7 +176,7 @@ class RandomForestLearner(SklearnLearner):
 
         except LearnerError:
             raise
-        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError) as e:
+        except (ValueError, RuntimeError, TypeError, AttributeError, np.linalg.LinAlgError) as e:
             logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
                 f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}. '

@@ -299,11 +299,20 @@ class FastpropLearner(Learner):
             for lg, lvl in zip(_pl_loggers, _orig_levels, strict=True):
                 lg.setLevel(lvl)
 
-    def predict(self, features: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict using trained Fastprop model.
 
         Args:
                 features: Feature matrix (n_samples, n_features)
+                smiles: Ignored; present for interface compatibility.
+                compute_uncertainty: Keyword-only (feature 023). Single
+                    Fastprop never produces uncertainty, so this is a no-op.
 
         Returns:
                 Tuple of (predictions, uncertainties).
@@ -312,6 +321,7 @@ class FastpropLearner(Learner):
         Raises:
                 RuntimeError: If model is not trained or prediction fails
         """
+        del smiles, compute_uncertainty
         if not self.is_trained:
             raise LearnerError('Model must be trained before prediction')
 
