@@ -496,7 +496,7 @@ All parameters from `run_active_learning()` are supported in configuration files
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `cycles` | list[dict] | List of cycle configurations with strategy, n_cycles, batch_fraction |
+| `cycles` | `list[dict]` | List of cycle configurations with strategy, n_cycles, batch_fraction |
 
 Cycle dictionary structure:
 ```yaml

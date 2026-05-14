@@ -34,7 +34,7 @@ All parameters with GPU considerations:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `hidden_sizes` | Tuple[int, ...] | `(512, 256, 128)` | Hidden layer sizes. Larger layers increase capacity but require more GPU memory. |
+| `hidden_sizes` | `Tuple[int, ...]` | `(512, 256, 128)` | Hidden layer sizes. Larger layers increase capacity but require more GPU memory. |
 | `activation` | str | `'relu'` | Activation function: `'relu'`, `'tanh'`, `'gelu'`, `'leaky_relu'`. ReLU is fastest. |
 | `dropout_rate` | float | `0.2` | Dropout rate for regularization. Higher values (0.3-0.5) reduce overfitting but may underfit. |
 | `batch_norm` | bool | `True` | Enable batch normalization. Improves training stability, minimal performance cost. |
@@ -136,7 +136,7 @@ All parameters with uncertainty considerations:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `hidden_sizes` | Tuple[int, ...] | `(256, 128)` | Hidden layer sizes. Smaller than MLP default for faster MC sampling. |
+| `hidden_sizes` | `Tuple[int, ...]` | `(256, 128)` | Hidden layer sizes. Smaller than MLP default for faster MC sampling. |
 | `dropout_rate` | float | `0.2` | Dropout rate for uncertainty. Higher rates (0.3-0.5) increase uncertainty magnitude. Critical parameter. |
 | `n_dropout_samples` | int | `100` | Number of forward passes for uncertainty. More samples = better estimates but slower. |
 | `activation` | str | `'relu'` | Activation function: `'relu'`, `'tanh'`, `'gelu'`, `'leaky_relu'`. |

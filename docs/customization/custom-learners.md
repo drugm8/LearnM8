@@ -88,7 +88,7 @@ The `train()` method trains the model on labeled data.
 
 - `features` (np.ndarray): Feature matrix with shape `(n_samples, n_features)`. For feature-based learners, these are pre-computed molecular features (fingerprints or descriptors). For graph neural networks, this may be ignored.
 - `targets` (np.ndarray): Target values with shape `(n_samples,)`. This is a 1D array of regression values or classification labels.
-- `smiles` (Optional[List[str]]): SMILES strings for each compound. Required by learners that work directly with molecular structures (e.g., Chemprop). Default is None for feature-based learners.
+- `smiles` (`Optional[List[str]]`): SMILES strings for each compound. Required by learners that work directly with molecular structures (e.g., Chemprop). Default is None for feature-based learners.
 
 **Returns:** None (modifies learner state)
 
@@ -110,9 +110,9 @@ The `predict()` method generates predictions and optional uncertainty estimates 
 **Parameters:**
 
 - `features` (np.ndarray): Feature matrix with shape `(n_samples, n_features)`. Must have the same number of features as the training data.
-- `smiles` (Optional[List[str]]): SMILES strings for prediction. Required only if `requires_smiles()` returns True.
+- `smiles` (`Optional[List[str]]`): SMILES strings for prediction. Required only if `requires_smiles()` returns True.
 
-**Returns:** Tuple[np.ndarray, Optional[np.ndarray]]
+**Returns:** `Tuple[np.ndarray, Optional[np.ndarray]]`
 
 - First element: Predictions array with shape `(n_samples,)`
 - Second element: Uncertainty estimates with shape `(n_samples,)` or None if not available

@@ -78,7 +78,7 @@ Memory usage scales linearly with library size, making it suitable for productio
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `features` | ndarray | Required | Pre-computed molecular fingerprints (n_compounds, n_features). |
-| `compound_ids` | List[str] | Required | List of compound IDs corresponding to feature rows. |
+| `compound_ids` | `List[str]` | Required | List of compound IDs corresponding to feature rows. |
 | `featurizer` | str | 'morgan' | Type of molecular features ('morgan', 'ecfp6', 'maccs'). |
 | `threshold` | float | 0.5 | Tanimoto similarity threshold for clustering (0.0-1.0). |
 | `branching_factor` | int | 50 | Maximum number of subclusters in each node. |
