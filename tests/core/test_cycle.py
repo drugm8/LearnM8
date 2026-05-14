@@ -9,10 +9,17 @@ from learnm8.core.cycle import (
     _apply_pruning,
     _calculate_cycle_metrics,
     _select_compounds,
+    build_selection_order_lookup,
     execute_cycle,
 )
 from learnm8.core.interfaces import Oracle
-from learnm8.exceptions import AcquisitionError, LearnerError, OracleError, PruningError
+from learnm8.exceptions import (
+    AcquisitionError,
+    LearnerError,
+    LearnM8Error,
+    OracleError,
+    PruningError,
+)
 from tests.fixtures.master_dataframe import (
     create_initialized_master_df as initialize_master_dataframe,
 )
@@ -883,3 +890,24 @@ class TestNarrowExceptPaths:
         # `metrics.update(eval_metrics)` call.
         assert 'r2' not in metrics
         assert 'mae' not in metrics
+
+
+@pytest.mark.unit
+class TestBuildSelectionOrderLookup:
+    """build_selection_order_lookup: strict id->order map (Item 14)."""
+
+    def test_maps_ids_to_their_index(self):
+        lookup = build_selection_order_lookup(['C3', 'C1', 'C2'])
+        assert lookup('C3') == 0
+        assert lookup('C1') == 1
+        assert lookup('C2') == 2
+
+    def test_missing_id_raises_instead_of_sentinel(self):
+        lookup = build_selection_order_lookup(['C1', 'C2'], context='Selected')
+        with pytest.raises(LearnM8Error, match='missing from the selection order map'):
+            lookup('C_not_present')
+
+    def test_error_message_includes_context_and_id(self):
+        lookup = build_selection_order_lookup(['C1'], context='Initial-batch')
+        with pytest.raises(LearnM8Error, match=r"Initial-batch compound ID 'ghost'"):
+            lookup('ghost')

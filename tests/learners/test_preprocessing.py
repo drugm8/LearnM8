@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from learnm8.exceptions import LearnerError
 from learnm8.learners.base import _preprocess_features
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
@@ -69,11 +70,20 @@ class TestPreprocessFeatures:
         result, _, _ = _preprocess_features(features, valid_feature_mask=None, is_training=False)
         assert result.shape == features.shape
 
-    def test_all_zero_variance_columns_produces_empty_features(self):
+    def test_all_zero_variance_columns_raises(self):
         features = np.ones((5, 3))
-        result, mask, _ = _preprocess_features(features, is_training=True)
-        assert result.shape[1] == 0
-        assert not np.any(mask)
+        with pytest.raises(LearnerError, match='constant'):
+            _preprocess_features(features, is_training=True)
+
+    def test_predict_feature_width_mismatch_raises(self):
+        train_feats = np.array([[1.0, 5.0, 3.0], [2.0, 5.0, 4.0]])
+        _, mask, _ = _preprocess_features(train_feats, is_training=True)
+        # Trained on 3-wide features; predict with 5-wide features.
+        wrong_width = np.random.rand(4, 5)
+        with pytest.raises(LearnerError, match='width mismatch'):
+            _preprocess_features(
+                wrong_width, valid_feature_mask=mask, is_training=False
+            )
 
     def test_threshold_boundary(self):
         n = 100

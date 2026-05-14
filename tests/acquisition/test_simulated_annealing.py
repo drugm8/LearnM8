@@ -61,6 +61,14 @@ class TestSimulatedAnnealingAcquisition:
         with pytest.raises(ValueError, match="score_direction must be"):
             SimulatedAnnealingAcquisition(score_direction='invalid')
 
+        # Test invalid neighbor strategy
+        with pytest.raises(ValueError, match="neighbor_strategy must be"):
+            SimulatedAnnealingAcquisition(neighbor_strategy='invalid')
+
+        # Test invalid n_neighbors
+        with pytest.raises(ValueError, match="n_neighbors must be >= 1"):
+            SimulatedAnnealingAcquisition(n_neighbors=0)
+
     def test_cooling_schedules(self, small_real_compounds):
         """Test different cooling schedules with real molecular data."""
         compounds = small_real_compounds.clone()
@@ -352,3 +360,161 @@ class TestSimulatedAnnealingAcquisition:
             # At minimum, should have valid target assignments
             assert unique_targets_in_selection >= 1
             assert unique_targets_in_selection <= unique_targets_total
+
+    def test_knn_neighbor_strategy_selects_compounds(self, small_real_compounds, small_real_morgan_features):
+        """Test kNN-based neighbor generation produces valid selections."""
+        compounds = small_real_compounds.clone()
+        np.random.seed(42)
+        predictions = compounds.get_column('Activity').to_numpy() + np.random.normal(0, 0.5, len(compounds))
+        compounds = compounds.with_columns(pl.Series('prediction', predictions))
+
+        from learnm8.features import create_featurizer
+        featurizer_obj = create_featurizer('morgan')
+
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features',
+            n_neighbors=5,
+            max_iterations=100,
+            random_state=42,
+            featurizer_obj=featurizer_obj,
+        )
+        selected = acq.select(compounds, n_select=8)
+
+        assert len(selected) == 8
+        assert len(selected.get_column('ID').unique()) == 8
+        assert 'acquisition_score' in selected.columns
+        assert np.all(np.isfinite(selected.get_column('acquisition_score').to_numpy()))
+
+    def test_knn_falls_back_without_featurizer(self, small_real_compounds):
+        """Test kNN strategy gracefully falls back to random when featurizer_obj is missing."""
+        compounds = small_real_compounds.clone()
+        np.random.seed(42)
+        predictions = compounds.get_column('Activity').to_numpy() + np.random.normal(0, 0.5, len(compounds))
+        compounds = compounds.with_columns(pl.Series('prediction', predictions))
+
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features',
+            n_neighbors=5,
+            max_iterations=100,
+            random_state=42,
+        )
+        selected = acq.select(compounds, n_select=8)
+
+        assert len(selected) == 8
+        assert len(selected.get_column('ID').unique()) == 8
+
+    def test_knn_neighbor_strategy_reproducible(self, small_real_compounds, small_real_morgan_features):
+        """Test kNN neighbor strategy produces reproducible results with fixed seed."""
+        compounds = small_real_compounds.clone()
+        np.random.seed(42)
+        predictions = compounds.get_column('Activity').to_numpy() + np.random.normal(0, 0.5, len(compounds))
+        compounds = compounds.with_columns(pl.Series('prediction', predictions))
+
+        from learnm8.features import create_featurizer
+        featurizer_obj = create_featurizer('morgan')
+
+        acq1 = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features',
+            n_neighbors=5,
+            max_iterations=100,
+            random_state=42,
+            featurizer_obj=featurizer_obj,
+        )
+        acq2 = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features',
+            n_neighbors=5,
+            max_iterations=100,
+            random_state=42,
+            featurizer_obj=featurizer_obj,
+        )
+
+        selected1 = acq1.select(compounds, n_select=5)
+        selected2 = acq2.select(compounds, n_select=5)
+
+        assert selected1.get_column('ID').to_list() == selected2.get_column('ID').to_list()
+
+    def test_knn_get_name_includes_neighbor_strategy(self):
+        """Test get_name includes neighbor_strategy when not default."""
+        acq_default = SimulatedAnnealingAcquisition(
+            neighbor_strategy='random',
+        )
+        assert acq_default.get_name() == "SimulatedAnnealing(exponential_higher)"
+
+        acq_knn = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features',
+        )
+        assert "knn_features" in acq_knn.get_name()
+
+    def test_knn_fallback_does_not_mutate_instance(self, small_real_compounds):
+        """The no-featurizer fallback must not permanently downgrade the instance."""
+        compounds = small_real_compounds.clone()
+        np.random.seed(42)
+        predictions = compounds.get_column('Activity').to_numpy() + np.random.normal(
+            0, 0.5, len(compounds)
+        )
+        compounds = compounds.with_columns(pl.Series('prediction', predictions))
+
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='knn_features', max_iterations=50, random_state=42
+        )
+        acq.select(compounds, n_select=4)
+        # Configured strategy is unchanged despite the runtime fallback.
+        assert acq.neighbor_strategy == 'knn_features'
+
+
+@pytest.mark.unit
+class TestScoreBandStrategy:
+    """Tests for the 'score_band' neighbour strategy (Item 16)."""
+
+    def _pool(self, small_real_compounds):
+        compounds = small_real_compounds.clone()
+        rng = np.random.default_rng(0)
+        predictions = rng.normal(0, 1, len(compounds))
+        return compounds.with_columns(pl.Series('prediction', predictions))
+
+    def test_score_band_selects_requested_unique_batch(self, small_real_compounds):
+        compounds = self._pool(small_real_compounds)
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='score_band', band_width=5, max_iterations=200,
+            random_state=42,
+        )
+        selected = acq.select(compounds, n_select=6)
+        assert len(selected) == 6
+        assert len(selected.get_column('ID').unique()) == 6
+        assert np.all(np.isfinite(selected.get_column('acquisition_score').to_numpy()))
+
+    def test_score_band_is_reproducible(self, small_real_compounds):
+        compounds = self._pool(small_real_compounds)
+        a = SimulatedAnnealingAcquisition(
+            neighbor_strategy='score_band', band_width=5, max_iterations=200,
+            random_state=7,
+        ).select(compounds, n_select=5)
+        b = SimulatedAnnealingAcquisition(
+            neighbor_strategy='score_band', band_width=5, max_iterations=200,
+            random_state=7,
+        ).select(compounds, n_select=5)
+        assert a.get_column('ID').to_list() == b.get_column('ID').to_list()
+
+    def test_score_band_needs_no_featurizer(self, small_real_compounds):
+        # score_band works purely from the prediction column — no featurizer_obj.
+        compounds = self._pool(small_real_compounds)
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='score_band', max_iterations=50, random_state=1
+        )
+        selected = acq.select(compounds, n_select=3)
+        assert len(selected) == 3
+
+    def test_score_band_candidate_respects_rank_window(self, small_real_compounds):
+        compounds = self._pool(small_real_compounds)
+        predictions = compounds.get_column('prediction').to_numpy()
+        acq = SimulatedAnnealingAcquisition(
+            neighbor_strategy='score_band', band_width=3, random_state=0
+        )
+        idx_at_rank, rank_of_idx = acq._build_score_band_index(predictions)
+        for current_idx in range(len(predictions)):
+            cand = acq._score_band_candidate(current_idx, idx_at_rank, rank_of_idx)
+            assert abs(int(rank_of_idx[cand]) - int(rank_of_idx[current_idx])) <= 3
+
+    def test_band_width_must_be_positive(self):
+        with pytest.raises(ValueError, match='band_width must be >= 1'):
+            SimulatedAnnealingAcquisition(neighbor_strategy='score_band', band_width=0)

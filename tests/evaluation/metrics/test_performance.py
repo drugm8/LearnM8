@@ -10,7 +10,6 @@ from numpy.testing import assert_allclose
 from learnm8.evaluation.metrics.performance import (
     calculate_spearman_correlation,
     calculate_average_score,
-    calculate_mape
 )
 
 
@@ -83,23 +82,3 @@ class TestPerformanceMetrics:
         expected = float(np.mean(scores, dtype=np.float64))
         assert_allclose(result, expected, rtol=0.0, atol=1e-12)
 
-    def test_mape_calculation(self):
-        """Test Mean Absolute Percentage Error calculation."""
-        y_true = np.array([1.0, 2.0, 3.0, 4.0])
-        y_pred = np.array([1.1, 1.9, 3.2, 3.8])
-
-        mape = calculate_mape(y_true, y_pred)
-
-        # Manual calculation: |1.1-1|/1 + |1.9-2|/2 + |3.2-3|/3 + |3.8-4|/4
-        # = 0.1 + 0.05 + 0.067 + 0.05 = 0.267 => 26.7%
-        expected = (0.1 + 0.05 + 0.2/3 + 0.05) * 25  # Convert to percentage
-        assert_allclose(mape, expected, rtol=1e-2)
-
-    def test_mape_with_zero_values(self):
-        """Test MAPE with zero values in ground truth."""
-        y_true = np.array([0.0, 2.0, 3.0])
-        y_pred = np.array([0.1, 1.9, 3.2])
-
-        # Should handle division by zero gracefully
-        mape = calculate_mape(y_true, y_pred)
-        assert np.isfinite(mape) or np.isnan(mape)

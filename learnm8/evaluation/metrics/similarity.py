@@ -11,11 +11,12 @@ newly-selected batch, once for the cumulative selected set):
       pair sampling (pilot-then-scale, target 95% CI half-width 0.005)
     * scaffold_diversity_index          - unique Bemis-Murcko scaffolds /
       valid compounds
-    * bit_marginal_entropy              - entropy of fingerprint bit-position
-      activation-frequency distribution (online accumulator). Renamed from
-      ``shannon_entropy_diversity`` in feature 019 to honestly describe what
-      this metric computes — the entropy of the marginal bit distribution,
-      not the Shannon entropy of compound sets.
+    * bit_position_uniformity_entropy   - entropy of the (sum-normalised)
+      bit-position activation distribution (online accumulator) — i.e. how
+      uniformly fingerprint bit positions are activated across the set. NOT a
+      sum of per-bit Bernoulli entropies; the name was corrected from the
+      earlier ``bit_marginal_entropy`` / ``shannon_entropy_diversity`` which
+      misdescribed the functional.
 
 All metrics operate ONLY on the selected compounds (bounded by n_cycles x
 batch_size), never on the full pool - this is the key to scaling the metric
@@ -58,26 +59,33 @@ DIVERSITY_KEYS: tuple[str, ...] = (
     "mean_tanimoto_similarity_sampled_cumulative",
     "scaffold_diversity_index_batch",
     "scaffold_diversity_index_cumulative",
-    "bit_marginal_entropy_batch",
-    "bit_marginal_entropy_cumulative",
+    "bit_position_uniformity_entropy_batch",
+    "bit_position_uniformity_entropy_cumulative",
 )
 
 
-# Renamed identifiers (feature 019). Accessed via the module-level
-# ``__getattr__`` hint below; emits a clear AttributeError / ImportError
-# rather than silently breaking. NO backward-compat alias is provided.
+# Renamed identifiers. Accessed via the module-level ``__getattr__`` hint
+# below; emits a clear AttributeError / ImportError rather than silently
+# breaking. NO backward-compat alias is provided.
 _RENAMED_SYMBOLS: dict[str, str] = {
     "_shannon_entropy_from_bit_sum": (
-        "Renamed to '_bit_marginal_entropy_from_bit_sum' (feature 019); "
+        "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'; "
         "the new name reflects that this is the entropy of the bit-position "
         "activation-frequency distribution, not the Shannon entropy of compound "
         "sets. No backward-compat alias is provided (alpha clean break)."
     ),
+    "_bit_marginal_entropy_from_bit_sum": (
+        "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'. The metric "
+        "computes the entropy of the (sum-normalised) bit-position activation "
+        "distribution — i.e. how uniformly bit positions are activated — not a "
+        "sum of per-bit Bernoulli entropies as 'bit_marginal_entropy' implied. "
+        "No backward-compat alias is provided (alpha clean break)."
+    ),
     "shannon_entropy_diversity_batch": (
-        "Renamed to 'bit_marginal_entropy_batch' (feature 019). No alias provided."
+        "Renamed to 'bit_position_uniformity_entropy_batch'. No alias provided."
     ),
     "shannon_entropy_diversity_cumulative": (
-        "Renamed to 'bit_marginal_entropy_cumulative' (feature 019). No alias provided."
+        "Renamed to 'bit_position_uniformity_entropy_cumulative'. No alias provided."
     ),
 }
 
@@ -418,23 +426,26 @@ def _compute_batch_scaffolds(
     return out, valid_count
 
 
-def _bit_marginal_entropy_from_bit_sum(
+def _bit_position_uniformity_entropy_from_bit_sum(
     bit_sum: np.ndarray | None,
     n_compounds: int,
 ) -> float | None:
-    """Entropy of the per-bit activation-frequency distribution (renamed feature 019).
+    """Entropy of the (sum-normalised) bit-position activation distribution.
 
     Operates on an online accumulator: ``bit_sum[k]`` is the count of
     compounds with bit k = 1 across the cumulative set; ``n_compounds`` is
-    the total compound count. ``bit_frequencies = bit_sum / n_compounds``;
-    ``scipy.stats.entropy`` then auto-normalises by the sum so the result
-    is the entropy of the normalised bit-position distribution (upper bound
-    ``log₂(n_bits)``).
+    the total compound count. ``bit_frequencies = bit_sum / n_compounds`` —
+    then ``scipy.stats.entropy`` **auto-normalises these by their sum** and
+    computes ``-Σ p_k log₂ p_k`` over the resulting categorical distribution.
+
+    So this is NOT a sum of per-bit Bernoulli entropies (which the older name
+    ``bit_marginal_entropy`` wrongly implied); it is the entropy of the
+    "if I pick a random set bit, which position is it?" distribution — a
+    measure of how *uniformly* bit positions are activated across the set.
+    Upper bound ``log₂(n_bits)`` when every bit is activated equally often.
 
     Returns ``None`` if no compounds are supplied or all bit-frequencies are
-    zero. Was previously misnamed ``_shannon_entropy_from_bit_sum`` —
-    feature 019 renames it to honestly describe the metric (this is the
-    entropy of bit-position marginals, not Shannon entropy of compound sets).
+    zero.
     """
     if n_compounds <= 0 or bit_sum is None:
         return None
@@ -720,20 +731,20 @@ def compute_diversity_metrics(
     # ----- Bit-marginal entropy (online accumulator + per-batch direct sum) -----
     shannon_start = time.perf_counter()
     try:
-        if "bit_marginal_entropy_batch" not in disabled_set:
+        if "bit_position_uniformity_entropy_batch" not in disabled_set:
             if batch_packed.shape[0] > 0:
                 batch_bit_sum = batch_packed.sum(axis=0).astype(np.int64)
-                metrics["bit_marginal_entropy_batch"] = _bit_marginal_entropy_from_bit_sum(
+                metrics["bit_position_uniformity_entropy_batch"] = _bit_position_uniformity_entropy_from_bit_sum(
                     batch_bit_sum, batch_packed.shape[0]
                 )
             else:
-                metrics["bit_marginal_entropy_batch"] = None
-        if "bit_marginal_entropy_cumulative" not in disabled_set:
+                metrics["bit_position_uniformity_entropy_batch"] = None
+        if "bit_position_uniformity_entropy_cumulative" not in disabled_set:
             # Spec 022: use cumulative_seen_count (true cumulative count) as
             # denominator, not the now-capped reservoir buffer length.
             # bit_sum_buffer accumulates over ALL fingerprints, so the
             # denominator must too.
-            metrics["bit_marginal_entropy_cumulative"] = _bit_marginal_entropy_from_bit_sum(
+            metrics["bit_position_uniformity_entropy_cumulative"] = _bit_position_uniformity_entropy_from_bit_sum(
                 run_cache.bit_sum_buffer, run_cache.cumulative_seen_count
             )
     except Exception as exc:
@@ -741,8 +752,8 @@ def compute_diversity_metrics(
             "diversity cycle=%d bit-marginal entropy failed (%s); setting to None",
             cycle, type(exc).__name__,
         )
-        metrics["bit_marginal_entropy_batch"] = None
-        metrics["bit_marginal_entropy_cumulative"] = None
+        metrics["bit_position_uniformity_entropy_batch"] = None
+        metrics["bit_position_uniformity_entropy_cumulative"] = None
     shannon_ms = (time.perf_counter() - shannon_start) * 1000.0
 
     logger.debug(

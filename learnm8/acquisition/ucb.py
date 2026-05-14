@@ -54,6 +54,12 @@ class UCBAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
+        # Reject ±inf σ rather than silently propagating ±inf UCB scores,
+        # matching the EI/PI/Entropy guard. A learner emitting inf σ is broken.
+        from learnm8.utils.numerical import assert_no_inf_uncertainty
+
+        assert_no_inf_uncertainty(uncertainties, compounds.get_column('ID'))
+
         logger.debug(f"UCBAcquisition: β={self.beta}, calculating UCB scores")
 
         # Calculate UCB scores based on score direction

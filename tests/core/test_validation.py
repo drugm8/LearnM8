@@ -3,6 +3,7 @@ import polars as pl
 from pathlib import Path
 
 from learnm8.core.validation import validate_compound_pool, ValidationResult, _validate_smiles
+from learnm8.exceptions import ValidationError
 
 
 @pytest.mark.integration
@@ -369,6 +370,65 @@ class TestValidateCompoundPool:
         assert len(result.invalid_compounds) == 0
         assert len(result.validation_errors) == 0
         assert result.success_rate == 1.0
+
+
+@pytest.mark.integration
+@pytest.mark.molecular
+class TestValidateTargetDtype:
+    """Target-column dtype validation (Item 5)."""
+
+    def _pool(self, target):
+        return pl.DataFrame({
+            'ID': ['C1', 'C2', 'C3'],
+            'SMILES': ['CCO', 'CCC', 'CCN'],
+            'target': target,
+        })
+
+    def test_numeric_float_target_passes(self):
+        result = validate_compound_pool(
+            self._pool([0.1, 0.2, 0.3]), n_jobs=1, progress=False, target_col='target'
+        )
+        assert result.valid_compounds['target'].dtype == pl.Float64
+
+    def test_numeric_int_target_passes(self):
+        result = validate_compound_pool(
+            self._pool([1, 0, 1]), n_jobs=1, progress=False, target_col='target'
+        )
+        assert result.valid_compounds['target'].dtype.is_numeric()
+
+    def test_numeric_string_target_is_cast_to_float(self):
+        result = validate_compound_pool(
+            self._pool(['0.1', '0.2', '0.3']), n_jobs=1, progress=False,
+            target_col='target',
+        )
+        assert result.valid_compounds['target'].dtype == pl.Float64
+
+    def test_non_numeric_string_target_raises(self):
+        with pytest.raises(ValidationError, match='non-numeric'):
+            validate_compound_pool(
+                self._pool(['active', 'inactive', 'active']), n_jobs=1,
+                progress=False, target_col='target',
+            )
+
+    def test_boolean_target_raises(self):
+        with pytest.raises(ValidationError, match='Boolean'):
+            validate_compound_pool(
+                self._pool([True, False, True]), n_jobs=1, progress=False,
+                target_col='target',
+            )
+
+    def test_missing_target_col_is_ignored(self):
+        result = validate_compound_pool(
+            self._pool([0.1, 0.2, 0.3]), n_jobs=1, progress=False,
+            target_col='not_a_column',
+        )
+        assert len(result.valid_compounds) == 3
+
+    def test_no_target_col_skips_validation(self):
+        result = validate_compound_pool(
+            self._pool(['active', 'inactive', 'active']), n_jobs=1, progress=False,
+        )
+        assert result.valid_compounds['target'].dtype == pl.Utf8
 
 
 @pytest.mark.integration

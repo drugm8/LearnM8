@@ -73,7 +73,13 @@ def _preprocess_features(
     else:
         if np.any(np.isnan(features)):
             logger.warning('NaN detected in binary fingerprint features')
-        features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+        # copy=False sanitises in place: the result is immediately rebound and
+        # feature matrices come fresh from extract_features (not user-owned),
+        # so this avoids a full matrix copy — material at the 100M-compound
+        # scale where a float32 binary matrix is hundreds of GB.
+        features = np.nan_to_num(
+            features, nan=0.0, posinf=0.0, neginf=0.0, copy=False
+        )
 
     if not remove_zero_variance:
         return features, None, imputer
@@ -87,9 +93,24 @@ def _preprocess_features(
                 f'Removing {n_removed} zero-variance features '
                 f'({features.shape[1]} -> {valid_feature_mask.sum()})'
             )
+        if not valid_feature_mask.any():
+            raise LearnerError(
+                f'All {features.shape[1]} features are constant (zero-variance) '
+                f'after preprocessing — there is nothing for the model to learn '
+                f'from. Check that the featurizer produces varied output for the '
+                f'training compounds, or disable remove_zero_variance.'
+            )
         features = features[:, valid_feature_mask]
     else:
         if valid_feature_mask is not None:
+            if features.shape[1] != valid_feature_mask.shape[0]:
+                raise LearnerError(
+                    f'Feature width mismatch between train and predict: the model '
+                    f'was trained on {valid_feature_mask.shape[0]}-wide features '
+                    f'but received {features.shape[1]}-wide features. This usually '
+                    f'means a different featurizer (or featurizer config) was used '
+                    f'for prediction than for training.'
+                )
             features = features[:, valid_feature_mask]
 
     return features, valid_feature_mask, imputer

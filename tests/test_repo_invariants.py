@@ -22,7 +22,7 @@ EXEMPTIONS: frozenset[str] = frozenset({
     "CHANGELOG.md",
     "tests/test_repo_invariants.py",
     # Rename-test file intentionally references the deprecated identifiers.
-    "tests/evaluation/test_bit_marginal_entropy_rename.py",
+    "tests/evaluation/test_bit_position_uniformity_entropy_rename.py",
     # The renamed-symbol __getattr__ hint dict in similarity.py contains the old
     # names by design (so users get a helpful error, not a silent KeyError).
     "learnm8/evaluation/metrics/similarity.py",

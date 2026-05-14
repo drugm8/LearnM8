@@ -195,7 +195,12 @@ class TestMCDropoutLearner:
             learner.train(features, single_compound['Activity'].to_numpy())
 
     def test_uncertainty_consistency(self, learner, tmp_path):
-        """Test that uncertainty is consistent across multiple predictions."""
+        """Repeated predict() on the same input is reproducible (Item 6).
+
+        The dropout RNG is snapshotted/restored around predict and reseeded per
+        chunk, so two consecutive predict() calls return identical mean and
+        uncertainty — σ is no longer a fresh random draw each call.
+        """
         compounds = pl.DataFrame({
             'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
             'SMILES': ['CCO', 'CCC', 'CCN'],
@@ -208,8 +213,8 @@ class TestMCDropoutLearner:
         pred1, unc1 = learner.predict(features)
         pred2, unc2 = learner.predict(features)
 
-        assert not np.allclose(pred1, pred2, rtol=1e-10)
-        assert not np.allclose(unc1, unc2, rtol=1e-10)
+        np.testing.assert_array_equal(pred1, pred2)
+        np.testing.assert_array_equal(unc1, unc2)
 
         assert np.all(unc1 >= 0)
         assert np.all(unc2 >= 0)

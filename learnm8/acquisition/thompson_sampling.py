@@ -31,7 +31,7 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         """
         super().__init__(**kwargs)
         self.random_state = random_state
-        self._rng = np.random.RandomState(random_state)
+        self._rng = np.random.default_rng(random_state)
 
     def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame:
         """Select using Thompson Sampling.

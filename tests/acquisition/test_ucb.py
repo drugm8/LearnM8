@@ -104,3 +104,15 @@ class TestUCBAcquisition:
         from learnm8.exceptions import LearnerError
         with pytest.raises(LearnerError, match=r"\[secondary-guard\] Uncertainties contain"):
             UCBAcquisition().select(compounds, n_select=2)
+
+    def test_ucb_rejects_inf_uncertainty_values(self, small_real_compounds):
+        # Item 9: UCB must reject ±inf σ like EI/PI/Entropy, not propagate ±inf.
+        compounds = _pool_with_predictions_and_uncertainty(
+            small_real_compounds.head(5).clone(),
+            [0.1, 0.2, 0.3, 0.4, 0.5],
+            [0.1, np.inf, 0.3, 0.4, 0.5],
+        )
+
+        from learnm8.exceptions import LearnerError
+        with pytest.raises(LearnerError, match='Inf uncertainties not supported'):
+            UCBAcquisition().select(compounds, n_select=2)

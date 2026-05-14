@@ -2,28 +2,6 @@
 
 import numpy as np
 from scipy.stats import spearmanr
-from sklearn.metrics import mean_absolute_percentage_error
-
-
-def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    Calculate Mean Absolute Percentage Error.
-
-    Args:
-        y_true: True values
-        y_pred: Predicted values
-
-    Returns:
-        MAPE value as percentage
-    """
-    # Handle potential division by zero
-    with np.errstate(divide='ignore', invalid='ignore'):
-        mape = mean_absolute_percentage_error(y_true, y_pred)
-        # Convert to percentage and handle inf/nan values
-        mape_percentage = mape * 100
-        if np.isnan(mape_percentage) or np.isinf(mape_percentage):
-            return 0.0
-        return mape_percentage
 
 
 def calculate_spearman_correlation(

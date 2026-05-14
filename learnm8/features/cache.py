@@ -364,18 +364,42 @@ def _acquire_lock(
 # ---------------------------------------------------------------------------
 
 
+def _canonicalize_smiles(smiles_list: list[str]) -> list[str]:
+    """Map each SMILES to its RDKit canonical form for stable cache keys.
+
+    Equivalent SMILES (``"CCO"`` / ``"OCC"``) must hash to the same cache key;
+    hashing the raw string would store them separately. Canonicalisation is
+    memoised per unique input string. SMILES that RDKit cannot parse fall back
+    to the raw string so invalid inputs still get a stable, deterministic key.
+    """
+    from rdkit import Chem
+
+    canon_cache: dict[str, str] = {}
+    result: list[str] = []
+    for s in smiles_list:
+        cached = canon_cache.get(s)
+        if cached is None:
+            mol = Chem.MolFromSmiles(s)
+            cached = Chem.MolToSmiles(mol) if mol is not None else s
+            canon_cache[s] = cached
+        result.append(cached)
+    return result
+
+
 def _cache_keys_bytes16(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
     """Compute the 128-bit BLAKE2b cache key for each SMILES.
 
-    Returns an ``np.ndarray`` of shape ``(len(smiles_list),)`` and dtype
-    ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
+    SMILES are canonicalised before hashing so equivalent representations share
+    a cache entry. Returns an ``np.ndarray`` of shape ``(len(smiles_list),)``
+    and dtype ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
     FIPS-locked hosts (BLAKE2b would otherwise still be admitted, but the
     flag mirrors the MD5-era contract).
     """
     name = featurizer.get_name()
     config_hash = featurizer.get_config_hash()
+    canonical_smiles = _canonicalize_smiles(smiles_list)
     out = np.empty(len(smiles_list), dtype=HASH_DTYPE)
-    for i, s in enumerate(smiles_list):
+    for i, s in enumerate(canonical_smiles):
         digest = hashlib.blake2b(
             f'{s}_{name}_{config_hash}'.encode(),
             digest_size=16,

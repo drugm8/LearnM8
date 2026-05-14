@@ -102,10 +102,14 @@ def _simple_2d_defaults(**extra: Any) -> dict[str, Any]:
 
 
 def _3d_defaults(**extra: Any) -> dict[str, Any]:
+    # optimize_force_field defaults to 'MMFF94': 3D descriptors (WHIM, USR,
+    # GETAWAY, ...) assume force-field-relaxed geometries, not raw ETKDG output.
+    # This is a deliberate behaviour change — it produces different (better)
+    # feature values and therefore distinct cache keys from unoptimised runs.
     d: dict[str, Any] = {
         'auto_generate_conformers': True,
         'num_conformers': 1,
-        'optimize_force_field': None,
+        'optimize_force_field': 'MMFF94',
         'n_jobs': -1,
         'verbose': 0,
         'random_state': DEFAULT_3D_RANDOM_STATE,

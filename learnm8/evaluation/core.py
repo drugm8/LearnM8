@@ -448,10 +448,6 @@ def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', p
 	cumulative_labeled = metrics.get('cumulative_labeled', '?')
 	is_benchmark = (oracle_type == 'benchmark')
 
-	# Metrics where lower is better (error metrics).
-	# Note: avg_score_selected follows score_direction which defaults to 'higher is better'
-	bad_metrics = {'rmse', 'mae', 'mse'}
-
 	def get_change_symbol(key: str, current_val: float, is_pct: bool = False) -> str:
 		"""Return change indicator symbol: ↑ (improved), ↓ (worsened), → (stagnant), or empty."""
 		if previous_metrics is None or key not in previous_metrics:
@@ -478,9 +474,9 @@ def format_progress_output(metrics: dict[str, Any], oracle_type: str = 'auto', p
 		if abs(diff) < stagnation_threshold:
 			return "→"
 
-		# Determine if higher is better for this metric
-		is_higher_better = key not in bad_metrics
-		is_improvement = (diff > 0) if is_higher_better else (diff < 0)
+		# All metrics emitted by evaluate_cycle are higher-is-better
+		# (discovery rates, overlaps, enrichment factors, avg_score_selected).
+		is_improvement = diff > 0
 
 		return "↑" if is_improvement else "↓"
 

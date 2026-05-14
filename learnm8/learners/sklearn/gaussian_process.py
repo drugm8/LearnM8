@@ -131,6 +131,13 @@ class GaussianProcessLearner(SklearnLearner):
             )
 
         resolved_kernel = self._resolve_kernel(features)
+
+        # The Tanimoto kernel is defined only for raw 0/1 vectors. Applying
+        # StandardScaler first would feed it standardized values, voiding its
+        # PSD guarantee and making the posterior std unreliable. Scale features
+        # only when the resolved kernel is RBF.
+        self.scale_features = not isinstance(resolved_kernel, TanimotoKernel)
+
         self.model = GaussianProcessRegressor(
             kernel=resolved_kernel,
             alpha=self.alpha,

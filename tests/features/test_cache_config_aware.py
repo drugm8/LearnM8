@@ -88,6 +88,17 @@ class TestConfigurationAwareCaching:
         assert any('morgan' in name.lower() for name in cache_names)
         assert any('usr' in name.lower() for name in cache_names)
 
+    def test_3d_optimize_force_field_default_is_mmff94(self):
+        """3D featurizers default to MMFF94 conformer optimization (Item 18)."""
+        usr = create_featurizer('usr')
+        assert usr.conformer_params.get('optimize_force_field') == 'MMFF94'
+
+    def test_3d_optimize_force_field_disambiguates_cache_key(self):
+        """MMFF94-optimized and unoptimized 3D runs produce distinct cache keys."""
+        usr_mmff = create_featurizer('usr')
+        usr_none = create_featurizer('usr', optimize_force_field=None)
+        assert usr_mmff.get_config_hash() != usr_none.get_config_hash()
+
 
 @pytest.mark.integration
 class TestCacheHitMiss:
