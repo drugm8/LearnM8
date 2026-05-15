@@ -821,7 +821,7 @@ def run_active_learning(
         pruning_fraction: Fraction to prune per cycle (0.0-0.9)
             If provided, enables pruning with score_based strategy
 
-        pruning_strategy: Pruning strategy (default: 'score_based')
+        pruning_strategy: Pruning strategy (default: 'score')
 
         pruning_params: Additional pruning parameters
 
