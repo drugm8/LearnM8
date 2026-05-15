@@ -1,5 +1,6 @@
 import pytest
-from learnm8.core.config import CycleConfig, parse_cycle_spec, parse_cycle_schedule
+
+from learnm8.core.config import CycleConfig, parse_cycle_schedule, parse_cycle_spec
 
 
 @pytest.mark.unit
@@ -29,10 +30,10 @@ class TestCycleConfig:
             'ucb',
             n_cycles=1,
             batch_fraction=0.01,
-            acquisition_params={'exploration_weight': 2.0}
+            acquisition_params={'beta': 2.0}
         )
 
-        assert config.acquisition_params == {'exploration_weight': 2.0}
+        assert config.acquisition_params == {'beta': 2.0}
 
     def test_missing_batch_fraction_raises_error(self):
         with pytest.raises(ValueError, match="CycleConfig requires batch_fraction"):
@@ -202,7 +203,7 @@ class TestParseCycleSchedule:
                 'ucb',
                 n_cycles=2,
                 batch_fraction=0.01,
-                acquisition_params={'exploration_weight': 2.0}
+                acquisition_params={'beta': 2.0}
             )
         ]
 
@@ -210,7 +211,7 @@ class TestParseCycleSchedule:
 
         assert len(schedule) == 2
         for config in schedule:
-            assert config.acquisition_params == {'exploration_weight': 2.0}
+            assert config.acquisition_params == {'beta': 2.0}
 
     def test_invalid_cycles_not_list(self):
         with pytest.raises(ValueError, match="cycles must be a list"):
