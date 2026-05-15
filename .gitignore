@@ -131,3 +131,4 @@ docs/decisions/TEMPLATE.md
 .github/agents/adversarial-reviewer.agent.md
 .github/prompts/review-current-spec-or-plan.prompt.md
 .claude/migration_008_parquet.md
+site/*
