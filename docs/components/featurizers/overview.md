@@ -110,6 +110,7 @@ features = extract_features(
 | `show_progress` | bool | `False` | Display progress bar (requires tqdm) |
 
 **Returns:**
+
 - `np.ndarray`: Feature matrix with shape `(n_compounds, n_features)`
 
 ### Integration with Active Learning
@@ -159,6 +160,7 @@ cache_key = hashlib.md5(smiles.encode('utf-8')).hexdigest()
 ```
 
 Features are stored in HDF5 with these hash keys, enabling:
+
 - **Deduplication:** Same SMILES always maps to same features
 - **Partial loading:** Only uncached molecules are computed
 - **Cache sharing:** Multiple experiments share same cache
@@ -229,6 +231,7 @@ learnm8 run experiment3.csv --target Activity --learner xgb --featurizer morgan 
 ```
 
 **Benefits:**
+
 - First experiment computes features
 - Subsequent experiments reuse cached features (100x speedup)
 - Works across different learners, strategies, and datasets

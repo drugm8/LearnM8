@@ -45,7 +45,7 @@ mypy learnm8/                         # Type check
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
 learnm8 validate compounds.csv        # Check SMILES validity
-learnm8 list learners                 # List available components
+python -c "from learnm8.api import list_available_learners; print(list_available_learners())"  # List available components
 learnm8 run --config experiment.yaml  # Config file support
 ```
 
@@ -76,7 +76,7 @@ learnm8/
 │   ├── extraction.py         # extract_features() function
 │   ├── cache.py              # HDF5 caching layer
 │   ├── base.py               # SkfpFeaturizer base class
-│   ├── skfp_2d/              # 26 2D fingerprint featurizers
+│   ├── skfp_2d/              # 30 2D fingerprint featurizers
 │   └── skfp_3d/              # 9 3D fingerprint featurizers
 ├── learners/
 │   ├── base.py               # Base classes + feature preprocessing
@@ -110,7 +110,7 @@ results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('greedy', n_cycles=5, batch_fraction=0.01,
-                    pruning_strategy='score_based', pruning_params={'pruning_fraction': 0.3})
+                    pruning_strategy='score', pruning_params={'pruning_fraction': 0.3})
     ]
 )
 
@@ -190,7 +190,7 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 
 `rf, gp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, chemprop_ensemble, ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble`
 
-**Uncertainty support:** gp, mc_dropout, all ensembles (including chemprop_ensemble, fastprop_ensemble)
+**Uncertainty support:** gp, mc_dropout, rf, lr, dt, gpu_gp, svgp, rf_fil, ridge_cuml, all ensembles (chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble)
 
 ### Acquisition Strategies
 
@@ -200,16 +200,16 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 
 ### Featurizers
 
-- **2D Circular:** morgan, ecfp, ecfp6, morgan_feat, secfp
+- **2D Circular:** morgan, ecfp, ecfp6, morgan_feat
 - **2D Keys:** maccs, pubchem, klekota_roth, laggner
 - **2D Topological:** avalon, atom_pair, topological_torsion, rdkit, pattern, layered
-- **2D Hashed:** map4, mhfp, lingo, erg
+- **2D Hashed:** map4, mhfp, lingo, erg, secfp
 - **2D Descriptors:** mordred/descriptors, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups
 - **3D** (conformer generation): whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape
 
 ### Schedules
 
-`quick` (5 cycles), `standard` (10), `intensive` (20), `diverse` (10 mixed)
+`quick` (5 cycles), `standard` (10), `intensive` (20)
 
 ## Extending LearnM8
 

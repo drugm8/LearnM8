@@ -9,12 +9,14 @@ LearnM8 provides state-of-the-art graph neural network learners through the Chem
 Chemprop implements message-passing neural networks (MPNNs) that learn molecular representations directly from graph structure. Instead of converting molecules to fixed fingerprints, Chemprop learns optimal molecular embeddings during training.
 
 **Key advantages:**
+
 - Works directly with SMILES strings (no featurizer needed)
 - Learns task-specific molecular representations
 - State-of-the-art performance on molecular property prediction
 - Can combine graph features with traditional descriptors (hybrid mode)
 
 **How it works:**
+
 1. Converts SMILES to molecular graph (atoms as nodes, bonds as edges)
 2. Passes messages along bonds for multiple steps (depth parameter)
 3. Aggregates node representations into molecular embedding
@@ -39,12 +41,14 @@ Single Chemprop message-passing neural network for molecular property prediction
 ChempropLearner provides a single MPNN model that works directly with SMILES strings. It offers fast training and inference but does not provide uncertainty estimates. For uncertainty quantification, use **ChempropEnsemble** instead.
 
 **When to use:**
+
 - When graph-based learning is desired over fingerprints
 - Fast training/inference is priority over uncertainty
 - Dataset size >1000 compounds (Chemprop needs data to learn representations)
 - Pure exploitation strategies (greedy, topk)
 
 **Key characteristics:**
+
 - No uncertainty quantification (single model)
 - Works directly with SMILES (no featurizer needed)
 - Optional hybrid mode (graph + descriptors)
@@ -68,6 +72,7 @@ ChempropLearner provides a single MPNN model that works directly with SMILES str
 | `dropout` | float | `0.0` | Dropout probability. Increase (0.1-0.3) for regularization on small datasets. |
 
 **Architecture tuning:**
+
 - Increase `depth` to 4-5 for larger, more complex molecules
 - Increase `message_hidden_dim` to 500 for richer datasets
 - Use `dropout=0.2` if overfitting on small datasets (<5000 compounds)
@@ -87,6 +92,7 @@ ChempropLearner provides a single MPNN model that works directly with SMILES str
 | `val_fraction` | float | `0.1` | Fraction of training data for validation (for early stopping). |
 
 **Training considerations:**
+
 - Early stopping reduces training time (typically stops at 20-40 epochs)
 - Validation split requires minimum dataset size (20 compounds)
 - GPU training is 5-20x faster than CPU
@@ -110,11 +116,13 @@ For uncertainty quantification with Chemprop, use **ChempropEnsemble** (3 models
 ### GPU Support
 
 Chemprop benefits significantly from GPU acceleration:
+
 - Training speedup: 5-20x on GPU vs CPU
 - Inference speedup: 10-50x on GPU vs CPU
 - Recommended: 4GB+ GPU memory for typical molecular datasets
 
 GPU memory management:
+
 - `enable_aggressive_gc=True` (default) prevents memory accumulation in active learning
 - Important for multi-cycle experiments (prevents GPU OOM errors)
 
@@ -182,12 +190,14 @@ Ensemble of 3 Chemprop learners providing uncertainty quantification through mod
 ChempropEnsemble creates 3 ChempropLearner instances with different random seeds. Uncertainty is estimated from the variance across ensemble predictions. This provides robust uncertainty estimates for active learning without requiring Monte Carlo sampling.
 
 **When to use:**
+
 - When uncertainty quantification is critical for active learning
 - Uncertainty-based acquisition strategies (UCB, EI, Thompson Sampling)
 - Graph-based learning with uncertainty needs
 - Sufficient computational budget (3x training/inference time)
 
 **Key characteristics:**
+
 - Uncertainty from ensemble disagreement (no dropout needed)
 - Same parameters as ChempropLearner (applied to all 3 members)
 - 3x computational cost vs single model
@@ -205,6 +215,7 @@ ChempropEnsemble accepts **all ChempropLearner parameters** (applied to each ens
 | `uncertainty_method` | str | `'std'` | Uncertainty calculation: `'std'`, `'mad'`, `'quantile'`. Std typical. |
 
 **Ensemble considerations:**
+
 - 3 models provide good uncertainty estimates (more models = diminishing returns)
 - Training time: 3x single model (models trained sequentially)
 - Inference time: 3x single model
@@ -215,6 +226,7 @@ ChempropEnsemble accepts **all ChempropLearner parameters** (applied to each ens
 ChempropEnsemble **provides uncertainty estimates** via ensemble disagreement.
 
 The returned uncertainty is calculated from the variance across 3 model predictions using the specified `uncertainty_method`:
+
 - `'std'`: Standard deviation (default, most common)
 - `'mad'`: Median absolute deviation (robust to outliers)
 - `'quantile'`: Interquartile range
@@ -280,11 +292,13 @@ Chemprop can combine learned graph features with traditional molecular descripto
 ### When to Use Hybrid Mode
 
 **Use hybrid mode when:**
+
 - Task benefits from explicit physicochemical properties (solubility, lipophilicity)
 - Dataset is small (<5000 compounds) and needs feature engineering help
 - Combining structural learning with domain knowledge improves performance
 
 **Use pure graph mode when:**
+
 - Dataset is large (>10,000 compounds) - Chemprop learns sufficient representations
 - Task is structure-activity relationship focused
 - Simplicity and speed are priorities
@@ -297,6 +311,7 @@ Chemprop can combine learned graph features with traditional molecular descripto
 4. Combined features fed through feedforward network
 
 **Descriptor concatenation:**
+
 - FFN input dimension = `message_hidden_dim` + descriptor dimension
 - Example: 300 (graph) + 1613 (Mordred descriptors) = 1913 total
 
@@ -329,6 +344,7 @@ results = run_active_learning(
 ```
 
 **Supported Featurizers for Hybrid Mode:**
+
 - `descriptors` (Mordred, 1613 features) - most comprehensive
 - `morgan` (2048 bits) - fast, good coverage
 - `ecfp6` (2048 bits) - larger radius
@@ -350,24 +366,28 @@ In standard active learning, each cycle trains a model from scratch on the growi
 4. **Continue...**
 
 **Benefits:**
+
 - Faster convergence (model retains knowledge from previous cycles)
 - Better uncertainty calibration (model smoothly adapts to new data)
 - Reduced computational cost (fewer epochs needed per cycle)
 - More stable active learning trajectories
 
 **Costs:**
+
 - Checkpoint storage (one checkpoint per cycle, ~50-200 MB each)
 - Slightly more complex configuration
 
 ### When to Use Fine-Tuning
 
 **Recommended for:**
+
 - Active learning campaigns with many cycles (>10 cycles)
 - Production screening workflows (faster cycle times matter)
 - Limited computational budget (reduces total training time)
 - Tasks where uncertainty calibration is critical
 
 **Not needed for:**
+
 - Benchmarking experiments (full retraining is more rigorous)
 - Few cycles (<5 cycles) where benefit is minimal
 - When checkpoint storage is constrained
@@ -457,11 +477,13 @@ ensemble_checkpoints/
 ```
 
 **Storage Requirements:**
+
 - Single model checkpoint: 50-200 MB (depends on architecture)
 - Ensemble checkpoint: 150-600 MB (3x single model)
 - 20 cycles of ensemble: 3-12 GB total
 
 **Checkpoint Safety:**
+
 - Architecture mismatch handled gracefully (trains fresh model if incompatible)
 - Missing checkpoints handled (trains fresh model)
 - Checkpoints not required for prediction (only for training)
@@ -500,6 +522,7 @@ results = run_active_learning(
 ```
 
 **What happens:**
+
 1. Cycle 1: Trains from scratch, saves `cycle_1.ckpt`
 2. Cycle 2: Loads `cycle_1.ckpt`, fine-tunes on expanded dataset, saves `cycle_2.ckpt`
 3. Cycle 3: Loads `cycle_2.ckpt`, fine-tunes further, saves `cycle_3.ckpt`
@@ -516,11 +539,13 @@ pip install chemprop
 ```
 
 **Requirements:**
+
 - PyTorch (installed automatically with chemprop)
 - PyTorch Lightning (installed automatically with chemprop)
 - RDKit (already required by LearnM8)
 
 **GPU Requirements:**
+
 - Optional but strongly recommended
 - Minimum 4GB GPU memory for typical datasets
 - 8GB+ recommended for large datasets (>100k compounds)
@@ -553,6 +578,7 @@ python -c "from learnm8.learners.torch import ChempropLearner; print('Chemprop a
 | **Featurizer Needed** | No (optional hybrid) | Yes | Yes |
 
 **When to choose Chemprop:**
+
 - Dataset >1000 compounds (Chemprop needs data to learn representations)
 - State-of-the-art performance desired
 - GPU available for reasonable training times

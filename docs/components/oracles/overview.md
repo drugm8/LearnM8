@@ -37,6 +37,7 @@ class Oracle(ABC):
 ```
 
 **Key Requirements:**
+
 - Accept a Polars DataFrame with `ID` and `SMILES` columns
 - Return a DataFrame with `ID` and requested property columns
 - Preserve input row order for correct alignment
@@ -66,6 +67,7 @@ oracle = CSVOracle('ground_truth.csv')
 ```
 
 The CSV file should contain:
+
 - An `ID` column (or specify custom ID column name)
 - A `SMILES` column
 - One or more property columns
@@ -228,32 +230,34 @@ Override auto-detection with the `mode` parameter:
 ```python
 results = run_active_learning(
     compound_pool='data.csv',
-    oracle=oracle,
+    oracle=oracle,    # CSV oracle → benchmark mode auto-detected
     learner='gp',
     target_col='Activity',
-    featurizer='morgan',
-    mode='benchmark'  # Force benchmark mode
+    featurizer='morgan'
 )
 ```
 
-Valid mode values: `'benchmark'`, `'run'`
+Mode is auto-detected: CSV oracles enable benchmark mode; Python function oracles enable run mode.
 
 ## Benchmark vs Production Differences
 
 ### Benchmark Mode (CSVOracle)
 
 **Characteristics:**
+
 - Complete ground truth dataset available
 - Full dataset prediction each cycle
 - Accurate enrichment factor calculation
 - Reproducible results for testing
 
 **Performance:**
+
 - Higher computational cost (predicting all compounds)
 - Suitable for datasets up to ~100k compounds
 - Focus on algorithm validation over speed
 
 **Metrics:**
+
 - Accurate enrichment factors across all cycles
 - Complete ROC/PR curves
 - Full dataset coverage statistics
@@ -261,17 +265,20 @@ Valid mode values: `'benchmark'`, `'run'`
 ### Production Mode (PythonOracle)
 
 **Characteristics:**
+
 - No complete ground truth (measurements are expensive)
 - Predict only unlabeled compounds
 - Optimized for computational efficiency
 - Real-world screening scenarios
 
 **Performance:**
+
 - Lower computational cost (predicting subset)
 - Suitable for large compound libraries (100k+)
 - Focus on practical screening efficiency
 
 **Metrics:**
+
 - Approximate enrichment (based on labeled subset)
 - Cumulative performance tracking
 - Cost-benefit analysis
@@ -362,21 +369,25 @@ class CachedOracle(Oracle):
 ## Best Practices
 
 **Input Validation:**
+
 - Validate SMILES before expensive measurements
 - Handle missing or malformed compound data gracefully
 - Check for duplicate IDs
 
 **Error Handling:**
+
 - Return NaN for failed measurements rather than raising exceptions
 - Log measurement failures for debugging
 - Provide meaningful error messages
 
 **Performance:**
+
 - Implement caching for expensive measurements
 - Use batch processing when possible
 - Consider rate limits for API-based oracles
 
 **Reproducibility:**
+
 - Use fixed random seeds for stochastic scoring
 - Document oracle configuration and parameters
 - Version control oracle code alongside experiments

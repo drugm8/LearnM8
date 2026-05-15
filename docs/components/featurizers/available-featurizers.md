@@ -1,531 +1,163 @@
 # Available Featurizers
 
-LearnM8 provides five molecular featurizers, each encoding different aspects of molecular structure and properties. This guide covers the characteristics, use cases, and examples for each featurizer.
+LearnM8 provides 39 molecular featurizers (38 unique implementations; `mordred` and `descriptors` are aliases). They are organised into five categories based on their representation type.
 
-## Featurizer Comparison
+## Quick Reference
 
-| Featurizer | Dimensions | Speed | Best For | Notes |
-|------------|------------|-------|----------|-------|
-| `morgan` | 2048 | Fast | General-purpose screening | Default choice, circular fingerprints radius=2 |
-| `maccs` | 167 | Fastest | Large libraries, rapid exploration | Structural keys, smallest representation |
-| `ecfp6` | 2048 | Fast | Larger molecular context | Extended radius=3, more distant features |
-| `morgan_feat` | 2048 | Fast | Pharmacophore-based tasks | Feature-based encoding (not atom types) |
-| `descriptors` | 1613 | Slowest | Rich feature sets, hybrid Chemprop | Mordred descriptors, maximum information |
+| Category | Featurizers | Storage | Dimensions |
+|----------|-------------|---------|------------|
+| 2D Circular | `morgan`, `ecfp`, `ecfp6`, `morgan_feat`, `secfp` | `packed_uint8` | 2048 |
+| 2D Keys | `maccs`, `pubchem`, `klekota_roth`, `laggner` | `packed_uint8` | 167 – 4860 |
+| 2D Topological | `avalon`, `atom_pair`, `topological_torsion`, `rdkit`, `pattern`, `layered` | `packed_uint8` / `csr_uint16` | 512 – 2048 |
+| 2D Hashed | `map4`, `mhfp`, `lingo`, `erg` | `packed_uint8` / `uint8` | 1024 – 2048 |
+| 2D Descriptors | `mordred`, `descriptors`, `rdkit_2d_descriptors`, `estate`, `ghose_crippen`, `mqns`, `vsa`, `bcut2d`, `physiochemical`, `pharmacophore`, `functional_groups` | `float32` | 1 – 1826 |
+| 3D (conformer) | `whim`, `usr`, `usrcat`, `e3fp`, `getaway`, `morse`, `rdf`, `autocorr`, `electroshape` | `float32` | 114 – 2048 |
 
-## Morgan Fingerprints
-
-### Overview
-
-Morgan fingerprints (also known as circular fingerprints) encode molecular structure based on atom neighborhoods up to a specified radius. This is the most commonly used featurizer in molecular machine learning.
-
-**Algorithm:**
-- Circular fingerprints with radius=2
-- 2048-bit hashed representation
-- Captures local chemical environments
+**Storage notes:**
 
-**Dimensions:** 2048
+- `packed_uint8` — binary fingerprints stored with `np.packbits` (~32× space saving vs float32).
+- `csr_uint16` — sparse integer count vectors (e.g., `atom_pair`, `topological_torsion` in count mode).
+- `uint8` — small-range integer counts (e.g., ERG, MQNs sub-ranges).
+- `float32` — continuous-valued descriptors and 3D features.
+- Tree learners (RF, XGB, DT) can request `preferred_dtype='uint8'` to skip float32 inflation (4× working-set reduction on 2048-bit Morgan).
 
-### When to Use
+---
 
-- **Default choice** for most active learning tasks
-- General-purpose molecular property prediction
-- Good balance between information content and dimensionality
-- Well-validated across diverse chemical spaces
-- Fast computation suitable for large libraries
+## 2D Circular Fingerprints
 
-### Example Usage
+Circular (ECFP-family) fingerprints encode atom environments up to a given radius. They are the most widely validated molecular representations for property prediction.
 
-**CLI:**
-```bash
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
-```
+| Name | Radius | Dimensions | Notes |
+|------|--------|------------|-------|
+| `morgan` | 2 | 2048 | Default; standard circular FP |
+| `ecfp` | 2 | 2048 | Alias for Morgan-style ECFP |
+| `ecfp6` | 3 | 2048 | ECFP6 (diameter=6); captures more distant contexts |
+| `morgan_feat` | 2 | 2048 | Feature-based encoding (pharmacophore properties, not atom types) |
+| `secfp` | 3 | 2048 | Spherical environment FP; includes SMILES-based substructures |
 
-**API:**
-```python
-from learnm8 import run_active_learning
+**Recommendation:** Start with `morgan`. Use `ecfp6` for large molecules (>30 heavy atoms) or long-range effects. Use `morgan_feat` for scaffold-hopping and pharmacophore tasks.
 
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='rf',
-    target_col='Activity',
-    featurizer='morgan'
-)
-```
+---
 
-**Direct Feature Extraction:**
-```python
-from learnm8 import extract_features
+## 2D Key-Based Fingerprints
 
-smiles_list = ['CCO', 'CCC', 'c1ccccc1']
-features = extract_features(smiles_list, featurizer='morgan')
-print(features.shape)  # (3, 2048)
-```
-
-## MACCS Keys
-
-### Overview
-
-MACCS (Molecular ACCess System) keys are a set of 167 predefined structural features based on common chemical substructures. This is the smallest and fastest featurizer.
-
-**Algorithm:**
-- 167 binary structural keys
-- Each bit represents presence/absence of specific substructure
-- Fixed patterns defined by MACCS system
+Predefined structural keys where each bit has an explicit chemical meaning. Smaller and faster than circular fingerprints; useful when interpretability matters.
 
-**Dimensions:** 167
-
-### When to Use
+| Name | Dimensions | Notes |
+|------|------------|-------|
+| `maccs` | 167 | MACCS structural keys; fastest, smallest, most interpretable |
+| `pubchem` | 881 | PubChem substructure keys |
+| `klekota_roth` | 4860 | Klekota–Roth keys; broad coverage of drug-like substructures |
+| `laggner` | 307 | Laggner pharmaceutical keys |
 
-- **Large compound libraries** (>100k molecules) where speed matters
-- Rapid exploration and initial screening
-- Memory-constrained environments
-- Fast baseline models
-- When interpretability is important (each bit has defined meaning)
+**Recommendation:** Use `maccs` for very large libraries (>100k) where speed and memory are constraints.
 
-**Performance advantage:**
-- Fastest computation (3-5x faster than Morgan)
-- Smallest memory footprint (12x smaller than Morgan)
-- Excellent for high-throughput virtual screening
+---
 
-### Example Usage
+## 2D Topological Fingerprints
 
-**CLI:**
-```bash
-learnm8 run large_library.csv --target Activity --learner rf --featurizer maccs
-```
+Path- and topology-based fingerprints that encode connectivity patterns without explicit circular neighborhoods.
 
-**API:**
-```python
-results = run_active_learning(
-    compound_pool='large_library.csv',
-    oracle='oracle.csv',
-    learner='rf',
-    target_col='Activity',
-    featurizer='maccs',
-    cache_dir=Path('.cache')
-)
-```
+| Name | Dimensions | Storage | Notes |
+|------|------------|---------|-------|
+| `avalon` | 512 | `packed_uint8` | Avalon toolkit FP; fast and reliable |
+| `atom_pair` | 2048 | `packed_uint8` / `csr_uint16` (count mode) | Encodes all atom-pair distances |
+| `topological_torsion` | 2048 | `packed_uint8` / `csr_uint16` (count mode) | Four-atom torsion fragments |
+| `rdkit` | 2048 | `packed_uint8` | RDKit path-based fingerprint |
+| `pattern` | 2048 | `packed_uint8` | RDKit pattern fingerprint |
+| `layered` | 2048 | `packed_uint8` | RDKit layered fingerprint |
 
-**Direct Feature Extraction:**
-```python
-from learnm8 import extract_features
-
-features = extract_features(
-    smiles_list=['CCO', 'CCC'],
-    featurizer='maccs'
-)
-print(features.shape)  # (2, 167)
-```
-
-## ECFP6
-
-### Overview
-
-Extended-Connectivity Fingerprints with radius 3 (ECFP6 refers to diameter=6, radius=3). Captures larger molecular neighborhoods compared to standard Morgan fingerprints.
-
-**Algorithm:**
-- Circular fingerprints with radius=3
-- 2048-bit hashed representation
-- Encodes more distant atom relationships
-
-**Dimensions:** 2048
-
-### When to Use
-
-- **Larger molecular context** important for activity
-- Molecules with extended functional groups
-- When radius=2 Morgan fingerprints insufficient
-- Structure-activity relationships depend on distant features
-- Complex molecular scaffolds
-
-**When ECFP6 outperforms Morgan:**
-- Large molecules (>30 heavy atoms)
-- Long-range electronic effects
-- Multi-ring systems with distant interactions
+---
 
-### Example Usage
-
-**CLI:**
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer ecfp6
-```
-
-**API:**
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='gp',
-    target_col='Activity',
-    featurizer='ecfp6'
-)
-```
-
-**Comparison with Morgan:**
-```python
-from learnm8 import extract_features
-
-smiles_list = ['CCCCOc1ccc(cc1)C(=O)c1ccccc1']  # Large molecule
-
-morgan_features = extract_features(smiles_list, featurizer='morgan')
-ecfp6_features = extract_features(smiles_list, featurizer='ecfp6')
-
-print(f"Morgan: {morgan_features.shape}")  # (1, 2048)
-print(f"ECFP6:  {ecfp6_features.shape}")   # (1, 2048)
-```
-
-## Morgan Feature Fingerprints
-
-### Overview
-
-Morgan feature fingerprints encode pharmacophore features rather than exact atom types. This representation focuses on chemical properties (donor, acceptor, aromatic, etc.) instead of atomic identity.
-
-**Algorithm:**
-- Circular fingerprints with radius=2
-- Feature-based encoding (pharmacophore properties)
-- 2048-bit hashed representation
-- Uses RDKit's `useFeatures=True` parameter
-
-**Dimensions:** 2048
-
-### When to Use
-
-- **Pharmacophore-based screening** where functional properties matter more than exact atoms
-- Drug-like molecule optimization
-- Scaffold hopping (finding different scaffolds with similar properties)
-- When activity depends on chemical features, not specific atom types
-- Hit-to-lead optimization
-
-**Feature types encoded:**
-- Hydrogen bond donors
-- Hydrogen bond acceptors
-- Aromatic rings
-- Aliphatic chains
-- Positive/negative ionizable groups
-
-### Example Usage
-
-**CLI:**
-```bash
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan_feat
-```
-
-**API:**
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='rf',
-    target_col='Activity',
-    featurizer='morgan_feat'
-)
-```
-
-**Comparison with Standard Morgan:**
-```python
-from learnm8 import extract_features
-
-smiles = 'CCO'
-
-morgan_standard = extract_features([smiles], featurizer='morgan')
-morgan_feature = extract_features([smiles], featurizer='morgan_feat')
-
-print(f"Standard Morgan: {morgan_standard.shape}")  # (1, 2048)
-print(f"Feature Morgan:  {morgan_feature.shape}")   # (1, 2048)
-```
-
-## Mordred Descriptors
-
-### Overview
-
-Mordred is a comprehensive molecular descriptor calculator that generates 1613 physicochemical descriptors covering diverse molecular properties. This provides the richest molecular representation but at the cost of computation time.
-
-**Algorithm:**
-- 1613 molecular descriptors
-- Physicochemical properties (MW, LogP, PSA, etc.)
-- Topological indices
-- Constitutional descriptors
-- Geometric descriptors
-- Electronic properties
-
-**Dimensions:** 1613
-
-### When to Use
-
-- **Maximum molecular information** needed
-- Small to medium datasets where computation time acceptable
-- QSAR/QSPR modeling with interpretable features
-- **Chemprop hybrid mode** (combining graph + descriptors)
-- When fingerprints underperform
-- Explainable AI applications (descriptors have physical meaning)
-
-**Performance considerations:**
-- Slowest computation (5-10x slower than Morgan)
-- Higher dimensional feature space
-- Best with feature selection or dimensionality reduction
-- Excellent for hybrid Chemprop models
-
-### Example Usage
-
-**CLI:**
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors
-```
-
-**API:**
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='gp',
-    target_col='Activity',
-    featurizer='descriptors'
-)
-```
-
-**Chemprop Hybrid Mode:**
-```bash
-learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
-```
-
-**API (Chemprop Hybrid):**
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='chemprop',
-    target_col='Activity',
-    featurizer='descriptors',
-    cache_dir=Path('.cache')
-)
-```
+## 2D Hashed Fingerprints
 
-**Direct Feature Extraction:**
-```python
-from learnm8 import extract_features
+Alternative hashing schemes and MinHash-based representations, useful for large-scale similarity search and diversity-aware selection.
 
-features = extract_features(
-    smiles_list=['CCO', 'CCC'],
-    featurizer='descriptors',
-    cache_dir=Path('.cache'),
-    show_progress=True
-)
-print(features.shape)  # (2, 1613)
-```
+| Name | Dimensions | Storage | Notes |
+|------|------------|---------|-------|
+| `map4` | 2048 | `packed_uint8` | MAP4 (MinHashed atom-pair fingerprint, diameter=4) |
+| `mhfp` | 2048 | `packed_uint8` | MinHashed fingerprint |
+| `lingo` | 1024 | `packed_uint8` | LINGO substring fingerprint |
+| `erg` | varies | `uint8` | Extended reduced graph (pharmacophore nodes) |
 
-## Detailed Comparison
+---
 
-### Computational Performance
+## 2D Descriptor-Based Featurizers
 
-**Timing benchmarks (1000 molecules, 16 cores):**
+Numeric physicochemical descriptors; continuous-valued. These provide the richest representation but are slower to compute and higher-dimensional. All stored as `float32`.
 
-| Featurizer | First Run (no cache) | Cached Run | Speedup |
-|------------|---------------------|------------|---------|
-| `maccs` | 15s | 0.2s | 75x |
-| `morgan` | 30s | 0.3s | 100x |
-| `ecfp6` | 32s | 0.3s | 107x |
-| `morgan_feat` | 31s | 0.3s | 103x |
-| `descriptors` | 180s | 1.8s | 100x |
+| Name | Dimensions | Notes |
+|------|------------|-------|
+| `mordred` / `descriptors` | 1613 | Mordred descriptors (these two names are aliases); recommended for Chemprop hybrid mode |
+| `rdkit_2d_descriptors` | 200 | RDKit standard 2D descriptors |
+| `estate` | 79 | Estate electronegativity descriptors |
+| `ghose_crippen` | 2 | LogP + MR (Ghose–Crippen atom contributions) |
+| `mqns` | 42 | Molecular quantum numbers |
+| `vsa` | 12 | Van der Waals surface area contributions |
+| `bcut2d` | 8 | BCUT2D eigenvalue-based descriptors |
+| `physiochemical` | varies | Physicochemical property descriptors |
+| `pharmacophore` | varies | Pharmacophore feature counts |
+| `functional_groups` | varies | Functional group counts |
 
-### Memory Usage
+**Note:** `mordred` and `descriptors` resolve to the same class (`MordredFingerprint`). Both names are accepted anywhere a featurizer string is used.
 
-**Memory per compound (approximate):**
+---
 
-| Featurizer | Per Compound | 100k Compounds |
-|------------|--------------|----------------|
-| `maccs` | 167 bytes | 16 MB |
-| `morgan` | 2048 bytes | 195 MB |
-| `ecfp6` | 2048 bytes | 195 MB |
-| `morgan_feat` | 2048 bytes | 195 MB |
-| `descriptors` | 6452 bytes (float32) | 615 MB |
+## 3D Fingerprints (Conformer-Based)
 
-### Information Content
+These featurizers require a 3D conformer, which LearnM8 generates automatically using RDKit ETKDG. They capture shape, volume, and 3D electronic distribution. All stored as `float32`.
 
-**Molecular aspects captured:**
+Conformer generation uses `random_state=0xf00d` by default (RDKit ETKDG convention). The seed is recorded in the cache key, so changing it invalidates the existing 3D cache for those featurizers.
 
-| Featurizer | Structural | Topological | Physicochemical | Geometric |
-|------------|-----------|-------------|-----------------|-----------|
-| `maccs` | ✓✓ | ✓ | - | - |
-| `morgan` | ✓✓✓ | ✓✓✓ | ✓ | - |
-| `ecfp6` | ✓✓✓ | ✓✓✓ | ✓ | - |
-| `morgan_feat` | ✓✓ | ✓✓ | ✓✓ | - |
-| `descriptors` | ✓✓✓ | ✓✓✓ | ✓✓✓ | ✓✓✓ |
+| Name | Dimensions | Notes |
+|------|------------|-------|
+| `whim` | 114 | WHIM shape descriptors |
+| `usr` | 12 | Ultrafast shape recognition |
+| `usrcat` | 60 | USR with pharmacophore categories |
+| `e3fp` | 2048 | Extended 3D fingerprint (3D ECFP analogue) |
+| `getaway` | 273 | GETAWAY surface area descriptors |
+| `morse` | 224 | 3D-MoRSE descriptors |
+| `rdf` | 210 | Radial distribution function descriptors |
+| `autocorr` | 80 | 3D autocorrelation descriptors |
+| `electroshape` | 15 | Electroshape (charge-weighted shape) |
 
-### Learner Compatibility
+**Requirements:** 3D featurizers require conformer generation. Invalid SMILES or molecules where conformers cannot be generated will return NaN vectors. Validate your compound pool first (`learnm8 validate`).
 
-**All featurizers compatible with:**
+---
 
-- RandomForest, AdvancedRandomForest
-- GaussianProcess
-- XGBoost, DecisionTree, LinearRegression
-- MLP, MCDropout, Fastprop
-- All ensemble variants
+## Learner Compatibility
 
-**Special case:**
-- Chemprop: Works without featurizers, but accepts `descriptors` for hybrid mode
+All featurizers are compatible with all learners **except**:
 
-## Practical Recommendations
+- **Chemprop / ChempropEnsemble**: No featurizer required (SMILES-native). Accepts `descriptors` or `mordred` for hybrid graph + descriptor mode.
+- **Fastprop / FastpropEnsemble**: Requires a featurizer (works with feature vectors, not SMILES directly).
 
-### Starting Point
+---
 
-Begin with Morgan fingerprints for most tasks:
+## Choosing a Featurizer
 
-```bash
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
-```
+| Scenario | Recommended featurizer |
+|----------|------------------------|
+| General purpose | `morgan` |
+| Very large library (>100k, speed critical) | `maccs` |
+| Large molecules / long-range effects | `ecfp6` |
+| Scaffold hopping, pharmacophore tasks | `morgan_feat` |
+| QSAR with interpretable features | `mordred` / `descriptors` |
+| Chemprop hybrid mode | `descriptors` |
+| 3D shape similarity | `usr` or `usrcat` |
+| 3D ECFP-like | `e3fp` |
+| Tree learners, memory constrained | `morgan` with `preferred_dtype='uint8'` |
 
-### Large-Scale Screening
+---
 
-Use MACCS for maximum speed with large libraries:
-
-```bash
-learnm8 run large_library.csv --target Activity --learner rf --featurizer maccs \
-  --cache-dir .shared_cache
-```
-
-### Complex Molecules
-
-Use ECFP6 for large molecules with extended features:
-
-```bash
-learnm8 run peptides.csv --target Activity --learner gp --featurizer ecfp6
-```
-
-### Pharmacophore Tasks
-
-Use Morgan feature fingerprints for functional property focus:
-
-```bash
-learnm8 run drug_candidates.csv --target Binding --learner ensemble --featurizer morgan_feat
-```
-
-### Maximum Performance
-
-Use Mordred descriptors when feature richness critical:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors \
-  --cache-dir .cache
-```
-
-### Chemprop Hybrid
-
-Combine graph neural network with descriptors:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner chemprop --featurizer descriptors
-```
-
-## Feature Extraction Best Practices
-
-### Cache Management
-
-Always specify cache directory for reusable features:
+## Listing All Featurizers
 
 ```python
-from learnm8 import extract_features
-from pathlib import Path
-
-features = extract_features(
-    smiles_list=smiles_list,
-    featurizer='morgan',
-    cache_dir=Path('.shared_cache')  # Reuse across experiments
-)
+from learnm8.features import FEATURIZER_REGISTRY
+print(sorted(FEATURIZER_REGISTRY))
 ```
-
-### Parallel Processing
-
-Let automatic optimization handle parallelization:
 
 ```python
-features = extract_features(
-    smiles_list=large_smiles_list,
-    featurizer='morgan',
-    n_jobs=-1  # Auto-optimize based on dataset size
-)
+from learnm8.features import FEATURIZER_REGISTRY
+print(sorted(FEATURIZER_REGISTRY))
 ```
-
-### Progress Tracking
-
-Enable progress bars for long computations:
-
-```python
-features = extract_features(
-    smiles_list=very_large_smiles_list,
-    featurizer='descriptors',
-    show_progress=True  # Requires tqdm
-)
-```
-
-### Batch Processing
-
-Process large datasets in batches to manage memory:
-
-```python
-batch_size = 10000
-all_features = []
-
-for i in range(0, len(smiles_list), batch_size):
-    batch = smiles_list[i:i+batch_size]
-    features = extract_features(
-        smiles_list=batch,
-        featurizer='morgan',
-        cache_dir=Path('.cache')
-    )
-    all_features.append(features)
-```
-
-## Troubleshooting
-
-### Invalid SMILES
-
-Use validation before feature extraction:
-
-```bash
-learnm8 validate compounds.csv -o validation_results/
-```
-
-**API:**
-```python
-from learnm8 import validate_compound_pool
-import polars as pl
-
-compounds = pl.read_csv('compounds.csv')
-result = validate_compound_pool(compounds, n_jobs=-1, progress=True)
-
-print(f"Valid: {len(result.valid_compounds)}")
-print(f"Invalid: {len(result.invalid_compounds)}")
-```
-
-### Memory Issues
-
-Use MACCS for memory-constrained environments:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner rf --featurizer maccs
-```
-
-### Slow Computation
-
-Enable caching and parallelization:
-
-```bash
-learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan \
-  --cache-dir .cache
-```
-
-### Cache Corruption
-
-Clear corrupted cache files:
-
-```bash
-rm -rf .cache/morgan_features.h5
-```
-
-## Next Steps
-
-- [Featurizers Overview](overview.md) - Caching, parallelization, and API details
-- [Running Experiments](../../tutorials/running-experiments.md) - Complete experimental workflows
-- [Learner Overview](../learners/overview.md) - Choosing compatible learners
-- [Custom Featurizers](../../customization/extending-framework.md) - Implementing custom featurizers

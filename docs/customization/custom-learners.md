@@ -93,6 +93,7 @@ The `train()` method trains the model on labeled data.
 **Returns:** None (modifies learner state)
 
 **Raises:**
+
 - `ValueError`: If input shapes are incompatible or data is invalid
 - `RuntimeError`: If training fails due to model errors
 
@@ -118,6 +119,7 @@ The `predict()` method generates predictions and optional uncertainty estimates 
 - Second element: Uncertainty estimates with shape `(n_samples,)` or None if not available
 
 **Raises:**
+
 - `RuntimeError`: If model is not trained or prediction fails
 
 **Example return values:**
@@ -159,6 +161,7 @@ The `requires_smiles()` method indicates whether the learner needs SMILES string
 **Returns:** bool - True if learner works directly with molecular structures
 
 **When to override:**
+
 - Graph neural networks (Chemprop): Return True
 - Feature-based learners (RF, GP, XGB): Return False (default)
 

@@ -9,12 +9,14 @@ This guide covers advanced LearnM8 features for scaling to large compound librar
 Pruning removes low-value compounds from the unlabeled pool based on model predictions and uncertainties. This reduces computational costs and focuses active learning on promising regions.
 
 **Benefits:**
+
 - 10-50% computational savings
 - Faster cycle times
 - Focused search in chemical space
 - Memory efficiency for large libraries
 
 **When to use:**
+
 - Compound pools > 100,000 compounds
 - Limited computational budget
 - Clear exploitation phase (later cycles)
@@ -36,7 +38,7 @@ results = run_active_learning(
     target_col='affinity',
     featurizer='morgan',
     n_cycles=20,
-    pruning_strategy='score_based',
+    pruning_strategy='score',
     pruning_fraction=0.1,
     score_direction='higher'
 )
@@ -45,7 +47,8 @@ results = run_active_learning(
 Removes bottom 10% of compounds by predicted score each cycle.
 
 **Parameters:**
-- `pruning_strategy`: `'score_based'` for prediction-based pruning
+
+- `pruning_strategy`: `'score'` for prediction-based pruning
 - `pruning_fraction`: Fraction to remove (0.0-0.9), typically 0.1-0.3
 - `score_direction`: `'higher'` or `'lower'` based on optimization goal
 
@@ -57,7 +60,7 @@ learnm8 run large_library.csv oracle.py:score \
   --learner gp \
   --featurizer morgan \
   --n-cycles 20 \
-  --pruning-strategy score_based \
+  --pruning-strategy score \
   --pruning-fraction 0.1 \
   --score-direction higher
 ```
@@ -84,7 +87,7 @@ results = run_active_learning(
             'greedy',
             n_cycles=10,
             batch_fraction=0.005,
-            pruning_strategy='score_based',
+            pruning_strategy='score',
             pruning_fraction=0.2
         )
     ]
@@ -92,6 +95,7 @@ results = run_active_learning(
 ```
 
 **When uncertainty-based pruning works:**
+
 - Learner provides reliable uncertainties (GP, ensembles, MC Dropout)
 - Later cycles when model is confident
 - Exploration phase complete
@@ -115,7 +119,7 @@ cycles = [
         'greedy',
         n_cycles=5,
         batch_fraction=0.01,
-        pruning_strategy='score_based',
+        pruning_strategy='score',
         pruning_fraction=0.1
     ),
 
@@ -124,7 +128,7 @@ cycles = [
         'greedy',
         n_cycles=10,
         batch_fraction=0.01,
-        pruning_strategy='score_based',
+        pruning_strategy='score',
         pruning_fraction=0.3
     )
 ]
@@ -160,6 +164,7 @@ Cumulative computational savings: ~40%
 Ensemble learning combines multiple models to improve predictions and uncertainty quantification.
 
 **Advantages:**
+
 - Better uncertainty estimates through model disagreement
 - Robustness to overfitting
 - No hyperparameter tuning for uncertainty
@@ -171,6 +176,7 @@ ensemble_uncertainty = sqrt(prediction_variance + model_disagreement)
 ```
 
 Where:
+
 - `prediction_variance`: Average uncertainty from individual models
 - `model_disagreement`: Variance across model predictions
 
@@ -202,7 +208,7 @@ results = run_active_learning(
 ```bash
 learnm8 run compounds.csv oracle.py:score \
   --target affinity \
-  --learner mixed \
+  --learner mixed_ensemble \
   --featurizer morgan \
   --n-cycles 15 \
   --batch-fraction 0.01
@@ -244,6 +250,7 @@ results = run_active_learning(
 LearnM8 provides pre-configured ensembles for common model types.
 
 **Available ensembles:**
+
 - `rf_ensemble`: 3 RandomForest variants
 - `xgb_ensemble`: 3 XGBoost variants
 - `lr_ensemble`: 3 LinearRegression variants
@@ -279,18 +286,21 @@ learnm8 run compounds.csv oracle.py:score \
 ### Ensemble Performance Considerations
 
 **Computational cost:**
+
 - 3x training time (3 models)
 - 3x prediction time
 - 3x memory usage
 - No parallelization (sequential training)
 
 **When worth the cost:**
+
 - Uncertainty-based acquisition (UCB, EI, Thompson)
 - Small to medium datasets (< 50,000 compounds)
 - High-value measurements (expensive oracles)
 - Research and benchmarking
 
 **When to use single models:**
+
 - Very large datasets (> 100,000 compounds)
 - Greedy acquisition (no uncertainty needed)
 - Computational budget constraints
@@ -303,12 +313,14 @@ learnm8 run compounds.csv oracle.py:score \
 Fine-tuning for active learning reuses trained model weights from previous cycles as initialization for subsequent training, instead of training from scratch each cycle.
 
 **Benefits:**
+
 - Faster convergence (fewer epochs needed)
 - Better uncertainty calibration
 - Improved performance with small batches
 - Preserved learned representations
 
 **Computational cost:**
+
 - 20-40% faster training per cycle
 - Additional checkpoint storage (minimal)
 - No prediction cost increase
@@ -339,17 +351,7 @@ results = run_active_learning(
 )
 ```
 
-**CLI Alternative:**
-
-```bash
-learnm8 run compounds.csv oracle.py:score \
-  --target affinity \
-  --learner chemprop \
-  --n-cycles 20 \
-  --batch-fraction 0.005 \
-  --enable-chemprop-fine-tuning \
-  --checkpoint-dir ./checkpoints
-```
+Chemprop fine-tuning is only available via the Python API (no CLI equivalent).
 
 ### Fine-Tuning Parameters
 
@@ -365,6 +367,7 @@ learner = ChempropLearner(
 ```
 
 **Parameters:**
+
 - `enable_fine_tuning`: Enable checkpoint-based fine-tuning (default: False)
 - `checkpoint_dir`: Directory for checkpoint storage (required if fine-tuning)
 - `max_epochs`: Maximum epochs per training cycle
@@ -404,9 +407,9 @@ results = run_active_learning(
         ('greedy', 0.005),
         ('greedy', 0.005),
         ('greedy', 0.005),
-        ('diverse', 0.01)
+        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01),
     ],
-    export_csv=True,
+    output_format='csv',
     output_dir='results/chemprop_fine_tuned'
 )
 ```
@@ -439,6 +442,7 @@ Average training time reduction: 60%
 ### When Fine-Tuning Helps Most
 
 **Ideal scenarios:**
+
 - Small batch sizes (< 1% per cycle)
 - Many cycles (> 10 cycles)
 - Chemprop or deep learning models
@@ -446,6 +450,7 @@ Average training time reduction: 60%
 - Incremental learning tasks
 
 **Less beneficial:**
+
 - Large batch sizes (> 5% per cycle)
 - Few cycles (< 5 cycles)
 - Traditional ML models (RF, XGB)
@@ -482,21 +487,13 @@ cycles:
   - strategy: greedy
     batch_fraction: 0.005
     n_cycles: 10
-    pruning_strategy: score_based
+    pruning_strategy: score
     pruning_fraction: 0.15
-  - strategy: diverse
+  - strategy: simulated_annealing
     batch_fraction: 0.01
     n_cycles: 4
 
-learner_params:
-  enable_fine_tuning: true
-  checkpoint_dir: ./checkpoints/exp_001
-  max_epochs: 50
-  batch_size: 32
-  learning_rate: 0.0001
-  early_stopping: true
-
-export_csv: true
+output_format: csv
 cache_dir: .cache/docking_features
 ```
 
@@ -610,21 +607,17 @@ cycles:
   - strategy: greedy
     batch_fraction: 0.005
     n_cycles: 15
-    pruning_strategy: score_based
+    pruning_strategy: score
     pruning_fraction: 0.2
 
-learner_params:
-  enable_fine_tuning: true
-  checkpoint_dir: ./checkpoints/intensive
-  max_epochs: 100
-
-export_csv: true
+output_format: csv
 cache_dir: .cache/intensive
 ```
 
 ### Best Practices
 
 **Configuration management:**
+
 1. Use descriptive config names (`chemprop_ucb_beta2.yaml`)
 2. Include `random_state` for reproducibility
 3. Document parameter choices in comments
@@ -632,6 +625,7 @@ cache_dir: .cache/intensive
 5. Store oracle code with configs
 
 **Experiment tracking:**
+
 1. Unique output directories per experiment
 2. Record git commit hash in results
 3. Save config copy to output directory

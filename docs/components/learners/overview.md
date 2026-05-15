@@ -36,17 +36,24 @@ class MyLearner(Learner):
 
     def predict(self,
                 features: np.ndarray,
-                smiles: Optional[List[str]] = None
+                smiles: Optional[List[str]] = None,
+                *,
+                compute_uncertainty: bool = True
                 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix or SMILES strings.
 
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Optional SMILES strings (required by graph-based learners)
+            compute_uncertainty: When False and the learner is skip-eligible,
+                the uncertainty compute path is elided and None is returned
+                as the second element. Cannot disable uncertainty when the
+                active acquisition strategy requires it (e.g. UCB, EI).
 
         Returns:
             Tuple of (predictions, uncertainties).
-            Uncertainties can be None if model doesn't support them.
+            Uncertainties is None if the learner doesn't support them,
+            or if compute_uncertainty=False on a skip-eligible learner.
         """
         pass
 
@@ -106,7 +113,7 @@ Multiple models combined for improved predictions and uncertainty through model 
 - **LREnsemble**: Linear model variants ensemble
 - **XGBEnsemble**: XGBoost variants ensemble
 - **DTEnsemble**: Decision Tree variants ensemble
-- **MixedEnsemble**: Maximum diversity (RF + GP + XGB)
+- **MixedEnsemble**: Maximum diversity (RF + LR + XGB)
 - **FastpropEnsemble**: FastProp neural network ensemble
 
 ## Choosing a Learner
@@ -119,25 +126,25 @@ Selection depends on dataset characteristics, computational resources, and wheth
 |--------------|---------------------|----------------|---------------------|-----------|
 | < 1,000 compounds | No | Any | `rf` | Fast training, robust baseline |
 | < 1,000 compounds | Yes | No | `gp` | Best uncertainty for small data |
-| < 1,000 compounds | Yes | Yes | `chemprop` | State-of-the-art with uncertainty |
+| < 1,000 compounds | Yes | Yes | `chemprop_ensemble` | State-of-the-art with uncertainty |
 | 1,000-10,000 | No | Any | `xgb` | High performance, scalable |
-| 1,000-10,000 | Yes | No | `ensemble` | Model diversity for uncertainty |
-| 1,000-10,000 | Yes | Yes | `chemprop` | Superior performance at scale |
+| 1,000-10,000 | Yes | No | `mixed_ensemble` | Model diversity for uncertainty |
+| 1,000-10,000 | Yes | Yes | `chemprop_ensemble` | Superior performance at scale |
 | > 10,000 | No | No | `xgb` | Memory efficient, fast |
 | > 10,000 | No | Yes | `mlp` | Deep learning efficiency |
 | > 10,000 | Yes | No | `rf_ensemble` | Scalable ensemble |
-| > 10,000 | Yes | Yes | `chemprop` | Best overall performance |
+| > 10,000 | Yes | Yes | `chemprop_ensemble` | Best overall performance |
 
 ### Decision Matrix by Use Case
 
 | Priority | Recommended Learner | Notes |
 |----------|---------------------|-------|
 | Speed | `rf`, `xgb` | Fastest training times |
-| Uncertainty Quality | `gp`, `chemprop`, `mc_dropout` | Principled uncertainty quantification |
+| Uncertainty Quality | `gp`, `chemprop_ensemble`, `mc_dropout` | Principled uncertainty quantification |
 | Interpretability | `dt`, `lr` | Simple, explainable models |
-| State-of-the-art Performance | `chemprop` | MPNN architecture optimized for molecules |
-| No Featurizer | `chemprop` | Works directly with SMILES |
-| Robustness | `ensemble`, `mixed_ensemble` | Multiple models reduce overfitting risk |
+| State-of-the-art Performance | `chemprop_ensemble` | MPNN ensemble optimized for molecules |
+| No Featurizer | `chemprop`, `chemprop_ensemble`, `fastprop`, `fastprop_ensemble` | Work directly with SMILES |
+| Robustness | `mixed_ensemble`, `rf_ensemble` | Multiple models reduce overfitting risk |
 
 ### Featurizer Compatibility
 
@@ -156,16 +163,16 @@ All available learners with their properties and dependencies:
 
 | Shortcut | Full Name | Type | Uncertainty | GPU Support | Optional Deps | Requires Featurizer |
 |----------|-----------|------|-------------|-------------|---------------|---------------------|
-| `rf` | RandomForestLearner | Scikit-learn | ❌ | ❌ | - | ✅ |
+| `rf` | RandomForestLearner | Scikit-learn | ✅ | ❌ | - | ✅ |
 | `gp` | GaussianProcessLearner | Scikit-learn | ✅ | ❌ | - | ✅ |
 | `xgb` | XGBoostLearner | Scikit-learn | ❌ | ❌ | xgboost | ✅ |
-| `dt` | DecisionTreeLearner | Scikit-learn | ❌ | ❌ | - | ✅ |
-| `lr` | LinearRegressionLearner | Scikit-learn | ❌ | ❌ | - | ✅ |
-| `advanced_rf` | AdvancedRandomForestLearner | Scikit-learn | ✅ | ❌ | - | ✅ |
+| `dt` | DecisionTreeLearner | Scikit-learn | ✅ | ❌ | - | ✅ |
+| `lr` | LinearRegressionLearner | Scikit-learn | ✅ | ❌ | - | ✅ |
 | `mlp` | MLPLearner | PyTorch | ❌ | ✅ | torch | ✅ |
 | `mc_dropout` | MCDropoutLearner | PyTorch | ✅ | ✅ | torch | ✅ |
 | `fastprop` | FastpropLearner | PyTorch Lightning | ❌ | ✅ | torch, lightning | ✅ |
-| `chemprop` | ChempropEnsemble | Graph Neural Network | ✅ | ✅ | chemprop, torch | ❌ |
+| `chemprop` | ChempropLearner | Graph Neural Network | ❌ | ✅ | chemprop, torch | ❌ |
+| `chemprop_ensemble` | ChempropEnsemble | Ensemble | ✅ | ✅ | chemprop, torch | ❌ |
 | `ensemble` | EnsembleLearner | Ensemble | ✅ | ❌ | - | ✅ |
 | `rf_ensemble` | RFEnsemble | Ensemble | ✅ | ❌ | - | ✅ |
 | `lr_ensemble` | LREnsemble | Ensemble | ✅ | ❌ | - | ✅ |
@@ -173,13 +180,18 @@ All available learners with their properties and dependencies:
 | `dt_ensemble` | DTEnsemble | Ensemble | ✅ | ❌ | - | ✅ |
 | `mixed_ensemble` | MixedEnsemble | Ensemble | ✅ | ❌ | xgboost | ✅ |
 | `fastprop_ensemble` | FastpropEnsemble | Ensemble | ✅ | ✅ | torch, lightning | ✅ |
-| `chemprop_ensemble` | ChempropEnsemble | Ensemble | ✅ | ✅ | chemprop, torch | ❌ |
+| `rf_fil` | RfFilLearner | GPU (cuML) | ✅ | ✅ | cuml | ✅ |
+| `ridge_cuml` | RidgeCumlLearner | GPU (cuML) | ✅ | ✅ | cuml | ✅ |
+| `gpu_gp` | GPyTorchGPLearner | GPU (GPyTorch) | ✅ | ✅ | gpytorch | ✅ |
+| `svgp` | SVGPLearner | GPU (GPyTorch) | ✅ | ✅ | gpytorch | ✅ |
 
 **Notes:**
-- ✅ = Supported/Required
-- ❌ = Not supported/Not required
-- `chemprop` in CLI automatically uses `ChempropEnsemble` (3 models)
-- `ensemble` defaults to `MixedEnsemble` (RF + GP + XGB)
+
+- ✅ = Supported/Required, ❌ = Not supported/Not required
+- `rf`, `dt`, `lr` uncertainty: tree std dev, leaf impurity, and leverage-based proxies respectively — suitable for ranking (UCB, EI, PI) but not for absolute calibration analyses
+- `chemprop` is a single MPNN model with no uncertainty; use `chemprop_ensemble` for uncertainty via model disagreement
+- `ensemble` is a generic ensemble wrapper requiring explicit member specification. Use `mixed_ensemble` (RF + LR + XGB) for a pre-configured ensemble.
+- GPU learners (`rf_fil`, `ridge_cuml`, `gpu_gp`, `svgp`) require optional dependencies and are added to the registry only when those imports succeed
 
 ## Using Learners
 
@@ -229,8 +241,8 @@ learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan
 # Gaussian Process with uncertainty
 learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptors
 
-# Chemprop (no featurizer needed)
-learnm8 run compounds.csv --target Activity --learner chemprop
+# Chemprop (featurizer required by CLI but not used by the model)
+learnm8 run compounds.csv --target Activity --learner chemprop --featurizer morgan
 
 # Ensemble for robust uncertainty
 learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan
@@ -240,9 +252,10 @@ learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morg
 
 Discover available learners dynamically:
 
-```bash
-# CLI
-learnm8 list learners
+```python
+# Python API
+from learnm8.api import list_available_learners
+print(list_available_learners())
 ```
 
 ```python
@@ -263,9 +276,10 @@ Different learners provide uncertainty through different mechanisms:
 | Analytical | `gp` | Gaussian Process posterior variance | Low |
 | Monte Carlo Dropout | `mc_dropout` | Multiple forward passes with dropout | Medium (100 passes) |
 | Model Disagreement | All ensembles | Variance across ensemble predictions | High (3x training) |
-| Graph-based | `chemprop` | Ensemble variance + optional MVE | Medium to High |
+| Graph-based | `chemprop_ensemble` | Ensemble variance across 3 MPNN models | Medium to High |
 
 **Choosing an Uncertainty Method:**
+
 - **Small data, best uncertainty**: `gp` (analytical)
 - **Neural networks**: `mc_dropout` (Monte Carlo)
 - **Robust uncertainty**: Any ensemble (model disagreement)
@@ -290,6 +304,7 @@ Relative training times for 1000 compounds on CPU (baseline = RF):
 | Ensembles | 3x (base model) | ❌ | 3 models trained sequentially |
 
 **GPU Acceleration Impact:**
+
 - `mlp`, `mc_dropout`, `fastprop`: 5-10x faster on GPU
 - `chemprop`: 10-50x faster on GPU (essential for large datasets)
 
@@ -341,6 +356,7 @@ results = run_active_learning(
 ```
 
 Deterministic behavior across:
+
 - Train/test splits in cross-validation
 - Model initialization
 - Ensemble member diversity (via offset random states)

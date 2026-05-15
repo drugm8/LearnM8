@@ -32,6 +32,7 @@ class AcquisitionFunction(ABC):
 The core method that performs compound selection:
 
 **Input:**
+
 - `compounds`: Polars DataFrame with columns:
   - `ID` (str): Unique compound identifier
   - `SMILES` (str): Molecular structure
@@ -39,9 +40,11 @@ The core method that performs compound selection:
   - `uncertainty` (float, optional): Model uncertainty estimates
 
 **Output:**
+
 - Polars DataFrame subset with selected compounds (same schema as input)
 
 **Validation Requirements:**
+
 - Check that required columns exist
 - Validate `n_select` is positive and within bounds
 - Ensure predictions/uncertainties are valid (no NaN/infinite values)
@@ -270,6 +273,7 @@ class UncertaintyBasedAcquisition(AcquisitionFunction):
 ```
 
 The `validate_uncertainty_inputs()` helper automatically:
+
 - Checks that `uncertainty` column exists
 - Validates no NaN or negative values
 - Returns numpy arrays ready for computation
@@ -308,6 +312,7 @@ selected = self._safe_select_top_k(
 ```
 
 This method:
+
 - Handles infinite/NaN scores gracefully
 - Ensures score array length matches DataFrame
 - Adds `acquisition_score` column to output
@@ -336,8 +341,7 @@ results = run_active_learning(
     learner='gp',
     target_col='Activity',
     featurizer='morgan',
-    cycles=[('custom', 0.01)],  # Strategy name doesn't matter with instance
-    acquisition_function=custom_acquisition  # Pass instance directly
+    strategy=custom_acquisition  # Pass instance directly
 )
 ```
 

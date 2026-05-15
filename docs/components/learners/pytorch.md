@@ -17,12 +17,14 @@ Standard feedforward neural network with configurable architecture for molecular
 MLPLearner provides a multi-layer perceptron with customizable hidden layers, activation functions, and regularization. The default architecture (512-256-128) works well for most molecular property prediction tasks with traditional fingerprints or descriptors.
 
 **When to use:**
+
 - Large datasets (>10,000 compounds) where neural networks excel
 - Complex non-linear relationships in molecular properties
 - When GPU acceleration is available
 - Standard supervised learning without uncertainty requirements
 
 **Key characteristics:**
+
 - No uncertainty quantification (single forward pass)
 - Fast inference after training
 - Configurable architecture depth and width
@@ -45,6 +47,7 @@ All parameters with GPU considerations:
 | `random_state` | int | `42` | Random seed for reproducibility. |
 
 **GPU Performance:**
+
 - Training speedup: 5-20x on GPU vs CPU for large datasets
 - Inference speedup: 10-50x on GPU vs CPU
 - Memory requirements scale with `hidden_sizes` and `batch_size`
@@ -119,12 +122,14 @@ Multi-layer perceptron with Monte Carlo Dropout for uncertainty estimation throu
 MCDropoutLearner extends standard MLP with uncertainty quantification using Monte Carlo Dropout. During prediction, dropout is kept enabled and multiple forward passes generate an ensemble of predictions. The variance across these predictions provides uncertainty estimates.
 
 **When to use:**
+
 - When uncertainty quantification is required for active learning
 - Large datasets where standard Gaussian Process would be too slow
 - GPU is available (100 forward passes benefit significantly from parallelization)
 - Uncertainty-based acquisition strategies (UCB, Thompson Sampling, EI)
 
 **Key characteristics:**
+
 - Provides uncertainty estimates through stochastic sampling
 - Prediction time is ~100x slower than standard MLP (100 forward passes)
 - GPU acceleration critical for reasonable inference speed
@@ -148,12 +153,14 @@ All parameters with uncertainty considerations:
 | `random_state` | int | `42` | Random seed for reproducibility. |
 
 **Uncertainty Tuning:**
+
 - `dropout_rate` controls uncertainty magnitude: higher = more uncertain
 - `n_dropout_samples` controls estimate quality: 50-200 typical range
 - Too high dropout (>0.5) can hurt prediction accuracy
 - Too few samples (<50) produce noisy uncertainty estimates
 
 **GPU Performance:**
+
 - Prediction with 100 samples: 50-100x faster on GPU
 - CPU prediction can become bottleneck in active learning cycles
 - Consider reducing `n_dropout_samples` to 50 on CPU
@@ -230,12 +237,14 @@ PyTorch Lightning-based feedforward neural network using the fastprop library wi
 FastpropLearner provides a production-ready neural network implementation using PyTorch Lightning. It handles feature normalization automatically, includes early stopping to prevent overfitting, and supports input clamping (winsorization) for robustness. Works with any pre-computed molecular features.
 
 **When to use:**
+
 - Production workflows requiring robust training pipelines
 - When automatic feature scaling is desired
 - Large datasets with potential outliers (input clamping helps)
 - PyTorch Lightning features needed (distributed training, logging)
 
 **Key characteristics:**
+
 - Automatic feature and target standardization
 - Early stopping prevents overfitting without manual tuning
 - Input clamping (winsorization) for outlier robustness
@@ -260,12 +269,14 @@ All parameters with performance notes:
 | `enable_aggressive_gc` | bool | `True` | Enable GPU memory cleanup after training/prediction. Recommended for active learning. |
 
 **Performance Considerations:**
+
 - `hidden_size=1800` is fastprop's optimized default for molecular descriptors
 - Early stopping reduces total training time (typically stops at 20-30 epochs)
 - `enable_aggressive_gc=True` prevents GPU memory accumulation in multi-cycle active learning
 - `clamp_input=True` adds minimal overhead but improves robustness
 
 **GPU Memory Management:**
+
 - Aggressive garbage collection runs after train() and predict()
 - Critical for active learning with many cycles (prevents memory leaks)
 - Disable with `enable_aggressive_gc=False` if GPU memory is abundant
@@ -347,6 +358,7 @@ results = run_active_learning(
 - **CPU-only system?** → Consider Random Forest or XGBoost instead (better CPU performance)
 
 **GPU Requirements:**
+
 - All PyTorch learners benefit significantly from GPU acceleration
 - MCDropoutLearner especially needs GPU for reasonable inference speed
 - Minimum 4GB GPU memory for typical molecular datasets

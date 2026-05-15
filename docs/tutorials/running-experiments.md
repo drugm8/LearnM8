@@ -21,6 +21,7 @@ results = run_active_learning(
 ```
 
 **Parameter Explanations:**
+
 - `compound_pool='compounds.csv'`: Compound pool (must have `ID` and `SMILES` columns)
 - `oracle=None`: Auto-detect oracle from compound pool (benchmark mode)
 - `learner='gp'`: Gaussian Process model (provides uncertainty)
@@ -41,16 +42,17 @@ cycle_metrics = results['cycle_metrics']
 validation_result = results['validation_result']
 output_dir = results['output_dir']
 
-labeled_data = results['labeled_data']
-unlabeled_data = results['unlabeled_data']
+labeled_data = results['compounds_df'].filter(pl.col('status') == 'labeled')
+unlabeled_data = results['compounds_df'].filter(pl.col('status') == 'unlabeled')
 ```
 
 **Results Structure:**
-- `compounds_df`: Final Polars DataFrame with all compounds
+
+- `compounds_df`: Final Polars DataFrame with all compounds (7 columns: ID, SMILES, status, selected_cycle, labeled_cycle, pruned_cycle, target_col)
 - `cycle_metrics`: List of dictionaries (one per cycle)
 - `validation_result`: ValidationResult object with valid/invalid compounds
-- `labeled_data`: Polars DataFrame filtered to labeled compounds
-- `unlabeled_data`: Polars DataFrame filtered to unlabeled compounds
+- `labeled_count`: Integer count of labeled compounds at experiment end
+- `unlabeled_count`: Integer count of unlabeled compounds at experiment end
 
 ### Converting Polars to Pandas
 
@@ -60,7 +62,7 @@ LearnM8 uses Polars internally for performance. Convert to Pandas if needed:
 import polars as pl
 
 compounds_pandas = results['compounds_df'].to_pandas()
-labeled_pandas = results['labeled_data'].to_pandas()
+labeled_pandas = results['compounds_df'].filter(pl.col('status') == 'labeled').to_pandas()
 ```
 
 ### Understanding Output Directory Structure
@@ -78,6 +80,7 @@ learnm8_results_20250118_143022/
 ```
 
 **Key Files:**
+
 - `compounds_final.csv`: All compounds with status (labeled/unlabeled), predictions, cycle information
 - `cycle_metrics.csv`: Per-cycle metrics (enrichment factor, top-10 discovery, timing)
 - `selection_history.csv`: Which compounds were selected in each cycle
@@ -91,6 +94,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n
 ```
 
 **Flag Explanations:**
+
 - `compounds.csv`: Compound pool (must have `ID` and `SMILES` columns)
 - `--target Activity`: Target property column name
 - `--learner gp`: Gaussian Process model (provides uncertainty)
@@ -116,6 +120,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Fast training and prediction
 - Good general-purpose baseline
 - Works well with 100-10,000 compounds
@@ -141,6 +146,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Need principled uncertainty estimates
 - Smaller datasets (<5,000 compounds)
 - Research/benchmarking scenarios
@@ -166,6 +172,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Large datasets (10,000+ compounds)
 - Need fast predictions
 - Gradient boosting advantages (handles complex patterns)
@@ -210,6 +217,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Baseline comparison
 - Unbiased exploration
 - Initial screening cycles
@@ -235,6 +243,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Find best compounds quickly
 - After initial exploration phase
 - When model is confident
@@ -258,11 +267,12 @@ results = run_active_learning(
     n_cycles=10,
     batch_fraction=0.01,
     strategy='ucb',
-    acquisition_params={'exploration_weight': 2.0}
+    acquisition_params={'beta': 2.0}
 )
 ```
 
 **When to use:**
+
 - Balance finding good compounds with reducing uncertainty
 - Gaussian Process or ensemble models (provide uncertainty)
 - Exploration in early cycles
@@ -294,6 +304,7 @@ results = run_active_learning(
 ```
 
 **Benefits:**
+
 - First run: Features computed and cached
 - Subsequent runs: Features loaded from cache (100x faster)
 - Cache persists across experiments
@@ -308,6 +319,7 @@ results = run_active_learning(
 | 100,000 compounds | 250s | 1.2s | ~200x |
 
 **Cache Location:**
+
 - Default: `{output_dir}/.cache` (per-experiment)
 - Shared: Specify absolute path to share across experiments
 - Cache is keyed by SMILES + featurizer type
@@ -383,7 +395,7 @@ results = run_active_learning(
     random_state=42
 )
 
-print(f"Labeled {len(results['labeled_data'])} compounds")
+print(f"Labeled {len(results['compounds_df'].filter(pl.col('status') == 'labeled'))} compounds")
 print(f"Results saved to {results['output_dir']}")
 ```
 

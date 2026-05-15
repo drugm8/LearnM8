@@ -8,7 +8,7 @@ LearnM8 is a comprehensive active learning framework for molecular property pred
 
 Built on a pure functional architecture, LearnM8 provides explicit cycle control, comprehensive uncertainty quantification, and molecular-specific optimizations. The framework supports both benchmark analysis (with known ground truth) and production screening (with expensive experimental measurements), making it suitable for both research and real-world drug discovery applications.
 
-**Key Capabilities:** 21 ML models (including Chemprop GNNs, ensembles, and CUDA-accelerated learners), 9 acquisition strategies, 34 featurizers (25 2D + 9 3D), HDF5 caching for 100x speedup, automatic parallelization, GPU acceleration via GPyTorch and RAPIDS cuML, and design space pruning for large-scale screening.
+**Key Capabilities:** 21 ML models (including Chemprop GNNs, ensembles, and CUDA-accelerated learners), 9 acquisition strategies, 39 featurizers (30 2D + 9 3D), HDF5 caching for ~100× speedup, automatic parallelization, GPU acceleration via GPyTorch and RAPIDS cuML, and design space pruning for large-scale screening.
 
 ## 📚 Documentation
 
@@ -101,8 +101,8 @@ See [examples/README.md](examples/README.md) for complete guide.
 | --------- | ----- | -------- |
 | **Learners** | 21 | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble, ensemble |
 | **Acquisition** | 9 | greedy, random, topk, ucb, ei, pi, thompson, entropy, simulated_annealing |
-| **Featurizers** | 34 | 25 2D + 9 3D (see categories below) |
-| **Pruning** | 1 | score_based |
+| **Featurizers** | 39 | 30 2D + 9 3D (38 unique; see categories below) |
+| **Pruning** | 1 | score |
 
 ### Learners
 
@@ -144,9 +144,11 @@ Pool size reflects the total compound pool. GP is limited by labeled set growth 
 | `pi` | `ProbabilityImprovementAcquisition` | Yes | `xi` (0.01) | Probability of improving over current best; more conservative than EI |
 | `thompson` | `ThompsonSamplingAcquisition` | Yes | `random_state` | Stochastic — samples from posterior predictive distribution |
 | `entropy` | `EntropyAcquisition` | Yes | `entropy_type` | Maximum information gain — selects most uncertain compounds |
-| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `initial_temp`, `cooling_rate` | Temperature-based probabilistic selection; starts random, cools to greedy |
+| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `initial_temp`, `cooling_schedule` | Temperature-based probabilistic selection; starts random, cools to greedy |
 
 **Uncertainty-based strategies** (`ucb`, `ei`, `pi`, `thompson`, `entropy`) require a learner that supports uncertainty. See the Learners table above — the **Uncertainty Method** column indicates compatibility.
+
+Uncertainty computation is automatically skipped when the active strategy does not require it, reducing cycle time for skip-eligible learners (RF, GP, LR, DT, and GPU equivalents).
 
 ### Featurizers by Category
 

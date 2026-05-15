@@ -21,11 +21,13 @@ LearnM8 provides seven ensemble learners organized by component diversity:
 The `EnsembleLearner` class accepts any combination of learner instances, providing maximum flexibility for custom ensemble configurations.
 
 **When to Use:**
+
 - Custom model combinations not covered by predefined ensembles
 - Heterogeneous model architectures (e.g., RF + GP + XGB)
 - Experimentation with novel ensemble strategies
 
 **Features:**
+
 - Flexible aggregation methods (mean, median, weighted)
 - Multiple uncertainty estimation methods (std, mad, quantile)
 - Dynamic learner addition/removal
@@ -45,6 +47,7 @@ Specialized ensembles combining variations of a single learner type with differe
 | `ChempropEnsemble` | 3 Chemprop models | Graph neural network ensemble (SMILES-based) |
 
 **When to Use:**
+
 - Leverage specific model strengths while reducing overfitting
 - Consistent model architecture with diversity from random initialization
 - Simpler configuration than mixed ensembles
@@ -54,12 +57,14 @@ Specialized ensembles combining variations of a single learner type with differe
 The `MixedEnsemble` combines Random Forest, Linear Regression, and XGBoost to maximize model diversity and capture different aspects of structure-activity relationships.
 
 **When to Use:**
+
 - Production screening where robustness matters most
 - Unknown data characteristics (linear vs non-linear relationships)
 - Maximum uncertainty coverage across chemical space
 - Small to medium datasets (< 10,000 compounds)
 
 **Components:**
+
 - Random Forest: Captures non-linear interactions, feature importance
 - Linear Regression: Captures linear trends, fast predictions
 - XGBoost: Captures complex patterns, handles feature interactions
@@ -79,11 +84,13 @@ uncertainty = std(predictions_from_all_models)
 ```
 
 High uncertainty occurs when:
+
 - Models disagree significantly (large variance in predictions)
 - Compound is far from training data
 - Structural features poorly represented in training set
 
 Low uncertainty occurs when:
+
 - All models converge on similar predictions
 - Compound similar to well-represented training examples
 - Consistent structure-activity relationships
@@ -120,6 +127,7 @@ Ensemble methods train and predict with **3 models** (default ensemble size), re
 ### When Ensembles Are Worth the Cost
 
 **✅ Use Ensembles When:**
+
 - Uncertainty quantification is critical for acquisition strategy
 - Early cycles with small training sets (< 1000 compounds)
 - Production screening where robustness justifies computation
@@ -127,6 +135,7 @@ Ensemble methods train and predict with **3 models** (default ensemble size), re
 - Budget allows 3x computational overhead
 
 **❌ Single Models May Be Better When:**
+
 - Computational budget is tight
 - Large training sets (> 10,000 compounds) where single models are stable
 - Greedy/exploitation-only acquisition (uncertainty not used)
@@ -360,6 +369,7 @@ results = run_active_learning(
 ```
 
 **Fine-Tuning Behavior:**
+
 - Cycle 0: Train from scratch, save checkpoints
 - Cycles 1+: Load previous checkpoint, fine-tune on expanded dataset
 - Each ensemble member (3 models) has separate checkpoints
