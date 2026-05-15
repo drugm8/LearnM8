@@ -1,8 +1,17 @@
-# LearnM8: Active Learning Framework for Molecular Screening
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="media/learnm8_white_full.svg">
+    <img alt="LearnM8" src="media/learnm8_dark_full.svg" width="420">
+  </picture>
+  <br><br>
+  <strong>Active Learning Framework for Molecular Screening</strong>
+  <br><br>
 
 [![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](docs/)
 [![Python 3.11.9](https://img.shields.io/badge/python-3.11.9-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+</div>
 
 LearnM8 is a comprehensive active learning framework for molecular property prediction and compound screening. It combines state-of-the-art machine learning models with sophisticated acquisition strategies to enable efficient exploration of chemical space.
 
