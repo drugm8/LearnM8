@@ -1,3 +1,10 @@
+<div align="center" markdown>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/learnm8_white_full.svg">
+    <img alt="LearnM8" src="assets/learnm8_dark_full.svg" width="420">
+  </picture>
+</div>
+
 # LearnM8: Active Learning Framework for Molecular Screening
 
 LearnM8 is an active learning framework for molecular property prediction and compound screening. Built with a pure functional architecture, it enables researchers to efficiently explore chemical space through intelligent compound selection, uncertainty-guided decision-making, and state-of-the-art machine learning models.

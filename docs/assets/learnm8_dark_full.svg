@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="558" height="231" viewBox="0 0 558 231">
+  <defs>
+    <style>
+      .wordmark { font-family: "Quicksand", "DejaVu Sans", Arial, sans-serif; letter-spacing: 0; }
+      .wordmark-stem { font-family: "Quicksand-Regular", "Quicksand", "DejaVu Sans", Arial, sans-serif; font-weight: 400; }
+      .wordmark-m8 { font-family: "Quicksand-SemiBold", "Quicksand", "DejaVu Sans", Arial, sans-serif; font-weight: 700; }
+      .tagline { font-family: "Quicksand", "DejaVu Sans", Arial, sans-serif; font-weight: 500; letter-spacing: 0.08em; }
+    </style>
+  </defs>
+  <linearGradient id="grad-learnm8-h" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#B685F6"/><stop offset="100%" stop-color="#8352C3"/></linearGradient><filter id="inset-learnm8-h" x="0%" y="0%" width="100%" height="100%"><feMorphology in="SourceAlpha" operator="erode" radius="51.200" result="eroded"/><feGaussianBlur in="eroded" stdDeviation="25.600" result="blurredEroded"/><feComposite in="SourceAlpha" in2="blurredEroded" operator="arithmetic" k1="0" k2="1" k3="-1" k4="0" result="innerEdge"/><feFlood flood-color="#000000" flood-opacity="0.1" result="shadowColor"/><feComposite in="shadowColor" in2="innerEdge" operator="in" result="innerShadow"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="innerShadow"/></feMerge></filter>
+<g transform="translate(28.000 24.000) scale(0.0990) translate(-0.000 -0.000)" fill="url(#grad-learnm8-h)" filter="url(#inset-learnm8-h)"><g transform="matrix(1,0,0,1,-57.9354,-433.689)">
+        <g transform="matrix(30.0501,0,0,30.0501,-32552.7,-10072.9)">
+            <path d="M1108.9,351.026L1112.42,358.568C1113.83,361.594 1116.27,364.026 1119.29,365.438L1126.83,368.958C1127.68,369.354 1128.22,370.208 1128.22,371.141C1128.22,372.078 1127.68,372.932 1126.83,373.328L1119.29,376.849C1116.27,378.26 1113.83,380.693 1112.42,383.719L1108.9,391.26C1108.51,392.109 1107.65,392.651 1106.71,392.651C1105.78,392.651 1104.93,392.109 1104.53,391.26L1101.01,383.719C1099.6,380.693 1097.17,378.26 1094.14,376.849L1086.6,373.328C1085.75,372.932 1085.21,372.078 1085.21,371.141C1085.21,370.208 1085.75,369.354 1086.6,368.958L1094.14,365.438C1097.17,364.026 1099.6,361.594 1101.01,358.568L1104.53,351.026C1104.93,350.177 1105.78,349.635 1106.71,349.635C1107.65,349.635 1108.51,350.177 1108.9,351.026Z" />
+        </g>
+    </g>
+</g>
+  <text x="190.00" y="117.00" class="wordmark" font-size="86" fill="#333333" text-anchor="start"><tspan class="wordmark-stem">learn</tspan><tspan class="wordmark-m8">m8</tspan></text>
+  <text x="360.04" y="165.16" class="tagline" font-size="30.96" fill="#333333" fill-opacity="0.78" text-anchor="middle">active learning</text>
+</svg>
