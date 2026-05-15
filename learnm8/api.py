@@ -44,6 +44,7 @@ Examples:
         ]
     )
 """
+
 from __future__ import annotations
 
 import inspect
@@ -65,7 +66,7 @@ from learnm8.core.initialization import (
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
-from learnm8.core.validation import validate_compound_pool
+from learnm8.core.validation import ValidationResult, validate_compound_pool
 from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.exceptions import ConfigurationError, LearnM8Error
 from learnm8.learners import (
@@ -107,20 +108,16 @@ LEARNER_REGISTRY = {
     'xgb': XGBoostLearner,
     'lr': LinearRegressionLearner,
     'dt': DecisionTreeLearner,
-
     # GPU-accelerated learners
     'rf_fil': RfFilLearner,
     'ridge_cuml': RidgeCumlLearner,
-
     # PyTorch-based learners
     'mlp': MLPLearner,
     'mc_dropout': MCDropoutLearner,
     'fastprop': FastpropLearner,
-
     # Chemprop learners
     'chemprop': ChempropLearner,
     'chemprop_ensemble': ChempropEnsemble,
-
     # Ensemble learners
     'ensemble': EnsembleLearner,
     'rf_ensemble': RFEnsemble,
@@ -133,12 +130,14 @@ LEARNER_REGISTRY = {
 
 try:
     from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner
+
     LEARNER_REGISTRY['gpu_gp'] = GPyTorchGPLearner
 except ImportError:
     pass
 
 try:
     from learnm8.learners.gpytorch.svgp import SVGPLearner
+
     LEARNER_REGISTRY['svgp'] = SVGPLearner
 except ImportError:
     pass
@@ -231,9 +230,9 @@ def _create_learner(
         available = ', '.join(sorted(LEARNER_REGISTRY.keys()))
         raise ValueError(
             f"Unknown learner '{learner_str}'. "
-            f"Available learners: {available}. "
-            f"Uncertainty-capable: gp, mc_dropout, *_ensemble. "
-            f"SMILES-native (no featurizer needed): chemprop, fastprop."
+            f'Available learners: {available}. '
+            f'Uncertainty-capable: gp, mc_dropout, *_ensemble. '
+            f'SMILES-native (no featurizer needed): chemprop, fastprop.'
         )
 
     learner_class = LEARNER_REGISTRY[learner_str]
@@ -243,17 +242,17 @@ def _create_learner(
         if enable_chemprop_fine_tuning:
             if checkpoint_dir is None:
                 raise ValueError(
-                    "checkpoint_dir required when enable_chemprop_fine_tuning=True. "
-                    "This should be set automatically by run_active_learning()."
+                    'checkpoint_dir required when enable_chemprop_fine_tuning=True. '
+                    'This should be set automatically by run_active_learning().'
                 )
-            logger.info(f"Creating ChempropEnsemble with fine-tuning enabled (checkpoint_dir={checkpoint_dir})")
+            logger.info(
+                f'Creating ChempropEnsemble with fine-tuning enabled (checkpoint_dir={checkpoint_dir})'
+            )
             return ChempropEnsemble(
-                enable_fine_tuning=True,
-                checkpoint_dir=checkpoint_dir,
-                device=device
+                enable_fine_tuning=True, checkpoint_dir=checkpoint_dir, device=device
             )
         else:
-            logger.debug("Creating ChempropEnsemble without fine-tuning")
+            logger.debug('Creating ChempropEnsemble without fine-tuning')
             return ChempropEnsemble(device=device)
 
     # Standard learner instantiation
@@ -274,26 +273,31 @@ def _create_learner(
         # the two historically competing schemes into one source of truth so direct
         # construction and factory construction always agree.
         if 'random_state' in params:
-            logger.debug(f"Creating {learner_class.__name__} with random_state={random_state}")
+            logger.debug(
+                f'Creating {learner_class.__name__} with random_state={random_state}'
+            )
             return learner_class(random_state=random_state, **kwargs)
 
         elif 'random_states' in params:
             from learnm8.learners.ensemble.ensemble import _derive_random_states
+
             random_states = _derive_random_states(random_state, 3)
             logger.debug(
-                f"Creating {learner_class.__name__} with random_states={random_states} "
-                f"(legacy path; class lacks `random_state` parameter)"
+                f'Creating {learner_class.__name__} with random_states={random_states} '
+                f'(legacy path; class lacks `random_state` parameter)'
             )
             return learner_class(random_states=random_states, **kwargs)
 
         else:
-            logger.debug(f"Creating {learner_class.__name__} without random state parameter")
+            logger.debug(
+                f'Creating {learner_class.__name__} without random state parameter'
+            )
             return learner_class(**kwargs)
 
     except (ValueError, TypeError, ImportError, RuntimeError) as e:
         raise ConfigurationError(
             f"Failed to instantiate learner '{learner_str}' ({learner_class.__name__}): {e}. "
-            f"Check that all required dependencies are installed and parameters are valid."
+            f'Check that all required dependencies are installed and parameters are valid.'
         ) from e
 
 
@@ -315,7 +319,7 @@ def _validate_pool(
         if n_unmeasurable > 0:
             unmeasurable = valid_pool.filter(~keep_mask)
             kept = valid_pool.filter(keep_mask)
-            reason = "Not present in oracle ground truth (missing target value)"
+            reason = 'Not present in oracle ground truth (missing target value)'
             for cid in unmeasurable['ID'].to_list():
                 validation_result.validation_errors[str(cid)] = reason
             if len(validation_result.invalid_compounds) > 0:
@@ -326,9 +330,9 @@ def _validate_pool(
                 validation_result.invalid_compounds = unmeasurable
             validation_result.valid_compounds = kept
             logger.warning(
-                f"Reconciled pool with oracle: dropped {n_unmeasurable} compounds "
-                f"missing from oracle ground truth (e.g. invalid/non-numeric target). "
-                f"Pool size: {len(kept)} measurable compounds."
+                f'Reconciled pool with oracle: dropped {n_unmeasurable} compounds '
+                f'missing from oracle ground truth (e.g. invalid/non-numeric target). '
+                f'Pool size: {len(kept)} measurable compounds.'
             )
 
         # Target-column dtype is validated (and Utf8 strict-cast to Float64) by
@@ -361,7 +365,9 @@ def _build_cycle_schedule(
 ) -> list[CycleConfig]:
     if pruning_fraction is not None or pruning_strategy is not None:
         if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
-            raise ValueError(f"pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}")
+            raise ValueError(
+                f'pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}'
+            )
 
         if pruning_strategy is None:
             pruning_strategy = 'score'
@@ -371,8 +377,14 @@ def _build_cycle_schedule(
         if pruning_fraction is not None:
             pruning_params['pruning_fraction'] = pruning_fraction
 
-        fraction_str = f"{pruning_params.get('pruning_fraction', 'N/A'):.1%}" if isinstance(pruning_params.get('pruning_fraction'), (int, float)) else str(pruning_params.get('pruning_fraction'))
-        logger.info(f"Pruning enabled: {fraction_str} per cycle using {pruning_strategy}")
+        fraction_str = (
+            f'{pruning_params.get("pruning_fraction", "N/A"):.1%}'
+            if isinstance(pruning_params.get('pruning_fraction'), (int, float))
+            else str(pruning_params.get('pruning_fraction'))
+        )
+        logger.info(
+            f'Pruning enabled: {fraction_str} per cycle using {pruning_strategy}'
+        )
 
     cycle_schedule = parse_cycle_schedule(
         cycles=cycles,
@@ -386,7 +398,9 @@ def _build_cycle_schedule(
     )
 
     if len(cycle_schedule) == 0:
-        raise ValueError("Cycle schedule is empty - cannot determine initialization strategy")
+        raise ValueError(
+            'Cycle schedule is empty - cannot determine initialization strategy'
+        )
 
     return cycle_schedule
 
@@ -405,27 +419,38 @@ def _initialize_active_learning(
     disable_molecular_similarity: bool | Iterable[str],
 ) -> tuple[pl.DataFrame, list[dict[str, Any]], pl.DataFrame | None, int]:
     compounds_df = initialize_master_dataframe_empty(
-        validation_result.valid_compounds,
-        target_col
+        validation_result.valid_compounds, target_col
     )
 
-    expected_cols = {'ID', 'SMILES', 'status', 'selected_cycle', 'labeled_cycle', 'pruned_cycle', target_col}
+    expected_cols = {
+        'ID',
+        'SMILES',
+        'status',
+        'selected_cycle',
+        'labeled_cycle',
+        'pruned_cycle',
+        target_col,
+    }
     if not expected_cols.issubset(compounds_df.columns):
         missing = expected_cols - set(compounds_df.columns)
         raise ValueError(
-            f"Master DataFrame missing required columns: {missing}. "
-            f"This is an internal error — initialization may have failed. "
+            f'Master DataFrame missing required columns: {missing}. '
+            f'This is an internal error — initialization may have failed. '
             f"Check that target_col='{target_col}' matches a column in your data."
         )
 
     init_config = cycle_schedule[0]
 
     logger.info(
-        f"Cycle 0 (initialization) config: "
-        f"strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}"
+        f'Cycle 0 (initialization) config: '
+        f'strategy={init_config.strategy}, batch_fraction={init_config.batch_fraction}'
     )
 
-    original_pool = validation_result.valid_compounds.clone() if oracle_type == 'benchmark' else None
+    original_pool = (
+        validation_result.valid_compounds.clone()
+        if oracle_type == 'benchmark'
+        else None
+    )
     original_pool_size = len(validation_result.valid_compounds)
 
     compounds_df, cycle_0_metrics = select_initial_batch(
@@ -449,9 +474,9 @@ def _initialize_active_learning(
 
     all_metrics = [cycle_0_metrics]
     logger.info(
-        f"Cycle 0 metrics captured: "
-        f"avg_score={cycle_0_metrics.get('avg_score_selected', 'N/A')}, "
-        f"best={cycle_0_metrics.get('best_so_far', 'N/A')}"
+        f'Cycle 0 metrics captured: '
+        f'avg_score={cycle_0_metrics.get("avg_score_selected", "N/A")}, '
+        f'best={cycle_0_metrics.get("best_so_far", "N/A")}'
     )
 
     return compounds_df, all_metrics, original_pool, original_pool_size
@@ -479,14 +504,16 @@ def _execute_loop(
     feature_type: str,
     force_uncertainty: bool = False,
 ) -> tuple[pl.DataFrame, list[dict[str, Any]], list[Path]]:
-    cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+    cumulative_selected_ids = set(
+        compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list()
+    )
     prediction_files: list[Path] = []
     total_cycles = len(cycle_schedule)
 
     for cycle_num, config in enumerate(cycle_schedule[1:], start=1):
-        logger.info("─────────────────────────────────────────────────────────────")
-        logger.info(f"Cycle {cycle_num} of {len(cycle_schedule) - 1}")
-        logger.info("─────────────────────────────────────────────────────────────")
+        logger.info('─────────────────────────────────────────────────────────────')
+        logger.info(f'Cycle {cycle_num} of {len(cycle_schedule) - 1}')
+        logger.info('─────────────────────────────────────────────────────────────')
 
         try:
             previous_metrics = all_metrics[-1] if all_metrics else None
@@ -522,27 +549,29 @@ def _execute_loop(
             if cycle_parquet_path is not None:
                 prediction_files.append(cycle_parquet_path)
 
-            cumulative_selected_ids = set(compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list())
+            cumulative_selected_ids = set(
+                compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list()
+            )
 
             if metrics['remaining_unlabeled'] == 0:
-                logger.info("Pool exhausted, stopping early")
+                logger.info('Pool exhausted, stopping early')
                 break
 
         except LearnM8Error as e:
             e.add_note(
-                f"Failed during cycle {cycle_num} of {total_cycles} "
-                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+                f'Failed during cycle {cycle_num} of {total_cycles} '
+                f'(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})'
             )
             raise
         except (ValueError, RuntimeError, TypeError, OSError) as e:
-            logger.error(f"Cycle {cycle_num} failed: {e}")
+            logger.error(f'Cycle {cycle_num} failed: {e}')
             err = LearnM8Error(
-                f"Cycle {cycle_num} of {total_cycles} failed: {e}. "
-                f"Check the error details above for the specific cause."
+                f'Cycle {cycle_num} of {total_cycles} failed: {e}. '
+                f'Check the error details above for the specific cause.'
             )
             err.add_note(
-                f"Failed during cycle {cycle_num} of {total_cycles} "
-                f"(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})"
+                f'Failed during cycle {cycle_num} of {total_cycles} '
+                f'(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})'
             )
             raise err from e
 
@@ -571,26 +600,28 @@ def _save_results(
         'n_cycles': len(all_metrics),
         'random_state': random_state,
         'learner': learner.__class__.__name__,
-        'oracle': oracle.__class__.__name__
+        'oracle': oracle.__class__.__name__,
     }
 
     saved_files = save_results(
-        compounds_df, all_metrics, validation_result, config_dict, output_dir,
+        compounds_df,
+        all_metrics,
+        validation_result,
+        config_dict,
+        output_dir,
         output_format=output_format,
     )
 
-    logger.info(f"All results saved to: {output_dir}")
-    logger.debug("Saved files:")
+    logger.info(f'All results saved to: {output_dir}')
+    logger.debug('Saved files:')
     for file_type, file_path in saved_files.items():
-        logger.debug(f"  {file_type}: {file_path}")
+        logger.debug(f'  {file_type}: {file_path}')
 
     return saved_files
 
 
 def _calculate_aggregate_metrics(
-    all_metrics: list[dict[str, Any]],
-    compounds_df: pl.DataFrame,
-    oracle_type: str
+    all_metrics: list[dict[str, Any]], compounds_df: pl.DataFrame, oracle_type: str
 ) -> dict[str, Any]:
     """Calculate aggregate metrics across all cycles.
 
@@ -609,29 +640,54 @@ def _calculate_aggregate_metrics(
 
     agg = {}
 
-    avg_score_values = [m.get('avg_score_selected') for m in all_metrics if m.get('avg_score_selected') is not None]
+    avg_score_values = [
+        m.get('avg_score_selected')
+        for m in all_metrics
+        if m.get('avg_score_selected') is not None
+    ]
     if avg_score_values:
         agg['avg_selection_quality'] = float(np.mean(avg_score_values))
         agg['std_selection_quality'] = float(np.std(avg_score_values))
 
-    best_values = [m.get('best_so_far') for m in all_metrics if m.get('best_so_far') is not None]
+    best_values = [
+        m.get('best_so_far') for m in all_metrics if m.get('best_so_far') is not None
+    ]
     if best_values:
         agg['best_compound_value'] = best_values[-1]
-        best_cycle = next((i for i, m in enumerate(all_metrics) if m.get('best_so_far') == best_values[-1]), None)
+        best_cycle = next(
+            (
+                i
+                for i, m in enumerate(all_metrics)
+                if m.get('best_so_far') == best_values[-1]
+            ),
+            None,
+        )
         agg['best_compound_found_cycle'] = best_cycle
 
     if oracle_type == 'benchmark':
-        top10_disc_values = [m.get('top_10_discovery') for m in all_metrics if m.get('top_10_discovery') is not None]
+        top10_disc_values = [
+            m.get('top_10_discovery')
+            for m in all_metrics
+            if m.get('top_10_discovery') is not None
+        ]
         if top10_disc_values:
             agg['final_top_10_discovery'] = top10_disc_values[-1]
             agg['avg_top_10_discovery'] = float(np.mean(top10_disc_values))
 
-        top100_disc_values = [m.get('top_100_discovery') for m in all_metrics if m.get('top_100_discovery') is not None]
+        top100_disc_values = [
+            m.get('top_100_discovery')
+            for m in all_metrics
+            if m.get('top_100_discovery') is not None
+        ]
         if top100_disc_values:
             agg['final_top_100_discovery'] = top100_disc_values[-1]
             agg['avg_top_100_discovery'] = float(np.mean(top100_disc_values))
 
-        cumulative_ef_values = [m.get('cumulative_ef') for m in all_metrics if m.get('cumulative_ef') is not None]
+        cumulative_ef_values = [
+            m.get('cumulative_ef')
+            for m in all_metrics
+            if m.get('cumulative_ef') is not None
+        ]
         if cumulative_ef_values:
             agg['final_cumulative_ef'] = cumulative_ef_values[-1]
             agg['avg_cumulative_ef'] = float(np.mean(cumulative_ef_values))
@@ -642,25 +698,43 @@ def _calculate_aggregate_metrics(
             if m.get('batch_score_improvement_ratio') is not None
         ]
         if batch_improvement_values:
-            agg['avg_batch_score_improvement_ratio'] = float(np.mean(batch_improvement_values))
+            agg['avg_batch_score_improvement_ratio'] = float(
+                np.mean(batch_improvement_values)
+            )
 
-        unlabeled_spearman_values = [m.get('unlabeled_spearman_correlation') for m in all_metrics if m.get('unlabeled_spearman_correlation') is not None]
+        unlabeled_spearman_values = [
+            m.get('unlabeled_spearman_correlation')
+            for m in all_metrics
+            if m.get('unlabeled_spearman_correlation') is not None
+        ]
         if unlabeled_spearman_values:
             agg['final_unlabeled_spearman'] = unlabeled_spearman_values[-1]
             agg['avg_unlabeled_spearman'] = float(np.mean(unlabeled_spearman_values))
 
-        unlabeled_top100_values = [m.get('unlabeled_top_100_overlap') for m in all_metrics if m.get('unlabeled_top_100_overlap') is not None]
+        unlabeled_top100_values = [
+            m.get('unlabeled_top_100_overlap')
+            for m in all_metrics
+            if m.get('unlabeled_top_100_overlap') is not None
+        ]
         if unlabeled_top100_values:
             agg['final_unlabeled_top_100_overlap'] = unlabeled_top100_values[-1]
-            agg['avg_unlabeled_top_100_overlap'] = float(np.mean(unlabeled_top100_values))
+            agg['avg_unlabeled_top_100_overlap'] = float(
+                np.mean(unlabeled_top100_values)
+            )
 
-        unlabeled_ef_values = [m.get('unlabeled_ef_1_0') for m in all_metrics if m.get('unlabeled_ef_1_0') is not None]
+        unlabeled_ef_values = [
+            m.get('unlabeled_ef_1_0')
+            for m in all_metrics
+            if m.get('unlabeled_ef_1_0') is not None
+        ]
         if unlabeled_ef_values:
             agg['final_unlabeled_ef_1_0'] = unlabeled_ef_values[-1]
             agg['avg_unlabeled_ef_1_0'] = float(np.mean(unlabeled_ef_values))
 
     agg['total_cycles'] = len(all_metrics)
-    agg['total_labeled'] = int(compounds_df.filter(pl.col('status') == 'labeled').height)
+    agg['total_labeled'] = int(
+        compounds_df.filter(pl.col('status') == 'labeled').height
+    )
     agg['total_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
 
     return agg
@@ -683,7 +757,6 @@ def run_active_learning(
     initial_strategy: str = 'random',
     # Common parameters
     score_direction: str = 'higher',
-
     output_dir: str | Path | None = None,
     cache_dir: str | Path | None = None,
     random_state: int = 42,
@@ -707,6 +780,8 @@ def run_active_learning(
     disable_molecular_similarity: bool | Iterable[str] = False,
     # Force uncertainty computation (feature 023)
     force_uncertainty: bool = False,
+    # Skip validation (feature 030)
+    skip_validation: bool = False,
 ) -> dict[str, Any]:
     """Execute active learning experiment.
 
@@ -863,6 +938,13 @@ def run_active_learning(
             ``--force-uncertainty``. Silent no-op for learners that do not
             support uncertainty at all (chemprop, fastprop, mlp). Feature 023.
 
+        skip_validation: When True, skip SMILES validation, duplicate-ID checks,
+            and target-column dtype validation. All compounds are treated as
+            valid. Useful when re-running the same dataset repeatedly and you
+            have already verified its integrity (e.g., via ``learnm8 validate``
+            or a prior run). The oracle-vs-pool reconciliation step is still
+            performed. Default False. CLI equivalent: ``--skip-validation``.
+
     Returns:
         Dictionary with:
             - compounds_df: Final master DataFrame (narrow: 7 base columns + target)
@@ -908,7 +990,9 @@ def run_active_learning(
         original_compound_pool_path = None
 
         if output_dir is None:
-            output_dir = Path(f'learnm8_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            output_dir = Path(
+                f'learnm8_results_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+            )
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -919,24 +1003,24 @@ def run_active_learning(
         chemprop_checkpoint_dir = output_dir / '.checkpoints' / 'chemprop'
 
         configure_learnm8_logging(
-            output_dir=output_dir,
-            level='INFO',
-            console_type='auto'
+            output_dir=output_dir, level='INFO', console_type='auto'
         )
 
-        logger.info(f"Starting active learning experiment at {datetime.now()}")
-        logger.info(f"Output directory: {output_dir}")
+        logger.info(f'Starting active learning experiment at {datetime.now()}')
+        logger.info(f'Output directory: {output_dir}')
 
-        logger.debug(f"Normalizing compound_pool input (type: {type(compound_pool).__name__})")
+        logger.debug(
+            f'Normalizing compound_pool input (type: {type(compound_pool).__name__})'
+        )
 
         if isinstance(compound_pool, (str, Path)):
             compound_pool_path = Path(compound_pool)
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
                 raise FileNotFoundError(
-                    f"Compound pool file not found: {compound_pool_path}. "
-                    f"Verify the file path and ensure the file exists. "
-                    f"Supported formats: CSV, SDF, SMI."
+                    f'Compound pool file not found: {compound_pool_path}. '
+                    f'Verify the file path and ensure the file exists. '
+                    f'Supported formats: CSV, SDF, SMI.'
                 )
             compound_pool = load_compound_file(
                 compound_pool_path,
@@ -944,70 +1028,82 @@ def run_active_learning(
                 id_column=id_column,
                 progress=True,
             )
-            logger.debug(f"Loaded DataFrame: {len(compound_pool)} rows, {len(compound_pool.columns)} columns")
+            logger.debug(
+                f'Loaded DataFrame: {len(compound_pool)} rows, {len(compound_pool.columns)} columns'
+            )
         elif isinstance(compound_pool, pl.DataFrame):
-            logger.debug("Using provided DataFrame as compound pool")
+            logger.debug('Using provided DataFrame as compound pool')
         else:
             raise TypeError(
-                f"compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool).__name__}. "
+                f'compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool).__name__}. '
                 f"Pass a file path (CSV/SDF/SMI) or a Polars DataFrame with 'ID' and 'SMILES' columns."
             )
 
         if 'ID' not in compound_pool.columns or 'SMILES' not in compound_pool.columns:
             missing = {'ID', 'SMILES'} - set(compound_pool.columns)
             raise ValueError(
-                f"Compound pool missing required column(s): {missing}. "
-                f"Found columns: {list(compound_pool.columns)}. "
+                f'Compound pool missing required column(s): {missing}. '
+                f'Found columns: {list(compound_pool.columns)}. '
                 f"Ensure your data has 'ID' (unique identifier) and 'SMILES' (molecular structure) columns."
             )
 
         if oracle is None:
-            logger.debug("Oracle not provided, attempting auto-detection from compound_pool")
+            logger.debug(
+                'Oracle not provided, attempting auto-detection from compound_pool'
+            )
             if original_compound_pool_path is not None:
-                oracle = CSVOracle(str(original_compound_pool_path), id_column=id_column or 'ID')
-                logger.debug("Auto-detected CSV oracle from compound pool")
+                oracle = CSVOracle(
+                    str(original_compound_pool_path), id_column=id_column or 'ID'
+                )
+                logger.debug('Auto-detected CSV oracle from compound pool')
             else:
                 raise ValueError(
-                    "Oracle is required when compound_pool is a DataFrame. "
-                    "Provide an oracle parameter: a CSV path (benchmark mode), "
+                    'Oracle is required when compound_pool is a DataFrame. '
+                    'Provide an oracle parameter: a CSV path (benchmark mode), '
                     "'module.py:function' (run mode), or an Oracle instance. "
-                    "Alternatively, pass compound_pool as a CSV file path for auto-detection."
+                    'Alternatively, pass compound_pool as a CSV file path for auto-detection.'
                 )
         elif isinstance(oracle, (str, Path)):
             oracle_path = Path(oracle)
             if oracle_path.suffix == '.csv':
                 oracle = CSVOracle(str(oracle_path))
-                logger.debug(f"Using CSV oracle: {oracle_path}")
+                logger.debug(f'Using CSV oracle: {oracle_path}')
             else:
                 if ':' not in str(oracle):
                     raise ValueError(
                         f"Non-CSV oracle path must use 'module.py:function' format, got: '{oracle}'. "
                         f"Example: oracle='my_oracle.py:measure_activity'. "
-                        f"For CSV-based oracles, use a .csv file extension."
+                        f'For CSV-based oracles, use a .csv file extension.'
                     )
                 module_path, function_name = str(oracle).split(':', 1)
                 from learnm8.oracles.python_oracle import PythonOracle
+
                 oracle = PythonOracle(module_path, function_name)
-                logger.debug(f"Using Python oracle: {module_path}:{function_name}")
+                logger.debug(f'Using Python oracle: {module_path}:{function_name}')
         elif isinstance(oracle, Oracle):
-            logger.debug(f"Using provided oracle instance: {oracle.__class__.__name__}")
+            logger.debug(f'Using provided oracle instance: {oracle.__class__.__name__}')
         elif isinstance(oracle, pl.DataFrame):
-            logger.debug("Creating in-memory oracle from DataFrame")
+            logger.debug('Creating in-memory oracle from DataFrame')
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.csv', delete=False
+            ) as f:
                 temp_oracle_path = Path(f.name)
                 oracle.write_csv(temp_oracle_path)
             oracle = CSVOracle(str(temp_oracle_path))
-            logger.debug("Created CSV oracle from DataFrame")
+            logger.debug('Created CSV oracle from DataFrame')
         else:
             raise TypeError(
-                f"oracle must be None, str, Path, DataFrame, or Oracle instance, "
-                f"got {type(oracle).__name__}. "
+                f'oracle must be None, str, Path, DataFrame, or Oracle instance, '
+                f'got {type(oracle).__name__}. '
                 f"Use a CSV path for benchmark mode, 'module.py:function' for run mode, "
-                f"or pass an Oracle instance."
+                f'or pass an Oracle instance.'
             )
 
-        oracle_type: Literal['run', 'benchmark'] = 'benchmark' if isinstance(oracle, CSVOracle) else 'run'
+        oracle_type: Literal['run', 'benchmark'] = (
+            'benchmark' if isinstance(oracle, CSVOracle) else 'run'
+        )
 
         if isinstance(learner, str):
             learner_str = learner
@@ -1015,44 +1111,49 @@ def run_active_learning(
                 learner,
                 random_state,
                 enable_chemprop_fine_tuning=enable_chemprop_fine_tuning,
-                checkpoint_dir=chemprop_checkpoint_dir if enable_chemprop_fine_tuning else None,
+                checkpoint_dir=chemprop_checkpoint_dir
+                if enable_chemprop_fine_tuning
+                else None,
                 n_jobs=n_jobs,
-                device=device
+                device=device,
             )
-            logger.info(f"Using learner: {learner.__class__.__name__}")
-            logger.debug(f"Instantiated learner from string: {learner_str}")
+            logger.info(f'Using learner: {learner.__class__.__name__}')
+            logger.debug(f'Instantiated learner from string: {learner_str}')
         elif isinstance(learner, Learner):
-            logger.info(f"Using learner: {learner.__class__.__name__}")
-            logger.debug("Using provided learner instance")
+            logger.info(f'Using learner: {learner.__class__.__name__}')
+            logger.debug('Using provided learner instance')
             if enable_chemprop_fine_tuning:
                 logger.warning(
-                    "enable_chemprop_fine_tuning=True ignored because learner is "
-                    "pre-instantiated. Configure fine-tuning on the learner instance directly."
+                    'enable_chemprop_fine_tuning=True ignored because learner is '
+                    'pre-instantiated. Configure fine-tuning on the learner instance directly.'
                 )
         else:
             raise TypeError(
-                f"learner must be str or Learner instance, got {type(learner).__name__}. "
+                f'learner must be str or Learner instance, got {type(learner).__name__}. '
                 f"Use a string shortcut (e.g., 'rf', 'gp', 'chemprop') or pass "
-                f"a Learner instance."
+                f'a Learner instance.'
             )
 
         if learner.requires_smiles():
             if featurizer is not None:
-                featurizer_name = featurizer if isinstance(featurizer, str) else featurizer.get_name()
+                featurizer_name = (
+                    featurizer if isinstance(featurizer, str) else featurizer.get_name()
+                )
                 logger.info(
-                    f"{learner.get_name()} will use {featurizer_name} features as extra descriptors (x_d). "
-                    f"For pure graph-based learning, set featurizer=None."
+                    f'{learner.get_name()} will use {featurizer_name} features as extra descriptors (x_d). '
+                    f'For pure graph-based learning, set featurizer=None.'
                 )
         else:
             if featurizer is None:
                 from learnm8.features import list_available_featurizers
+
                 available = list_available_featurizers()
                 featurizer_options = ', '.join(sorted(available['all']))
                 raise ValueError(
-                    f"{learner.get_name()} requires a featurizer because it is a feature-based "
+                    f'{learner.get_name()} requires a featurizer because it is a feature-based '
                     f"learner. Specify featurizer parameter (e.g., featurizer='morgan'). "
-                    f"Valid options: {featurizer_options}. "
-                    f"Learners that work without a featurizer: chemprop, fastprop."
+                    f'Valid options: {featurizer_options}. '
+                    f'Learners that work without a featurizer: chemprop, fastprop.'
                 )
 
         # Convert string featurizer to instance if needed
@@ -1060,65 +1161,107 @@ def run_active_learning(
         if featurizer is not None:
             if isinstance(featurizer, str):
                 from learnm8.features import FEATURIZER_REGISTRY
+
                 if featurizer not in FEATURIZER_REGISTRY:
                     from learnm8.features import list_available_featurizers
+
                     available = list_available_featurizers()
                     featurizer_options = ', '.join(sorted(available['all']))
                     raise ValueError(
                         f"Unknown featurizer '{featurizer}'. "
-                        f"Valid options: {featurizer_options}. "
+                        f'Valid options: {featurizer_options}. '
                         f"Use 'learnm8 list featurizers' to see all available featurizers."
                     )
                 from learnm8.features import create_featurizer
+
                 featurizer_obj = create_featurizer(featurizer, n_jobs=n_jobs)
-                logger.debug(f"Instantiated featurizer: {featurizer_obj.get_name()}")
+                logger.debug(f'Instantiated featurizer: {featurizer_obj.get_name()}')
             else:
                 from learnm8.core.interfaces import Featurizer
+
                 if not isinstance(featurizer, Featurizer):
                     raise TypeError(
-                        f"featurizer must be a string name or Featurizer instance, "
-                        f"got {type(featurizer).__name__}. "
+                        f'featurizer must be a string name or Featurizer instance, '
+                        f'got {type(featurizer).__name__}. '
                         f"Use a string (e.g., 'morgan') or a Featurizer subclass instance."
                     )
                 featurizer_obj = featurizer
-                logger.debug(f"Using provided featurizer instance: {featurizer_obj.get_name()}")
+                logger.debug(
+                    f'Using provided featurizer instance: {featurizer_obj.get_name()}'
+                )
 
         feature_type = featurizer_obj.feature_type if featurizer_obj else 'binary'
 
         from learnm8.features.guard import check_large_feature_guard
-        check_large_feature_guard(featurizer_obj, len(compound_pool), large_features_ack)
+
+        check_large_feature_guard(
+            featurizer_obj, len(compound_pool), large_features_ack
+        )
 
         if not (0.0 < memory_safety_factor <= 1.0):
             raise ConfigurationError(
-                f"memory_safety_factor must be in (0.0, 1.0], got {memory_safety_factor}. "
-                f"Use 0.7 (default) for most cases, 0.85 for dedicated hardware, "
-                f"0.5 for shared clusters."
+                f'memory_safety_factor must be in (0.0, 1.0], got {memory_safety_factor}. '
+                f'Use 0.7 (default) for most cases, 0.85 for dedicated hardware, '
+                f'0.5 for shared clusters.'
             )
 
-        oracle_desc = f"{oracle.__class__.__name__}"
+        oracle_desc = f'{oracle.__class__.__name__}'
         if hasattr(oracle, 'source_file'):
-            oracle_desc += f" ({oracle.source_file})"
-        logger.info(f"Using oracle: {oracle_desc}")
+            oracle_desc += f' ({oracle.source_file})'
+        logger.info(f'Using oracle: {oracle_desc}')
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 1: Validating compound pool")
-        logger.info("═══════════════════════════════════════════════════════════════")
-        validation_result = _validate_pool(compound_pool, oracle, target_col, n_jobs)
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Phase 1: Validating compound pool')
+        logger.info('═══════════════════════════════════════════════════════════════')
+
+        if skip_validation:
+            logger.info('Skipping SMILES validation (skip_validation=True)')
+            validation_result = ValidationResult(
+                valid_compounds=compound_pool.clone(),
+                invalid_compounds=pl.DataFrame(schema=compound_pool.schema),
+                validation_errors={},
+            )
+        else:
+            validation_result = _validate_pool(
+                compound_pool, oracle, target_col, n_jobs
+            )
+
+        if skip_validation:
+            oracle_ids = oracle.known_ids()
+            if oracle_ids is not None and len(validation_result.valid_compounds) > 0:
+                valid_pool = validation_result.valid_compounds
+                keep_mask = valid_pool['ID'].is_in(list(oracle_ids))
+                n_unmeasurable = int((~keep_mask).sum())
+                if n_unmeasurable > 0:
+                    unmeasurable = valid_pool.filter(~keep_mask)
+                    kept = valid_pool.filter(keep_mask)
+                    reason = 'Not present in oracle ground truth (missing target value)'
+                    for cid in unmeasurable['ID'].to_list():
+                        validation_result.validation_errors[str(cid)] = reason
+                    validation_result.invalid_compounds = unmeasurable
+                    validation_result.valid_compounds = kept
+                    logger.warning(
+                        f'Reconciled pool with oracle: dropped {n_unmeasurable} compounds '
+                        f'missing from oracle ground truth (e.g. invalid/non-numeric target). '
+                        f'Pool size: {len(kept)} measurable compounds.'
+                    )
 
         if len(validation_result.valid_compounds) == 0:
             logger.error(
-                f"No valid compounds after validation. "
-                f"Total: {len(compound_pool)}, "
-                f"Invalid: {len(validation_result.invalid_compounds)}"
+                f'No valid compounds after validation. '
+                f'Total: {len(compound_pool)}, '
+                f'Invalid: {len(validation_result.invalid_compounds)}'
             )
             raise ValueError(
-                f"No valid compounds after validation. All {len(compound_pool)} compounds failed "
+                f'No valid compounds after validation. All {len(compound_pool)} compounds failed '
                 f"SMILES validation. Run 'learnm8 validate <file>' to identify invalid compounds, "
-                f"or check that SMILES strings are valid molecular structures."
+                f'or check that SMILES strings are valid molecular structures.'
             )
 
         if len(validation_result.invalid_compounds) > 0:
-            logger.warning(f"Found {len(validation_result.invalid_compounds)} invalid compounds")
+            logger.warning(
+                f'Found {len(validation_result.invalid_compounds)} invalid compounds'
+            )
 
         cycle_schedule = _build_cycle_schedule(
             cycles=cycles,
@@ -1132,31 +1275,35 @@ def run_active_learning(
             pruning_fraction=pruning_fraction,
         )
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 2: Initializing master DataFrame (all compounds unlabeled)")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Phase 2: Initializing master DataFrame (all compounds unlabeled)')
+        logger.info('═══════════════════════════════════════════════════════════════')
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info(
+            'Phase 2b: Initialization (Cycle 0) - selecting and measuring initial batch'
+        )
+        logger.info('═══════════════════════════════════════════════════════════════')
 
-        compounds_df, all_metrics, original_pool, original_pool_size = _initialize_active_learning(
-            validation_result=validation_result,
-            oracle=oracle,
-            target_col=target_col,
-            cycle_schedule=cycle_schedule,
-            featurizer_obj=featurizer_obj,
-            cache_dir=cache_dir,
-            random_state=random_state,
-            score_direction=score_direction,
-            oracle_type=oracle_type,
-            run_cache=run_cache,
-            disable_molecular_similarity=disable_molecular_similarity,
+        compounds_df, all_metrics, original_pool, original_pool_size = (
+            _initialize_active_learning(
+                validation_result=validation_result,
+                oracle=oracle,
+                target_col=target_col,
+                cycle_schedule=cycle_schedule,
+                featurizer_obj=featurizer_obj,
+                cache_dir=cache_dir,
+                random_state=random_state,
+                score_direction=score_direction,
+                oracle_type=oracle_type,
+                run_cache=run_cache,
+                disable_molecular_similarity=disable_molecular_similarity,
+            )
         )
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 3: Cycle Schedule")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Phase 3: Cycle Schedule')
+        logger.info('═══════════════════════════════════════════════════════════════')
 
         for i, config in enumerate(cycle_schedule, 1):
             schedule_msg = format_cycle_schedule(i, config, original_pool_size)
@@ -1167,11 +1314,13 @@ def run_active_learning(
             int(original_pool_size * c.batch_fraction) * c.n_cycles
             for c in cycle_schedule
         )
-        logger.info(f"Total: {total_cycles} cycles, {total_compounds_to_label} compounds to be labeled")
+        logger.info(
+            f'Total: {total_cycles} cycles, {total_compounds_to_label} compounds to be labeled'
+        )
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 4: Active Learning Cycles")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Phase 4: Active Learning Cycles')
+        logger.info('═══════════════════════════════════════════════════════════════')
 
         compounds_df, all_metrics, prediction_files = _execute_loop(
             compounds_df=compounds_df,
@@ -1196,27 +1345,35 @@ def run_active_learning(
             force_uncertainty=force_uncertainty,
         )
 
-        logger.debug("Calculating aggregate metrics")
-        aggregate_metrics = _calculate_aggregate_metrics(all_metrics, compounds_df, oracle_type)
+        logger.debug('Calculating aggregate metrics')
+        aggregate_metrics = _calculate_aggregate_metrics(
+            all_metrics, compounds_df, oracle_type
+        )
 
         if aggregate_metrics:
-            logger.debug("Aggregate metrics:")
+            logger.debug('Aggregate metrics:')
             if 'rmse_improvement' in aggregate_metrics:
-                logger.debug(f"  RMSE: {aggregate_metrics.get('initial_rmse', 'N/A'):.4f} → {aggregate_metrics.get('final_rmse', 'N/A'):.4f} (improvement: {aggregate_metrics.get('rmse_improvement', 0):.4f})")
+                logger.debug(
+                    f'  RMSE: {aggregate_metrics.get("initial_rmse", "N/A"):.4f} → {aggregate_metrics.get("final_rmse", "N/A"):.4f} (improvement: {aggregate_metrics.get("rmse_improvement", 0):.4f})'
+                )
             if 'r2_improvement' in aggregate_metrics:
-                logger.debug(f"  R²: {aggregate_metrics.get('initial_r2', 'N/A'):.4f} → {aggregate_metrics.get('final_r2', 'N/A'):.4f} (improvement: {aggregate_metrics.get('r2_improvement', 0):.4f})")
+                logger.debug(
+                    f'  R²: {aggregate_metrics.get("initial_r2", "N/A"):.4f} → {aggregate_metrics.get("final_r2", "N/A"):.4f} (improvement: {aggregate_metrics.get("r2_improvement", 0):.4f})'
+                )
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Experiment Complete")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Experiment Complete')
+        logger.info('═══════════════════════════════════════════════════════════════')
 
-        summary_lines = format_experiment_summary(compounds_df, time.time() - start_time, len(all_metrics))
+        summary_lines = format_experiment_summary(
+            compounds_df, time.time() - start_time, len(all_metrics)
+        )
         for line in summary_lines:
             logger.info(line)
 
-        logger.info("═══════════════════════════════════════════════════════════════")
-        logger.info("Phase 5: Saving Results")
-        logger.info("═══════════════════════════════════════════════════════════════")
+        logger.info('═══════════════════════════════════════════════════════════════')
+        logger.info('Phase 5: Saving Results')
+        logger.info('═══════════════════════════════════════════════════════════════')
 
         saved_files = _save_results(
             compounds_df=compounds_df,
@@ -1241,12 +1398,16 @@ def run_active_learning(
             'output_dir': output_dir,
             'saved_files': saved_files,
             'prediction_files': prediction_files,
-            'labeled_count': int(compounds_df.filter(pl.col('status') == 'labeled').height),
-            'unlabeled_count': int(compounds_df.filter(pl.col('status') == 'unlabeled').height),
+            'labeled_count': int(
+                compounds_df.filter(pl.col('status') == 'labeled').height
+            ),
+            'unlabeled_count': int(
+                compounds_df.filter(pl.col('status') == 'unlabeled').height
+            ),
         }
 
     except Exception as e:
-        logger.error(f"Active learning failed: {e}", exc_info=True)
+        logger.error(f'Active learning failed: {e}', exc_info=True)
         raise
     finally:
         # Release diversity-metric caches even on success/failure paths.
