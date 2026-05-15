@@ -72,12 +72,13 @@ results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
-        CycleConfig('diverse', n_cycles=4, batch_fraction=0.01)
+        CycleConfig('simulated_annealing', n_cycles=4, batch_fraction=0.01)
     ]
 )
 ```
 
 Each `CycleConfig` specifies:
+
 - Which acquisition strategy to use
 - How many compounds to select (batch size)
 - Optional pruning and strategy parameters
@@ -99,6 +100,7 @@ class MyLearner(Learner):
 ```
 
 This pattern makes components:
+
 - **Modular**: Easy to swap implementations
 - **Testable**: Dependencies can be mocked
 - **Reusable**: Components work in different contexts
@@ -162,21 +164,25 @@ Use this for real screening campaigns where measurements are expensive and you w
 
 ### Learner (ML Model)
 
-The learner is the predictive model that learns structure-activity relationships from labeled compounds. LearnM8 provides 15+ models across multiple categories:
+The learner is the predictive model that learns structure-activity relationships from labeled compounds. LearnM8 provides 21 models across multiple categories:
 
 **Scikit-learn Models**:
+
 - `RandomForestLearner`: Fast baseline, good for most tasks
 - `GaussianProcessLearner`: Best uncertainty quantification
 - `XGBoostLearner`: High-performance gradient boosting
 
 **PyTorch Neural Networks**:
+
 - `MLPLearner`: Standard feedforward network
 - `MCDropoutLearner`: Neural network with uncertainty via dropout
 
 **Graph Neural Networks**:
+
 - `ChempropLearner`: State-of-the-art, works directly with SMILES
 
 **Ensemble Models**:
+
 - `EnsembleLearner`: Combines multiple models for robust uncertainty
 
 Key considerations when choosing a learner:
@@ -200,10 +206,10 @@ The acquisition function determines which compounds to measure next based on mod
 cycles=[('greedy', 0.01)]
 ```
 
-**Exploration (Diverse)**:
+**Exploration (Stochastic)**:
 ```python
-# Select chemically diverse compounds
-cycles=[('bitbirch', 0.01)]
+# Stochastic optimization-based exploration
+cycles=[('simulated_annealing', 0.01)]
 ```
 
 **Balanced (Uncertainty-Based)**:
@@ -221,7 +227,7 @@ Common strategies:
 | `ucb` | Balanced | Yes | General-purpose active learning |
 | `ei` | Balanced | Yes | Optimization campaigns |
 | `thompson` | Balanced | Yes | Stochastic exploration |
-| `bitbirch` | Diversity | No | Large chemical libraries (1M+ compounds) |
+| `simulated_annealing` | Optimization | No | Diversity without uncertainty estimates |
 
 ### Featurizer (Molecular Representation)
 
@@ -232,7 +238,7 @@ The featurizer converts SMILES strings into numerical vectors that machine learn
 | `morgan` | Fingerprint | 2048 | General-purpose molecular similarity |
 | `maccs` | Fingerprint | 167 | Structural keys, fast computation |
 | `ecfp6` | Fingerprint | 2048 | Larger molecular contexts |
-| `descriptors` | Numerical | ~200 | Physicochemical properties |
+| `descriptors` | Numerical | 1613 | Mordred physicochemical descriptors |
 
 **Note**: Graph neural networks (Chemprop) work directly with SMILES and don't require a featurizer:
 
@@ -281,7 +287,7 @@ results = run_active_learning(
         ('random', 0.02),    # Cycle 0: Initial random sample (2%)
         ('greedy', 0.01),    # Cycle 1: Greedy selection (1%)
         ('greedy', 0.01),    # Cycle 2: Greedy selection (1%)
-        ('diverse', 0.01)    # Cycle 3: Diverse exploration (1%)
+        ('simulated_annealing', 0.01)    # Cycle 3: Simulated annealing exploration (1%)
     ]
 )
 ```
@@ -297,6 +303,7 @@ cycles=[('greedy', 0.01)]
 ```
 
 Batch selection enables:
+
 - **Parallelization**: Measure multiple compounds simultaneously
 - **Efficiency**: Amortize setup costs across multiple measurements
 - **Diversity**: Select diverse compounds within each batch
@@ -325,6 +332,7 @@ LearnM8 adapts its behavior based on your use case:
 **When to use**: Testing algorithms, comparing acquisition strategies, research
 
 **Characteristics**:
+
 - Oracle is a CSV file with complete ground truth
 - Model predicts on the full dataset each cycle
 - Enables accurate enrichment factor calculations
@@ -342,6 +350,7 @@ results = run_active_learning(
 ```
 
 **Use benchmark mode to**:
+
 - Compare different acquisition strategies
 - Evaluate model performance over cycles
 - Validate active learning algorithms
@@ -352,6 +361,7 @@ results = run_active_learning(
 **When to use**: Real screening campaigns, expensive experiments
 
 **Characteristics**:
+
 - Oracle is a Python function performing measurements
 - Model predicts only on unlabeled compounds
 - Minimizes computational cost
@@ -369,6 +379,7 @@ results = run_active_learning(
 ```
 
 **Use production mode to**:
+
 - Guide experimental synthesis campaigns
 - Optimize computational screening (docking, MD)
 - Minimize expensive measurements
@@ -379,11 +390,12 @@ results = run_active_learning(
 LearnM8 automatically detects the mode based on the oracle type. You can override this if needed:
 
 ```python
-# Explicit mode specification
+# Mode is auto-detected from the oracle type:
+# CSV oracle → benchmark mode (discovery/ranking metrics available)
+# Python function oracle → run mode (basic metrics only)
 results = run_active_learning(
     compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    mode='benchmark',  # Force benchmark mode
+    oracle='oracle.csv',   # CSV oracle → benchmark mode
     learner='gp',
     target_col='Activity',
     featurizer='morgan'

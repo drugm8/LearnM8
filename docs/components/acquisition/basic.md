@@ -11,11 +11,13 @@ Greedy acquisition selects compounds with the highest (or lowest) predicted valu
 Greedy selection sorts compounds by model prediction and selects the top-K based on score direction. This strategy maximizes immediate expected value but may miss superior compounds in unexplored regions.
 
 **Algorithm**:
+
 1. Sort unlabeled compounds by prediction
 2. Select top n_select compounds (highest for 'higher', lowest for 'lower')
 3. Return selected compounds
 
 **Characteristics**:
+
 - **Exploitation-focused**: Prioritizes immediate predicted value
 - **Fast**: Simple sorting operation, O(n log n)
 - **Deterministic**: Same predictions always yield same selection
@@ -24,12 +26,14 @@ Greedy selection sorts compounds by model prediction and selects the top-K based
 ### When to Use
 
 **Recommended scenarios**:
+
 - Final active learning cycles when shifting from exploration to exploitation
 - Benchmarking uncertainty-based methods (baseline comparison)
 - Known smooth response surfaces with limited local optima
 - Computational constraints preventing uncertainty estimation
 
 **Not recommended**:
+
 - Early cycles (insufficient exploration leads to poor coverage)
 - Highly multimodal landscapes (risk of local optima)
 - When discovery of diverse hits is prioritized over single best compound
@@ -41,6 +45,7 @@ Greedy selection sorts compounds by model prediction and selects the top-K based
 | `score_direction` | str | `'higher'` | Optimization direction: `'higher'` (maximize) or `'lower'` (minimize) |
 
 **Performance notes**:
+
 - No additional computational cost beyond model prediction
 - Scales efficiently to millions of compounds
 
@@ -108,10 +113,12 @@ Random acquisition selects compounds uniformly at random from the unlabeled pool
 Random selection samples compounds without considering predictions or structure, ensuring unbiased exploration of chemical space. This strategy establishes baseline performance that any intelligent acquisition function should exceed.
 
 **Algorithm**:
+
 1. Randomly sample n_select compounds from unlabeled pool
 2. Return selected compounds
 
 **Characteristics**:
+
 - **Unbiased exploration**: No preference for predictions or structure
 - **Fast**: O(n_select) sampling operation
 - **Stochastic**: Different selections each run (unless random_state fixed)
@@ -120,12 +127,14 @@ Random selection samples compounds without considering predictions or structure,
 ### When to Use
 
 **Recommended scenarios**:
+
 - Cycle 0 initialization (random warm-start is standard practice)
 - Baseline comparison for evaluating acquisition strategies
 - Completely unknown chemical spaces with no prior knowledge
 - Negative control in method benchmarking studies
 
 **Not recommended**:
+
 - Production screening (inefficient use of experimental budget)
 - Later cycles (intelligent strategies should outperform random)
 - When any prior knowledge or structure-activity relationships exist
@@ -137,6 +146,7 @@ Random selection samples compounds without considering predictions or structure,
 | `random_state` | int | `42` | Random seed for reproducible selection |
 
 **Performance notes**:
+
 - Minimal computational overhead
 - Scales to arbitrarily large compound pools
 
@@ -202,12 +212,14 @@ Top-K acquisition provides flexible greedy selection by randomly sampling from t
 Top-K selection first identifies the top K% of compounds by prediction, then randomly selects the acquisition batch from this subset. This balances exploitation (considering only high predictions) with diversity (random sampling within top-K).
 
 **Algorithm**:
+
 1. Calculate K = max(n_select, k_fraction × pool_size)
 2. Select top-K compounds by prediction (based on score_direction)
 3. Randomly sample n_select compounds from top-K subset
 4. Return selected compounds
 
 **Characteristics**:
+
 - **Soft exploitation**: Focuses on high predictions but allows diversity
 - **Configurable balance**: k_fraction controls exploration/exploitation
 - **Stochastic**: Introduces randomness within top-K candidates
@@ -216,12 +228,14 @@ Top-K selection first identifies the top K% of compounds by prediction, then ran
 ### When to Use
 
 **Recommended scenarios**:
+
 - Middle active learning cycles balancing exploitation and diversity
 - When greedy selection is too deterministic (want exploration within good compounds)
 - Avoiding repeated selection of identical high-prediction clusters
 - Uncertain prediction quality (hedge bets within top predictions)
 
 **Not recommended**:
+
 - When pure exploitation is desired (use Greedy instead)
 - When uncertainty-guided exploration is available (use UCB, EI instead)
 - Very small compound pools (limited benefit over greedy)
@@ -234,12 +248,14 @@ Top-K selection first identifies the top K% of compounds by prediction, then ran
 | `score_direction` | str | `'higher'` | Optimization direction: `'higher'` or `'lower'` | N/A |
 
 **Parameter tuning**:
+
 - `k_fraction=0.01`: Near-greedy (1% top compounds)
 - `k_fraction=0.1`: Balanced (10% top compounds, default)
 - `k_fraction=0.5`: High diversity (50% top compounds)
 - `k_fraction=1.0`: Equivalent to random selection
 
 **Performance notes**:
+
 - Sorting: O(n log n)
 - Random sampling: O(k) where k = k_fraction × n
 
@@ -334,6 +350,6 @@ results = run_active_learning(
 ## See Also
 
 - [Uncertainty-Based Strategies](uncertainty-based.md) - UCB, EI, PI, Thompson, Entropy
-- [Diversity Methods](diversity.md) - BitBIRCH, Simulated Annealing
+- [Diversity Methods](diversity.md) - Simulated Annealing
 - [Acquisition Overview](overview.md) - Strategy selection guide
 - [Building Custom Cycles](../../tutorials/building-custom-cycles.md) - Combining multiple strategies

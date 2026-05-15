@@ -30,6 +30,7 @@ Higher β values encourage sampling in uncertain regions of chemical space, whic
 - **Large compound pools:** Scales well to millions of compounds
 
 Avoid UCB when:
+
 - Pure exploitation is desired (use greedy instead)
 - Uncertainty estimates are poorly calibrated
 - Computational budget is extremely limited (fewer cycles mean less time for exploration)
@@ -42,6 +43,7 @@ Avoid UCB when:
 | `score_direction` | str | 'higher' | Optimization direction ('higher' or 'lower'). |
 
 **Tuning Guidance:**
+
 - Start with β = 2.0 for balanced behavior
 - Increase to β = 3-5 for more exploration (useful in first few cycles)
 - Decrease to β = 1.0 for more exploitation (useful in later cycles)
@@ -121,6 +123,7 @@ The ξ parameter adds a small buffer to encourage exploration even when improvem
 - **Bayesian optimization:** Standard choice in Bayesian optimization workflows
 
 Avoid EI when:
+
 - Current best value is unknown or unreliable
 - Uncertainty calibration is poor
 - Goal is exploration rather than optimization
@@ -134,6 +137,7 @@ Avoid EI when:
 | `current_best` | float | Required | Best observed value from labeled training data. |
 
 **Tuning Guidance:**
+
 - Keep ξ small (0.001-0.1) for optimization-focused campaigns
 - Increase ξ to 0.1-0.5 for more exploration
 - `current_best` is automatically computed from training data in each cycle
@@ -206,6 +210,7 @@ Similar to EI, ξ controls the exploration bonus but with different interpretati
 - **Simple optimization:** When EI's complexity is unnecessary
 
 Avoid PI when:
+
 - Magnitude of improvement matters (use EI instead)
 - Goal is broad exploration (use UCB or entropy instead)
 - Uncertainty estimates are unreliable
@@ -219,6 +224,7 @@ Avoid PI when:
 | `current_best` | float | Required | Best observed value from labeled training data. |
 
 **Tuning Guidance:**
+
 - Keep ξ = 0.01 for balanced probability of improvement
 - Increase ξ to 0.1-0.5 for more conservative selection (higher improvement required)
 - Decrease ξ to 0.001 for more aggressive selection
@@ -266,6 +272,7 @@ results = run_active_learning(
 Thompson Sampling is a stochastic exploration strategy that samples from the posterior predictive distribution and selects compounds based on sampled values. This Bayesian approach naturally balances exploration and exploitation through the posterior uncertainty.
 
 **Algorithm:**
+
 1. For each compound, sample a value from its predictive distribution: `sample ~ N(prediction, uncertainty)`
 2. Select compounds with highest (or lowest) sampled values
 3. Stochasticity ensures exploration in uncertain regions
@@ -290,6 +297,7 @@ The only parameter is `random_state` for reproducibility, not exploration contro
 - **Long campaigns:** Provably optimal in the long run (multi-armed bandit theory)
 
 Avoid Thompson Sampling when:
+
 - Deterministic selection is required
 - Short campaigns where stochasticity introduces too much variance
 - Interpretability is important (behavior is less intuitive than UCB/EI)
@@ -302,6 +310,7 @@ Avoid Thompson Sampling when:
 | `score_direction` | str | 'higher' | Optimization direction ('higher' or 'lower'). |
 
 **Tuning Guidance:**
+
 - Set `random_state` for reproducibility in benchmark experiments
 - Vary `random_state` across independent runs for exploration diversity
 - No other tuning required (automatic exploration)
@@ -388,6 +397,7 @@ The `entropy_type` parameter controls whether raw uncertainty (standard deviatio
 - **Diversity complement:** Combines well with diversity-based strategies
 
 Avoid Entropy when:
+
 - Goal is optimization rather than exploration
 - Later cycles when exploitation is needed
 - Uncertainty estimates are poorly calibrated
@@ -400,6 +410,7 @@ Avoid Entropy when:
 | `score_direction` | str | 'higher' | Optimization direction (ignored by entropy, but required for consistency). |
 
 **Tuning Guidance:**
+
 - Use `entropy_type='uncertainty'` (default) for linear uncertainty scoring
 - Use `entropy_type='variance'` to emphasize high-uncertainty compounds more strongly
 - Variance heavily penalizes low-uncertainty compounds (quadratic relationship)
@@ -468,6 +479,7 @@ All uncertainty-based strategies have similar computational complexity:
 3. **Memory:** Minimal additional memory beyond predictions/uncertainties
 
 **Optimization tips:**
+
 - EI and PI require SciPy (normal distribution CDF/PDF)
 - Thompson Sampling uses numpy random sampling (faster than EI/PI)
 - UCB is fastest (simple arithmetic)

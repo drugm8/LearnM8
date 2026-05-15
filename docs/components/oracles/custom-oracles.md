@@ -25,6 +25,7 @@ def my_oracle_function(compound_ids: List[str]) -> pd.DataFrame:
 ```
 
 **Requirements:**
+
 - **Input**: List of compound ID strings
 - **Output**: DataFrame with `ID` column plus one or more score columns
 - **Return type**: pandas DataFrame or Polars DataFrame
@@ -745,7 +746,7 @@ def main():
         batch_fraction=0.01,
         strategy='ucb',
         output_dir=OUTPUT_DIR,
-        export_csv=True
+        output_format='csv'
     )
 
     # Analyze results
@@ -756,7 +757,7 @@ def main():
     print(f"  Top 1% enrichment: {final_cycle['enrichment_1%']:.2f}")
 
     # Export selected compounds
-    selected = results['master_df'].filter(
+    selected = results['compounds_df'].filter(
         pl.col('status') == 'labeled'
     ).sort('vina_score')
 
@@ -776,26 +777,31 @@ python production_screening.py
 ## Best Practices
 
 **Error Handling:**
+
 - Return NaN for failed measurements rather than raising exceptions
 - Log warnings for debugging without stopping execution
 - Validate inputs before expensive operations
 
 **Performance:**
+
 - Implement caching for expensive calculations
 - Use batch processing when possible
 - Consider parallelization for independent measurements
 
 **Reproducibility:**
+
 - Use fixed random seeds for stochastic operations
 - Log oracle version and configuration
 - Document dependencies and requirements
 
 **Testing:**
+
 - Test with small compound sets before production
 - Validate output format matches LearnM8 requirements
 - Handle edge cases (invalid SMILES, missing data)
 
 **Security:**
+
 - Never expose API keys in code (use environment variables)
 - Validate and sanitize compound inputs
 - Use secure connections for web APIs

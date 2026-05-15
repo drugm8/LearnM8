@@ -9,6 +9,7 @@ LearnM8 operates in two distinct modes optimized for different use cases: **Benc
 Benchmark mode uses pre-computed ground truth data from a CSV file to evaluate active learning performance. The oracle predicts on the **entire dataset** each cycle to calculate correct enrichment metrics.
 
 **Key characteristics:**
+
 - Ground truth available for all compounds
 - Full dataset prediction for accurate metrics
 - Used for algorithm comparison and validation
@@ -104,6 +105,7 @@ comp3,CCCO,0.9
 Production mode uses custom scoring functions for expensive measurements (docking, synthesis, assays). The oracle predicts only **unlabeled compounds** to minimize computational cost.
 
 **Key characteristics:**
+
 - No ground truth available upfront
 - Unlabeled pool prediction only
 - Custom oracle functions (docking, ML models, experiments)
@@ -259,11 +261,13 @@ learnm8 run compound_library.csv docking_oracle.py:dock_compounds \
 LearnM8 automatically detects the appropriate mode based on oracle type:
 
 **Auto-detected as Benchmark:**
+
 - CSVOracle instance
 - Compound pool CSV contains target column
 - Same file used for pool and oracle
 
 **Auto-detected as Production:**
+
 - PythonOracle instance
 - Separate oracle specification
 - `module.py:function` syntax
@@ -285,14 +289,7 @@ results = run_active_learning(
 )
 ```
 
-**CLI alternative:**
-```bash
-learnm8 run compounds.csv \
-  --mode benchmark \
-  --target Activity \
-  --learner gp \
-  --featurizer morgan
-```
+
 
 ## Performance Differences
 
@@ -317,18 +314,21 @@ learnm8 run compounds.csv \
 | 10 | 100,000 | 90,000 |
 
 **Total predictions:**
+
 - Benchmark: 1,100,000
 - Production: 950,000 (14% reduction)
 
 ### When Full Prediction Matters
 
 **Benchmark mode required for:**
+
 - Accurate enrichment factor calculation
 - Hit rate validation
 - Coverage metrics
 - Algorithm comparison studies
 
 **Production mode sufficient for:**
+
 - Real screening campaigns
 - Acquisition function testing
 - Model performance evaluation
@@ -367,7 +367,7 @@ benchmark_results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
-        CycleConfig('diverse', n_cycles=1, batch_fraction=0.01)
+        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01)
     ]
 )
 
@@ -381,7 +381,7 @@ production_results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
-        CycleConfig('diverse', n_cycles=1, batch_fraction=0.01)
+        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01)
     ]
 )
 ```
@@ -393,12 +393,12 @@ learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
   --learner ensemble \
   --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*8 diverse:0.01"
+  --cycles "random:0.02 ucb:0.01*8 simulated_annealing:0.01"
 
 # 2. Deploy best strategy in production
 learnm8 run screening_library.csv docking_oracle.py:score \
   --target affinity \
   --learner ensemble \
   --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*8 diverse:0.01"
+  --cycles "random:0.02 ucb:0.01*8 simulated_annealing:0.01"
 ```

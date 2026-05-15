@@ -13,16 +13,19 @@ An acquisition function receives model predictions and uncertainties for unlabel
 Effective acquisition strategies balance two competing objectives:
 
 **Exploitation**: Select compounds with highest predicted values
+
 - Immediately maximize expected value
 - Risk missing better compounds in unexplored regions
 - Example: Greedy selection (pure exploitation)
 
 **Exploration**: Select compounds with high uncertainty or diversity
+
 - Gather information about poorly characterized regions
 - May sacrifice short-term gains for long-term discovery
 - Example: Entropy-based selection (pure exploration)
 
 **Balanced Strategies**: Combine both objectives with tunable parameters
+
 - Upper Confidence Bound (UCB): prediction + β × uncertainty
 - Expected Improvement (EI): probabilistic improvement calculation
 - Thompson Sampling: stochastic balance
@@ -60,6 +63,7 @@ class AcquisitionFunction(ABC):
 ```
 
 **Key methods**:
+
 - `select()`: Core selection logic (required)
 - `requires_uncertainty()`: Whether uncertainty column is needed (optional, defaults to False)
 - `get_name()`: Identifier for logging and reporting (optional)
@@ -80,19 +84,18 @@ Does your learner provide uncertainty estimates?
     ├─ Want pure exploitation? → Greedy
     ├─ Want baseline comparison? → Random
     ├─ Want flexible top selection? → Top-K
-    ├─ Want molecular diversity? → BitBIRCH (if installed)
     └─ Want optimization-based? → Simulated Annealing
 ```
 
 **Additional considerations**:
-- **Large compound libraries (>100k)**: Consider diversity-based methods (BitBIRCH)
-- **Early cycles**: Random or diverse initialization recommended
+
+- **Early cycles**: Random initialization recommended for unbiased initial sampling
 - **Later cycles**: Switch to exploitation (Greedy) or balanced strategies (UCB)
-- **Computational constraints**: Simulated Annealing adds overhead
+- **No uncertainty available**: Use greedy, random, topk, or simulated_annealing
 
 ## Strategy Registry
 
-LearnM8 provides 11+ acquisition strategies across four categories:
+LearnM8 provides 9 acquisition strategies:
 
 | Strategy | Category | Requires Uncertainty | When to Use | Key Parameters |
 |----------|----------|---------------------|-------------|----------------|
@@ -100,27 +103,24 @@ LearnM8 provides 11+ acquisition strategies across four categories:
 | `random` | Basic | No | Baseline, initial exploration | `random_state` |
 | `topk` | Basic | No | Flexible greedy selection | `k_fraction`, `score_direction` |
 | `ucb` | Uncertainty | Yes | Balanced exploration/exploitation | `beta` |
-| `ei` | Uncertainty | Yes | Expected improvement over best | `xi`, `current_best` |
-| `pi` | Uncertainty | Yes | Probability of improvement | `xi`, `current_best` |
+| `ei` | Uncertainty | Yes | Expected improvement over best | `xi` |
+| `pi` | Uncertainty | Yes | Probability of improvement | `xi` |
 | `thompson` | Uncertainty | Yes | Stochastic sampling | `random_state` |
 | `entropy` | Uncertainty | Yes | Maximum information gain | `entropy_type` |
 | `simulated_annealing` | Optimization | No | Temperature-based optimization | `initial_temp`, `cooling_schedule` |
-| `bitbirch` | Diversity | No | Molecular clustering (optional) | `threshold`, `branching_factor` |
-
-**Dependencies**:
-- **scipy**: Required for Expected Improvement (EI) and Probability of Improvement (PI)
-- **bitbirch**: Optional, required for BitBIRCH clustering strategy
 
 ## Score Direction
 
 The `score_direction` parameter controls optimization direction:
 
 **'higher' (default)**: Select compounds with highest scores
+
 - Use when higher target values are better (e.g., binding affinity, activity)
 - Greedy selects maximum predictions
 - UCB uses upper bound: prediction + β × uncertainty
 
 **'lower'**: Select compounds with lowest scores
+
 - Use when lower target values are better (e.g., toxicity, synthesis cost)
 - Greedy selects minimum predictions
 - UCB uses lower bound: prediction - β × uncertainty
@@ -233,5 +233,5 @@ learnm8 run compounds.csv oracle.py:score --target binding \
 
 - [Basic Strategies](basic.md) - Greedy, Random, Top-K
 - [Uncertainty-Based Strategies](uncertainty-based.md) - UCB, EI, PI, Thompson, Entropy
-- [Diversity Methods](diversity.md) - BitBIRCH, Simulated Annealing
+- [Simulated Annealing](diversity.md) - Simulated Annealing
 - [Custom Acquisition Functions](../../customization/custom-acquisition.md) - Implementing your own strategies

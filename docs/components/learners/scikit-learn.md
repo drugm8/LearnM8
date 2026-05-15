@@ -9,12 +9,14 @@ LearnM8 provides six scikit-learn based learners optimized for molecular propert
 Random Forest uses an ensemble of decision trees trained on bootstrapped samples of the data. Each tree votes on the prediction, with the average serving as the final output. This learner provides a fast, robust baseline with good performance across diverse molecular datasets.
 
 **When to use:**
+
 - Fast prototyping and baseline establishment
 - Datasets of any size (particularly effective for 100-10,000 compounds)
 - When interpretability through feature importance is valuable
 - As a component in ensemble models
 
 **Key characteristics:**
+
 - No uncertainty quantification (base implementation)
 - Parallel training across all CPU cores
 - Out-of-bag (OOB) scoring for model validation
@@ -33,6 +35,7 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 | `n_jobs` | int | -1 | Parallel jobs. -1 uses all CPU cores for 5-10x training speedup. |
 
 **Performance notes:**
+
 - Training time scales linearly with `n_estimators`
 - Memory scales with `n_estimators` × tree size
 - Prediction is fast (logarithmic in tree depth)
@@ -47,6 +50,7 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 **Speed:** Fast (trains in seconds for typical molecular datasets)
 
 **Scalability:**
+
 - Excellent for 100-100,000 compounds
 - Linear scaling with dataset size
 - Parallel training utilizes all CPU cores
@@ -96,12 +100,14 @@ feature_importance = learner.get_feature_importance()
 Gaussian Process (GP) regression provides the gold standard for uncertainty quantification in active learning. It models predictions as a Gaussian distribution, naturally providing both mean predictions and standard deviation estimates. GP excels on small to medium datasets where principled uncertainty is crucial.
 
 **When to use:**
+
 - Small to medium datasets (<5,000 compounds recommended)
 - Uncertainty-based acquisition strategies (UCB, EI, Thompson sampling)
 - When accurate uncertainty quantification is critical
 - Benchmark studies requiring rigorous uncertainty estimates
 
 **Key characteristics:**
+
 - Native, principled uncertainty quantification
 - Scales cubically with dataset size (O(n³))
 - Hyperparameter optimization via marginal likelihood
@@ -118,6 +124,7 @@ Gaussian Process (GP) regression provides the gold standard for uncertainty quan
 | `random_state` | int | 42 | Random seed for reproducibility. |
 
 **Performance notes:**
+
 - Training time: O(n³) - becomes slow for >5,000 compounds
 - Prediction time: O(n²) - scales quadratically with training set size
 - Memory: O(n²) - stores full covariance matrix
@@ -128,6 +135,7 @@ Gaussian Process (GP) regression provides the gold standard for uncertainty quan
 **Yes** - GaussianProcessLearner provides principled uncertainty estimates through posterior standard deviation. This is the most theoretically sound uncertainty available in LearnM8.
 
 **How it works:**
+
 - GP models predictions as Gaussian distributions
 - Returns mean (prediction) and standard deviation (uncertainty)
 - Uncertainty increases in unexplored regions
@@ -138,6 +146,7 @@ Gaussian Process (GP) regression provides the gold standard for uncertainty quan
 **Speed:** Slow for large datasets (cubic scaling)
 
 **Scalability:**
+
 - Excellent for <1,000 compounds
 - Acceptable for 1,000-5,000 compounds
 - Not recommended for >5,000 compounds
@@ -189,12 +198,14 @@ hyperparams = learner.get_learned_hyperparameters()
 XGBoost provides high-performance gradient boosting optimized for speed and accuracy. It builds an ensemble of decision trees sequentially, with each tree correcting errors from previous trees. XGBoost excels on medium to large molecular datasets where prediction quality and computational efficiency are both priorities.
 
 **When to use:**
+
 - Medium to large datasets (1,000-100,000+ compounds)
 - When prediction accuracy is the top priority
 - Production systems requiring fast predictions
 - Datasets with complex non-linear relationships
 
 **Key characteristics:**
+
 - State-of-the-art tabular data performance
 - Efficient parallel training
 - Regularization prevents overfitting
@@ -216,6 +227,7 @@ XGBoost provides high-performance gradient boosting optimized for speed and accu
 | `n_jobs` | int | -1 | Parallel jobs. -1 uses all CPU cores for fast training. |
 
 **Performance notes:**
+
 - Training time scales with `n_estimators` × `max_depth`
 - Histogram-based algorithm (`tree_method='hist'`) for efficiency
 - Memory efficient compared to Random Forest
@@ -230,6 +242,7 @@ XGBoost provides high-performance gradient boosting optimized for speed and accu
 **Speed:** Very fast (optimized C++ implementation)
 
 **Scalability:**
+
 - Excellent for 1,000-100,000+ compounds
 - Sub-linear scaling with efficient algorithms
 - Parallel training utilizes all CPU cores
@@ -284,12 +297,14 @@ booster_stats = learner.get_booster_stats()
 Decision Tree provides a single interpretable tree structure for predictions. Unlike ensemble methods, a single tree offers complete transparency in decision-making, making it valuable for understanding model logic and identifying key features. However, single trees are prone to overfitting and generally provide lower accuracy than ensemble methods.
 
 **When to use:**
+
 - Model interpretability is paramount
 - Understanding decision logic for domain insights
 - Debugging feature extraction or data quality issues
 - Teaching active learning concepts with simple models
 
 **Key characteristics:**
+
 - Fully interpretable decision paths
 - Fast training and prediction
 - Prone to overfitting without regularization
@@ -306,6 +321,7 @@ Decision Tree provides a single interpretable tree structure for predictions. Un
 | `random_state` | int | 42 | Random seed for reproducibility. |
 
 **Performance notes:**
+
 - Defaults designed to prevent overfitting (limited depth, higher min_samples)
 - Training time logarithmic in dataset size
 - Prediction extremely fast (single path through tree)
@@ -320,6 +336,7 @@ Decision Tree provides a single interpretable tree structure for predictions. Un
 **Speed:** Very fast (fastest learner in LearnM8)
 
 **Scalability:**
+
 - Excellent for any dataset size
 - Logarithmic prediction time
 - Minimal memory footprint
@@ -369,12 +386,14 @@ feature_importance = learner.get_feature_importance()
 Linear Regression models predictions as a linear combination of features. This learner provides the simplest baseline and works well when molecular properties have approximately linear relationships with features. Supports both standard linear regression and Ridge regression (L2 regularization) for handling feature collinearity.
 
 **When to use:**
+
 - Simple baseline establishment
 - Linear relationships between features and targets
 - Small datasets where complex models overfit
 - Fast predictions required in production
 
 **Key characteristics:**
+
 - Analytical solution (no iterative optimization)
 - Interpretable coefficients
 - Very fast training and prediction
@@ -390,6 +409,7 @@ Linear Regression models predictions as a linear combination of features. This l
 | `random_state` | int | 42 | Random seed for Ridge regression reproducibility. |
 
 **Performance notes:**
+
 - LinearRegression: Parallel computation via BLAS/LAPACK
 - Ridge: Sequential but still very fast
 - Training time: O(n² × d) for n samples, d features
@@ -404,6 +424,7 @@ Linear Regression models predictions as a linear combination of features. This l
 **Speed:** Very fast (analytical solution)
 
 **Scalability:**
+
 - Excellent for any dataset size
 - Quadratic scaling with features
 - Parallel computation for LinearRegression
@@ -452,12 +473,14 @@ intercept = learner.get_intercept()
 Advanced Random Forest extends the base RandomForestLearner with optimized hyperparameters, regularization techniques, and enhanced configuration for superior performance on molecular datasets. This learner includes 300 trees (vs 100), depth limits, cost complexity pruning, and bootstrap subsampling designed to balance accuracy and generalization.
 
 **When to use:**
+
 - When Random Forest is preferred but enhanced performance needed
 - Medium to large molecular datasets (1,000-50,000 compounds)
 - When out-of-bag validation is valuable
 - As a strong single-model baseline before ensembles
 
 **Key characteristics:**
+
 - Optimized hyperparameters for molecular data
 - Cost complexity pruning (ccp_alpha) prevents overfitting
 - Bootstrap subsampling adds regularization
@@ -481,6 +504,7 @@ Advanced Random Forest extends the base RandomForestLearner with optimized hyper
 | `n_jobs` | int | -1 | Parallel jobs. Auto-capped at 32 cores for efficiency. |
 
 **Performance notes:**
+
 - 3x training time vs base RF (300 vs 100 trees)
 - Cost complexity pruning adds minimal overhead
 - OOB scoring provides free validation
@@ -491,6 +515,7 @@ Advanced Random Forest extends the base RandomForestLearner with optimized hyper
 **Yes** - AdvancedRandomForestLearner provides uncertainty estimates through tree prediction variance. Each tree in the forest makes a prediction, and the standard deviation across trees serves as uncertainty.
 
 **How it works:**
+
 - Collect predictions from all 300 trees
 - Mean prediction = average across trees
 - Uncertainty = standard deviation across trees
@@ -501,6 +526,7 @@ Advanced Random Forest extends the base RandomForestLearner with optimized hyper
 **Speed:** Fast (3x slower than base RF due to more trees)
 
 **Scalability:**
+
 - Excellent for 1,000-50,000 compounds
 - Linear scaling with dataset size
 - Parallel training utilizes up to 32 CPU cores
@@ -578,36 +604,42 @@ feature_importance = learner.get_feature_importance()
 ### When to Use Each Learner
 
 **Choose RandomForestLearner when:**
+
 - Establishing baselines quickly
 - Dataset size is 100-10,000 compounds
 - Feature importance analysis needed
 - Computational resources limited
 
 **Choose GaussianProcessLearner when:**
+
 - Dataset size <5,000 compounds
 - Uncertainty-based acquisition critical (UCB, EI, Thompson)
 - Principled uncertainty quantification required
 - Computational time available for cubic scaling
 
 **Choose XGBoostLearner when:**
+
 - Dataset size >1,000 compounds
 - Maximum prediction accuracy required
 - Fast training and prediction needed
 - Production deployment planned
 
 **Choose DecisionTreeLearner when:**
+
 - Model interpretability is paramount
 - Understanding decision logic required
 - Debugging data quality issues
 - Educational/demonstration purposes
 
 **Choose LinearRegressionLearner when:**
+
 - Simple baseline needed
 - Linear relationships suspected
 - Extremely fast predictions required
 - Interpretable coefficients valuable
 
 **Choose AdvancedRandomForestLearner when:**
+
 - Random Forest preferred but better performance needed
 - Dataset size 1,000-50,000 compounds
 - Uncertainty estimates desired without ensemble overhead

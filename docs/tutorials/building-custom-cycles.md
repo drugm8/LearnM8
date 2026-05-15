@@ -28,11 +28,13 @@ cycles = [
 Batch fractions are **always relative to the original pool size**, not the remaining unlabeled compounds.
 
 **Example with 10,000 compound pool:**
+
 - `batch_fraction=0.01` → 100 compounds per cycle
 - `batch_fraction=0.005` → 50 compounds per cycle
 - Consistent batch sizes across all cycles
 
 **Rationale:**
+
 - Predictable total labeling budget
 - Easy to calculate total compounds: `sum(fractions) * pool_size`
 - Fair comparison across different strategies
@@ -83,6 +85,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Find top hits quickly
 - After sufficient exploration
 - Production screening focused on best compounds
@@ -105,6 +108,7 @@ results = run_active_learning(
 ```
 
 **When to use:**
+
 - Baseline comparison
 - Building representative training sets
 - Avoiding model bias
@@ -113,7 +117,7 @@ results = run_active_learning(
 
 Combine different strategies for sophisticated screening:
 
-### Random → Greedy → Diverse
+### Random → Greedy → Simulated Annealing
 
 ```python
 results = run_active_learning(
@@ -129,15 +133,16 @@ results = run_active_learning(
         ('greedy', 0.01),
         ('greedy', 0.01),
         ('greedy', 0.01),
-        ('bitbirch', 0.01),    # Phase 3: Diversify coverage
-        ('bitbirch', 0.01),
-        ('greedy', 0.01),      # Phase 4: Final exploitation
+        ('simulated_annealing', 0.01),  # Phase 3: Diversify coverage
+        ('simulated_annealing', 0.01),
+        ('greedy', 0.01),              # Phase 4: Final exploitation
         ('greedy', 0.01)
     ]
 )
 ```
 
 **Rationale:**
+
 1. **Random (2%)**: Get unbiased initial training data
 2. **Greedy (5 cycles × 1%)**: Rapidly find top hits
 3. **Diverse (2 cycles × 1%)**: Explore uncovered regions
@@ -161,14 +166,15 @@ results = run_active_learning(
         ('greedy', 0.005),
         ('greedy', 0.005)
     ],
-    acquisition_params={'exploration_weight': 2.0}
+    acquisition_params={'beta': 2.0}
 )
 ```
 
 **Rationale:**
+
 - UCB balances exploration (uncertainty) and exploitation (prediction)
 - Transition to pure greedy after sufficient exploration
-- `exploration_weight=2.0` emphasizes exploration early
+- `beta=2.0` emphasizes exploration early
 
 ## CycleConfig Dataclass (Advanced)
 
@@ -199,13 +205,14 @@ results = run_active_learning(
             'ucb',
             n_cycles=4,
             batch_fraction=0.005,
-            acquisition_params={'exploration_weight': 1.5}
+            acquisition_params={'beta': 1.5}
         )
     ]
 )
 ```
 
 **CycleConfig Parameters:**
+
 - `strategy`: Acquisition function name
 - `n_cycles`: Number of cycles with this configuration
 - `batch_fraction`: Fraction of pool to select per cycle
@@ -214,6 +221,7 @@ results = run_active_learning(
 - `acquisition_params`: Optional acquisition function parameters
 
 **When to use CycleConfig:**
+
 - Cycle-specific pruning
 - Different acquisition parameters per phase
 - Complex multi-phase strategies
@@ -229,14 +237,14 @@ cycles = [
         'ucb',
         n_cycles=3,
         batch_fraction=0.01,
-        acquisition_params={'exploration_weight': 3.0}
+        acquisition_params={'beta': 3.0}
     ),
 
     CycleConfig(
         'ucb',
         n_cycles=3,
         batch_fraction=0.01,
-        acquisition_params={'exploration_weight': 1.0}
+        acquisition_params={'beta': 1.0}
     ),
 
     CycleConfig(
@@ -259,6 +267,7 @@ results = run_active_learning(
 ```
 
 **Rationale:**
+
 - UCB with high exploration weight → UCB with lower weight → Greedy
 - Gradual transition from exploration to exploitation
 - Pruning only in final greedy phase
@@ -275,6 +284,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 ```
 
 **Format:**
+
 - `strategy:fraction` - Single cycle
 - `strategy:fraction*n` - Repeat n times
 - Space-separated for multiple phases
@@ -295,14 +305,15 @@ cycles = [
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4 diverse:0.01*2"
+  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4 simulated_annealing:0.01*2"
 ```
 
 **Expanded cycles:**
+
 1. random: 2%
 2. ucb: 1% (repeated 3 times)
 3. greedy: 0.5% (repeated 4 times)
-4. diverse: 1% (repeated 2 times)
+4. simulated_annealing: 1% (repeated 2 times)
 
 **Total: 10 cycles**
 
@@ -311,121 +322,35 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
   --cycles "random:0.01 ucb:0.01*5" \
-  --acquisition-params '{"exploration_weight": 2.0}'
+  --acquisition-params '{"beta": 2.0}'  # UCB beta parameter
 ```
 
 **Note:** Acquisition parameters apply to all cycles that use them.
 
-## Predefined Schedules
-
-Use `--schedule` for common patterns:
-
-### Quick Schedule (5 cycles)
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --schedule quick
-```
-
-**Equivalent to:**
-```python
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-    CycleConfig('greedy', n_cycles=4, batch_fraction=0.01)
-]
-```
-
-**When to use:**
-- Fast exploration
-- Initial screening
-- Testing workflows
-
-### Standard Schedule (10 cycles)
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --schedule standard
-```
-
-**Equivalent to:**
-```python
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-    CycleConfig('greedy', n_cycles=9, batch_fraction=0.01)
-]
-```
-
-**When to use:**
-- Default balanced approach
-- Most screening campaigns
-- 10-12% total labeling budget
-
-### Intensive Schedule (20 cycles)
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --schedule intensive
-```
-
-**Equivalent to:**
-```python
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.01),
-    CycleConfig('greedy', n_cycles=19, batch_fraction=0.005)
-]
-```
-
-**When to use:**
-- Thorough screening
-- Large compound libraries
-- When labeling cost is low
-
-### Diverse Schedule (10 cycles)
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --schedule diverse
-```
-
-**Equivalent to:**
-```python
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-    CycleConfig('bitbirch', n_cycles=2, batch_fraction=0.01),
-    CycleConfig('greedy', n_cycles=3, batch_fraction=0.01),
-    CycleConfig('ucb', n_cycles=2, batch_fraction=0.01),
-    CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)
-]
-```
-
-**When to use:**
-- Maximize chemical diversity
-- Avoid local optima
-- Explore multiple promising regions
-
-**Note:** Requires BitBIRCH installation:
-```bash
-pip install git+https://github.com/mqcomplab/bitbirch.git
-```
+> **Note:** Predefined schedules (`--schedule quick/standard/intensive`) are not available. Use the [cycles specification](#cli-cycle-specifications) section above to define custom cycle schedules instead.
 
 ## Design Principles
 
 **Early Exploration:**
-- Start with random or diverse sampling
+
+- Start with random or simulated_annealing sampling
 - Build unbiased initial training set
 - Typical: 1-2% of pool
 
 **Mid-Phase Exploitation:**
+
 - Use greedy or low-weight UCB
 - Focus on finding best compounds
 - Typical: 5-10 cycles × 0.5-1% of pool
 
 **Late Diversification:**
-- Optional diversity methods (bitbirch, diverse)
+
+- Optional diversity methods (simulated_annealing)
 - Cover unexplored regions
 - Typical: 1-2 cycles × 1% of pool
 
 **Final Refinement:**
+
 - Return to greedy
 - Verify top hits
 - Typical: 1-2 cycles × 0.5% of pool
@@ -446,7 +371,7 @@ cycles = [
     ('greedy', 0.01),      # 100 compounds
     ('greedy', 0.01),      # 100 compounds
     ('greedy', 0.01),      # 100 compounds
-    ('diverse', 0.01)      # 100 compounds
+    ('simulated_annealing', 0.01)  # 100 compounds
 ]
 
 total_fraction = 0.01 + 0.01 + 0.01 + 0.01 + 0.01 + 0.01

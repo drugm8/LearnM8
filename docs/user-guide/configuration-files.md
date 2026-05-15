@@ -68,7 +68,7 @@ enable_chemprop_fine_tuning: false
 
 # Pruning Configuration
 pruning_fraction: 0.3  # Optional, enables pruning if specified
-pruning_strategy: "score_based"  # Only supported strategy
+pruning_strategy: "score"  # Only supported strategy
 pruning_params:
   pruning_threshold: 0.5  # Optional: absolute score threshold
 
@@ -120,7 +120,7 @@ cycles:
     batch_fraction: 0.01
 
 pruning_fraction: 0.2
-pruning_strategy: "score_based"
+pruning_strategy: "score"
 
 output_dir: "results/ensemble_screening"
 cache_dir: ".cache/shared"
@@ -147,12 +147,12 @@ cycles:
     batch_fraction: 0.005
     acquisition_params:
       beta: 1.5
-  - strategy: "diverse"
+  -     strategy: "simulated_annealing"
     n_cycles: 3
     batch_fraction: 0.01
 
 pruning_fraction: 0.3
-pruning_strategy: "score_based"
+pruning_strategy: "score"
 pruning_params:
   pruning_threshold: 0.5
 
@@ -216,7 +216,7 @@ JSON format is also supported, with identical schema to YAML but different synta
     }
   ],
   "pruning_fraction": 0.2,
-  "pruning_strategy": "score_based",
+  "pruning_strategy": "score",
   "output_dir": "results/ensemble_screening",
   "cache_dir": ".cache/shared",
   "random_state": 123
@@ -249,13 +249,13 @@ JSON format is also supported, with identical schema to YAML but different synta
       }
     },
     {
-      "strategy": "diverse",
+      "strategy": "simulated_annealing",
       "n_cycles": 3,
       "batch_fraction": 0.01
     }
   ],
   "pruning_fraction": 0.3,
-  "pruning_strategy": "score_based",
+  "pruning_strategy": "score",
   "pruning_params": {
     "pruning_threshold": 0.5
   },
@@ -321,6 +321,7 @@ learnm8 run --config config.yaml \
 ```
 
 Result:
+
 - `learner`: "gp" (CLI override)
 - `n_cycles`: 10 (from config)
 - `output_dir`: "results/custom" (CLI override)
@@ -374,6 +375,7 @@ git commit -m "Add configuration for ensemble comparison"
 ```
 
 Benefits:
+
 - **Reproducibility:** Exact experiment parameters preserved
 - **Collaboration:** Share configurations with team members
 - **Tracking:** Document experimental protocol evolution
@@ -505,7 +507,7 @@ Cycle dictionary structure:
   batch_fraction: 0.01
   acquisition_params:  # Optional
     beta: 2.0
-  pruning_strategy: "score_based"  # Optional
+  pruning_strategy: "score"  # Optional
   pruning_params:  # Optional
     pruning_fraction: 0.3
 ```
@@ -526,7 +528,7 @@ Cycle dictionary structure:
 |-----------|------|---------|-------------|
 | `enable_chemprop_fine_tuning` | bool | False | Enable fine-tuning for Chemprop models |
 | `pruning_fraction` | float | None | Fraction to prune per cycle (0.0-0.9) |
-| `pruning_strategy` | str | None | Pruning method (only score_based is supported) |
+| `pruning_strategy` | str | None | Pruning method (only "score" is supported) |
 | `pruning_params` | dict | None | Additional pruning parameters |
 | `acquisition_params` | dict | None | Acquisition strategy parameters (beta, temperature, etc.) |
 
@@ -582,7 +584,7 @@ cycles:
     batch_fraction: 0.0005
 
 pruning_fraction: 0.4
-pruning_strategy: "score_based"
+pruning_strategy: "score"
 pruning_params:
   pruning_threshold: 0.5
 

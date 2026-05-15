@@ -21,6 +21,7 @@ nav = [
   { "User Guide" = [
     { "CLI Reference" = "user-guide/cli-reference.md" },
     { "API Reference" = "user-guide/api-reference.md" },
+    { "Examples" = "user-guide/examples.md" },
     { "Configuration Files" = "user-guide/configuration-files.md" },
   ]},
   { "Components" = [

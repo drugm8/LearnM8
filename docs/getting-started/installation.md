@@ -7,6 +7,7 @@ This guide walks you through installing LearnM8 and its dependencies.
 **Python Version:** LearnM8 requires Python 3.11.9 or compatible versions. We recommend using Conda for environment management.
 
 **System Requirements:**
+
 - 64-bit operating system (Linux, macOS, or Windows)
 - 4+ GB RAM (8+ GB recommended for large compound libraries)
 - Internet connection for initial installation
@@ -42,7 +43,7 @@ Test that LearnM8 is correctly installed:
 learnm8 --help
 ```
 
-You should see the main help message with available subcommands (`run`, `validate`, `list`).
+You should see the main help message with available subcommands (`run`, `validate`).
 
 ## Optional Dependencies
 
@@ -82,16 +83,6 @@ For high-performance gradient boosting:
 pip install xgboost
 ```
 
-### BitBIRCH (Molecular Clustering)
-
-For advanced diversity-based acquisition using molecular clustering:
-
-```bash
-pip install git+https://github.com/mqcomplab/bitbirch.git
-```
-
-BitBIRCH cannot be included in `setup.py` due to its GitHub source, so it must be installed separately.
-
 ### All Optional Dependencies
 
 Install all optional features at once:
@@ -100,7 +91,6 @@ Install all optional features at once:
 pip install torch
 pip install chemprop
 pip install xgboost
-pip install git+https://github.com/mqcomplab/bitbirch.git
 ```
 
 ## Testing Your Installation
@@ -128,14 +118,20 @@ pytest tests/
 Test the command-line interface:
 
 ```bash
-# List available learners (confirms model registry)
-learnm8 list learners
+learnm8 --help
+learnm8 run --help
+```
 
-# List acquisition strategies
-learnm8 list acquisition
+Or from Python to list available components:
 
-# List featurizers
-learnm8 list featurizers
+```python
+from learnm8.api import list_available_learners
+from learnm8.features import FEATURIZER_REGISTRY
+from learnm8.acquisition import ACQUISITION_REGISTRY
+
+print(list_available_learners())
+print(sorted(FEATURIZER_REGISTRY))
+print(sorted(ACQUISITION_REGISTRY))
 ```
 
 ## Development Installation
@@ -149,6 +145,7 @@ pip install -e .[test]
 ```
 
 This installs additional testing tools:
+
 - `pytest` - Test framework
 - `pytest-cov` - Coverage reporting
 - `hypothesis` - Property-based testing

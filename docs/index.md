@@ -1,155 +1,120 @@
 # LearnM8: Active Learning Framework for Molecular Screening
 
-LearnM8 is a comprehensive active learning framework designed for molecular property prediction and compound screening. Built with a pure functional architecture, it enables researchers to efficiently explore chemical space through intelligent compound selection, uncertainty-guided decision-making, and state-of-the-art machine learning models.
+LearnM8 is an active learning framework for molecular property prediction and compound screening. Built with a pure functional architecture, it enables researchers to efficiently explore chemical space through intelligent compound selection, uncertainty-guided decision-making, and state-of-the-art machine learning models.
 
 The framework addresses a fundamental challenge in computational chemistry: how to select the most informative molecules for experimental testing when resources are limited. Through iterative cycles of prediction, selection, and measurement, LearnM8 helps researchers identify promising compounds faster than traditional screening approaches while minimizing experimental costs.
 
-LearnM8 combines modern software engineering practices with cutting-edge molecular machine learning. The framework provides both benchmark capabilities for algorithm development and production-ready tools for real-world screening campaigns. Whether you're testing new active learning strategies on known datasets or deploying predictive models in drug discovery pipelines, LearnM8 offers the flexibility and performance you need.
-
 ## Key Features
-
-**Pure Functional Architecture**
-
-- Simple `run_active_learning()` function as the main entry point
-- No complex state management or hidden side effects
-- Explicit cycle control through `CycleConfig` dataclass
-- Dependency injection for all components
-- Composition over inheritance for maximum flexibility
 
 **Comprehensive Model Suite**
 
-- 15+ machine learning models with uncertainty quantification
-- Scikit-learn models (Random Forest, Gaussian Process, XGBoost, Decision Tree, Linear Regression)
-- PyTorch neural networks (MLP, MC Dropout, FastProp)
-- Graph neural networks (Chemprop) that work directly with SMILES
-- Ensemble methods for robust uncertainty estimation
-- GPU support for accelerated training
+- 21 machine learning models including scikit-learn, PyTorch neural networks, Chemprop GNNs, and ensemble methods
+- Uncertainty quantification for 17 of 21 learners (rf, gp, dt, lr, mc_dropout, all 8 ensembles, and 4 GPU learners)
+- Optional GPU acceleration via GPyTorch and RAPIDS cuML
 
 **Rich Acquisition Strategies**
 
-- 11+ selection strategies from basic to sophisticated
-- Exploitation strategies (greedy, top-k)
-- Exploration strategies (random, entropy, Thompson sampling)
-- Uncertainty-based methods (UCB, Expected Improvement, Probability of Improvement)
-- Diversity-focused selection (BitBIRCH, simulated annealing)
-- Custom acquisition function support
+- 9 selection strategies: basic (greedy, random, topk), uncertainty-based (UCB, EI, PI, Thompson, entropy), and optimization-based (simulated annealing)
+- Uncertainty-based strategies automatically skip uncertainty computation when not needed
 
 **Performance Optimizations**
 
-- HDF5-based feature caching (100x speedup on repeated extraction)
-- Automatic parallelization (5-10x faster feature extraction)
-- Vectorized Polars operations (10x faster DataFrame updates)
-- Early validation with datamol (catch invalid SMILES before experiments)
-- Persistent cache directory for cross-experiment reuse
+- HDF5-based feature caching (~100× speedup on repeated extraction)
+- Automatic parallelization for feature extraction
+- Vectorized Polars operations for all DataFrame work
+- Streaming parquet output for large pools (>1M rows, constant RAM)
 
 **Two Operating Modes**
 
-- Benchmark mode: CSVOracle with full dataset prediction for accurate metrics
-- Production mode: PythonOracle with unlabeled pool prediction for efficiency
-- Automatic mode detection based on oracle type
-- Support for custom scoring functions
-
-**Molecular-Specific Design**
-
-- RDKit integration for molecular featurization
-- Multiple fingerprint types (Morgan, MACCS, ECFP6)
-- Mordred descriptors for comprehensive chemical features
-- SMILES-based validation before experiments
-- Chemical scaffold and clustering-based diversity
+- **Benchmark mode** (CSV oracle): full discovery, enrichment, and ranking metrics with ground truth
+- **Production mode** (Python oracle): integration with real assays or docking software
+- Auto-detected from oracle type; no manual flag required
 
 ## Quick Example
-
-Get started with LearnM8's Python API:
 
 ```python
 from learnm8 import run_active_learning
 
+# Benchmark mode — oracle auto-detected from the same CSV
 results = run_active_learning(
     compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='gp',
+    learner='rf',
     target_col='Activity',
     featurizer='morgan',
     n_cycles=10
 )
+
+print(f"Best compound: {results['aggregate_metrics']['best_compound_value']:.3f}")
+print(f"Top-10 discovery rate: {results['aggregate_metrics']['final_top_10_discovery']:.1%}")
 ```
 
-Or use the command-line interface for quick experiments:
+Or use the CLI:
 
 ```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan --n-cycles 10
-```
-
-## Architecture Highlights
-
-**Explicit Cycle Control**
-
-LearnM8 uses explicit cycle specifications instead of hidden hyperparameters. Users specify exactly what happens in each cycle:
-
-```python
-from learnm8 import CycleConfig
-
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-    CycleConfig('ucb', n_cycles=5, batch_fraction=0.01),
-    CycleConfig('diverse', n_cycles=4, batch_fraction=0.01)
-]
-```
-
-**Dependency Injection**
-
-Components receive dependencies explicitly rather than managing hidden state:
-
-```python
-from learnm8.learners import GaussianProcessLearner
-from learnm8.oracles import PythonOracle
-
-learner = GaussianProcessLearner(alpha=1e-6)
-oracle = PythonOracle('scoring_module.py', 'calculate_affinity')
-
-results = run_active_learning(
-    compound_pool=df,
-    oracle=oracle,
-    learner=learner,
-    target_col='binding_score',
-    featurizer='morgan'
-)
-```
-
-**Functional Data Flow**
-
-Every cycle returns metrics and updated DataFrames without mutating global state:
-
-```python
-results = run_active_learning(...)
-
-compounds_df = results['compounds_df']
-cycle_metrics = results['cycle_metrics']
-validation_result = results['validation_result']
+learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
 ```
 
 ## Component Overview
 
-**Learners**: 15+ models including Random Forest, Gaussian Process, XGBoost, neural networks, graph neural networks, and ensembles
+### Learners (21 total)
 
-**Acquisition Functions**: 11+ strategies including greedy, UCB, Expected Improvement, Thompson sampling, BitBIRCH clustering, and simulated annealing
+| Shortcut | Model | Uncertainty | CPU | GPU | Typical Pool Size |
+|----------|-------|-------------|-----|-----|-------------------|
+| `rf` | Random Forest | Tree std dev | ✓ | — | 1K – 10M+ |
+| `gp` | Gaussian Process | GP posterior | ✓ | — | < 10K |
+| `gpu_gp` | GPyTorch Exact GP | GP posterior | ✓ | ✓ | < 10K |
+| `svgp` | Scalable Variational GP | Variational | ✓ | ✓ | 10K – 100K+ |
+| `xgb` | XGBoost | — | ✓ | ✓ | 1K – 10M+ |
+| `lr` | Linear Regression | Leverage-based | ✓ | — | any |
+| `dt` | Decision Tree | Leaf impurity | ✓ | — | 1K – 10M+ |
+| `mlp` | MLP Neural Network | — | ✓ | ✓ | 10K – 1M+ |
+| `mc_dropout` | MC Dropout | MC sampling | ✓ | ✓ | 5K – 500K |
+| `fastprop` | FastProp | — | ✓ | ✓ | 10K – 1M+ |
+| `chemprop` | Chemprop GNN | — | ✓ | ✓ | 5K – 500K |
+| `rf_fil` | RF + FIL inference | Tree std dev | — | ✓ | 1K – 10M+ |
+| `ridge_cuml` | Ridge (cuML) | Leverage-based | — | ✓ | any |
+| `chemprop_ensemble` | Chemprop × 3 | Ensemble std | ✓ | ✓ | 1K – 200K |
+| `rf_ensemble` | RF × N | Ensemble std | ✓ | — | 1K – 10M+ |
+| `lr_ensemble` | LR × N | Ensemble std | ✓ | ✓ | any |
+| `xgb_ensemble` | XGBoost × N | Ensemble std | ✓ | ✓ | 1K – 10M+ |
+| `dt_ensemble` | DT × N | Ensemble std | ✓ | — | 1K – 10M+ |
+| `mixed_ensemble` | RF + LR + XGB | Ensemble std | ✓ | ✓ | 1K – 50K |
+| `fastprop_ensemble` | FastProp × N | Ensemble std | ✓ | ✓ | 5K – 500K |
+| `ensemble` | Generic wrapper (explicit member config required) | Ensemble std | ✓ | — | any |
 
-**Featurizers**: Morgan fingerprints, MACCS keys, ECFP6, and Mordred descriptors with automatic caching
+`gpu_gp` and `svgp` require GPyTorch ≥ 1.11 and GAUCHE ≥ 0.1.6. `rf_fil` and `ridge_cuml` require RAPIDS cuML ≥ 25.04.
 
-**Oracles**: CSVOracle for benchmarking and PythonOracle for custom scoring functions
+### Acquisition Strategies (9 total)
 
-**Pruning**: Score-based pruning for design space reduction in large compound libraries
+| Shortcut | Requires Uncertainty | Strategy |
+|----------|---------------------|----------|
+| `greedy` | No | Highest predicted value (pure exploitation) |
+| `random` | No | Random selection (baseline) |
+| `topk` | No | Top-K ranked selection |
+| `ucb` | Yes | Mean + β × uncertainty |
+| `ei` | Yes | Expected improvement over current best |
+| `pi` | Yes | Probability of improving over current best |
+| `thompson` | Yes | Sample from posterior predictive distribution |
+| `entropy` | Yes | Maximum uncertainty (maximum information gain) |
+| `simulated_annealing` | No | Temperature-based probabilistic selection |
+
+Uncertainty-based strategies (`ucb`, `ei`, `pi`, `thompson`, `entropy`) require a learner with an uncertainty method. Uncertainty computation is automatically skipped when the active strategy does not require it.
+
+### Featurizers (39 registered names, 38 unique)
+
+| Category | Count | Examples |
+|----------|-------|---------|
+| 2D Circular | 5 | morgan, ecfp, ecfp6, morgan_feat, secfp |
+| 2D Structural Keys | 4 | maccs, pubchem, klekota_roth, laggner |
+| 2D Topological | 6 | avalon, atom_pair, topological_torsion, rdkit, pattern, layered |
+| 2D Hashed | 4 | map4, mhfp, lingo, erg, secfp |
+| 2D Descriptors | 11 | mordred, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups |
+| 3D (conformer) | 9 | whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape |
 
 ## Next Steps
 
 - **[Installation Guide](getting-started/installation.md)**: Set up LearnM8 with conda and optional dependencies
-- **[Quickstart Tutorial](getting-started/quickstart.md)**: Run your first experiment in under 5 minutes
-- **[Core Concepts](getting-started/concepts.md)**: Understand active learning fundamentals and LearnM8 architecture
-- **[CLI Reference](user-guide/cli-reference.md)**: Complete command-line documentation
-- **[API Reference](user-guide/api-reference.md)**: Detailed Python API documentation
-
-## Links
-
-- **GitHub Repository**: [https://github.com/volkamerlab/LearnM8](https://github.com/volkamerlab/LearnM8)
-- **Issue Tracker**: [https://github.com/volkamerlab/LearnM8/issues](https://github.com/volkamerlab/LearnM8/issues)
-- **License**: See [LICENSE](https://github.com/volkamerlab/LearnM8/blob/main/LICENSE)
+- **[Quickstart Tutorial](getting-started/quickstart.md)**: Run your first experiment
+- **[Core Concepts](getting-started/concepts.md)**: Understand active learning and LearnM8's design
+- **[CLI Reference](user-guide/cli-reference.md)**: Full command-line documentation
+- **[API Reference](user-guide/api-reference.md)**: Complete Python API reference
