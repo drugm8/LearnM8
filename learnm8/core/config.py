@@ -37,7 +37,7 @@ class CycleConfig:
         batch_fraction: Fraction of original pool to select per cycle
         pruning_strategy: Pruning strategy name (e.g., 'score')
         pruning_params: Parameters for pruning strategy (e.g., {'pruning_fraction': 0.3})
-        acquisition_params: Parameters for acquisition strategy (e.g., {'exploration_weight': 2.0})
+        acquisition_params: Parameters for acquisition strategy (e.g., {'beta': 2.0})
 
     Example:
         >>> config = CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)
@@ -145,7 +145,7 @@ def parse_cycle_spec(spec: str) -> list[dict[str, Any]]:
                 f"Expected format: 'strategy:fraction' or 'strategy:fraction*count'. "
                 f"Example: 'greedy:0.01' or 'greedy:0.01*5'. "
                 f"Error: {e}"
-            )
+            ) from e
 
     return configs
 
