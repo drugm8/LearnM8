@@ -60,6 +60,8 @@ name = "volkamerlab/LearnM8"
 edit_uri = "edit/main/docs/"
 
 [project.theme]
+logo = "assets/learnm8_logo.svg"
+favicon = "assets/favicon.svg"
 language = "en"
 features = [
   "content.code.annotate",
@@ -79,10 +81,14 @@ features = [
   "toc.follow",
 ]
 
+[project.theme.font]
+text = "Quicksand"
+code = "JetBrains Mono"
+
 [[project.theme.palette]]
 scheme = "default"
-primary = "indigo"
-accent = "indigo"
+primary = "purple"
+accent = "purple"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
