@@ -1,13 +1,12 @@
 name: learnm8
 channels:
   - rapidsai
-  - pytorch
   - conda-forge
   - nvidia
 
 dependencies:
   # --- Python runtime ---
-  - python=3.11
+  - python=3.12
 
   # --- Core scientific computing ---
   - numpy>=1.24,<3.0
@@ -17,26 +16,33 @@ dependencies:
   - pyarrow>=15.0
 
   # --- Machine learning ---
-  - scikit-learn>=1.2,<1.8
-  - xgboost>=1.7,<3.0
+  # scikit-learn 1.4 is the first release with full py3.12 wheels on conda-forge.
+  - scikit-learn>=1.4,<1.8
+  - xgboost>=2.0,<4.0
   - statsmodels>=0.14
   - joblib>=1.2
 
   # --- Chemistry ---
-  - rdkit>=2023.03
-  - datamol>=0.12
-  - mordredcommunity
+  - rdkit>=2024.03
+  - datamol>=0.12.5
+  - mordredcommunity>=2.0.0
 
-  # --- Deep learning (PyTorch + CUDA 12) ---
-  - pytorch>=2.0,<3.0
-  - pytorch-cuda>=12.4
+  # --- Deep learning (PyTorch + CUDA 12, conda-forge build) ---
+  # Use conda-forge build selector instead of the deprecated pytorch-cuda meta-package.
+  # cuda-version pin keeps RAPIDS + pytorch on the same CUDA 12.x family.
+  - pytorch>=2.4,<3.0=*cuda12*
   - pytorch-lightning>=2.0,<3.0
+  - cuda-version>=12.4,<13
 
-  # --- GPU acceleration (CUDA 12) ---
+  # --- GPU acceleration (RAPIDS, CUDA 12) ---
+  # cuml >=25.10 is the first release with py3.12 + treelite>=4.6 on the rapidsai channel.
+  - cuml>=25.10,<26
+  - cupy>=13.6
+  - treelite>=4.6,<5.0
+
+  # --- Gaussian processes (gauche dep, installed via conda for ABI stability) ---
   - gpytorch>=1.11
-  - cuml>=25.04
-  - cupy
-  - treelite>=4.4,<5.0
+  - botorch>=0.11
 
   # --- IO, display & config ---
   - h5py>=3.0
@@ -53,9 +59,11 @@ dependencies:
   # --- Pip-only packages ---
   - pip
   - pip:
-    - chemprop
-    - fastprop
-    - scikit-fingerprints
+    - chemprop>=2.2
+    - fastprop>=1.2
+    - scikit-fingerprints>=2.0.0
+    # gauche's PyPI classifiers omit py3.12, but requires-python=">=3.8" and all
+    # deps (torch/gpytorch/botorch/rdkit) support py3.12. Install --no-deps and
+    # rely on conda-provided botorch+gpytorch if pip install fails on metadata.
     - gauche>=0.1.6
     - pytest-xdist>=3.5
-    - git+https://github.com/mqcomplab/bitbirch.git
