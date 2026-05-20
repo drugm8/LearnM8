@@ -132,3 +132,4 @@ docs/decisions/TEMPLATE.md
 .github/prompts/review-current-spec-or-plan.prompt.md
 .claude/migration_008_parquet.md
 site/*
+output/
