@@ -34,6 +34,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -638,6 +639,39 @@ _DENSE_EXPECTED_FEATURES_DTYPE: dict[str, Any] = {
     STORAGE_FLOAT32: np.float32,
     STORAGE_UINT8: np.uint8,
 }
+
+
+@dataclass(frozen=True)
+class CacheMetadata:
+    """Parsed v3 cache root attrs + derived shape facts.
+
+    Returned by the cheap and full validators so callers do not re-parse HDF5
+    attrs. ``feature_width`` is the on-disk ``/features`` column count for dense
+    layouts and ``None`` for CSR layouts — the invariant is enforced in
+    ``__post_init__`` so dense-path consumers may rely on it being non-``None``.
+    """
+
+    schema_version: int
+    bit_count: int
+    storage_dtype: str
+    storage_layout: str
+    featurizer_name: str
+    write_epoch: int
+    n_rows: int
+    feature_width: int | None
+
+    def __post_init__(self) -> None:
+        is_csr = self.storage_layout == LAYOUT_CSR
+        if is_csr and self.feature_width is not None:
+            raise ValueError(
+                f'CSR cache metadata must have feature_width=None, '
+                f'got {self.feature_width!r}.'
+            )
+        if not is_csr and self.feature_width is None:
+            raise ValueError(
+                f'dense cache metadata requires a feature_width, got None '
+                f'(storage_layout={self.storage_layout!r}).'
+            )
 
 
 def _validate_cache_integrity(
