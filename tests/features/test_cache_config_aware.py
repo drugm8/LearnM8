@@ -154,7 +154,7 @@ class TestCacheWithDifferentParameters:
     """Test caching with various parameter combinations."""
 
     def test_cache_fp_size_variations(self, small_real_compounds, tmp_path):
-        """Different fp_size = different bit_count = old v2 file gets renamed."""
+        """Different fp_size = different bit_count = stale cache file gets replaced."""
         import h5py
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
@@ -172,11 +172,9 @@ class TestCacheWithDifferentParameters:
         assert feat_2048.shape[1] == 2048
         assert feat_4096.shape[1] == 4096
 
-        # Active cache reflects the latest bit_count; previous file lives at .dim<N>.bak
+        # Stale cache replaced; active file reflects latest bit_count.
         active = tmp_path / 'features_morgan.h5'
-        backup = tmp_path / 'features_morgan.h5.dim2048.bak'
         assert active.exists()
-        assert backup.exists()
 
         with h5py.File(active, 'r') as h5f:
             assert int(h5f.attrs['bit_count']) == 4096
