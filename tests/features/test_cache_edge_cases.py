@@ -1,4 +1,4 @@
-"""Edge-case tests for the v2 cache (T033)."""
+"""Edge-case tests for the cache (T033)."""
 
 from __future__ import annotations
 

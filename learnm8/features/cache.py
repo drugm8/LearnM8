@@ -1,4 +1,4 @@
-"""HDF5 v3 bit-packed binary feature cache.
+"""HDF5 bit-packed binary feature cache (schema v3).
 
 Schema (version 3):
   - /hash_index: (N,) S16    — 128-bit BLAKE2b digests, sorted ascending (lex)
@@ -12,21 +12,14 @@ Cache-key recipe:
           digest_size=16, usedforsecurity=False)
 
 The 128-bit digest gives ~1.5e-23 collision probability at N=10**8 (birthday
-formula), versus ~2.7e-4 for the prior v2 64-bit truncation — adequate at
-LearnM8's 10**8 design point with comfortable headroom.
+formula).
 
 Concurrency:
   Single-node, single-filesystem use only. NFS, Lustre, GlusterFS, and other
   shared/distributed filesystems are NOT supported and may produce silent
   corruption — fcntl.flock has well-defined semantics only on local POSIX
-  filesystems. Locking uses a sidecar `<cache>.lock` file and a thread-safe
-  in-process `OrderedDict` LRU keyed on (path, mtime_ns, write_epoch).
-
-Migration:
-  Opening a cache (64-bit hash) renames the file to ``<name>.h5.hash64.bak``
-  and creates a fresh v3 cache. The ``.bak`` is preserved; the user may delete
-  it once satisfied. If ``<name>.h5.hash64.bak`` already exists, migration is
-  REFUSED to prevent data loss.
+  filesystems. Locking uses a sidecar ``<cache>.lock`` file and a thread-safe
+  in-process ``OrderedDict`` LRU keyed on (path, mtime_ns, write_epoch).
 """
 
 from __future__ import annotations
@@ -54,7 +47,6 @@ from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import (
     ConfigurationError,
     FeatureExtractionError,
-    PersistenceError,
 )
 
 logger = logging.getLogger(__name__)
@@ -456,7 +448,7 @@ def _merge_sorted_indices(
 
 
 # ---------------------------------------------------------------------------
-# v2 file open / init (T009, T010, T029)
+# File open / init
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +485,7 @@ def _dense_np_dtype(storage_dtype: str) -> Any:
     return np.float32
 
 
-def _initialize_v2_csr_datasets(
+def _initialize_csr_datasets(
     f: h5py.File, featurizer: Featurizer, storage_dtype: str
 ) -> None:
     """Create CSR-layout datasets (csr_data/csr_indices/csr_indptr + hash/row indices)."""
@@ -560,7 +552,7 @@ def _initialize_v3_datasets(
     """Create empty v3 datasets and write root attrs."""
     storage_dtype = _normalize_storage_dtype(storage_dtype)
     if storage_dtype == STORAGE_CSR_UINT16:
-        _initialize_v2_csr_datasets(f, featurizer, storage_dtype)
+        _initialize_csr_datasets(f, featurizer, storage_dtype)
         return
 
     bit_count = int(featurizer.get_dimension())
@@ -604,109 +596,36 @@ def _create_fresh_v3(path: Path, featurizer: Featurizer, storage_dtype: str) -> 
         _initialize_v3_datasets(f, featurizer, storage_dtype)
 
 
-def _atomic_rename(src: Path, dst: Path) -> None:
-    try:
-        os.replace(str(src), str(dst))
-    except OSError as exc:
-        raise PersistenceError(
-            f'Failed to rename cache file {src} → {dst}: {exc}. '
-            f'The original file has not been modified.'
-        ) from exc
-
-
 def _open_or_create_h5(cache_path: Path, featurizer: Featurizer) -> h5py.File:
-    """Probe-and-create-or-open under the writer's exclusive lock (T009 + T029).
+    """Open or create the cache file under the writer's exclusive lock.
 
-    Caller MUST already hold ``LOCK_EX`` on ``cache_path.lock``. The probe step
-    must happen under the writer lock so a concurrent writer cannot rename the
-    file mid-probe.
+    Caller MUST already hold ``LOCK_EX`` on ``cache_path.lock``.
     """
     storage_dtype = _normalize_storage_dtype(featurizer.get_storage_dtype())
     expected_dim = int(featurizer.get_dimension())
 
+    def _recreate() -> h5py.File:
+        with contextlib.suppress(OSError):
+            os.remove(str(cache_path))
+        _create_fresh_v3(cache_path, featurizer, storage_dtype)
+        return _h5_open(cache_path, 'a')
+
     if not cache_path.exists():
-        _create_fresh_v3(cache_path, featurizer, storage_dtype)
-        return _h5_open(cache_path, 'a')
+        return _recreate()
 
-    schema_version: int | None
-    bit_count: int | None
-    file_storage_dtype: str | None
     try:
-        with _h5_open(cache_path, 'r') as probe:
-            sv = probe.attrs.get(ATTR_SCHEMA_VERSION, None)
-            bc = probe.attrs.get(ATTR_BIT_COUNT, None)
-            sd = probe.attrs.get(ATTR_STORAGE_DTYPE, None)
-            schema_version = int(sv) if sv is not None else None
-            bit_count = int(bc) if bc is not None else None
-            file_storage_dtype = str(sd) if sd is not None else None
-    except (OSError, KeyError):
-        schema_version = None
-        bit_count = None
-        file_storage_dtype = None
-
-    if schema_version != SCHEMA_VERSION:
-        # v2 → v3 migration uses a dedicated .hash64.bak suffix and refuses to
-        # overwrite an existing .bak — prevents data loss if the user runs the
-        # migration twice.
-        if schema_version == 2:
-            backup = cache_path.with_suffix(cache_path.suffix + '.hash64.bak')
-            if backup.exists():
-                raise PersistenceError(
-                    f'Refusing to migrate cache {cache_path}: backup target '
-                    f'{backup} already exists. Inspect or delete it and retry. '
-                    f'The original cache has not been modified.'
-                )
-            _atomic_rename(cache_path, backup)
-            logger.warning(
-                'Migrated v2 (64-bit hash) cache to %s; starting fresh v3 '
-                '(128-bit hash) cache. The .bak may be deleted once verified.',
-                backup,
-            )
-        else:
-            suffix_tag = f'v{schema_version}' if schema_version is not None else 'v0'
-            backup = cache_path.with_suffix(cache_path.suffix + f'.{suffix_tag}.bak')
-            _atomic_rename(cache_path, backup)
-            logger.warning(
-                'Renamed non-v3 cache to %s; starting fresh v3 cache.', backup
-            )
-        _create_fresh_v3(cache_path, featurizer, storage_dtype)
-        return _h5_open(cache_path, 'a')
-
-    if bit_count != expected_dim:
-        tag = f'dim{bit_count}' if bit_count is not None else 'dimunknown'
-        backup = cache_path.with_suffix(cache_path.suffix + f'.{tag}.bak')
-        _atomic_rename(cache_path, backup)
-        logger.warning(
-            'Renamed cache with mismatched bit_count (%s vs expected %d) '
-            'to %s; starting fresh v3 cache.',
-            bit_count,
-            expected_dim,
-            backup,
-        )
-        _create_fresh_v3(cache_path, featurizer, storage_dtype)
-        return _h5_open(cache_path, 'a')
-
-    if file_storage_dtype is not None and file_storage_dtype != storage_dtype:
-        # Distinguish legitimate stale cache (user flipped get_storage_dtype()) from
-        # genuine corruption (attr tampered or partial write). Validate against the
-        # file's own recorded dtype: if the file is internally consistent, it's just
-        # stale → rename to .bak. If inconsistent, propagate the validation error.
-        with _h5_open(cache_path, 'r') as probe:
-            _validate_v2_file_integrity(probe, featurizer, cache_path)
-        tag = f'dim{bit_count}'
-        backup = cache_path.with_suffix(cache_path.suffix + f'.{tag}.bak')
-        _atomic_rename(cache_path, backup)
-        logger.warning(
-            'Renamed cache with mismatched storage_dtype (%s vs expected %s) '
-            'to %s; starting fresh v3 cache.',
-            file_storage_dtype,
-            storage_dtype,
-            backup,
-        )
-        _create_fresh_v3(cache_path, featurizer, storage_dtype)
-        return _h5_open(cache_path, 'a')
-
-    return _h5_open(cache_path, 'a')
+        f = _h5_open(cache_path, 'a')
+        sv = f.attrs.get(ATTR_SCHEMA_VERSION, None)
+        if sv is None or int(sv) != SCHEMA_VERSION:
+            f.close()
+            return _recreate()
+        bc = f.attrs.get(ATTR_BIT_COUNT, None)
+        if bc is None or int(bc) != expected_dim:
+            f.close()
+            return _recreate()
+        return f
+    except OSError:
+        return _recreate()
 
 
 # ---------------------------------------------------------------------------
@@ -721,7 +640,7 @@ _DENSE_EXPECTED_FEATURES_DTYPE: dict[str, Any] = {
 }
 
 
-def _validate_v2_file_integrity(
+def _validate_cache_integrity(
     f: h5py.File, featurizer: Featurizer, cache_path: Path
 ) -> None:
     """Check the contract invariants; on violation raise ``FeatureExtractionError``."""
@@ -1223,7 +1142,7 @@ def from_storage_uint8(
 
 
 def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
-    """Decorator factory: v2 bit-packed HDF5 cache around a featurizer call.
+    """Decorator factory: bit-packed HDF5 cache around a featurizer call.
 
     The wrapped function MUST accept ``(smiles_list, featurizer, *args, **kwargs)``
     and return a ``(N, dim) float32`` matrix for the missed SMILES.
@@ -1270,16 +1189,10 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                     if f_ro is not None:
                         try:
                             sv = f_ro.attrs.get(ATTR_SCHEMA_VERSION, None)
-                            bc = f_ro.attrs.get(ATTR_BIT_COUNT, None)
-                            sd = f_ro.attrs.get(ATTR_STORAGE_DTYPE, None)
-                            sd_match = sd is not None and str(sd) == storage_dtype
-                            if (
-                                sv is not None
-                                and int(sv) == SCHEMA_VERSION
-                                and bc == dim
-                                and sd_match
-                            ):
-                                _validate_v2_file_integrity(
+                            if sv is None or int(sv) != SCHEMA_VERSION:
+                                pass
+                            else:
+                                _validate_cache_integrity(
                                     f_ro, featurizer, cache_path
                                 )
                                 t_open = time.perf_counter()
@@ -1314,9 +1227,9 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
             t_write_start = t_read
             t_end = t_read
             if n_misses:
-                # Phase 2: misses → LOCK_EX, re-open (handles v1/dim rename),
-                # re-lookup-and-read (picks up any rows committed by other
-                # writers between Phase 1 release and Phase 2 acquire), then write.
+                # Phase 2: misses → LOCK_EX, re-open, re-lookup-and-read
+                # (picks up any rows committed by other writers between
+                # Phase 1 release and Phase 2 acquire), then write.
                 with _acquire_lock(cache_path, mode='exclusive'):
                     f = _open_or_create_h5(cache_path, featurizer)
                     try:

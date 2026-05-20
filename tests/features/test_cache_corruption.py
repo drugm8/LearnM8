@@ -15,7 +15,7 @@ from learnm8.features.extraction import extract_features
 
 
 @pytest.fixture
-def populated_v2_cache(tmp_path: Path) -> Path:
+def populated_cache(tmp_path: Path) -> Path:
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
     _HASH_INDEX_CACHE.clear()
@@ -90,9 +90,9 @@ CORRUPTORS = {
 
 @pytest.mark.unit
 @pytest.mark.parametrize('invariant_id', sorted(CORRUPTORS))
-def test_each_invariant_violation_raises(populated_v2_cache: Path, invariant_id: int):
-    CORRUPTORS[invariant_id](populated_v2_cache)
-    cache_dir = populated_v2_cache.parent
+def test_each_invariant_violation_raises(populated_cache: Path, invariant_id: int):
+    CORRUPTORS[invariant_id](populated_cache)
+    cache_dir = populated_cache.parent
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     with pytest.raises(FeatureExtractionError, match=r'[Dd]elete the cache file'):
@@ -100,21 +100,21 @@ def test_each_invariant_violation_raises(populated_v2_cache: Path, invariant_id:
 
 
 @pytest.mark.unit
-def test_truncated_file_fails_fast(populated_v2_cache: Path):
-    file_size = populated_v2_cache.stat().st_size
-    with open(populated_v2_cache, 'r+b') as f:
+def test_truncated_file_fails_fast(populated_cache: Path):
+    file_size = populated_cache.stat().st_size
+    with open(populated_cache, 'r+b') as f:
         f.truncate(file_size // 2)
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     with pytest.raises(FeatureExtractionError):
-        extract_features(['CCO', 'XXXNEW'], feat, cache_dir=populated_v2_cache.parent)
+        extract_features(['CCO', 'XXXNEW'], feat, cache_dir=populated_cache.parent)
 
 
 @pytest.mark.unit
-def test_no_silent_fallback_on_corruption(populated_v2_cache: Path):
+def test_no_silent_fallback_on_corruption(populated_cache: Path):
     """FR-011: corrupt cache must NEVER silently re-fingerprint."""
-    _break_invariant_4_dtype_mismatch(populated_v2_cache)
+    _break_invariant_4_dtype_mismatch(populated_cache)
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     with pytest.raises(FeatureExtractionError):
-        extract_features(['CCO'], feat, cache_dir=populated_v2_cache.parent)
+        extract_features(['CCO'], feat, cache_dir=populated_cache.parent)
