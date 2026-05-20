@@ -28,6 +28,7 @@ import contextlib
 import fcntl
 import hashlib
 import logging
+import math
 import os
 import threading
 import time
@@ -1030,6 +1031,124 @@ def _read_cache_hits_csr(
     return out_unique[inverse_unique]
 
 
+def _count_dense_runs(unique_rows: np.ndarray) -> int:
+    """Number of maximal contiguous runs in sorted unique row indices."""
+    n = unique_rows.size
+    if n <= 1:
+        return int(n)
+    diffs = np.diff(unique_rows.astype(np.int64))
+    return int(1 + np.count_nonzero(diffs != 1))
+
+
+def _should_use_dense_runs(n_unique: int, n_runs: int) -> bool:
+    """Whether the contiguous-run reader beats the fancy-index gather.
+
+    Runs win when they cut HDF5 slice operations: the fancy path issues
+    ``ceil(n_unique / H5_FANCY_INDEX_CHUNK)`` chunked gathers; the runs path
+    issues one contiguous slab read per run. The gate is deliberately
+    conservative — sparse reads route to the fancy path, which never
+    over-reads gap rows (a slab read of sparse rows would).
+    """
+    if n_unique == 0:
+        return False
+    fancy_chunks = math.ceil(n_unique / H5_FANCY_INDEX_CHUNK)
+    return n_runs <= max(1, fancy_chunks)
+
+
+def _read_cache_hits_dense_fancy(
+    f: h5py.File,
+    unique_rows: np.ndarray,
+    inverse_unique: np.ndarray,
+    storage_dtype: str,
+    bit_count: int,
+    output_dtype: str,
+) -> np.ndarray:
+    """Dense read via chunked h5py fancy indexing — the reference path.
+
+    Kept permanently as the differential oracle for
+    :func:`_read_cache_hits_dense_runs`.
+    """
+    width = _packed_width(bit_count, storage_dtype)
+    np_dtype = _dense_np_dtype(storage_dtype)
+    n_unique = unique_rows.size
+    raw = np.empty((n_unique, width), dtype=np_dtype)
+    features = f[DSET_FEATURES]
+    for start in range(0, n_unique, H5_FANCY_INDEX_CHUNK):
+        end = min(start + H5_FANCY_INDEX_CHUNK, n_unique)
+        idx = unique_rows[start:end].tolist()
+        raw[start:end] = features[idx, :]
+
+    if output_dtype == 'uint8':
+        decoded_unique = from_storage_uint8(raw, storage_dtype, bit_count)
+    else:
+        decoded_unique = from_storage(raw, storage_dtype, bit_count)
+    return np.asarray(decoded_unique[inverse_unique])
+
+
+def _read_cache_hits_dense_runs(
+    f: h5py.File,
+    unique_rows: np.ndarray,
+    inverse_unique: np.ndarray,
+    storage_dtype: str,
+    bit_count: int,
+    output_dtype: str,
+    slab_rows: int,
+) -> np.ndarray:
+    """Dense read via memory-bounded contiguous slabs.
+
+    Fills the final output array directly from bounded decoded slabs; never
+    holds a full raw-unique matrix and a full decoded-unique matrix at once
+    (that 2x-full-size pairing is the fancy path's peak-RSS cost). The slab
+    loop runs unconditionally, including when the rows form a single run that
+    spans the whole dataset. Bit-identical to
+    :func:`_read_cache_hits_dense_fancy`.
+    """
+    out_np_dtype = np.uint8 if output_dtype == 'uint8' else np.float32
+    n_targets = int(inverse_unique.size)
+    if n_targets == 0:
+        return np.empty((0, bit_count), dtype=out_np_dtype)
+
+    out = np.empty((n_targets, bit_count), dtype=out_np_dtype)
+    inverse_unique = np.ascontiguousarray(inverse_unique, dtype=np.int64).reshape(-1)
+    # Group target positions by their unique-row index so each slab scatters a
+    # contiguous slice of `order` rather than scanning all targets per slab.
+    order = np.argsort(inverse_unique, kind='stable')
+    inverse_sorted = inverse_unique[order]
+    features = f[DSET_FEATURES]
+    n_feature_rows = int(features.shape[0])
+    n_unique = int(unique_rows.size)
+
+    pos = 0
+    while pos < n_unique:
+        slab_first = int(unique_rows[pos])
+        slab_stop = slab_first + slab_rows
+        end = max(int(np.searchsorted(unique_rows, slab_stop, side='left')), pos + 1)
+        slab_last = int(unique_rows[end - 1])
+        # A slice past the dataset end clamps silently; fancy indexing raises.
+        # Make the runs path raise too — an out-of-bounds row_index (already
+        # rejected by cheap validation) must never read garbage.
+        if slab_last >= n_feature_rows:
+            raise FeatureExtractionError(
+                f'cache row_index {slab_last} past /features rows '
+                f'{n_feature_rows}; cache is corrupt.'
+            )
+        raw_slab = features[slab_first : slab_last + 1, :]
+        if output_dtype == 'uint8':
+            decoded_slab = from_storage_uint8(raw_slab, storage_dtype, bit_count)
+        else:
+            decoded_slab = from_storage(raw_slab, storage_dtype, bit_count)
+        assert decoded_slab.shape[0] <= slab_rows
+
+        t_lo = int(np.searchsorted(inverse_sorted, pos, side='left'))
+        t_hi = int(np.searchsorted(inverse_sorted, end, side='left'))
+        sel = order[t_lo:t_hi]
+        local = unique_rows[inverse_unique[sel]].astype(np.int64) - slab_first
+        out[sel] = decoded_slab[local]
+        pos = end
+        del raw_slab, decoded_slab
+    return out
+
+
 def _read_cache_hits(
     f: h5py.File,
     target_rows: np.ndarray,
@@ -1043,8 +1162,9 @@ def _read_cache_hits(
     ``packed_uint8`` / ``uint8`` storage (REQ-9). CSR storage always returns
     float32 regardless (REQ-10).
 
-    h5py fancy indexing requires strictly-increasing indices; duplicates in the
-    caller's query (same SMILES twice) collapse to a single read and re-expand.
+    Dense storage dispatches between a memory-bounded contiguous-run reader
+    (contiguous / ordered reads — e.g. a full prediction pool) and the chunked
+    fancy-index reader (sparse reads); see :func:`_should_use_dense_runs`.
     """
     out_np_dtype = np.uint8 if output_dtype == 'uint8' else np.float32
     if target_rows.size == 0:
@@ -1055,21 +1175,19 @@ def _read_cache_hits(
         return _read_cache_hits_csr(f, target_rows, bit_count)
 
     unique_rows, inverse_unique = np.unique(target_rows, return_inverse=True)
-    n_unique = unique_rows.size
-    width = _packed_width(bit_count, storage_dtype)
-    np_dtype = _dense_np_dtype(storage_dtype)
-    raw = np.empty((n_unique, width), dtype=np_dtype)
-    features = f[DSET_FEATURES]
-    for start in range(0, n_unique, H5_FANCY_INDEX_CHUNK):
-        end = min(start + H5_FANCY_INDEX_CHUNK, n_unique)
-        idx = unique_rows[start:end].tolist()
-        raw[start:end] = features[idx, :]
-
-    if output_dtype == 'uint8':
-        decoded_unique = from_storage_uint8(raw, storage_dtype, bit_count)
-    else:
-        decoded_unique = from_storage(raw, storage_dtype, bit_count)
-    return decoded_unique[inverse_unique]
+    if _should_use_dense_runs(unique_rows.size, _count_dense_runs(unique_rows)):
+        return _read_cache_hits_dense_runs(
+            f,
+            unique_rows,
+            inverse_unique,
+            storage_dtype,
+            bit_count,
+            output_dtype,
+            MAX_UNPACK_CHUNK_ROWS,
+        )
+    return _read_cache_hits_dense_fancy(
+        f, unique_rows, inverse_unique, storage_dtype, bit_count, output_dtype
+    )
 
 
 def _write_csr_misses(
