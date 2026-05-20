@@ -72,25 +72,6 @@ class TestEnsembleLearner:
         assert "mean" in name
         assert "+" in name
 
-    def test_add_learner(self, ensemble):
-        """Test adding learners to ensemble."""
-        initial_count = len(ensemble.learners)
-
-        new_learner = RandomForestLearner(n_estimators=3, random_state=123)
-        ensemble.add_learner(new_learner)
-
-        assert len(ensemble.learners) == initial_count + 1
-        assert not ensemble.is_trained
-
-    def test_remove_learner(self, ensemble):
-        """Test removing learners from ensemble."""
-        initial_count = len(ensemble.learners)
-
-        ensemble.remove_learner(0)
-
-        assert len(ensemble.learners) == initial_count - 1
-        assert not ensemble.is_trained
-
     def test_failed_learner_handling(self, compounds_20, features_20):
         """Test handling of failed learners during training."""
         compounds = compounds_20.clone()

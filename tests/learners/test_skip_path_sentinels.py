@@ -29,7 +29,7 @@ def _tiny_fixture():
 
 
 # ---------------------------------------------------------------------------
-# CPU skip-eligible learners (5)
+# CPU skip-eligible learners (4)
 # ---------------------------------------------------------------------------
 
 
@@ -83,23 +83,6 @@ def test_rf_skip_does_not_call_np_std():
     assert mock_std.call_count == 0, (
         f'RF skip path invoked np.std {mock_std.call_count}x; expected 0.'
     )
-
-
-def test_advanced_rf_skip_does_not_call_np_std():
-    """AdvancedRandomForest: mirror of RF skip path."""
-    from learnm8.learners.sklearn import advanced_random_forest as arf_module
-
-    X, y = _tiny_fixture()
-    learner = arf_module.AdvancedRandomForestLearner(
-        n_estimators=5, random_state=42, max_depth=3
-    )
-    learner.train(X, y)
-
-    with patch.object(arf_module.np, 'std') as mock_std:
-        _preds, sigmas = learner.predict(X, compute_uncertainty=False)
-
-    assert sigmas is None
-    assert mock_std.call_count == 0
 
 
 def test_dt_skip_does_not_call_apply():

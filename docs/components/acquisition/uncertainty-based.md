@@ -2,7 +2,7 @@
 
 Uncertainty-based acquisition strategies leverage model confidence estimates to balance exploration (sampling uncertain regions) with exploitation (sampling predicted high-value compounds). These strategies are particularly powerful when paired with learners that provide well-calibrated uncertainty quantification.
 
-All strategies in this section require learners that support uncertainty estimation (Gaussian Process, ensembles, MC Dropout, or Advanced Random Forest).
+All strategies in this section require learners that support uncertainty estimation (Gaussian Process, ensembles, or MC Dropout).
 
 ## Upper Confidence Bound (UCB)
 
@@ -56,7 +56,6 @@ UCB requires uncertainty estimates. Compatible learners:
 - **GaussianProcessLearner** - Best calibrated uncertainty
 - **Ensemble learners** - Uncertainty from model disagreement (MixedEnsemble, RFEnsemble, etc.)
 - **MCDropoutLearner** - Uncertainty from dropout sampling
-- **AdvancedRandomForestLearner** - Uncertainty from OOB scoring
 
 ### Examples
 
@@ -322,7 +321,6 @@ Thompson Sampling requires uncertainty estimates. Compatible learners:
 - **GaussianProcessLearner** - Best calibrated sampling
 - **Ensemble learners** - Samples from model disagreement
 - **MCDropoutLearner** - Samples from dropout distribution
-- **AdvancedRandomForestLearner** - Samples from OOB estimates
 
 ### Examples
 
@@ -422,7 +420,6 @@ Entropy requires uncertainty estimates. Compatible learners:
 - **GaussianProcessLearner** - Best calibrated entropy
 - **Ensemble learners** - Entropy from model disagreement
 - **MCDropoutLearner** - Entropy from dropout variability
-- **AdvancedRandomForestLearner** - Entropy from OOB estimates
 
 ### Examples
 

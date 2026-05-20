@@ -1,6 +1,6 @@
 # Scikit-learn Learners
 
-LearnM8 provides six scikit-learn based learners optimized for molecular property prediction. These models offer proven performance, computational efficiency, and robust handling of different dataset characteristics.
+LearnM8 provides five scikit-learn based learners optimized for molecular property prediction. These models offer proven performance, computational efficiency, and robust handling of different dataset characteristics.
 
 ## RandomForestLearner
 
@@ -12,7 +12,6 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 
 - Fast prototyping and baseline establishment
 - Datasets of any size (particularly effective for 100-10,000 compounds)
-- When interpretability through feature importance is valuable
 - As a component in ensemble models
 
 **Key characteristics:**
@@ -20,7 +19,6 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 - No uncertainty quantification (base implementation)
 - Parallel training across all CPU cores
 - Out-of-bag (OOB) scoring for model validation
-- Feature importance through tree-based analysis
 
 ### Parameters
 
@@ -43,7 +41,7 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 
 ### Uncertainty Support
 
-**No** - Base RandomForestLearner does not provide uncertainty estimates. Use AdvancedRandomForestLearner or ensemble variants for uncertainty quantification.
+**No** - Base RandomForestLearner does not provide uncertainty estimates. Use ensemble variants for uncertainty quantification.
 
 ### Performance Characteristics
 
@@ -57,7 +55,7 @@ Random Forest uses an ensemble of decision trees trained on bootstrapped samples
 
 **Memory:** Moderate (trees stored in memory, ~1-10 MB per 100 trees)
 
-**Best for:** Quick prototyping, baseline models, feature importance analysis
+**Best for:** Quick prototyping, baseline models
 
 ### Example (CLI)
 
@@ -88,7 +86,6 @@ results = run_active_learning(
 )
 
 oob_score = learner.get_oob_score()
-feature_importance = learner.get_feature_importance()
 ```
 
 ---
@@ -185,8 +182,6 @@ results = run_active_learning(
     cycles=[('random', 0.02), ('ucb', 0.01)],
     acquisition_params={'beta': 2.0}
 )
-
-hyperparams = learner.get_learned_hyperparameters()
 ```
 
 ---
@@ -231,7 +226,6 @@ XGBoost provides high-performance gradient boosting optimized for speed and accu
 - Training time scales with `n_estimators` × `max_depth`
 - Histogram-based algorithm (`tree_method='hist'`) for efficiency
 - Memory efficient compared to Random Forest
-- Feature importance through gain/weight/cover metrics
 
 ### Uncertainty Support
 
@@ -283,9 +277,6 @@ results = run_active_learning(
     featurizer='morgan',
     n_cycles=15
 )
-
-feature_importance = learner.get_feature_importance()
-booster_stats = learner.get_booster_stats()
 ```
 
 ---
@@ -373,8 +364,6 @@ results = run_active_learning(
     featurizer='morgan',
     n_cycles=10
 )
-
-feature_importance = learner.get_feature_importance()
 ```
 
 ---
@@ -459,118 +448,6 @@ results = run_active_learning(
     featurizer='descriptors',
     n_cycles=10
 )
-
-coefficients = learner.get_coefficients()
-intercept = learner.get_intercept()
-```
-
----
-
-## AdvancedRandomForestLearner
-
-### Overview
-
-Advanced Random Forest extends the base RandomForestLearner with optimized hyperparameters, regularization techniques, and enhanced configuration for superior performance on molecular datasets. This learner includes 300 trees (vs 100), depth limits, cost complexity pruning, and bootstrap subsampling designed to balance accuracy and generalization.
-
-**When to use:**
-
-- When Random Forest is preferred but enhanced performance needed
-- Medium to large molecular datasets (1,000-50,000 compounds)
-- When out-of-bag validation is valuable
-- As a strong single-model baseline before ensembles
-
-**Key characteristics:**
-
-- Optimized hyperparameters for molecular data
-- Cost complexity pruning (ccp_alpha) prevents overfitting
-- Bootstrap subsampling adds regularization
-- Enhanced tree statistics and diagnostics
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `n_estimators` | int | 300 | Number of trees (3x base RF). More trees improve stability and reduce variance. |
-| `max_depth` | int | 15 | Maximum tree depth. Limited depth prevents overfitting compared to unlimited in base RF. |
-| `min_samples_split` | int | 5 | Minimum samples to split. Higher than base RF (2) for regularization. |
-| `min_samples_leaf` | int | 2 | Minimum samples at leaves. Prevents single-sample leaves. |
-| `max_features` | str | 'sqrt' | Features per split. 'sqrt' provides good balance. |
-| `max_samples` | float | 0.8 | Bootstrap sample fraction. <1.0 adds regularization through subsampling. |
-| `min_impurity_decrease` | float | 0.0001 | Minimum improvement required to split. Prunes low-value splits. |
-| `ccp_alpha` | float | 0.001 | Cost complexity pruning parameter. Non-zero enables pruning of weak branches. |
-| `bootstrap` | bool | True | Enable bootstrap sampling. Recommended for OOB validation. |
-| `oob_score` | bool | True | Calculate out-of-bag score. Free validation metric. |
-| `random_state` | int | 42 | Random seed for reproducibility. |
-| `n_jobs` | int | -1 | Parallel jobs. Auto-capped at 32 cores for efficiency. |
-
-**Performance notes:**
-
-- 3x training time vs base RF (300 vs 100 trees)
-- Cost complexity pruning adds minimal overhead
-- OOB scoring provides free validation
-- Tree statistics available for analysis
-
-### Uncertainty Support
-
-**Yes** - AdvancedRandomForestLearner provides uncertainty estimates through tree prediction variance. Each tree in the forest makes a prediction, and the standard deviation across trees serves as uncertainty.
-
-**How it works:**
-
-- Collect predictions from all 300 trees
-- Mean prediction = average across trees
-- Uncertainty = standard deviation across trees
-- Higher variance indicates model disagreement (uncertainty)
-
-### Performance Characteristics
-
-**Speed:** Fast (3x slower than base RF due to more trees)
-
-**Scalability:**
-
-- Excellent for 1,000-50,000 compounds
-- Linear scaling with dataset size
-- Parallel training utilizes up to 32 CPU cores
-
-**Memory:** Moderate (300 trees stored, ~3x base RF memory)
-
-**Best for:** Enhanced Random Forest performance, molecular datasets requiring regularization
-
-### Example (CLI)
-
-```bash
-learnm8 run compounds.csv --target Activity --learner advanced_rf --featurizer morgan --cycles "random:0.02 greedy:0.01*9"
-```
-
-### Example (API)
-
-```python
-from learnm8 import run_active_learning
-from learnm8.learners.sklearn import AdvancedRandomForestLearner
-
-learner = AdvancedRandomForestLearner(
-    n_estimators=500,
-    max_depth=20,
-    min_samples_split=10,
-    min_samples_leaf=3,
-    max_samples=0.7,
-    min_impurity_decrease=0.0005,
-    ccp_alpha=0.005,
-    random_state=42
-)
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=learner,
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[('random', 0.02), ('greedy', 0.01)],
-    n_cycles=10
-)
-
-oob_score = learner.get_oob_score()
-tree_stats = learner.get_tree_stats()
-feature_importance = learner.get_feature_importance()
 ```
 
 ---
@@ -586,7 +463,6 @@ feature_importance = learner.get_feature_importance()
 | XGBoost | Very fast | 1k-100k+ | No | Low | Large datasets, max accuracy |
 | DecisionTree | Very fast | Any | No | Very low | Interpretability |
 | LinearRegression | Very fast | Any | No | Very low | Simple baseline |
-| AdvancedRandomForest | Fast | 1k-50k | Yes | Moderate | Enhanced RF performance |
 
 ### Featurizer Recommendations
 
@@ -599,7 +475,6 @@ feature_importance = learner.get_feature_importance()
 | XGBoost | `morgan` or `ecfp6` | Tree methods optimized for binary features |
 | DecisionTree | `morgan` | Simpler fingerprints easier to interpret |
 | LinearRegression | `descriptors` | Continuous features for linear relationships |
-| AdvancedRandomForest | `morgan` or `ecfp6` | Tree methods with binary fingerprints |
 
 ### When to Use Each Learner
 
@@ -607,7 +482,6 @@ feature_importance = learner.get_feature_importance()
 
 - Establishing baselines quickly
 - Dataset size is 100-10,000 compounds
-- Feature importance analysis needed
 - Computational resources limited
 
 **Choose GaussianProcessLearner when:**
@@ -637,10 +511,3 @@ feature_importance = learner.get_feature_importance()
 - Linear relationships suspected
 - Extremely fast predictions required
 - Interpretable coefficients valuable
-
-**Choose AdvancedRandomForestLearner when:**
-
-- Random Forest preferred but better performance needed
-- Dataset size 1,000-50,000 compounds
-- Uncertainty estimates desired without ensemble overhead
-- Regularization important for generalization

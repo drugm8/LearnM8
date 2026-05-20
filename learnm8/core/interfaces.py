@@ -350,7 +350,7 @@ class Featurizer(ABC):
     def get_storage_dtype(self) -> str:
         """Return the on-disk encoding name for this featurizer.
 
-        Used by the v2 HDF5 cache to dispatch between packed-binary storage
+        Used by the HDF5 cache to dispatch between packed-binary storage
         (32x compression for binary fingerprints) and plain float32 storage
         (continuous-valued descriptors).
 

@@ -75,7 +75,6 @@ class RfFilLearner(SklearnLearner):
         self.device = 'cuda'
         self.n_estimators = n_estimators
         self._fil_model = None
-        self._fil_tmp_dir: str | None = None
 
     def get_name(self) -> str:
         return 'rf_fil'

@@ -132,37 +132,6 @@ class TestFastpropEnsemble:
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
 
-    def test_diverse_random_states(
-        self, fastprop_ensemble, small_real_compounds, small_real_morgan_features
-    ):
-        """Test that ensemble learners have different random states."""
-        assert len(fastprop_ensemble.learners) == 3
-
-        random_states = [learner.random_state for learner in fastprop_ensemble.learners]
-        assert len(set(random_states)) == 3
-        assert random_states == [42, 123, 356]
-
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        individual_preds = fastprop_ensemble.get_individual_predictions(features)
-        assert len(individual_preds) == 3
-
-        pred_arrays = [
-            preds for preds in individual_preds.values() if preds is not None
-        ]
-        assert len(pred_arrays) == 3
-
-        for i in range(len(pred_arrays)):
-            for j in range(i + 1, len(pred_arrays)):
-                assert not np.allclose(pred_arrays[i], pred_arrays[j], rtol=1e-3)
-
     def test_train_with_empty_arrays(self, fastprop_ensemble):
         """Test error handling when training with empty arrays."""
         empty_features = np.array([]).reshape(0, 10)
@@ -285,48 +254,6 @@ class TestFastpropEnsemble:
 
         assert predictions.shape[0] == len(compounds)
         assert uncertainty.shape[0] == len(compounds)
-
-    def test_ensemble_statistics(
-        self, fastprop_ensemble, small_real_compounds, small_real_morgan_features
-    ):
-        """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        stats = fastprop_ensemble.get_ensemble_statistics()
-        assert stats['n_learners'] == 3
-        assert stats['is_trained'] is False
-
-        features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-        stats = fastprop_ensemble.get_ensemble_statistics()
-        assert stats['is_trained'] is True
-        assert 'learner_names' in stats
-        assert 'learners_with_uncertainty' in stats
-        assert len(stats['learner_names']) == 3
-
-    def test_individual_predictions(
-        self, fastprop_ensemble, small_real_compounds, small_real_morgan_features
-    ):
-        """Test individual learner predictions retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        features = small_real_morgan_features
-        fastprop_ensemble.train(features, compounds['Activity'].to_numpy())
-        individual_preds = fastprop_ensemble.get_individual_predictions(features)
-
-        assert len(individual_preds) == 3
-        for _learner_name, preds in individual_preds.items():
-            assert preds is not None
-            assert len(preds) == len(compounds)
-            assert np.all(np.isfinite(preds))
 
     def test_small_dataset_trains_and_predicts_finite_values(self, tmp_path):
         """Test with small dataset of 5 diverse compounds."""

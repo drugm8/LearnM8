@@ -89,32 +89,6 @@ class TestMixedEnsemble:
         ensemble = MixedEnsemble(uncertainty_method='mad', random_state=42)
         assert ensemble.uncertainty_method == 'mad'
 
-    def test_model_diversity_in_predictions(self, trained_mixed):
-        """Test that different models produce diverse predictions."""
-        ensemble, features, compounds = trained_mixed
-        individual_preds = ensemble.get_individual_predictions(features)
-
-        pred_arrays = [preds for preds in individual_preds.values() if preds is not None]
-        assert len(pred_arrays) >= 2
-
-        for i in range(len(pred_arrays) - 1):
-            for j in range(i + 1, len(pred_arrays)):
-                correlation = np.corrcoef(pred_arrays[i], pred_arrays[j])[0, 1]
-                assert correlation < 1.0
-
-    def test_uncertainty_captures_model_disagreement(self, trained_mixed):
-        """Test that uncertainty reflects disagreement between models."""
-        ensemble, features, _compounds = trained_mixed
-
-        _predictions, uncertainty = ensemble.predict(features)
-        individual_preds = ensemble.get_individual_predictions(features)
-
-        pred_arrays = np.array([preds for preds in individual_preds.values() if preds is not None])
-        expected_std = np.std(pred_arrays, axis=0)
-
-        assert uncertainty.shape == expected_std.shape
-        np.testing.assert_allclose(uncertainty, expected_std, rtol=1e-5)
-
     def test_all_learners_train_successfully(self, trained_mixed):
         """Test that all learners train without errors."""
         ensemble, _features, _compounds = trained_mixed

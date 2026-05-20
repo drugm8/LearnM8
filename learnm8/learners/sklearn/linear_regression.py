@@ -195,25 +195,3 @@ class LinearRegressionLearner(SklearnLearner):
             raise LearnerError(
                 f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}.'
             ) from e
-
-    def get_coefficients(self) -> np.ndarray | None:
-        """Get model coefficients from the trained model.
-
-        Returns:
-            Array of model coefficients, or None if model not trained
-        """
-        if not self.is_trained:
-            return None
-
-        return self.model.coef_
-
-    def get_intercept(self) -> float | None:
-        """Get model intercept from the trained model.
-
-        Returns:
-            Model intercept, or None if model not trained or no intercept fitted
-        """
-        if not self.is_trained:
-            return None
-
-        return getattr(self.model, 'intercept_', None)

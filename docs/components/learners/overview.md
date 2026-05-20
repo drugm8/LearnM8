@@ -87,7 +87,6 @@ Traditional machine learning models built on scikit-learn, offering robust basel
 - **XGBoostLearner**: High-performance gradient boosting
 - **DecisionTreeLearner**: Interpretable single trees
 - **LinearRegressionLearner**: Simple linear baselines
-- **AdvancedRandomForestLearner**: Enhanced Random Forest with improved uncertainty
 
 ### PyTorch Neural Networks
 

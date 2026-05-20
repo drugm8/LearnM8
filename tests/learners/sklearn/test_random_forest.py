@@ -76,25 +76,6 @@ class TestRandomForestLearner:
         assert 'RandomForest' in name
         assert 'n_estimators=10' in name
 
-    def test_feature_importance_returns_non_negative_values_after_training(
-        self, learner, small_real_compounds, small_real_morgan_features
-    ):
-        """Test feature importance retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity')
-            )
-
-        assert learner.get_feature_importance() is None
-
-        features = small_real_morgan_features
-        learner.train(features, compounds['Activity'].to_numpy())
-        importance = learner.get_feature_importance()
-        assert importance is not None
-        assert len(importance) > 0
-        assert np.all(importance >= 0)
-
     def test_get_oob_score_returns_float_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test out-of-bag score retrieval."""
         compounds = small_real_compounds.clone()

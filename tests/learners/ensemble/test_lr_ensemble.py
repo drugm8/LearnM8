@@ -59,31 +59,6 @@ class TestLREnsemble:
         assert ensemble.weights is not None
         assert np.allclose(ensemble.weights, weights)
 
-    def test_diverse_regularization(self, lr_ensemble, compounds_20, features_20):
-        """Test that ensemble learners have different regularization strengths."""
-        assert len(lr_ensemble.learners) == 3
-
-        alphas = [learner.alpha for learner in lr_ensemble.learners]
-        assert len(set(alphas)) == 3
-        assert alphas == [0.1, 1.0, 10.0]
-
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
-
-        features = features_20
-        lr_ensemble.train(features, compounds['Activity'].to_numpy())
-
-        individual_preds = lr_ensemble.get_individual_predictions(features)
-        assert len(individual_preds) == 3
-
-        pred_arrays = [preds for preds in individual_preds.values() if preds is not None]
-        assert len(pred_arrays) == 3
-
-        for i in range(len(pred_arrays)):
-            for j in range(i+1, len(pred_arrays)):
-                assert not np.allclose(pred_arrays[i], pred_arrays[j], atol=1e-2)
-
     def test_get_name_includes_regularization_strengths(self, lr_ensemble):
         """Test name generation for LR ensemble."""
         name = lr_ensemble.get_name()
@@ -128,27 +103,6 @@ class TestLREnsemble:
 
         with pytest.raises((ValueError, LearnerError)):
             lr_ensemble.train(features, targets)
-
-    def test_add_learner_to_ensemble(self, lr_ensemble):
-        """Test adding learners to LR ensemble."""
-        from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
-
-        initial_count = len(lr_ensemble.learners)
-
-        new_learner = LinearRegressionLearner(alpha=100.0, random_state=789)
-        lr_ensemble.add_learner(new_learner)
-
-        assert len(lr_ensemble.learners) == initial_count + 1
-        assert not lr_ensemble.is_trained
-
-    def test_remove_learner_from_ensemble(self, lr_ensemble):
-        """Test removing learners from ensemble."""
-        initial_count = len(lr_ensemble.learners)
-
-        lr_ensemble.remove_learner(0)
-
-        assert len(lr_ensemble.learners) == initial_count - 1
-        assert not lr_ensemble.is_trained
 
     def test_prediction_consistency(self, lr_ensemble, compounds_20, features_20):
         """Test that predictions are consistent across multiple calls."""

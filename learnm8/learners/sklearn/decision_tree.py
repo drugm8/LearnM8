@@ -149,14 +149,3 @@ class DecisionTreeLearner(SklearnLearner):
             raise LearnerError(
                 f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}.'
             ) from e
-
-    def get_feature_importance(self) -> np.ndarray | None:
-        """Get feature importance scores from the trained model.
-
-        Returns:
-            Array of feature importance scores, or None if model not trained
-        """
-        if not self.is_trained:
-            return None
-
-        return self.model.feature_importances_

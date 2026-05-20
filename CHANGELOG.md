@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased]
+
+### Removed — Dead-code cleanup
+
+Unused public surface and empty stub packages removed. None of these
+symbols were referenced by ``run_active_learning()`` or any built-in
+component; removal does not affect standard API or CLI usage.
+
+- ``AdvancedRandomForestLearner`` class and the ``advanced_rf`` learner key
+  (the class was never registered in ``LEARNER_REGISTRY``).
+- Unused sklearn learner introspection methods: ``get_feature_importance``,
+  ``get_tree_stats``, ``get_coefficients``, ``get_intercept``,
+  ``get_booster_stats``, ``get_learned_hyperparameters``. ``get_oob_score``
+  is retained.
+- Unused ensemble methods: ``get_ensemble_statistics``,
+  ``get_individual_predictions``, ``add_learner``, ``remove_learner``.
+- Pruning ``get_pruning_stats`` — both the abstract
+  ``DesignSpacePruner.get_pruning_stats`` and the ``ScoreBasedPruner``
+  implementation.
+- TorchLearner ``save_model``, ``load_model``, ``get_training_history``
+  and the backing ``training_history`` attribute.
+- Module ``learnm8/cli/formatting.py`` (``format_cycle_metrics_table``).
+- Module ``learnm8/utils/data_loaders.py``.
+- Empty stub packages ``learnm8/features/skfp_2d/`` and
+  ``learnm8/features/skfp_3d/``. The 39 featurizers are defined in the
+  ``_FEATURIZER_CONFIG`` factory in ``learnm8/features/__init__.py``; new
+  featurizers are added there, not as files in those packages.
+
 ## [0.11.0] — 2026-05-13
 
 ### Added — Acquisition-Aware Uncertainty Computation (feature 023)
@@ -17,12 +45,12 @@
 - Per-cycle parquet drops the ``uncertainty`` column entirely when skipped
   (column-presence semantics, not fabricated nulls); ``has_uncertainty``
   metric still reports False with ``uncertainty_*`` keys present at None.
-- 9 skip-eligible learners: CPU ``gp``, ``rf``, ``advanced_rf``, ``dt``,
-  ``lr`` and GPU/gpytorch siblings ``rf_fil``, ``ridge_cuml``, ``gpu_gp``,
-  ``svgp``. RF/AdvancedRF unify their mean source across both branches for
-  bit-identity under the force_uncertainty toggle (D9). Ensembles cascade
-  the flag to members AND short-circuit their outer std-reduction (D10 —
-  saves ~4 GB at 100M × N-member scale).
+- 8 skip-eligible learners: CPU ``gp``, ``rf``, ``dt``, ``lr`` and
+  GPU/gpytorch siblings ``rf_fil``, ``ridge_cuml``, ``gpu_gp``, ``svgp``.
+  RF unifies its mean source across both branches for bit-identity under
+  the force_uncertainty toggle (D9). Ensembles cascade the flag to members
+  AND short-circuit their outer std-reduction (D10 — saves ~4 GB at
+  100M × N-member scale).
 - ``mc_dropout`` stays uniform-contract: continues to run N stochastic
   forward passes when ``compute_uncertainty=False`` (skipping them would
   change mean semantics per Gal & Ghahramani 2016), only the std return is

@@ -6,7 +6,7 @@ Tests the base DesignSpacePruner interface and utility functions using real mole
 import pytest
 import numpy as np
 import polars as pl
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from learnm8.pruning.base import (
     DesignSpacePruner,
@@ -22,17 +22,13 @@ class MockPruner(DesignSpacePruner):
     def __init__(self, requires_uncertainty=False, name="MockPruner"):
         self.requires_uncertainty_flag = requires_uncertainty
         self.name = name
-        self.last_pruning_stats = {}
-    
+
     def requires_uncertainty(self) -> bool:
         return self.requires_uncertainty_flag
-    
+
     def get_name(self) -> str:
         return self.name
-    
-    def get_pruning_stats(self) -> Dict[str, Any]:
-        return self.last_pruning_stats.copy()
-    
+
     def prune(self, compounds: pl.DataFrame, predictions: np.ndarray,
               uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
         # Validate inputs
@@ -41,13 +37,6 @@ class MockPruner(DesignSpacePruner):
         # Simple mock: keep first half of compounds
         n_keep = len(compounds) // 2
         pruned = compounds.head(n_keep)
-
-        self.last_pruning_stats = {
-            'compounds_before_pruning': len(compounds),
-            'compounds_after_pruning': len(pruned),
-            'compounds_pruned': len(compounds) - len(pruned),
-            'pruning_fraction': self._calculate_pruning_fraction(len(compounds), len(pruned))
-        }
 
         return pruned
 
@@ -63,12 +52,6 @@ def test_mock_pruner_basic_functionality(sample_compounds):
     assert len(pruned) == len(sample_compounds) // 2
     assert 'ID' in pruned.columns
     assert 'SMILES' in pruned.columns
-
-    # Check stats
-    stats = pruner.get_pruning_stats()
-    assert stats['compounds_before_pruning'] == len(sample_compounds)
-    assert stats['compounds_after_pruning'] == len(pruned)
-    assert stats['compounds_pruned'] > 0
 
 
 def test_pruner_interface_validation(sample_compounds):
@@ -166,12 +149,7 @@ def test_requires_uncertainty_default():
     assert pruner.requires_uncertainty() == False
 
 
-def test_pruner_name_and_stats():
-    """Test pruner name and stats functionality."""
+def test_pruner_name():
+    """Test pruner name functionality."""
     pruner = MockPruner(name="TestPruner")
     assert pruner.get_name() == "TestPruner"
-    
-    # Stats should be empty initially
-    stats = pruner.get_pruning_stats()
-    assert isinstance(stats, dict)
-    assert len(stats) == 0

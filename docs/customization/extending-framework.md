@@ -193,10 +193,6 @@ class MyCustomPruner(DesignSpacePruner):
         """Prune compounds based on custom criteria."""
         pass
 
-    def get_pruning_stats(self) -> Dict[str, Any]:
-        """Return statistics about most recent pruning operation."""
-        pass
-
     def get_name(self) -> str:
         """Return descriptive name for this pruning strategy."""
         pass
@@ -225,7 +221,6 @@ class PercentilePruner(DesignSpacePruner):
 
         self.percentile = percentile
         self.score_direction = score_direction
-        self._last_stats = {}
 
     def prune(self,
               compounds: pl.DataFrame,
@@ -234,8 +229,6 @@ class PercentilePruner(DesignSpacePruner):
 
         # Validate inputs
         self.validate_inputs(compounds, predictions, uncertainties)
-
-        n_compounds = len(compounds)
 
         # Calculate threshold based on percentile
         if self.score_direction == 'higher':
@@ -250,21 +243,7 @@ class PercentilePruner(DesignSpacePruner):
         # Prune compounds
         pruned_compounds = self._safe_prune_by_indices(compounds, keep_mask)
 
-        # Store statistics
-        self._last_stats = {
-            'compounds_before_pruning': n_compounds,
-            'compounds_after_pruning': len(pruned_compounds),
-            'compounds_pruned': n_compounds - len(pruned_compounds),
-            'pruning_fraction': self._calculate_pruning_fraction(n_compounds, len(pruned_compounds)),
-            'threshold': float(threshold),
-            'percentile': self.percentile,
-            'score_direction': self.score_direction
-        }
-
         return pruned_compounds
-
-    def get_pruning_stats(self) -> Dict[str, Any]:
-        return self._last_stats.copy()
 
     def get_name(self) -> str:
         return f"PercentilePruner(p={self.percentile}, dir={self.score_direction})"
@@ -284,7 +263,6 @@ class UncertaintyPercentilePruner(DesignSpacePruner):
             raise ValueError("uncertainty_percentile must be between 0 and 100")
 
         self.uncertainty_percentile = uncertainty_percentile
-        self._last_stats = {}
 
     def prune(self,
               compounds: pl.DataFrame,
@@ -296,8 +274,6 @@ class UncertaintyPercentilePruner(DesignSpacePruner):
         if uncertainties is None:
             raise PruningError("UncertaintyPercentilePruner requires uncertainty estimates")
 
-        n_compounds = len(compounds)
-
         # Calculate uncertainty threshold
         threshold = np.percentile(uncertainties, self.uncertainty_percentile)
 
@@ -306,19 +282,7 @@ class UncertaintyPercentilePruner(DesignSpacePruner):
 
         pruned_compounds = self._safe_prune_by_indices(compounds, keep_mask)
 
-        self._last_stats = {
-            'compounds_before_pruning': n_compounds,
-            'compounds_after_pruning': len(pruned_compounds),
-            'compounds_pruned': n_compounds - len(pruned_compounds),
-            'pruning_fraction': self._calculate_pruning_fraction(n_compounds, len(pruned_compounds)),
-            'uncertainty_threshold': float(threshold),
-            'uncertainty_percentile': self.uncertainty_percentile
-        }
-
         return pruned_compounds
-
-    def get_pruning_stats(self) -> Dict[str, Any]:
-        return self._last_stats.copy()
 
     def get_name(self) -> str:
         return f"UncertaintyPercentilePruner(p={self.uncertainty_percentile})"

@@ -212,19 +212,3 @@ class GaussianProcessLearner(SklearnLearner):
             'working_multiplier': 1.0,
             'fixed_overhead': 0,
         }
-
-    def get_learned_hyperparameters(self) -> dict | None:
-        if not self.is_trained:
-            return None
-
-        kernel = getattr(self.model, 'kernel_', None)
-        if kernel is None:
-            return None
-
-        return {
-            'kernel': str(kernel),
-            'theta': kernel.theta,
-            'log_marginal_likelihood': getattr(
-                self.model, 'log_marginal_likelihood_value_', None
-            ),
-        }

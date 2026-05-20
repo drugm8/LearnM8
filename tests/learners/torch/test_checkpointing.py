@@ -62,7 +62,7 @@ class TestTorchLearnerCheckpointing:
         )
         learner.train(X, y)
 
-        history = learner.get_training_history()
+        history = learner.training_history
         assert len(history) > 0
 
         best_epoch = min(range(len(history)), key=lambda i: history[i]['val_loss'])
@@ -112,7 +112,7 @@ class TestTorchLearnerCheckpointing:
         assert learner.is_trained
         assert learner.model is not None
 
-        history = learner.get_training_history()
+        history = learner.training_history
         assert len(history) >= 1
 
     def test_best_checkpoint_restored_when_no_early_stopping(self):
@@ -130,7 +130,7 @@ class TestTorchLearnerCheckpointing:
         )
         learner.train(X, y)
 
-        history = learner.get_training_history()
+        history = learner.training_history
         assert len(history) == 15
 
         best_val_loss = min(h['val_loss'] for h in history)
@@ -157,7 +157,7 @@ class TestTorchLearnerCheckpointing:
         )
         learner.train(X, y)
 
-        history = learner.get_training_history()
+        history = learner.training_history
         best_val_loss = min(h['val_loss'] for h in history)
 
         mask = learner._valid_feature_mask

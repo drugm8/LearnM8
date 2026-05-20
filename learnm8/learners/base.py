@@ -9,7 +9,6 @@ import logging
 import time
 from abc import abstractmethod
 from collections.abc import Callable
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -503,7 +502,6 @@ class TorchLearner(Learner):
         self.is_trained = False
         self.training_history = []
         self._valid_feature_mask = None
-        self._input_dim = None
         self._feature_type = 'binary'
         self._feature_imputer = None
         self._target_scaler = None
@@ -673,7 +671,6 @@ class TorchLearner(Learner):
             import torch
 
             input_dim = features.shape[1]
-            self._input_dim = input_dim
             torch.manual_seed(self.random_state)
             if torch.cuda.is_available():
                 torch.cuda.manual_seed(self.random_state)
@@ -869,76 +866,3 @@ class TorchLearner(Learner):
         """Return True if this learner can provide uncertainty estimates."""
         # Base PyTorch models don't provide uncertainty by default
         return False
-
-    def get_training_history(self) -> list:
-        """Get training history for analysis.
-
-        Returns:
-            List of dictionaries containing training metrics per epoch
-        """
-        return self.training_history.copy()
-
-    def save_model(self, path: Path) -> None:
-        """Save model state to file.
-
-        Args:
-            path: Path to save model
-        """
-        if self.model is None:
-            raise LearnerError(
-                f'No model to save for {self.get_name()}. '
-                f'The model has not been created yet. Call train() first to create and train the model.'
-            )
-
-        state = {
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict()
-            if self.optimizer
-            else None,
-            'scaler': self.scaler,
-            'training_history': self.training_history,
-            'is_trained': self.is_trained,
-            'config': {
-                'batch_size': self.batch_size,
-                'max_epochs': self.max_epochs,
-                'learning_rate': self.learning_rate,
-                'early_stopping_patience': self.early_stopping_patience,
-                'random_state': self.random_state,
-            },
-        }
-
-        import torch
-
-        torch.save(state, path)
-        logger.debug(f'Saved {self.get_name()} model to {path}')
-
-    def load_model(self, path: Path) -> None:
-        """Load model state from file.
-
-        Args:
-            path: Path to load model from
-        """
-        import torch
-
-        if not path.exists():
-            raise FileNotFoundError(
-                f'Model file not found: {path}. '
-                f'Verify the path is correct and that the model was previously saved with save_model().'
-            )
-
-        state = torch.load(path, map_location=self.device)
-
-        # Restore configuration
-        config = state.get('config', {})
-        for key, value in config.items():
-            setattr(self, key, value)
-
-        # Create model if needed (requires input size from first use)
-        # Note: Model creation is deferred until first training or explicit creation
-
-        # Restore training state
-        self.scaler = state.get('scaler')
-        self.training_history = state.get('training_history', [])
-        self.is_trained = state.get('is_trained', False)
-
-        logger.debug(f'Loaded {self.get_name()} model from {path}')

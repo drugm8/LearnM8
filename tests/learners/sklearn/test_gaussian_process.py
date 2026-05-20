@@ -85,21 +85,6 @@ class TestGaussianProcessLearner:
         assert "GaussianProcess" in name
         assert "alpha=0.001" in name
 
-    def test_get_learned_hyperparameters_returns_kernel_and_theta_after_training(self, learner, compounds_25, features_25):
-        """Test hyperparameter learning."""
-        compounds = compounds_25.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
-
-        assert learner.get_learned_hyperparameters() is None
-
-        features = features_25
-        learner.train(features, compounds['Activity'].to_numpy())
-        hyperparams = learner.get_learned_hyperparameters()
-        assert hyperparams is not None
-        assert 'kernel' in hyperparams
-        assert 'theta' in hyperparams
-
     def test_custom_alpha_configuration_trains_and_predicts(self, compounds_25, features_25):
         """Test learner with custom kernel configuration."""
         learner = GaussianProcessLearner(alpha=1e-6, random_state=42)

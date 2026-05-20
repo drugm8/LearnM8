@@ -98,59 +98,6 @@ class TestLinearRegressionLearner:
         assert np.all(np.isfinite(ridge_predictions))
         assert not np.allclose(linear_predictions, ridge_predictions)
 
-    def test_get_coefficients(self, learner, compounds_20, features_20):
-        """Test coefficient retrieval."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        assert learner.get_coefficients() is None
-
-        features = features_20
-        learner.train(features, compounds['Activity'].to_numpy())
-        coefficients = learner.get_coefficients()
-
-        assert coefficients is not None
-        assert len(coefficients) == np.sum(learner._valid_feature_mask)
-        assert np.all(np.isfinite(coefficients))
-
-    def test_get_intercept(self, learner, compounds_20, features_20):
-        """Test intercept retrieval."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        assert learner.get_intercept() is None
-
-        features = features_20
-        learner.train(features, compounds['Activity'].to_numpy())
-        intercept = learner.get_intercept()
-
-        assert intercept is not None
-        assert isinstance(intercept, (float, np.floating))
-        assert np.isfinite(intercept)
-
-    def test_get_intercept_no_intercept_mode(self, compounds_20, features_20):
-        """Test intercept retrieval when fit_intercept=False."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        learner = LinearRegressionLearner(fit_intercept=False, random_state=42)
-        features = features_20
-        learner.train(features, compounds['Activity'].to_numpy())
-        intercept = learner.get_intercept()
-
-        assert intercept is not None
-        assert isinstance(intercept, (float, np.floating))
-        assert np.isclose(intercept, 0.0)
-
     def test_train_with_empty_arrays(self, learner):
         """Test error handling with empty arrays."""
         empty_features = np.array([]).reshape(0, 10)
@@ -235,30 +182,6 @@ class TestLinearRegressionLearner:
 
         assert len(predictions) == 5
         assert np.all(np.isfinite(predictions))
-
-    def test_coefficients_ridge_vs_linear(self, compounds_20, features_20):
-        """Test that Ridge produces smaller coefficients than Linear (regularization effect)."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        features = features_20
-        targets = compounds['Activity'].to_numpy()
-
-        linear_learner = LinearRegressionLearner(alpha=None, random_state=42)
-        linear_learner.train(features, targets)
-        linear_coefs = linear_learner.get_coefficients()
-
-        ridge_learner = LinearRegressionLearner(alpha=10.0, random_state=42)
-        ridge_learner.train(features, targets)
-        ridge_coefs = ridge_learner.get_coefficients()
-
-        linear_l2_norm = np.linalg.norm(linear_coefs)
-        ridge_l2_norm = np.linalg.norm(ridge_coefs)
-
-        assert ridge_l2_norm < linear_l2_norm
 
     def test_n_jobs_parameter(self, compounds_20, features_20):
         """Test that n_jobs parameter is respected for LinearRegression mode."""

@@ -38,7 +38,7 @@ ruff format --check .                 # Format check
 mypy learnm8/                         # Type check
 ```
 
-**When to include slow tests:** Changes to `learners/torch/`, `learners/ensemble/`, `features/skfp_3d/`, `api.py`, `core/cycle.py`, or pre-commit/PR validation.
+**When to include slow tests:** Changes to `learners/torch/`, `learners/ensemble/`, 3D featurizers in `features/`, `api.py`, `core/cycle.py`, or pre-commit/PR validation.
 
 ## CLI
 
@@ -73,14 +73,13 @@ learnm8/
 │   ├── data_structures.py    # Shared data structures
 │   └── resources.py          # CPU/GPU resource validation (n_jobs, device)
 ├── features/                 # HDF5-cached feature extraction
+│   ├── __init__.py           # _FEATURIZER_CONFIG factory (39 featurizers)
 │   ├── extraction.py         # extract_features() function
 │   ├── cache.py              # HDF5 caching layer
-│   ├── base.py               # SkfpFeaturizer base class
-│   ├── skfp_2d/              # 30 2D fingerprint featurizers
-│   └── skfp_3d/              # 9 3D fingerprint featurizers
+│   └── base.py               # SkfpFeaturizer base class
 ├── learners/
 │   ├── base.py               # Base classes + feature preprocessing
-│   ├── sklearn/              # RF, GP, XGBoost, DT, LR, AdvancedRF
+│   ├── sklearn/              # RF, GP, XGBoost, DT, LR
 │   ├── torch/                # MLP, MC Dropout, Chemprop, Fastprop
 │   └── ensemble/             # RF/LR/XGB/DT/Mixed/Chemprop/Fastprop ensembles
 ├── acquisition/              # Greedy, TopK, UCB, EI, PI, Thompson, Entropy, SA
@@ -220,10 +219,11 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 3. Register in `LEARNER_REGISTRY` in `learnm8/api.py`
 
 ### Adding Featurizers
-1. Inherit from `SkfpFeaturizer` in `learnm8.features.base`
-2. Create file in `learnm8/features/skfp_2d/` (or `skfp_3d/`)
-3. Register in `learnm8/features/__init__.py` (import, registry dict, `__all__`)
-4. Create test in `tests/features/skfp_2d/`
+1. Add an entry to `_FEATURIZER_CONFIG` in `learnm8/features/__init__.py`
+   (keyed by name; specify `cls`, `defaults`, `storage_dtype`, `feature_type`,
+   `requires_conformers`) — featurizers are config entries, not separate files
+2. `FEATURIZER_REGISTRY` is derived from the config keys automatically
+3. Create test in `tests/features/`
 
 ### Adding Acquisition Strategies
 1. Inherit from base in `learnm8.acquisition.base`
@@ -268,9 +268,9 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 
 ## Recent Changes
 
-- **023 Acquisition-aware uncertainty (v0.11.0 — BREAKING)** — `Learner.predict()` gains a keyword-only `compute_uncertainty: bool = True` parameter. The cycle resolves `compute_uncertainty = force_uncertainty OR acq_func.requires_uncertainty()` once at cycle start and threads it through `_predict_pool → predict_with_batching → learner.predict → EnsembleBase` cascade. 9 skip-eligible learners (gp, rf, advanced_rf, dt, lr, rf_fil, ridge_cuml, gpu_gp, svgp) genuinely omit uncertainty compute; ensembles cascade to members AND short-circuit the outer std-reduction (D10 — saves ~4 GB at 100M × N-member scale). RF/AdvancedRF unify their mean source across both branches for bit-identity under the force_uncertainty toggle (D9). mc_dropout stays uniform-contract: N stochastic passes still run (skipping them would change mean semantics per Gal & Ghahramani 2016). New API: `run_active_learning(..., force_uncertainty=False)` + CLI flag `--force-uncertainty`. Per-cycle parquet drops the `uncertainty` column entirely when skipped (column-presence semantics; no fabricated nulls); cycle metrics keep `uncertainty_*` keys present at None with `has_uncertainty=False`. **Breaking**: third-party `Learner` subclasses raise `TypeError: predict() got an unexpected keyword argument 'compute_uncertainty'` on first cycle predict; pinned by `tests/core/test_third_party_subclass_breakage.py`. 5-line migration diff in CHANGELOG 0.11.0. No runtime shim, no DeprecationWarning. External validation: sklearn#31374 reports ~96% saving on the matching GP optimisation.
+- **023 Acquisition-aware uncertainty (v0.11.0 — BREAKING)** — `Learner.predict()` gains a keyword-only `compute_uncertainty: bool = True` parameter. The cycle resolves `compute_uncertainty = force_uncertainty OR acq_func.requires_uncertainty()` once at cycle start and threads it through `_predict_pool → predict_with_batching → learner.predict → EnsembleBase` cascade. 8 skip-eligible learners (gp, rf, dt, lr, rf_fil, ridge_cuml, gpu_gp, svgp) genuinely omit uncertainty compute; ensembles cascade to members AND short-circuit the outer std-reduction (D10 — saves ~4 GB at 100M × N-member scale). RF unifies its mean source across both branches for bit-identity under the force_uncertainty toggle (D9). mc_dropout stays uniform-contract: N stochastic passes still run (skipping them would change mean semantics per Gal & Ghahramani 2016). New API: `run_active_learning(..., force_uncertainty=False)` + CLI flag `--force-uncertainty`. Per-cycle parquet drops the `uncertainty` column entirely when skipped (column-presence semantics; no fabricated nulls); cycle metrics keep `uncertainty_*` keys present at None with `has_uncertainty=False`. **Breaking**: third-party `Learner` subclasses raise `TypeError: predict() got an unexpected keyword argument 'compute_uncertainty'` on first cycle predict; pinned by `tests/core/test_third_party_subclass_breakage.py`. 5-line migration diff in CHANGELOG 0.11.0. No runtime shim, no DeprecationWarning. External validation: sklearn#31374 reports ~96% saving on the matching GP optimisation.
 - **020 Cache integrity at 100M scale** — bumped HDF5 cache `schema_version` from 2 to 3. `/hash_index` widened from `uint64` to `S16` (128-bit BLAKE2b digests), collision probability at N=10**8 drops from ~2.7e-4 to ~1.5e-23. Replaced the prior weakref hash_index cache with a strong-ref `OrderedDict` LRU (`DEFAULT_HASH_INDEX_LRU_MAX=4`, ~6.4 GB headroom at 100M) guarded by `threading.Lock`; entries auto-evict on `write_epoch` bump or mtime change. v2 caches auto-migrate to `<name>.h5.hash64.bak` on first open under `LOCK_EX`; an existing `.bak` raises `PersistenceError` (no data clobber). 3D featurizers (whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape) gain `random_state: int = 0xf00d` (`DEFAULT_3D_RANDOM_STATE`, RDKit ETKDG convention) forwarded to `ConformerGenerator` with try/except fallback for scikit-fingerprints<1.18.0; recorded in `get_config()` only when `requires_3d()` is True so cache keys disambiguate different seeds without invalidating 2D caches. Single-node single-filesystem only — NFS/Lustre/GlusterFS NOT supported.
-- **017 Count-FP storage routing + uint8 tree inputs** — fixed silent count-fingerprint corruption: `MorganFeaturizer`, `MACCSFeaturizer`, `AtomPairFeaturizer`, `TopologicalTorsionFeaturizer` now flip `feature_type` to `'continuous'` and route to `csr_uint16` (Morgan/AtomPair/TopTorsion) or `uint8` (MACCS) storage when `count=True`. **Severity callout**: any user previously running `count=True` had `np.packbits` truncate every nonzero count to a single bit; legacy `packed_uint8` cache files are auto-migrated to `<name>.h5.dim*.bak` on first open with the new code. Added `Learner.preferred_feature_dtype()` (default `'float32'`); tree learners (RF, XGB, DT, AdvancedRF) override to `'uint8'` for binary features and `extract_features(..., preferred_dtype='uint8')` skips the float32 inflation — 4× working-set reduction on a 2048-bit Morgan matrix. `_preprocess_features` now has a uint8 fast path that skips `np.isnan`/`np.nan_to_num` and preserves the compact dtype through the zero-variance mask. CSR / float32 storage transparently fall back to float32.
+- **017 Count-FP storage routing + uint8 tree inputs** — fixed silent count-fingerprint corruption: `MorganFeaturizer`, `MACCSFeaturizer`, `AtomPairFeaturizer`, `TopologicalTorsionFeaturizer` now flip `feature_type` to `'continuous'` and route to `csr_uint16` (Morgan/AtomPair/TopTorsion) or `uint8` (MACCS) storage when `count=True`. **Severity callout**: any user previously running `count=True` had `np.packbits` truncate every nonzero count to a single bit; legacy `packed_uint8` cache files are auto-migrated to `<name>.h5.dim*.bak` on first open with the new code. Added `Learner.preferred_feature_dtype()` (default `'float32'`); tree learners (RF, XGB, DT) override to `'uint8'` for binary features and `extract_features(..., preferred_dtype='uint8')` skips the float32 inflation — 4× working-set reduction on a 2048-bit Morgan matrix. `_preprocess_features` now has a uint8 fast path that skips `np.isnan`/`np.nan_to_num` and preserves the compact dtype through the zero-variance mask. CSR / float32 storage transparently fall back to float32.
 - **016 Storage dtype expansion** (merged) — added `uint8` and `csr_uint16` storage paths to v2 cache for small-range integer counts and sparse integer vectors. `fingerprint_used` label appends `_uint8` / `_csruint16` dtype tokens. ERG, MQNs, pharmacophore, physiochemical featurizers updated.
 - **015 Bit-packed cache v2** (merged) — rewrote `learnm8/features/cache.py` from v1 (per-molecule float32 dataset) to v2 (single 2-D `features` dataset per featurizer + side `hash_index`/`row_index` + `np.packbits` for binary). Blosc-LZ4 level 5 + byte-shuffle, `fcntl.flock` concurrency, fail-fast on corruption with 1 transient retry, `schema_version=2` root attr, `os.replace` to `.bak` for non-v2 files. Added `Featurizer.get_storage_dtype()` on the abstract interface. Public `extract_features(...)` signature unchanged. Performance: 1M-row Morgan-2048 warm read <5 s, 100M-row open <1 s, ≤30 GB on-disk at 100M.
 - **014 Diagnostic metrics** — added `feature_extraction_time` and additional diagnostic cycle metrics (`learnm8/evaluation/metrics/diagnostics.py`).
@@ -296,11 +296,11 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 **Tech Stack**: Python 3.11.9, numpy, scikit-learn (GP `return_std`, RF `estimators_`, DT `apply()`), polars (drop-column parquet schema), pytorch/Lightning (MC Dropout uniform-contract)
 **Key Decisions**:
 - `Learner.predict(*, compute_uncertainty: bool = True)` keyword-only; cycle resolves `force_uncertainty OR acq_func.requires_uncertainty()` once at cycle start and threads through `_predict_pool → predict_with_batching → learner.predict`; ensemble cascade passes the flag directly at the 3 explicit member-loop sites (D1 helper dropped per post-review Simplification)
-- Skip-eligible learners — 9 total per FR-004 amendment (5 CPU `gp`/`rf`/`advanced_rf`/`dt`/`lr` + 4 GPU/gpytorch siblings `rf_fil`/`ridge_cuml`/`gpu_gp`/`svgp`): genuine work elision. RF skip path is `model.predict(features)` — sklearn's joblib-parallel shared-memory `_accumulate_prediction` (NOT a "fused C kernel"); unconditional win is `(n_trees, n_samples)` allocation elision + `np.std` removal; wall-time gain ≥2× scales with `n_jobs`. RF/AdvancedRF unify mean source across both branches for bit-identity (D9)
+- Skip-eligible learners — 8 total per FR-004 amendment (4 CPU `gp`/`rf`/`dt`/`lr` + 4 GPU/gpytorch siblings `rf_fil`/`ridge_cuml`/`gpu_gp`/`svgp`): genuine work elision. RF skip path is `model.predict(features)` — sklearn's joblib-parallel shared-memory `_accumulate_prediction` (NOT a "fused C kernel"); unconditional win is `(n_trees, n_samples)` allocation elision + `np.std` removal; wall-time gain ≥2× scales with `n_jobs`. RF unifies mean source across both branches for bit-identity (D9)
 - Uniform-contract learners (8 ensembles + mc_dropout): return None AND skip the outer ensemble std-reduction via early return (FR-005 strengthened post-review — saves ~4 GB at 100M × N-member scale; D10); mc_dropout cannot honestly skip (uncertainty IS the multi-sample std)
 - DT/LR uncertainties are formally **ordinal proxies** — suitable for ranking under UCB/EI/PI, NOT for absolute calibration analyses (MACE/ENCE); documented in CHANGELOG + contracts
 - Test-time `inspect.signature` audit on `LEARNER_REGISTRY` (D2) PLUS separate parametrized behavior test calling `predict(X, False)` on every learner (Dissent B) — signature ≠ behavior; both kept
-- Structural skip-path sentinel tests for all 9 skip-eligible learners (D11) using mock-based assertions (e.g., `np.stack` for RF, `model.apply` for DT, `_compute_leverages_cpu` for LR, `solve_triangular` for gpytorch) — prevents sklearn-#31374-style DRY-refactor regressions without violating OOS-1 (structural, not timing)
+- Structural skip-path sentinel tests for all 8 skip-eligible learners (D11) using mock-based assertions (e.g., `np.stack` for RF, `model.apply` for DT, `_compute_leverages_cpu` for LR, `solve_triangular` for gpytorch) — prevents sklearn-#31374-style DRY-refactor regressions without violating OOS-1 (structural, not timing)
 - Parquet drop-column on skip safe because LearnM8 has no glob-based parquet readers (every consumer single-file column-gated)
 - External validation: [sklearn #31374](https://github.com/scikit-learn/scikit-learn/issues/31374) merged identical GP optimization (96% runtime saved)
 - Third-party `Learner` subclasses break with natural `TypeError` (FR-018); pinned by monkeypatched-LEARNER_REGISTRY CI test (D8); `Learner.predict.__doc__` gains migration paragraph linking to CHANGELOG (documentation, not runtime shim)

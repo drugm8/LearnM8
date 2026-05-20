@@ -191,11 +191,11 @@ class TestMLPLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        assert len(learner.get_training_history()) == 0
+        assert len(learner.training_history) == 0
 
         features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
-        history = learner.get_training_history()
+        history = learner.training_history
 
         assert len(history) > 0
         assert 'epoch' in history[0]
@@ -219,7 +219,7 @@ class TestMLPLearner:
 
         features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
-        history = learner.get_training_history()
+        history = learner.training_history
 
         assert hasattr(learner, 'early_stopping_patience')
         assert learner.early_stopping_patience == 2

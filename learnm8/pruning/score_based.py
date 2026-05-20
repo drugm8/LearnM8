@@ -142,14 +142,6 @@ class ScoreBasedPruner(DesignSpacePruner):
 
         return pruned_compounds
 
-    def get_pruning_stats(self) -> dict[str, Any]:
-        """Get statistics from the most recent pruning operation.
-        
-        Returns:
-            Dictionary containing pruning statistics
-        """
-        return self._last_stats.copy()
-
     def get_name(self) -> str:
         """Return the name of this pruning strategy.
         

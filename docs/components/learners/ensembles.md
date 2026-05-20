@@ -30,8 +30,6 @@ The `EnsembleLearner` class accepts any combination of learner instances, provid
 
 - Flexible aggregation methods (mean, median, weighted)
 - Multiple uncertainty estimation methods (std, mad, quantile)
-- Dynamic learner addition/removal
-- Individual model prediction access
 
 ### Type-Specific Ensembles
 
@@ -412,31 +410,6 @@ chemprop_custom = ChempropEnsemble(
 )
 ```
 
-## Ensemble Statistics and Analysis
-
-Access detailed ensemble information during and after experiments:
-
-```python
-from learnm8.learners import EnsembleLearner
-
-ensemble = EnsembleLearner(learners=[...])
-
-ensemble.train(features, targets)
-
-stats = ensemble.get_ensemble_statistics()
-
-print(f"Number of learners: {stats['n_learners']}")
-print(f"Aggregation method: {stats['aggregation_method']}")
-print(f"Uncertainty method: {stats['uncertainty_method']}")
-print(f"Learners with native uncertainty: {stats['learners_with_uncertainty']}")
-print(f"Fraction with uncertainty: {stats['fraction_with_uncertainty']:.1%}")
-
-individual_preds = ensemble.get_individual_predictions(test_features)
-
-for name, predictions in individual_preds.items():
-    print(f"{name}: mean={predictions.mean():.3f}, std={predictions.std():.3f}")
-```
-
 ## Performance Tradeoff Tables
 
 ### Accuracy vs Speed
@@ -484,9 +457,8 @@ for name, predictions in individual_preds.items():
 2. **Use ChempropEnsemble** when GPU available (state-of-the-art performance)
 3. **Transition to single models** as training set grows (> 5000 compounds)
 4. **Enable HDF5 caching** to offset ensemble overhead (100x speedup on features)
-5. **Monitor individual model predictions** to detect outliers or failures
-6. **Use weighted ensembles** if one model type clearly outperforms others
-7. **Consider fine-tuning for Chemprop** in long campaigns (> 10 cycles)
+5. **Use weighted ensembles** if one model type clearly outperforms others
+6. **Consider fine-tuning for Chemprop** in long campaigns (> 10 cycles)
 
 ## Related Documentation
 

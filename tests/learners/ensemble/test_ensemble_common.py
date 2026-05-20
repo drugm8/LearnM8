@@ -170,41 +170,6 @@ class TestEnsembleCommon:
         with pytest.raises((RuntimeError, LearnerError), match='must be trained'):
             ensemble.predict(features_20)
 
-    def test_untrained_ensemble_statistics_report_multiple_learners_and_untrained_state(self, ensemble_setup):
-        _, ensemble = ensemble_setup
-        stats = ensemble.get_ensemble_statistics()
-        assert stats['n_learners'] >= 2
-        assert stats['is_trained'] is False
-
-    def test_trained_ensemble_statistics_include_learner_names(
-        self, ensemble_setup, compounds_20, features_20
-    ):
-        _, ensemble = ensemble_setup
-        _compounds, targets = _prepare_targets(compounds_20)
-        features = features_20
-
-        ensemble.train(features, targets)
-        stats = ensemble.get_ensemble_statistics()
-        assert stats['is_trained'] is True
-        assert 'learner_names' in stats
-        assert len(stats['learner_names']) >= 2
-
-    def test_individual_predictions_return_finite_arrays_for_each_learner(
-        self, ensemble_setup, compounds_20, features_20
-    ):
-        _, ensemble = ensemble_setup
-        compounds, targets = _prepare_targets(compounds_20)
-        features = features_20
-
-        ensemble.train(features, targets)
-        individual_preds = ensemble.get_individual_predictions(features)
-
-        assert len(individual_preds) >= 1
-        for _learner_name, preds in individual_preds.items():
-            if preds is not None:
-                assert len(preds) == len(compounds)
-                assert np.all(np.isfinite(preds))
-
     @pytest.fixture(params=FAST_ENSEMBLE_CONFIGS)
     def fast_ensemble_setup(self, request):
         """Fast ensemble types for aggregation/uncertainty method tests."""
