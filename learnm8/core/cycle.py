@@ -1200,12 +1200,14 @@ def _predict_pool(
             f'featurizer produces valid features for your compound pool.'
         )
 
+    pred_arr = np.asarray(predictions).ravel()
+    unc_arr = np.asarray(uncertainties).ravel() if uncertainties is not None else None
     pred_data: dict[str, Any] = {
         'ID': list(valid_compound_ids),
-        'prediction': predictions,
+        'prediction': pred_arr,
     }
-    if uncertainties is not None:
-        pred_data['uncertainty'] = uncertainties
+    if unc_arr is not None:
+        pred_data['uncertainty'] = unc_arr
     cycle_predictions = pl.DataFrame(pred_data)
 
     return cycle_predictions, prediction_time, predict_feature_time, valid_compound_ids

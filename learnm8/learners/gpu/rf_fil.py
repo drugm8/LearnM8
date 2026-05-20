@@ -214,7 +214,7 @@ class RfFilLearner(SklearnLearner):
             # no (n_samples, n_trees) allocation.
             def predict_mean_fn(chunk: np.ndarray) -> np.ndarray:
                 raw = self._fil_model.predict(chunk)
-                return np.asarray(raw)
+                return np.asarray(raw).ravel()
 
             predictions = _predict_with_oom_retry(features, predict_mean_fn)
             logger.debug(
