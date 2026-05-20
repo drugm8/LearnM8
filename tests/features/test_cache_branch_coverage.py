@@ -14,7 +14,7 @@ from learnm8.features.cache import (
     _hash_index_cache_get,
     _hash_index_cache_put,
     _load_hash_index,
-    _validate_cache_integrity,
+    _validate_cache_full,
     from_storage,
 )
 from learnm8.features.extraction import extract_features
@@ -58,7 +58,7 @@ def test_hash_index_cache_put_typeerror_silenced():
 
 
 @pytest.mark.unit
-def test_validate_cache_integrity_featurizer_name_mismatch(tmp_path: Path):
+def test_validate_cache_full_featurizer_name_mismatch(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
     cache_path = tmp_path / 'features_morgan.h5'
@@ -69,11 +69,11 @@ def test_validate_cache_integrity_featurizer_name_mismatch(tmp_path: Path):
         pytest.raises(FeatureExtractionError, match=r'featurizer_name mismatch'),
         h5py.File(cache_path, 'r') as f,
     ):
-        _validate_cache_integrity(f, feat, cache_path)
+        _validate_cache_full(f, feat, cache_path)
 
 
 @pytest.mark.unit
-def test_validate_cache_integrity_schema_version_mismatch(tmp_path: Path):
+def test_validate_cache_full_schema_version_mismatch(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
     cache_path = tmp_path / 'features_morgan.h5'
@@ -84,4 +84,4 @@ def test_validate_cache_integrity_schema_version_mismatch(tmp_path: Path):
         pytest.raises(FeatureExtractionError, match=r'schema_version mismatch'),
         h5py.File(cache_path, 'r') as f,
     ):
-        _validate_cache_integrity(f, feat, cache_path)
+        _validate_cache_full(f, feat, cache_path)

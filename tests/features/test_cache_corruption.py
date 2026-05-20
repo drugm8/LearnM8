@@ -91,12 +91,21 @@ CORRUPTORS = {
 @pytest.mark.unit
 @pytest.mark.parametrize('invariant_id', sorted(CORRUPTORS))
 def test_each_invariant_violation_raises(populated_cache: Path, invariant_id: int):
+    """Every invariant violation surfaces as FeatureExtractionError end-to-end.
+
+    Invariants 1,3-7 are caught by cheap validation on the warm read path.
+    Invariant 2 (duplicate hashes) is deliberately NOT scanned by cheap
+    validation — it is caught by ``_merge_sorted_indices`` on the write path,
+    which is why the probe SMILES must be valid (a miss that reaches the
+    writer). Full-validator coverage of invariant 2 lives in
+    ``test_cache_validation.py``.
+    """
     CORRUPTORS[invariant_id](populated_cache)
     cache_dir = populated_cache.parent
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     with pytest.raises(FeatureExtractionError, match=r'[Dd]elete the cache file'):
-        extract_features(['XXXNEW'], feat, cache_dir=cache_dir)
+        extract_features(['c1ccccc1'], feat, cache_dir=cache_dir)
 
 
 @pytest.mark.unit

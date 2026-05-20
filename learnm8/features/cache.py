@@ -66,6 +66,9 @@ ATTR_FEATURIZER_NAME = 'featurizer_name'
 ATTR_WRITE_EPOCH = 'write_epoch'
 ATTR_STORAGE_LAYOUT = 'storage_layout'
 ATTR_HASH_WIDTH = 'hash_width_bits'
+# Interrupted-write guard: set to 1 before a multi-step write, cleared to 0
+# after the final flush. A missing attr means clean (pre-flag caches).
+ATTR_DIRTY = 'dirty'
 
 LAYOUT_DENSE = 'dense'
 LAYOUT_CSR = 'csr'
@@ -544,6 +547,7 @@ def _initialize_csr_datasets(
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_CSR
     f.attrs[ATTR_HASH_WIDTH] = np.uint16(HASH_WIDTH_BITS)
+    f.attrs[ATTR_DIRTY] = np.uint8(0)
     f.flush()
 
 
@@ -589,6 +593,7 @@ def _initialize_v3_datasets(
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(0)
     f.attrs[ATTR_STORAGE_LAYOUT] = LAYOUT_DENSE
     f.attrs[ATTR_HASH_WIDTH] = np.uint16(HASH_WIDTH_BITS)
+    f.attrs[ATTR_DIRTY] = np.uint8(0)
     f.flush()
 
 
@@ -674,14 +679,25 @@ class CacheMetadata:
             )
 
 
-def _validate_cache_integrity(
-    f: h5py.File, featurizer: Featurizer, cache_path: Path
-) -> None:
-    """Check the contract invariants; on violation raise ``FeatureExtractionError``."""
-    msg_suffix = (
+def _cache_msg_suffix(cache_path: Path) -> str:
+    return (
         f'\nDelete the cache file ({cache_path}) and retry. '
         f'This file will not be used until removed.'
     )
+
+
+def _validate_cache_cheap(
+    f: h5py.File, featurizer: Featurizer, cache_path: Path
+) -> CacheMetadata:
+    """Structural validation for the warm read path — no full index scans.
+
+    Catches missing/mismatched attrs and datasets, dtype/shape mismatches, an
+    interrupted-write ``dirty`` flag, and out-of-bounds row indices. Does NOT
+    scan hash sortedness/uniqueness or CSR ``indptr`` monotonicity — call
+    :func:`_validate_cache_full` for those. On violation raises
+    ``FeatureExtractionError``; on success returns parsed :class:`CacheMetadata`.
+    """
+    msg_suffix = _cache_msg_suffix(cache_path)
 
     for attr in REQUIRED_ATTRS:
         if attr not in f.attrs:
@@ -689,10 +705,17 @@ def _validate_cache_integrity(
                 f'cache missing required attr {attr!r}.' + msg_suffix
             )
 
-    if int(f.attrs[ATTR_SCHEMA_VERSION]) != SCHEMA_VERSION:
+    schema_version = int(f.attrs[ATTR_SCHEMA_VERSION])
+    if schema_version != SCHEMA_VERSION:
         raise FeatureExtractionError(
-            f'cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, '
+            f'cache schema_version mismatch (got {schema_version}, '
             f'expected {SCHEMA_VERSION}).' + msg_suffix
+        )
+
+    if int(f.attrs.get(ATTR_DIRTY, 0)) != 0:
+        raise FeatureExtractionError(
+            'cache is marked dirty — a previous write was interrupted and the '
+            'file may be inconsistent.' + msg_suffix
         )
 
     storage_dtype = _normalize_storage_dtype(str(f.attrs[ATTR_STORAGE_DTYPE]))
@@ -711,6 +734,19 @@ def _validate_cache_integrity(
             f'cache /hash_index dtype mismatch: expected {HASH_DTYPE!r} '
             f'(128-bit BLAKE2b digests), got {hash_index.dtype!r}.' + msg_suffix
         )
+    if row_index.dtype != np.dtype(np.uint64):
+        raise FeatureExtractionError(
+            f'cache /row_index dtype mismatch: expected uint64, '
+            f'got {row_index.dtype!r}.' + msg_suffix
+        )
+    if len(hash_index) != len(row_index):
+        raise FeatureExtractionError(
+            f'cache hash_index/row_index length mismatch '
+            f'({len(hash_index)} vs {len(row_index)}).' + msg_suffix
+        )
+
+    bit_count = int(f.attrs[ATTR_BIT_COUNT])
+    feature_width: int | None = None
 
     if layout == LAYOUT_DENSE:
         if DSET_FEATURES not in f:
@@ -722,11 +758,11 @@ def _validate_cache_integrity(
         expected_features_dtype = _DENSE_EXPECTED_FEATURES_DTYPE[storage_dtype]
         if features.dtype != np.dtype(expected_features_dtype):
             raise FeatureExtractionError(
-                f'cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} '
-                f'but /features.dtype={features.dtype!r}.' + msg_suffix
+                f'cache /features dtype mismatch: file says '
+                f'storage_dtype={storage_dtype!r} but '
+                f'/features.dtype={features.dtype!r}.' + msg_suffix
             )
 
-        bit_count = int(f.attrs[ATTR_BIT_COUNT])
         expected_width = _packed_width(bit_count, storage_dtype)
         if features.ndim != 2 or features.shape[1] != expected_width:
             raise FeatureExtractionError(
@@ -735,13 +771,23 @@ def _validate_cache_integrity(
                 f'got {features.shape}.' + msg_suffix
             )
 
+        if features.shape[0] != row_index.shape[0]:
+            raise FeatureExtractionError(
+                f'cache /features row count {features.shape[0]} disagrees with '
+                f'row_index length {row_index.shape[0]}.' + msg_suffix
+            )
+
+        # Vectorized bounds check: cheap (~ms even at 100M), and the only thing
+        # standing between a torn/truncated cache and a silently wrong read.
         if len(row_index) > 0:
             max_row = int(row_index[:].max())
             if max_row >= features.shape[0]:
                 raise FeatureExtractionError(
                     f'cache row_index points past /features rows '
-                    f'(max={max_row}, /features rows={features.shape[0]}).' + msg_suffix
+                    f'(max={max_row}, /features rows={features.shape[0]}).'
+                    + msg_suffix
                 )
+        feature_width = int(features.shape[1])
     elif layout == LAYOUT_CSR:
         if storage_dtype != STORAGE_CSR_UINT16:
             raise FeatureExtractionError(
@@ -759,51 +805,61 @@ def _validate_cache_integrity(
                 )
             if f[dset].dtype != np.dtype(expected_dtype):
                 raise FeatureExtractionError(
-                    f'cache {dset!r} dtype mismatch: expected {np.dtype(expected_dtype)!r}, '
-                    f'got {f[dset].dtype!r}.' + msg_suffix
-                )
-
-        indptr = f[DSET_CSR_INDPTR]
-        csr_data = f[DSET_CSR_DATA]
-        csr_indices = f[DSET_CSR_INDICES]
-
-        if indptr.shape[0] != row_index.shape[0] + 1:
-            raise FeatureExtractionError(
-                f'cache csr_indptr length mismatch: expected {row_index.shape[0] + 1} '
-                f'(row_index + 1), got {indptr.shape[0]}.' + msg_suffix
-            )
-
-        if indptr.shape[0] >= 1 and int(indptr[0]) != 0:
-            raise FeatureExtractionError(
-                f'cache csr_indptr[0] must be 0, got {int(indptr[0])}.' + msg_suffix
-            )
-
-        if indptr.shape[0] > 0:
-            last = int(indptr[-1])
-            if last != csr_data.shape[0] or last != csr_indices.shape[0]:
-                raise FeatureExtractionError(
-                    f'cache csr_indptr[-1]={last} disagrees with csr_data '
-                    f'({csr_data.shape[0]}) / csr_indices ({csr_indices.shape[0]}).'
+                    f'cache {dset!r} dtype mismatch: expected '
+                    f'{np.dtype(expected_dtype)!r}, got {f[dset].dtype!r}.'
                     + msg_suffix
                 )
 
-        if indptr.shape[0] > 1:
-            diffs = np.diff(np.asarray(indptr[:], dtype=np.int64))
-            if np.any(diffs < 0):
-                raise FeatureExtractionError(
-                    'cache csr_indptr is not monotone non-decreasing.' + msg_suffix
-                )
+        indptr = f[DSET_CSR_INDPTR]
+        if indptr.shape[0] != row_index.shape[0] + 1:
+            raise FeatureExtractionError(
+                f'cache csr_indptr length mismatch: expected '
+                f'{row_index.shape[0] + 1} (row_index + 1), got '
+                f'{indptr.shape[0]}.' + msg_suffix
+            )
+        if indptr.shape[0] >= 1 and int(indptr[0]) != 0:
+            raise FeatureExtractionError(
+                f'cache csr_indptr[0] must be 0, got {int(indptr[0])}.'
+                + msg_suffix
+            )
     else:
         raise FeatureExtractionError(
             f'cache has unknown storage_layout {layout!r}.' + msg_suffix
         )
 
-    if len(hash_index) != len(row_index):
+    if str(f.attrs[ATTR_FEATURIZER_NAME]) != featurizer.get_name():
         raise FeatureExtractionError(
-            f'cache hash_index/row_index length mismatch '
-            f'({len(hash_index)} vs {len(row_index)}).' + msg_suffix
+            f'cache featurizer_name mismatch: file says '
+            f'{str(f.attrs[ATTR_FEATURIZER_NAME])!r}, expected '
+            f'{featurizer.get_name()!r}.' + msg_suffix
         )
 
+    return CacheMetadata(
+        schema_version=schema_version,
+        bit_count=bit_count,
+        storage_dtype=storage_dtype,
+        storage_layout=layout,
+        featurizer_name=str(f.attrs[ATTR_FEATURIZER_NAME]),
+        write_epoch=int(f.attrs.get(ATTR_WRITE_EPOCH, 0)),
+        n_rows=len(row_index),
+        feature_width=feature_width,
+    )
+
+
+def _validate_cache_full(
+    f: h5py.File, featurizer: Featurizer, cache_path: Path
+) -> CacheMetadata:
+    """Full integrity validation: cheap structural checks plus full index scans.
+
+    Adds hash-index sortedness/uniqueness and CSR ``indptr`` end-consistency
+    and monotonicity on top of :func:`_validate_cache_cheap`. Used by tests,
+    debugging, and explicit validation — the warm read path uses the cheap
+    validator. On violation raises ``FeatureExtractionError``.
+    """
+    meta = _validate_cache_cheap(f, featurizer, cache_path)
+    msg_suffix = _cache_msg_suffix(cache_path)
+
+    hash_index = f[DSET_HASH_INDEX]
     if len(hash_index) > 1:
         # S16 element-wise comparison is lex byte comparison — the
         # strict-ascending invariant. np.diff() doesn't work on bytes dtypes.
@@ -814,12 +870,27 @@ def _validate_cache_integrity(
                 '(duplicates or out-of-order).' + msg_suffix
             )
 
-    if str(f.attrs[ATTR_FEATURIZER_NAME]) != featurizer.get_name():
-        raise FeatureExtractionError(
-            f'cache featurizer_name mismatch: file says '
-            f'{str(f.attrs[ATTR_FEATURIZER_NAME])!r}, expected '
-            f'{featurizer.get_name()!r}.' + msg_suffix
-        )
+    if meta.storage_layout == LAYOUT_CSR:
+        indptr = f[DSET_CSR_INDPTR]
+        csr_data = f[DSET_CSR_DATA]
+        csr_indices = f[DSET_CSR_INDICES]
+        if indptr.shape[0] > 0:
+            last = int(indptr[-1])
+            if last != csr_data.shape[0] or last != csr_indices.shape[0]:
+                raise FeatureExtractionError(
+                    f'cache csr_indptr[-1]={last} disagrees with csr_data '
+                    f'({csr_data.shape[0]}) / csr_indices '
+                    f'({csr_indices.shape[0]}).' + msg_suffix
+                )
+        if indptr.shape[0] > 1:
+            diffs = np.diff(np.asarray(indptr[:], dtype=np.int64))
+            if np.any(diffs < 0):
+                raise FeatureExtractionError(
+                    'cache csr_indptr is not monotone non-decreasing.'
+                    + msg_suffix
+                )
+
+    return meta
 
 
 # ---------------------------------------------------------------------------
@@ -1007,6 +1078,11 @@ def _write_csr_misses(
             f'this indicates a featurizer bug or dim mismatch.'
         )
 
+    # Mark dirty before the first HDF5 mutation; a crash mid-write leaves
+    # dirty=1 on disk for the next reader's cheap validation to reject.
+    f.attrs[ATTR_DIRTY] = np.uint8(1)
+    f.flush()
+
     indptr_dset = f[DSET_CSR_INDPTR]
     data_dset = f[DSET_CSR_DATA]
     indices_dset = f[DSET_CSR_INDICES]
@@ -1044,6 +1120,8 @@ def _write_csr_misses(
 
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(int(f.attrs.get(ATTR_WRITE_EPOCH, 0)) + 1)
     f.flush()
+    f.attrs[ATTR_DIRTY] = np.uint8(0)
+    f.flush()
 
 
 def _write_cache_misses(
@@ -1063,6 +1141,11 @@ def _write_cache_misses(
         return
 
     encoded = to_storage(miss_features, storage_dtype)
+
+    # Mark dirty before the first HDF5 mutation; a crash mid-write leaves
+    # dirty=1 on disk for the next reader's cheap validation to reject.
+    f.attrs[ATTR_DIRTY] = np.uint8(1)
+    f.flush()
 
     features = f[DSET_FEATURES]
     cur_n = features.shape[0]
@@ -1088,6 +1171,8 @@ def _write_cache_misses(
     row_dset[:] = merged_r
 
     f.attrs[ATTR_WRITE_EPOCH] = np.uint64(int(f.attrs.get(ATTR_WRITE_EPOCH, 0)) + 1)
+    f.flush()
+    f.attrs[ATTR_DIRTY] = np.uint8(0)
     f.flush()
 
 
@@ -1226,7 +1311,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                             if sv is None or int(sv) != SCHEMA_VERSION:
                                 pass
                             else:
-                                _validate_cache_integrity(
+                                _validate_cache_cheap(
                                     f_ro, featurizer, cache_path
                                 )
                                 t_open = time.perf_counter()
