@@ -11,8 +11,6 @@ import pytest
 from learnm8.exceptions import FeatureExtractionError
 from learnm8.features import create_featurizer
 from learnm8.features.cache import (
-    _hash_index_cache_get,
-    _hash_index_cache_put,
     _load_hash_index,
     _validate_cache_full,
     from_storage,
@@ -42,19 +40,6 @@ def test_hash_index_cache_invalidates_on_write_epoch_bump(tmp_path: Path):
 
     assert idx_a.size == 2
     assert idx_b.size == 3
-
-
-@pytest.mark.unit
-def test_hash_index_cache_get_returns_none_when_missing():
-    fake_path = Path('/tmp/nonexistent_cache_v2.h5')
-    assert _hash_index_cache_get(fake_path, 12345, 0) is None
-
-
-@pytest.mark.unit
-def test_hash_index_cache_put_typeerror_silenced():
-    """Non-arr input cannot be weakref'd; the put helper must swallow that."""
-    fake_path = Path('/tmp/x.h5')
-    _hash_index_cache_put(fake_path, 0, 0, 'not-an-array')  # type: ignore[arg-type]
 
 
 @pytest.mark.unit

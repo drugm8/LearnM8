@@ -135,64 +135,78 @@ _BLOSC_KWARGS = hdf5plugin.Blosc(
 # Bounded LRU cap for in-process /hash_index re-reads. At 100M rows x 16 B,
 # each entry is ~1.6 GB; 4 entries ~ 6.4 GB headroom, fits the 30 GB cache
 # budget alongside Morgan-2048 features.
-DEFAULT_HASH_INDEX_LRU_MAX: int = 4
+DEFAULT_INDEX_LRU_MAX: int = 4
 
 
 # ---------------------------------------------------------------------------
-# Process-level hash_index LRU cache
+# Process-level index LRU cache (hash_index + row_index)
 # ---------------------------------------------------------------------------
-# WHY: NFR-003 (<1 s open at 100M) requires we don't re-read the ~1.6 GB
-# /hash_index on every reader open. Strong-ref OrderedDict LRU keyed on
-# (path, mtime_ns, write_epoch) auto-invalidates on writer commit (write_epoch
-# bumps under LOCK_EX) and on external mtime changes. Bounded by
-# DEFAULT_HASH_INDEX_LRU_MAX to respect the cache memory budget.
+# WHY: a warm read must not re-read the uncompressed /hash_index (~1.6 GB at
+# 100M) or /row_index (~0.8 GB) on every open. One strong-ref OrderedDict LRU
+# holds both per cache file in a single _IndexEntry, keyed on
+# (path, st_ino, mtime_ns, write_epoch): write_epoch invalidates on a writer
+# commit (bumped under LOCK_EX), mtime_ns on external edits, st_ino on a
+# delete-and-recreate at the same path. Bounded by DEFAULT_INDEX_LRU_MAX.
+# Cached arrays are returned read-only so a shared entry cannot be mutated by
+# one thread under another.
 
-_HASH_INDEX_CACHE: OrderedDict[tuple[str, int, int], np.ndarray] = OrderedDict()
-_HASH_INDEX_LOCK: threading.Lock = threading.Lock()
+_IndexCacheKey = tuple[str, int, int, int]
 
 
-def _hash_index_cache_get(
-    path: Path, mtime_ns: int, write_epoch: int
-) -> np.ndarray | None:
-    """Lookup the cached hash_index array; return None on miss.
+@dataclass
+class _IndexEntry:
+    """Cached hash_index / row_index arrays for one cache-file generation."""
 
-    On hit: moves the entry to the most-recently-used position. Returns a
-    strong reference — caller does NOT need to keep ``arr`` alive.
+    hash_index: np.ndarray | None = None
+    row_index: np.ndarray | None = None
+
+
+_INDEX_CACHE: OrderedDict[_IndexCacheKey, _IndexEntry] = OrderedDict()
+_INDEX_CACHE_LOCK: threading.Lock = threading.Lock()
+
+
+def _index_cache_key(f: h5py.File, cache_path: Path) -> _IndexCacheKey:
+    """Build the LRU key: (resolved path, st_ino, mtime_ns, write_epoch)."""
+    try:
+        st = os.stat(cache_path)
+        st_ino, mtime_ns = int(st.st_ino), int(st.st_mtime_ns)
+    except OSError:
+        st_ino, mtime_ns = 0, 0
+    write_epoch = int(f.attrs.get(ATTR_WRITE_EPOCH, 0))
+    return (str(cache_path.resolve()), st_ino, mtime_ns, write_epoch)
+
+
+def _index_cache_get(key: _IndexCacheKey) -> _IndexEntry | None:
+    """Return the cached entry for ``key`` (moved to MRU), or None on miss."""
+    with _INDEX_CACHE_LOCK:
+        entry = _INDEX_CACHE.get(key)
+        if entry is not None:
+            _INDEX_CACHE.move_to_end(key)
+        return entry
+
+
+def _index_cache_put(key: _IndexCacheKey, entry: _IndexEntry) -> None:
+    """Store ``entry`` under ``key``.
+
+    Evicts stale entries for the same path (different st_ino/mtime/epoch) so a
+    writer commit does not leave the old arrays occupying an LRU slot. Caps the
+    cache at ``DEFAULT_INDEX_LRU_MAX`` entries.
     """
-    key = (str(path.resolve()), mtime_ns, write_epoch)
-    with _HASH_INDEX_LOCK:
-        if key in _HASH_INDEX_CACHE:
-            _HASH_INDEX_CACHE.move_to_end(key)
-            return _HASH_INDEX_CACHE[key]
-        return None
-
-
-def _hash_index_cache_put(
-    path: Path, mtime_ns: int, write_epoch: int, arr: np.ndarray
-) -> None:
-    """Store ``arr`` under the (path, mtime_ns, write_epoch) key.
-
-    Evicts stale entries for the same path (different mtime_ns/write_epoch) so
-    a write_epoch bump doesn't leave the old ~1.6 GB array occupying an LRU
-    slot until natural eviction. Caps the cache at
-    ``DEFAULT_HASH_INDEX_LRU_MAX`` entries.
-    """
-    key = (str(path.resolve()), mtime_ns, write_epoch)
-    with _HASH_INDEX_LOCK:
+    with _INDEX_CACHE_LOCK:
         path_str = key[0]
-        stale = [k for k in _HASH_INDEX_CACHE if k[0] == path_str and k != key]
+        stale = [k for k in _INDEX_CACHE if k[0] == path_str and k != key]
         for k in stale:
-            del _HASH_INDEX_CACHE[k]
-        _HASH_INDEX_CACHE[key] = arr
-        _HASH_INDEX_CACHE.move_to_end(key)
-        while len(_HASH_INDEX_CACHE) > DEFAULT_HASH_INDEX_LRU_MAX:
-            _HASH_INDEX_CACHE.popitem(last=False)
+            del _INDEX_CACHE[k]
+        _INDEX_CACHE[key] = entry
+        _INDEX_CACHE.move_to_end(key)
+        while len(_INDEX_CACHE) > DEFAULT_INDEX_LRU_MAX:
+            _INDEX_CACHE.popitem(last=False)
 
 
-def _hash_index_cache_clear() -> None:
-    """Drop all cached hash_index arrays (test convenience)."""
-    with _HASH_INDEX_LOCK:
-        _HASH_INDEX_CACHE.clear()
+def _index_cache_clear() -> None:
+    """Drop all cached index arrays (test convenience)."""
+    with _INDEX_CACHE_LOCK:
+        _INDEX_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -779,8 +793,9 @@ def _validate_cache_cheap(
 
         # Vectorized bounds check: cheap (~ms even at 100M), and the only thing
         # standing between a torn/truncated cache and a silently wrong read.
+        # Routed through the LRU so the lookup that follows reuses this read.
         if len(row_index) > 0:
-            max_row = int(row_index[:].max())
+            max_row = int(_load_row_index(f, cache_path).max())
             if max_row >= features.shape[0]:
                 raise FeatureExtractionError(
                     f'cache row_index points past /features rows '
@@ -898,18 +913,43 @@ def _validate_cache_full(
 # ---------------------------------------------------------------------------
 
 
+def _readonly(arr: np.ndarray) -> np.ndarray:
+    """Mark ``arr`` immutable; cached index arrays are shared across threads."""
+    arr.flags.writeable = False
+    return arr
+
+
 def _load_hash_index(f: h5py.File, cache_path: Path) -> np.ndarray:
-    """Return ``/hash_index`` as an ``S16`` array, using the process LRU cache."""
-    try:
-        mtime_ns = os.stat(cache_path).st_mtime_ns
-    except OSError:
-        mtime_ns = 0
-    write_epoch = int(f.attrs.get(ATTR_WRITE_EPOCH, 0))
-    cached = _hash_index_cache_get(cache_path, mtime_ns, write_epoch)
-    if cached is not None:
-        return cached
-    arr = np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE)
-    _hash_index_cache_put(cache_path, mtime_ns, write_epoch, arr)
+    """Return ``/hash_index`` as a read-only ``S16`` array via the index LRU."""
+    key = _index_cache_key(f, cache_path)
+    entry = _index_cache_get(key)
+    if entry is not None and entry.hash_index is not None:
+        return entry.hash_index
+    arr = _readonly(np.asarray(f[DSET_HASH_INDEX][:], dtype=HASH_DTYPE))
+    if entry is None:
+        entry = _IndexEntry(hash_index=arr)
+    else:
+        entry.hash_index = arr
+    _index_cache_put(key, entry)
+    return arr
+
+
+def _load_row_index(f: h5py.File, cache_path: Path) -> np.ndarray:
+    """Return ``/row_index`` as a read-only ``uint64`` array via the index LRU.
+
+    Shares the per-file cache entry with :func:`_load_hash_index`, so a warm
+    read reads ``/row_index`` once instead of on every cache lookup.
+    """
+    key = _index_cache_key(f, cache_path)
+    entry = _index_cache_get(key)
+    if entry is not None and entry.row_index is not None:
+        return entry.row_index
+    arr = _readonly(np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64))
+    if entry is None:
+        entry = _IndexEntry(row_index=arr)
+    else:
+        entry.row_index = arr
+    _index_cache_put(key, entry)
     return arr
 
 
@@ -930,7 +970,7 @@ def _lookup_cache(
     matched_pos = np.where(in_range, pos, 0)
     found = in_range & (hash_index[matched_pos] == query_hashes)
     if np.any(found):
-        row_index = np.asarray(f[DSET_ROW_INDEX][:], dtype=np.uint64)
+        row_index = _load_row_index(f, cache_path)
         target_rows = row_index[matched_pos[found]]
     else:
         target_rows = np.empty(0, dtype=np.uint64)

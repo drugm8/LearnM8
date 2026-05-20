@@ -10,7 +10,7 @@ import pytest
 
 from learnm8.exceptions import FeatureExtractionError
 from learnm8.features import create_featurizer
-from learnm8.features.cache import _HASH_INDEX_CACHE
+from learnm8.features.cache import _index_cache_clear
 from learnm8.features.extraction import extract_features
 
 
@@ -18,7 +18,7 @@ from learnm8.features.extraction import extract_features
 def populated_cache(tmp_path: Path) -> Path:
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
-    _HASH_INDEX_CACHE.clear()
+    _index_cache_clear()
     return tmp_path / 'features_morgan.h5'
 
 

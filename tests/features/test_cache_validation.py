@@ -14,7 +14,7 @@ from learnm8.exceptions import FeatureExtractionError
 from learnm8.features import create_featurizer
 from learnm8.features.cache import (
     CacheMetadata,
-    _hash_index_cache_clear,
+    _index_cache_clear,
     _validate_cache_cheap,
     _validate_cache_full,
 )
@@ -135,7 +135,7 @@ def dense_cache(tmp_path: Path) -> tuple[Path, object]:
     """A valid dense (packed_uint8) Morgan cache and its featurizer."""
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
-    _hash_index_cache_clear()
+    _index_cache_clear()
     return tmp_path / 'features_morgan.h5', feat
 
 
@@ -147,7 +147,7 @@ def csr_cache(tmp_path: Path) -> tuple[Path, _FakeCsrFeaturizer]:
     )
     feat = _FakeCsrFeaturizer(values, name='fake_csr')
     extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
-    _hash_index_cache_clear()
+    _index_cache_clear()
     return tmp_path / 'features_fake_csr.h5', feat
 
 
@@ -346,7 +346,7 @@ def test_warm_read_on_dirty_cache_raises(dense_cache):
     path, feat = dense_cache
     with h5py.File(path, 'r+') as f:
         f.attrs['dirty'] = np.uint8(1)
-    _hash_index_cache_clear()
+    _index_cache_clear()
     with pytest.raises(FeatureExtractionError, match='dirty'):
         extract_features(['CCO'], feat, cache_dir=path.parent)
 
@@ -357,6 +357,6 @@ def test_warm_read_on_out_of_bounds_row_index_raises(dense_cache):
     path, feat = dense_cache
     with h5py.File(path, 'r+') as f:
         f['row_index'][0] = 9999
-    _hash_index_cache_clear()
+    _index_cache_clear()
     with pytest.raises(FeatureExtractionError, match='past /features'):
         extract_features(['CCO'], feat, cache_dir=path.parent)
