@@ -22,8 +22,8 @@ from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 def trained_rf(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained RandomForest for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner(). Tests that mutate MUST use a function-scoped fixture.
+    WARNING: Shared across session. Do NOT call train(). Tests that
+    mutate MUST use a function-scoped fixture.
     """
     learner = RandomForestLearner(n_estimators=10, random_state=42)
     features = _small_real_morgan_features_raw.copy()
@@ -62,8 +62,7 @@ def trained_xgb(_small_real_morgan_features_raw, small_real_compounds):
 def trained_rf_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained RFEnsemble for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner().
+    WARNING: Shared across session. Do NOT call train().
     """
     ensemble = RFEnsemble(n_estimators=10, random_state=42)
     features = _small_real_morgan_features_raw.copy()
@@ -76,8 +75,7 @@ def trained_rf_ensemble(_small_real_morgan_features_raw, small_real_compounds):
 def trained_mixed_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained MixedEnsemble for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner().
+    WARNING: Shared across session. Do NOT call train().
     """
     ensemble = MixedEnsemble(random_state=42)
     features = _small_real_morgan_features_raw.copy()
@@ -90,8 +88,7 @@ def trained_mixed_ensemble(_small_real_morgan_features_raw, small_real_compounds
 def trained_lr_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained LREnsemble for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner().
+    WARNING: Shared across session. Do NOT call train().
     """
     ensemble = LREnsemble(regularization_strengths=[0.1, 1.0], random_states=[42, 123])
     features = _small_real_morgan_features_raw.copy()
@@ -104,8 +101,7 @@ def trained_lr_ensemble(_small_real_morgan_features_raw, small_real_compounds):
 def trained_dt_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained DTEnsemble for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner().
+    WARNING: Shared across session. Do NOT call train().
     """
     ensemble = DTEnsemble(max_depths=[5, 10], random_states=[42, 123])
     features = _small_real_morgan_features_raw.copy()
@@ -118,8 +114,7 @@ def trained_dt_ensemble(_small_real_morgan_features_raw, small_real_compounds):
 def trained_xgb_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained XGBEnsemble for read-only tests.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner().
+    WARNING: Shared across session. Do NOT call train().
     """
     ensemble = XGBEnsemble(learning_rates=[0.05, 0.1], random_states=[42, 123])
     features = _small_real_morgan_features_raw.copy()
@@ -135,9 +130,9 @@ def trained_chemprop_ensemble(small_real_compounds):
     Trains a 3-model ensemble on small_real_compounds once per session,
     eliminating ~5s of per-test training in read-only consumers.
 
-    WARNING: Shared across session. Do NOT call train(), add_learner(),
-    or remove_learner(). Tests that need an untrained ensemble or that
-    verify is_trained transitions MUST construct their own instance.
+    WARNING: Shared across session. Do NOT call train(). Tests that need
+    an untrained ensemble or that verify is_trained transitions MUST
+    construct their own instance.
     """
     ensemble = ChempropEnsemble(message_hidden_dim=300, depth=2, max_epochs=3)
     smiles = small_real_compounds['SMILES'].to_list()

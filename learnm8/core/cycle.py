@@ -256,7 +256,7 @@ def execute_cycle(
     # Feature 023 FR-007: cycle-level resolution of compute_uncertainty. The
     # OR-precedence is asymmetric — force_uncertainty=True overrides skip even
     # for greedy/random; uncertainty-requiring acquisitions (UCB/EI/PI/etc.)
-    # cannot be disabled. Skip-eligible learners (gp/rf/advanced_rf/dt/lr +
+    # cannot be disabled. Skip-eligible learners (gp/rf/dt/lr +
     # GPU/gpytorch siblings) elide uncertainty compute when this is False.
     compute_uncertainty = force_uncertainty or acq_func.requires_uncertainty()
 

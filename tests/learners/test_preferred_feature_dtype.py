@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 
-from learnm8.learners.sklearn.advanced_random_forest import AdvancedRandomForestLearner
 from learnm8.learners.sklearn.decision_tree import DecisionTreeLearner
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
@@ -23,7 +22,6 @@ TREE_LEARNERS = [
     RandomForestLearner,
     XGBoostLearner,
     DecisionTreeLearner,
-    AdvancedRandomForestLearner,
 ]
 
 NON_TREE_LEARNERS = [

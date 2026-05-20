@@ -6,7 +6,6 @@ that reduce the unlabeled compound pool by removing unlikely candidates.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
 
 import numpy as np
 import polars as pl
@@ -40,16 +39,6 @@ class DesignSpacePruner(ABC):
             
         Raises:
             PruningError: If pruning fails or inputs are invalid
-        """
-        pass
-
-    @abstractmethod
-    def get_pruning_stats(self) -> dict[str, Any]:
-        """
-        Get statistics about the most recent pruning operation.
-        
-        Returns:
-            Dictionary containing pruning statistics
         """
         pass
 

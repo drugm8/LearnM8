@@ -108,40 +108,6 @@ class TestChempropEnsemble:
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
 
-    def test_diverse_random_states(self, chemprop_ensemble, small_real_compounds):
-        """Test that ensemble learners have different random states."""
-        assert len(chemprop_ensemble.learners) == 3
-
-        random_states = [learner.random_state for learner in chemprop_ensemble.learners]
-        assert len(set(random_states)) == 3
-        assert random_states == [42, 123, 356]
-
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-
-        individual_preds = chemprop_ensemble.get_individual_predictions(
-            features=None, smiles=smiles
-        )
-
-        assert len(individual_preds) == 3
-
-        pred_arrays = [
-            preds for preds in individual_preds.values() if preds is not None
-        ]
-        assert len(pred_arrays) == 3
-
-        for i in range(len(pred_arrays)):
-            for j in range(i + 1, len(pred_arrays)):
-                assert not np.allclose(pred_arrays[i], pred_arrays[j], rtol=1e-3)
-
     def test_train_with_empty_arrays(self, chemprop_ensemble):
         """Test error handling when training with empty arrays."""
         empty_smiles = []
@@ -257,28 +223,6 @@ class TestChempropEnsemble:
 
         assert predictions.shape[0] == len(compounds)
         assert uncertainty.shape[0] == len(compounds)
-
-    def test_ensemble_statistics(self, chemprop_ensemble, small_real_compounds):
-        """Test ensemble statistics retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        stats = chemprop_ensemble.get_ensemble_statistics()
-        assert stats['n_learners'] == 3
-        assert stats['is_trained'] is False
-
-        smiles = compounds['SMILES'].to_list()
-        targets = compounds['Activity'].to_numpy()
-
-        chemprop_ensemble.train(features=None, targets=targets, smiles=smiles)
-        stats = chemprop_ensemble.get_ensemble_statistics()
-        assert stats['is_trained'] is True
-        assert 'learner_names' in stats
-        assert 'learners_with_uncertainty' in stats
-        assert len(stats['learner_names']) == 3
 
     def test_small_dataset_trains_and_predicts_finite_values(self):
         """Test with small dataset of 5 diverse compounds."""

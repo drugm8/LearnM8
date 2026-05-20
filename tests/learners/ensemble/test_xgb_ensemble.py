@@ -91,19 +91,6 @@ class TestXGBEnsemble:
         name = custom_xgb_ensemble.get_name()
         assert name == "XGBEnsemble(3xXGB,lr=[0.01,0.05,0.10])"
 
-    def test_uncertainty_diversity_across_models(self, trained_xgb):
-        """Test that ensemble uncertainty captures model diversity."""
-        ensemble, features, _compounds = trained_xgb
-
-        individual_preds = ensemble.get_individual_predictions(features)
-        _predictions, uncertainty = ensemble.predict(features)
-
-        pred_arrays = [preds for preds in individual_preds.values()]
-        assert len(pred_arrays) == 3
-
-        manual_std = np.std(pred_arrays, axis=0)
-        np.testing.assert_allclose(uncertainty, manual_std, rtol=1e-5)
-
     def test_consistency_across_predictions(self, trained_xgb):
         """Test that predictions are consistent across multiple calls."""
         ensemble, features, _compounds = trained_xgb
@@ -113,27 +100,6 @@ class TestXGBEnsemble:
 
         np.testing.assert_array_equal(predictions1, predictions2)
         np.testing.assert_array_equal(uncertainty1, uncertainty2)
-
-    def test_add_learner(self, xgb_ensemble):
-        """Test adding learners to ensemble."""
-        from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
-
-        initial_count = len(xgb_ensemble.learners)
-
-        new_learner = XGBoostLearner(learning_rate=0.15, random_state=789)
-        xgb_ensemble.add_learner(new_learner)
-
-        assert len(xgb_ensemble.learners) == initial_count + 1
-        assert not xgb_ensemble.is_trained
-
-    def test_remove_learner(self, xgb_ensemble):
-        """Test removing learners from ensemble."""
-        initial_count = len(xgb_ensemble.learners)
-
-        xgb_ensemble.remove_learner(0)
-
-        assert len(xgb_ensemble.learners) == initial_count - 1
-        assert not xgb_ensemble.is_trained
 
     def test_mismatched_learning_rates_and_random_states(self):
         """Test behavior when learning rates and random states don't match."""

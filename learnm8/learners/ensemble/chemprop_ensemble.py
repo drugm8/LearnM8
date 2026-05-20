@@ -237,29 +237,6 @@ class ChempropEnsemble(EnsembleLearner):
 		self._cleanup_gpu_memory("after ensemble prediction")
 		return ensemble_predictions, uncertainties
 
-	def get_individual_predictions(self, features, smiles=None):
-		"""Get predictions from individual ensemble members.
-
-		Args:
-			features: Ignored (ChempropEnsemble works with SMILES directly)
-			smiles: SMILES strings (required)
-
-		Returns:
-			Dictionary mapping learner names to their predictions
-		"""
-		if smiles is None:
-			raise ValueError("ChempropEnsemble requires SMILES strings")
-
-		if not self.is_trained:
-			raise LearnerError("Ensemble must be trained before prediction")
-
-		individual_predictions = {}
-		for i, learner in enumerate(self.learners):
-			pred, _ = learner.predict(features=None, smiles=smiles)
-			individual_predictions[f"{learner.get_name()}_{i}"] = pred
-
-		return individual_predictions
-
 	def get_name(self) -> str:
 		"""Return a descriptive name for this learner."""
 		return f"ChempropEnsemble(3xChemprop,depth={self.depth},hidden={self.message_hidden_dim})"

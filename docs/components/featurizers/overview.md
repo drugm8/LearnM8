@@ -17,7 +17,7 @@ SMILES: "CCO"  →  Featurizer  →  [0, 1, 0, 1, ..., 0]  (2048-dimensional vec
 
 All scikit-learn, PyTorch, and XGBoost learners require featurizers:
 
-- RandomForest, AdvancedRandomForest
+- RandomForest
 - GaussianProcess
 - XGBoost, DecisionTree, LinearRegression
 - MLP, MCDropout, Fastprop

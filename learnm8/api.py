@@ -930,7 +930,7 @@ def run_active_learning(
         force_uncertainty: When True, learners always compute uncertainty even
             if the acquisition function does not require it (e.g., 'greedy').
             Useful for diagnostic / calibration analyses. Default False, in
-            which case skip-eligible learners (gp, rf, advanced_rf, dt, lr,
+            which case skip-eligible learners (gp, rf, dt, lr,
             rf_fil, ridge_cuml, gpu_gp, svgp) elide uncertainty work and the
             per-cycle parquet drops the `uncertainty` column. The cycle
             resolves ``compute_uncertainty = force_uncertainty OR

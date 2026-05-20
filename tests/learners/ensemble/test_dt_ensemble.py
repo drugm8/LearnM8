@@ -86,28 +86,6 @@ class TestDTEnsemble:
         with pytest.raises((ValueError, LearnerError)):
             dt_ensemble.train(features, targets)
 
-    def test_prediction_variance(self, small_real_compounds, small_real_morgan_features):
-        """Test that different max_depth models produce diverse predictions."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        ensemble = DTEnsemble(max_depths=[3, 10, 20], random_states=[42, 42, 42])
-        features = small_real_morgan_features
-        ensemble.train(features, compounds['Activity'].to_numpy())
-
-        individual_preds = ensemble.get_individual_predictions(features)
-        assert len(individual_preds) == 3
-
-        predictions_array = np.array([preds for preds in individual_preds.values() if preds is not None])
-        assert predictions_array.shape[0] == 3
-        assert predictions_array.shape[1] == len(compounds)
-
-        variances = np.var(predictions_array, axis=0)
-        assert np.mean(variances) > 0
-
     def test_consistency_with_fixed_random_state(self, small_real_compounds, small_real_morgan_features):
         """Test prediction consistency with fixed random states."""
         compounds = small_real_compounds.clone()
@@ -127,25 +105,6 @@ class TestDTEnsemble:
         predictions2, _ = ensemble2.predict(features)
 
         assert np.allclose(predictions1, predictions2)
-
-    def test_add_learner(self, dt_ensemble):
-        """Test adding learners to DTEnsemble."""
-        initial_count = len(dt_ensemble.learners)
-
-        new_learner = DecisionTreeLearner(max_depth=20, random_state=999)
-        dt_ensemble.add_learner(new_learner)
-
-        assert len(dt_ensemble.learners) == initial_count + 1
-        assert not dt_ensemble.is_trained
-
-    def test_remove_learner(self, dt_ensemble):
-        """Test removing learners from DTEnsemble."""
-        initial_count = len(dt_ensemble.learners)
-
-        dt_ensemble.remove_learner(0)
-
-        assert len(dt_ensemble.learners) == initial_count - 1
-        assert not dt_ensemble.is_trained
 
     def test_failed_learner_handling(self, small_real_compounds, small_real_morgan_features):
         """Test handling of failed learners during training."""
@@ -167,8 +126,8 @@ class TestDTEnsemble:
             def supports_uncertainty(self):
                 return False
 
-        ensemble = DTEnsemble(max_depths=[5], random_states=[42])
-        ensemble.add_learner(MockBadLearner())
+        ensemble = DTEnsemble(max_depths=[5, 10], random_states=[42, 123])
+        ensemble.learners.append(MockBadLearner())
 
         features = small_real_morgan_features
         with pytest.raises(LearnerError, match='BadLearner'):

@@ -143,37 +143,3 @@ class XGBoostLearner(SklearnLearner):
 
     def preferred_feature_dtype(self) -> str:
         return 'uint8' if self._feature_type == 'binary' else 'float32'
-
-    def get_feature_importance(self) -> np.ndarray | None:
-        """Get feature importance scores from the trained model.
-
-        Returns:
-            Array of feature importance scores, or None if model not trained
-        """
-        if not self.is_trained:
-            return None
-
-        return self.model.feature_importances_
-
-    def get_booster_stats(self) -> dict | None:
-        """Get statistics from the trained XGBoost booster.
-
-        Returns:
-            Dictionary of booster statistics, or None if model not trained
-        """
-        if not self.is_trained:
-            return None
-
-        booster = getattr(self.model, 'get_booster', lambda: None)()
-        if booster is None:
-            return None
-
-        try:
-            return {
-                'num_boosted_rounds': booster.num_boosted_rounds(),
-                'num_features': booster.num_features(),
-                'objective': self.model.objective,
-            }
-        except (ValueError, RuntimeError, TypeError, AttributeError) as e:
-            logger.warning(f'Failed to get booster stats: {e}')
-            return None

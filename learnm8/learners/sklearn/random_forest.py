@@ -184,17 +184,6 @@ class RandomForestLearner(SklearnLearner):
                 f'and that the featurizer is compatible with the model.'
             ) from e
 
-    def get_feature_importance(self) -> np.ndarray | None:
-        """Get feature importance scores from the trained model.
-
-        Returns:
-            Array of feature importance scores, or None if model not trained
-        """
-        if not self.is_trained:
-            return None
-
-        return self.model.feature_importances_
-
     def get_oob_score(self) -> float | None:
         """Get out-of-bag R² score from the trained model.
 

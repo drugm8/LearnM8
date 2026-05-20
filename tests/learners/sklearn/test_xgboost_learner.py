@@ -66,38 +66,6 @@ class TestXGBoostLearner:
         assert "lr=0.1" in name
         assert "depth=6" in name
 
-    @pytest.mark.slow
-    def test_feature_importance_returns_non_negative_values_after_training(self, learner, compounds_20, features_20):
-        """Test feature importance retrieval."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
-
-        assert learner.get_feature_importance() is None
-
-        features = features_20
-        learner.train(features, compounds['Activity'].to_numpy())
-        importance = learner.get_feature_importance()
-        assert importance is not None
-        assert len(importance) > 0
-        assert np.all(importance >= 0)
-
-    @pytest.mark.slow
-    def test_booster_stats(self, learner, compounds_20, features_20):
-        """Test booster statistics retrieval."""
-        compounds = compounds_20.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
-
-        assert learner.get_booster_stats() is None
-
-        features = features_20
-        learner.train(features, compounds['Activity'].to_numpy())
-        stats = learner.get_booster_stats()
-        if stats is not None:
-            assert isinstance(stats, dict)
-            assert 'num_boosted_rounds' in stats or 'num_features' in stats
-
     def test_custom_hyperparameters_train_and_predict(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different hyperparameters."""
         compounds = small_real_compounds.clone()

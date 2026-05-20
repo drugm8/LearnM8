@@ -53,14 +53,6 @@ def test_score_based_pruner_basic_functionality(sample_compounds):
     assert 'ID' in pruned.columns
     assert 'SMILES' in pruned.columns
 
-    # Check statistics
-    stats = pruner.get_pruning_stats()
-    assert stats['compounds_before_pruning'] == n_compounds
-    assert stats['compounds_after_pruning'] == expected_kept
-    assert stats['compounds_pruned'] == n_compounds - expected_kept
-    assert abs(stats['pruning_fraction_actual'] - 0.3) <= 0.1
-    assert stats['score_direction'] == 'higher'
-
 
 def test_score_based_pruner_higher_direction(sample_compounds):
     """Test pruning with 'higher' score direction."""
@@ -72,14 +64,6 @@ def test_score_based_pruner_higher_direction(sample_compounds):
     pruned = pruner.prune(test_compounds, predictions)
     
     assert len(pruned) == 3
-    
-    # Check pruning statistics - for 'higher' direction, should keep compounds with highest scores
-    stats = pruner.get_pruning_stats()
-    assert stats['score_threshold'] == 0.5  # Minimum score among kept compounds (0.5, 0.7, 0.9)
-    assert stats['score_range_kept']['min'] == 0.5
-    assert stats['score_range_kept']['max'] == 0.9
-    assert stats['compounds_pruned'] == 2
-    assert stats['score_direction'] == 'higher'
 
 
 def test_score_based_pruner_lower_direction(sample_compounds):
@@ -92,14 +76,6 @@ def test_score_based_pruner_lower_direction(sample_compounds):
     pruned = pruner.prune(test_compounds, predictions)
     
     assert len(pruned) == 3
-    
-    # Check pruning statistics - for 'lower' direction, should keep compounds with lowest scores
-    stats = pruner.get_pruning_stats()
-    assert stats['score_threshold'] == 0.5  # Maximum score among kept compounds (0.1, 0.3, 0.5)
-    assert stats['score_range_kept']['min'] == 0.1
-    assert stats['score_range_kept']['max'] == 0.5
-    assert stats['compounds_pruned'] == 2
-    assert stats['score_direction'] == 'lower'
 
 
 def test_score_based_pruner_no_pruning(sample_compounds):
@@ -112,10 +88,6 @@ def test_score_based_pruner_no_pruning(sample_compounds):
     # Should keep all compounds
     assert len(pruned) == len(sample_compounds)
     assert_frame_equal(pruned, sample_compounds)
-    
-    stats = pruner.get_pruning_stats()
-    assert stats['compounds_pruned'] == 0
-    assert stats['pruning_fraction_actual'] == 0.0
 
 
 def test_score_based_pruner_edge_cases(sample_compounds):
@@ -136,36 +108,6 @@ def test_score_based_pruner_edge_cases(sample_compounds):
     pruned = high_pruning_pruner.prune(sample_compounds, predictions)
     
     assert len(pruned) >= 1  # Should keep at least one compound
-
-
-def test_score_based_pruner_statistics(sample_compounds):
-    """Test comprehensive statistics collection."""
-    predictions = np.array([0.1, 0.9, 0.3, 0.7, 0.5])
-    test_compounds = sample_compounds.head(5)
-    
-    pruner = ScoreBasedPruner(pruning_fraction=0.4, score_direction='higher')
-    pruned = pruner.prune(test_compounds, predictions)
-    
-    stats = pruner.get_pruning_stats()
-    
-    # Check all required statistics
-    assert 'compounds_before_pruning' in stats
-    assert 'compounds_after_pruning' in stats
-    assert 'compounds_pruned' in stats
-    assert 'pruning_fraction_actual' in stats
-    assert 'pruning_fraction_requested' in stats
-    assert 'score_direction' in stats
-    assert 'score_threshold' in stats
-    assert 'score_range_kept' in stats
-    
-    # Check score range statistics
-    score_range = stats['score_range_kept']
-    assert 'min' in score_range
-    assert 'max' in score_range
-    assert 'mean' in score_range
-    
-    assert score_range['min'] <= score_range['max']
-    assert score_range['min'] <= score_range['mean'] <= score_range['max']
 
 
 def test_score_based_pruner_doesnt_require_uncertainty():

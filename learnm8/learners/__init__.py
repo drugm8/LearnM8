@@ -22,7 +22,6 @@ from .ensemble import (
 )
 from .gpu import RfFilLearner, RidgeCumlLearner
 from .sklearn import (
-    AdvancedRandomForestLearner,
     DecisionTreeLearner,
     GaussianProcessLearner,
     LinearRegressionLearner,
@@ -37,7 +36,6 @@ with contextlib.suppress(ImportError):
     from .gpytorch import SVGPLearner  # noqa: F401
 
 __all__ = [
-    'AdvancedRandomForestLearner',
     'ChempropLearner',
     'DTEnsemble',
     'DecisionTreeLearner',

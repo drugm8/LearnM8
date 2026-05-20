@@ -150,25 +150,6 @@ class FastpropEnsemble(EnsembleLearner):
         self._cleanup_gpu_memory('after ensemble prediction')
         return ensemble_predictions, uncertainties
 
-    def get_individual_predictions(self, features):
-        """Get predictions from individual ensemble members.
-
-        Args:
-            features: Feature matrix (n_samples, n_features)
-
-        Returns:
-            Dictionary mapping learner names to their predictions
-        """
-        if not self.is_trained:
-            raise LearnerError('Ensemble must be trained before prediction')
-
-        individual_predictions = {}
-        for i, learner in enumerate(self.learners):
-            pred, _ = learner.predict(features)
-            individual_predictions[f'{learner.get_name()}_{i}'] = pred
-
-        return individual_predictions
-
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         return f'FastpropEnsemble(3xFastprop,layers={self.fnn_layers},hidden={self.hidden_size})'

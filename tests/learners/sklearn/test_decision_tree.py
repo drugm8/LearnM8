@@ -81,25 +81,6 @@ class TestDecisionTreeLearner:
         name = learner.get_name()
         assert "DecisionTree" in name
 
-    def test_feature_importance_returns_normalized_values_after_training(self, learner, small_real_compounds, small_real_morgan_features):
-        """Test feature importance retrieval."""
-        compounds = small_real_compounds.clone()
-        if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(
-                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
-            )
-
-        assert learner.get_feature_importance() is None
-
-        features = small_real_morgan_features
-        learner.train(features, compounds['Activity'].to_numpy())
-
-        importance = learner.get_feature_importance()
-        assert importance is not None
-        assert importance.shape[0] == np.sum(learner._valid_feature_mask)
-        assert np.all(importance >= 0)
-        assert np.isclose(importance.sum(), 1.0)
-
     def test_supports_uncertainty_returns_true_for_default_criterion(self, learner):
         """Test DecisionTreeLearner supports uncertainty."""
         assert learner.supports_uncertainty() is True

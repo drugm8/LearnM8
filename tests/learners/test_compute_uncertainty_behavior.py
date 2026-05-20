@@ -100,6 +100,11 @@ def test_compute_uncertainty_false_returns_none(learner_name, tiny_data, request
     preds, sigmas = learner.predict(X, compute_uncertainty=False)
     assert preds is not None
     assert len(preds) == len(X)
+    assert preds.ndim == 1, (
+        f'{learner_name}.predict(compute_uncertainty=False) returned '
+        f'predictions with ndim={preds.ndim} (shape={preds.shape}); '
+        f'expected ndim=1 to avoid Polars wrapping each row as Array(Float32, 1).'
+    )
     assert sigmas is None, (
         f'{learner_name}.predict(compute_uncertainty=False) returned non-None '
         f'uncertainty (len={len(sigmas) if sigmas is not None else 0}); '

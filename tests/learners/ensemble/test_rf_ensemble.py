@@ -150,20 +150,6 @@ class TestRFEnsemble:
         with pytest.raises((ValueError, LearnerError)):
             rf_ensemble.train(features, targets)
 
-    def test_add_remove_learners(self, rf_ensemble):
-        """Test adding and removing learners from ensemble."""
-        initial_count = len(rf_ensemble.learners)
-
-        new_learner = RandomForestLearner(n_estimators=5, random_state=999)
-        rf_ensemble.add_learner(new_learner)
-
-        assert len(rf_ensemble.learners) == initial_count + 1
-        assert not rf_ensemble.is_trained
-
-        rf_ensemble.remove_learner(0)
-        assert len(rf_ensemble.learners) == initial_count
-        assert not rf_ensemble.is_trained
-
     def test_uncertainty_magnitude(
         self, rf_ensemble, small_real_compounds, small_real_morgan_features
     ):

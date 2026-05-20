@@ -69,22 +69,6 @@ def test_predict_raises_on_any_member_failure(features, targets):
 
 
 @pytest.mark.unit
-def test_get_individual_predictions_raises_on_member_failure(features, targets):
-    members = [
-        MockLearner(name='member_0'),
-        MockLearner(name='member_1', fail_on_predict=True),
-        MockLearner(name='member_2'),
-    ]
-    ensemble = EnsembleLearner(members)
-    ensemble.train(features, targets)
-    ensemble.is_trained = True
-    for m in ensemble.learners:
-        m.is_trained = True
-    with pytest.raises(LearnerError):
-        ensemble.get_individual_predictions(features)
-
-
-@pytest.mark.unit
 def test_all_members_succeed_returns_normal_results(features, targets):
     members = [
         MockLearner(name='member_0'),
