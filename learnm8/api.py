@@ -759,7 +759,7 @@ def _calculate_aggregate_metrics(
 
 def run_active_learning(
     compound_pool: str | Path | pl.DataFrame,
-    oracle: str | Path | Oracle,
+    oracle: str | Path | Oracle | None,
     learner: str | Learner,
     target_col: str,
     featurizer: str | Featurizer | None = None,
@@ -1095,7 +1095,7 @@ def run_active_learning(
                 module_path, function_name = str(oracle).split(':', 1)
                 from learnm8.oracles.python_oracle import PythonOracle
 
-                oracle = PythonOracle(module_path, function_name)
+                oracle = PythonOracle(module_path, function_name=function_name)
                 logger.debug(f'Using Python oracle: {module_path}:{function_name}')
         elif isinstance(oracle, Oracle):
             logger.debug(f'Using provided oracle instance: {oracle.__class__.__name__}')
