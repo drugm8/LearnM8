@@ -383,6 +383,14 @@ def execute_cycle(
         )
     )
 
+    # Re-derive cumulative_selected_ids from the post-_select_and_measure
+    # compounds_df so it includes the batch just labeled this cycle. The stale
+    # caller-supplied value omits it; this single source feeds both the
+    # discovery metrics and the unlabeled-pool ranking exclusion.
+    cumulative_selected_ids = set(
+        compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list()
+    )
+
     # Step 14: Calculate Cycle Metrics (basic + evaluate_cycle enhancement)
     evaluation_start_time = time.time()
     metrics = _calculate_cycle_metrics(
@@ -1281,8 +1289,10 @@ def _select_and_measure(
     # not customised current_best via acquisition_params, propagate the cycle's
     # current_best onto the instance so EI/PI behave identically to the
     # construct-on-demand path.
-    if acq_func is not None and 'current_best' in acquisition_params and hasattr(
-        acq_func, 'current_best'
+    if (
+        acq_func is not None
+        and 'current_best' in acquisition_params
+        and hasattr(acq_func, 'current_best')
     ):
         acq_func.current_best = acquisition_params['current_best']
 
