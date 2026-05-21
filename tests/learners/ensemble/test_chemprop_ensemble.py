@@ -1,6 +1,7 @@
 """Tests for ChempropEnsemble implementation."""
 
 import gc
+from unittest.mock import MagicMock
 
 import numpy as np
 import polars as pl
@@ -328,6 +329,55 @@ class TestChempropEnsemble:
             assert learner.depth == 5
             assert learner.atom_messages is True
             assert learner.batch_norm is True
+
+
+@pytest.mark.unit
+class TestChempropEnsembleDescriptorForwarding:
+    """Test that the descriptor array (x_d) reaches member ChempropLearners."""
+
+    def _mock_members(self, ensemble, n_samples):
+        """Replace ensemble members with mocks returning fixed-shape output."""
+        mocks = []
+        for _ in ensemble.learners:
+            member = MagicMock()
+            member.predict.return_value = (np.zeros(n_samples), None)
+            mocks.append(member)
+        ensemble.learners = mocks
+        return mocks
+
+    def test_train_forwards_descriptors_to_members(self):
+        """train() must pass the same non-None features array to every member."""
+        ensemble = ChempropEnsemble(max_epochs=2)
+        smiles = ['CCO', 'c1ccccc1', 'CC(=O)O']
+        targets = np.array([0.5, 0.3, 0.8])
+        features = np.arange(3 * 4, dtype=np.float32).reshape(3, 4)
+
+        mocks = self._mock_members(ensemble, len(smiles))
+
+        ensemble.train(features=features, targets=targets, smiles=smiles)
+
+        for member in mocks:
+            member.train.assert_called_once()
+            _, kwargs = member.train.call_args
+            assert kwargs['features'] is not None
+            np.testing.assert_array_equal(kwargs['features'], features)
+
+    def test_predict_forwards_descriptors_to_members(self):
+        """predict() must pass the same non-None features array to every member."""
+        ensemble = ChempropEnsemble(max_epochs=2)
+        smiles = ['CCO', 'c1ccccc1', 'CC(=O)O']
+        features = np.arange(3 * 4, dtype=np.float32).reshape(3, 4)
+
+        mocks = self._mock_members(ensemble, len(smiles))
+        ensemble.is_trained = True
+
+        ensemble.predict(features=features, smiles=smiles)
+
+        for member in mocks:
+            member.predict.assert_called_once()
+            _, kwargs = member.predict.call_args
+            assert kwargs['features'] is not None
+            np.testing.assert_array_equal(kwargs['features'], features)
 
 
 @pytest.mark.slow
