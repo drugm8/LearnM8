@@ -96,6 +96,36 @@ class TestFeaturizationChunkSize:
         result = featurization_chunk_size(5000)
         assert isinstance(result, int)
 
+    def test_njobs_default_is_single_task_behaviour(self):
+        # n_jobs=1 → ceil(len / 1) = len → identical to the pre-Fix-A clamp.
+        assert featurization_chunk_size(20_000) == 20_000
+        assert featurization_chunk_size(20_000, n_jobs=1) == 20_000
+
+    def test_njobs_aware_fills_every_worker(self):
+        # A 320k chunk over 64 workers must produce >= 64 tasks (Fix A: no
+        # idle worker), unlike the flat CAP which gave only 320k // 50k ~= 6.
+        chunk = featurization_chunk_size(320_000, n_jobs=64)
+        assert chunk == 5_000
+        assert 320_000 // chunk >= 64
+
+    def test_huge_input_still_capped(self):
+        # Above CAP * n_jobs the chunk caps at CAP; the pool just receives
+        # more than n_jobs tasks and per-worker working set stays bounded.
+        chunk = featurization_chunk_size(10_000_000, n_jobs=64)
+        assert chunk == FEATURIZATION_CHUNK_CAP
+        assert 10_000_000 // chunk >= 64
+
+    def test_njobs_aware_respects_floor(self):
+        # ceil(50k / 64) = 782 < FLOOR → clamped up to FLOOR.
+        assert (
+            featurization_chunk_size(50_000, n_jobs=64) == FEATURIZATION_CHUNK_FLOOR
+        )
+
+    def test_nonpositive_njobs_treated_as_one(self):
+        # Defensive: an unresolved 0 / -1 collapses to single-task sizing.
+        assert featurization_chunk_size(20_000, n_jobs=0) == 20_000
+        assert featurization_chunk_size(20_000, n_jobs=-1) == 20_000
+
 
 # ---------------------------------------------------------------------------
 # 2. Chunk-independence — direct fingerprint batch_size variation

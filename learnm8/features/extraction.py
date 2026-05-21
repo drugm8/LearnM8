@@ -53,21 +53,27 @@ def _extract_features_with_featurizer(
             f'Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds'
         )
 
-    # REQ-15/15a (feature 025, Item 6): bound each loky worker's working set by
-    # setting scikit-fingerprints' native batch_size. It is set on a per-call
-    # deepcopy of the featurizer — the shared featurizer instance is used
-    # concurrently by other extract_features callers (e.g.
+    # REQ-15/15a (feature 025, Item 6): set scikit-fingerprints' native
+    # batch_size so the transform splits into >= n_jobs tasks (Fix A — fills
+    # every loky worker) while still capping each worker's working set. It is
+    # set on a per-call deepcopy of the featurizer — the shared featurizer
+    # instance is used concurrently by other extract_features callers (e.g.
     # acquisition/simulated_annealing.py), so it must never be mutated. The
     # deepcopy (~0.02 ms) is unconditional for skfp-backed featurizers. A custom
     # (non-SkfpFeaturizer) Featurizer has no skfp batch_size and is left as-is.
     transform_featurizer: Featurizer = featurizer
     if isinstance(featurizer, SkfpFeaturizer):
+        from joblib import effective_n_jobs
+
         from learnm8.core.batching import featurization_chunk_size
 
         featurizer_copy = copy.deepcopy(featurizer)
         try:
+            # Size the chunk against the worker count skfp will actually use,
+            # so input_len // batch_size >= n_jobs and no worker idles.
+            n_workers = effective_n_jobs(featurizer_copy.fingerprint.n_jobs)
             featurizer_copy.fingerprint.set_params(
-                batch_size=featurization_chunk_size(len(smiles_list))
+                batch_size=featurization_chunk_size(len(smiles_list), n_workers)
             )
             transform_featurizer = featurizer_copy
         except (ValueError, TypeError):

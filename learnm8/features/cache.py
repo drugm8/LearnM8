@@ -1147,6 +1147,11 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
 
             featurizer_name = featurizer.get_name()
             storage_dtype = _normalize_storage_dtype(featurizer.get_storage_dtype())
+            # In-memory dtype for freshly-computed misses. Binary fingerprints
+            # report 'uint8' (lossless, 4x smaller than float32 on the cold
+            # path); count/descriptor featurizers keep 'float32' so the
+            # to_storage range validation sees the true values.
+            compute_dtype = np.dtype(featurizer.get_compute_dtype())
             use_uint8_output = _resolve_uint8_output(
                 preferred_dtype, storage_dtype, featurizer_name
             )
@@ -1180,9 +1185,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                             if sv is None or int(sv) != SCHEMA_VERSION:
                                 pass
                             else:
-                                _validate_cache_integrity(
-                                    f_ro, featurizer, cache_path
-                                )
+                                _validate_cache_integrity(f_ro, featurizer, cache_path)
                                 t_open = time.perf_counter()
 
                                 def _lookup_and_read() -> tuple[np.ndarray, np.ndarray]:
@@ -1241,15 +1244,18 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                             miss_features = func(
                                 miss_smiles, featurizer, *args, **kwargs
                             )
-                            miss_features = np.asarray(miss_features, dtype=np.float32)
+                            # Hold misses at the featurizer's compute dtype
+                            # (uint8 for binary fingerprints) — to_storage
+                            # encodes to storage_dtype on write regardless.
+                            miss_features = np.asarray(
+                                miss_features, dtype=compute_dtype
+                            )
                             if miss_features.shape != (n_misses, dim):
                                 raise FeatureExtractionError(
                                     f'Featurizer returned shape {miss_features.shape}, '
                                     f'expected ({n_misses}, {dim}).'
                                 )
                             if use_uint8_output:
-                                # Cache write still records float32 → packed/uint8 via
-                                # to_storage; user-facing `out` keeps the compact dtype.
                                 out[miss_idx] = miss_features.astype(
                                     np.uint8, copy=False
                                 )
@@ -1258,12 +1264,18 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                             miss_hashes = query_hashes[miss_idx]
                             # Dedupe within the miss batch — same SMILES appearing
                             # twice produces identical hashes; the strict-ascending
-                            # invariant rejects duplicate row writes.
+                            # invariant rejects duplicate row writes. The common
+                            # case (no duplicates) skips the fancy-index copy.
                             _, unique_pos = np.unique(miss_hashes, return_index=True)
-                            unique_pos.sort()
-                            uniq_smiles = [miss_smiles[i] for i in unique_pos]
-                            uniq_features = miss_features[unique_pos]
-                            uniq_hashes = miss_hashes[unique_pos]
+                            if unique_pos.size == n_misses:
+                                uniq_smiles = miss_smiles
+                                uniq_features = miss_features
+                                uniq_hashes = miss_hashes
+                            else:
+                                unique_pos.sort()
+                                uniq_smiles = [miss_smiles[i] for i in unique_pos]
+                                uniq_features = miss_features[unique_pos]
+                                uniq_hashes = miss_hashes[unique_pos]
                             _write_cache_misses(
                                 f,
                                 uniq_smiles,

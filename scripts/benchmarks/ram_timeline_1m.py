@@ -335,6 +335,7 @@ def run_child(args: argparse.Namespace) -> int:
                 cache_dir=str(args.cache_dir),
                 random_state=42,
                 large_features_ack=True,
+                memory_safety_factor=args.memory_safety_factor,
             )
         finally:
             emit_event('run_end')
@@ -689,6 +690,7 @@ def run_monitor(args: argparse.Namespace) -> int:
         '--al-output', str(al_output),
         '--cache-dir', str(cache_dir),
         '--n-cycles', str(args.n_cycles),
+        '--memory-safety-factor', str(args.memory_safety_factor),
     ]
     env = os.environ.copy()
     if 'CONDA_PREFIX' not in env:
@@ -764,6 +766,7 @@ def main() -> int:
     parser.add_argument('--cache-dir', type=Path)
     parser.add_argument('--n-cycles', type=int, default=10)
     parser.add_argument('--interval', type=float, default=0.5)
+    parser.add_argument('--memory-safety-factor', type=float, default=0.7)
     args = parser.parse_args()
     if args.child:
         return run_child(args)

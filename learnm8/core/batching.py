@@ -17,6 +17,8 @@ import gc
 import logging
 import math
 import os
+import platform
+import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -46,6 +48,11 @@ FEATURIZATION_CHUNK_CAP = 50_000
 
 _allocator_configured = False
 
+# glibc malloc-arena tuning (R1 — cold-featurization worker RSS). Detected
+# once at import; configure_host_allocator() is a no-op off a glibc/Linux host.
+_IS_GLIBC_LINUX: bool = sys.platform == 'linux' and platform.libc_ver()[0] == 'glibc'
+_host_allocator_configured: bool = False
+
 
 def _configure_cuda_allocator() -> None:
     """Best-effort lazy config of expandable_segments for CUDA allocator."""
@@ -60,6 +67,28 @@ def _configure_cuda_allocator() -> None:
         )
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = new_val
         logger.debug('Set PYTORCH_CUDA_ALLOC_CONF=%s', new_val)
+
+
+def configure_host_allocator() -> None:
+    """Cap glibc malloc arenas for subsequently-spawned featurization workers.
+
+    glibc creates up to ``8 * n_cpu`` per-thread malloc arenas and retains
+    free()'d memory per-arena, so worker RSS plateaus at its high-water mark.
+    ``MALLOC_ARENA_MAX`` bounds that fragmentation. glibc reads the variable at
+    process init, so this cannot shrink the *current* process — but loky
+    featurization workers are spawned later, inherit the environment, and hold
+    the bulk of the cross-batch RSS. Idempotent, no-op off glibc, and never
+    overrides a value the operator already set.
+    """
+    global _host_allocator_configured
+    if _host_allocator_configured:
+        return
+    _host_allocator_configured = True
+    if not _IS_GLIBC_LINUX:
+        return
+    if 'MALLOC_ARENA_MAX' not in os.environ:
+        os.environ['MALLOC_ARENA_MAX'] = '2'
+        logger.debug('Set MALLOC_ARENA_MAX=2 for featurization workers')
 
 
 def _get_learner_device(learner: Learner) -> str:
@@ -182,32 +211,41 @@ def estimate_batch_size(
     return batch_size
 
 
-def featurization_chunk_size(input_len: int) -> int:
+def featurization_chunk_size(input_len: int, n_jobs: int = 1) -> int:
     """Return the per-call scikit-fingerprints ``batch_size`` for featurization.
 
-    Fixed-cap-with-floor heuristic: ``clamp(input_len, FLOOR, CAP)``.
+    Heuristic: ``clamp(ceil(input_len / n_jobs), FLOOR, CAP)``.
 
-    ``CAP`` (:data:`FEATURIZATION_CHUNK_CAP`) bounds each loky worker's working
-    set — a worker streams CAP-row SMILES chunks rather than holding
-    ``1/n_jobs`` of the whole input. ``FLOOR``
-    (:data:`FEATURIZATION_CHUNK_FLOOR`) prevents pathologically small chunks
-    whose per-chunk overhead would dominate; below the floor the featurizer
-    simply processes everything in a single batch.
+    scikit-fingerprints splits one ``transform`` call into ``input_len //
+    batch_size`` tasks and dispatches them across its loky pool. Sizing the
+    chunk at ``ceil(input_len / n_jobs)`` therefore yields ``>= n_jobs`` tasks,
+    so every worker gets work — a flat ``CAP`` (the pre-Fix-A behaviour) made
+    only ``input_len // CAP`` tasks, which starves the pool whenever
+    ``input_len < CAP * n_jobs`` (e.g. a 320k prediction chunk → ~6 tasks).
+
+    ``CAP`` (:data:`FEATURIZATION_CHUNK_CAP`) still bounds each worker's working
+    set for very large inputs: when ``input_len`` exceeds ``CAP * n_jobs`` the
+    chunk is capped at ``CAP`` and the pool simply receives more than ``n_jobs``
+    tasks. ``FLOOR`` (:data:`FEATURIZATION_CHUNK_FLOOR`) prevents pathologically
+    small chunks whose per-task overhead would dominate.
 
     This is deliberately NOT :func:`estimate_batch_size`: that helper sizes a
     learner's prediction batch from a memory profile and a host-memory probe.
-    Featurization has no learner — a fixed cap suffices and avoids a per-call
-    probe. The return value is passed to scikit-fingerprints' own
-    ``batch_size`` keyword argument; it is a distinct concept from the
-    prediction-time ``batch_size`` produced by ``estimate_batch_size``.
+    The return value is passed to scikit-fingerprints' own ``batch_size``
+    keyword argument; it is a distinct concept from the prediction-time
+    ``batch_size`` produced by ``estimate_batch_size``.
 
     Args:
         input_len: number of SMILES to featurize in this call.
+        n_jobs: resolved (positive) worker count skfp will parallelise over.
+            Pass a value already run through ``joblib.effective_n_jobs`` so
+            ``-1`` / ``None`` are concrete; values < 1 are treated as 1.
 
     Returns:
         The per-call chunk size, clamped to ``[FLOOR, CAP]``.
     """
-    return max(FEATURIZATION_CHUNK_FLOOR, min(input_len, FEATURIZATION_CHUNK_CAP))
+    per_worker = math.ceil(input_len / max(1, n_jobs))
+    return max(FEATURIZATION_CHUNK_FLOOR, min(per_worker, FEATURIZATION_CHUNK_CAP))
 
 
 def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
