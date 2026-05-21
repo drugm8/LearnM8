@@ -30,11 +30,63 @@ class TestCSVOracleInit:
         with pytest.raises(ValueError, match="ID column"):
             CSVOracle(str(csv_file))
 
-    def test_init_filters_null_rows(self, tmp_path):
+    def test_init_keeps_null_target_rows(self, tmp_path):
         csv_file = tmp_path / "oracle.csv"
         csv_file.write_text("ID,Activity\nCOMP_001,1.5\nCOMP_002,no_score\n")
         oracle = CSVOracle(str(csv_file))
-        assert oracle.ground_truth.height == 1
+        assert oracle.ground_truth.height == 2
+        assert oracle.known_ids() == {'COMP_001', 'COMP_002'}
+
+    def test_init_keeps_rows_with_null_auxiliary_column(self, tmp_path):
+        csv_file = tmp_path / "oracle.csv"
+        csv_file.write_text(
+            "ID,SMILES,Activity,MW\n"
+            "COMP_001,CCO,1.5,46.07\n"
+            "COMP_002,CCC,2.3,\n"
+            "COMP_003,CCCC,0.8,58.12\n"
+            "COMP_004,c1ccccc1,3.1,\n"
+        )
+        oracle = CSVOracle(str(csv_file))
+        assert oracle.known_ids() == {
+            'COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'
+        }
+        compounds = pl.DataFrame({
+            'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'],
+            'SMILES': ['CCO', 'CCC', 'CCCC', 'c1ccccc1'],
+        })
+        result = oracle.measure(compounds, ['Activity'])
+        assert result.height == 4
+        activities = dict(
+            zip(result['ID'].to_list(), result['Activity'].to_list(), strict=True)
+        )
+        assert activities['COMP_001'] == pytest.approx(1.5)
+        assert activities['COMP_002'] == pytest.approx(2.3)
+        assert activities['COMP_003'] == pytest.approx(0.8)
+        assert activities['COMP_004'] == pytest.approx(3.1)
+
+    def test_measure_excludes_only_null_target_compound(self, tmp_path):
+        csv_file = tmp_path / "oracle.csv"
+        csv_file.write_text(
+            "ID,SMILES,Activity\n"
+            "COMP_001,CCO,1.5\n"
+            "COMP_002,CCC,no_score\n"
+            "COMP_003,CCCC,0.8\n"
+        )
+        oracle = CSVOracle(str(csv_file))
+        present = pl.DataFrame({
+            'ID': ['COMP_001', 'COMP_003'],
+            'SMILES': ['CCO', 'CCCC'],
+        })
+        result = oracle.measure(present, ['Activity'])
+        assert result['ID'].to_list() == ['COMP_001', 'COMP_003']
+        assert result['Activity'].to_list() == pytest.approx([1.5, 0.8])
+
+        with_null = pl.DataFrame({
+            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+            'SMILES': ['CCO', 'CCC', 'CCCC'],
+        })
+        with pytest.raises(ValueError, match="null"):
+            oracle.measure(with_null, ['Activity'])
 
     def test_init_with_smiles_column(self, tmp_path):
         csv_file = tmp_path / "oracle.csv"

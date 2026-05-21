@@ -53,26 +53,6 @@ class CSVOracle(Oracle):
                         # Keep as string if conversion fails
                         pass
 
-        # Filter out rows with null values in numeric columns
-        # This removes compounds with invalid scores like 'no_score' that were converted to null
-        initial_height = self.ground_truth.height
-        for column in self.ground_truth.columns:
-            if column not in ['ID', id_column, 'SMILES']:
-                col_dtype = self.ground_truth[column].dtype
-                if col_dtype in [pl.Float64, pl.Float32, pl.Int64, pl.Int32]:
-                    null_count = self.ground_truth[column].is_null().sum()
-                    if null_count > 0:
-                        logger.warning(
-                            f"CSVOracle: Filtering {null_count} compounds with null values in '{column}'"
-                        )
-                        self.ground_truth = self.ground_truth.filter(pl.col(column).is_not_null())
-
-        filtered_count = initial_height - self.ground_truth.height
-        if filtered_count > 0:
-            logger.info(
-                f"CSVOracle: Filtered {filtered_count} compounds with invalid/null property values"
-            )
-
         # Validate the ID column exists
         if id_column not in self.ground_truth.columns:
             available = list(self.ground_truth.columns)
@@ -104,7 +84,7 @@ class CSVOracle(Oracle):
             self.ground_truth = deduped
 
     def known_ids(self) -> set:
-        """IDs the oracle can measure (rows with invalid/null targets are dropped at init)."""
+        """IDs present in the oracle CSV (null targets are filtered per-property in measure())."""
         return set(self.ground_truth['ID'].to_list())
 
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
