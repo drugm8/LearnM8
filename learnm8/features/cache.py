@@ -8,8 +8,10 @@ Schema (version 3):
                  triple replaces the dense /features dataset.
 
 Cache-key recipe:
-  blake2b(f'{canonical_smiles}_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode(),
+  blake2b(f'{smiles}_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode(),
           digest_size=16, usedforsecurity=False)
+  The SMILES is keyed verbatim; callers supply RDKit-canonical SMILES via
+  learnm8.core.validation.canonicalize_for_cache (feature 025, Item 5).
 
 The 128-bit digest gives ~1.5e-23 collision probability at N=10**8 (birthday
 formula).
@@ -356,42 +358,28 @@ def _acquire_lock(
 # ---------------------------------------------------------------------------
 
 
-def _canonicalize_smiles(smiles_list: list[str]) -> list[str]:
-    """Map each SMILES to its RDKit canonical form for stable cache keys.
-
-    Equivalent SMILES (``"CCO"`` / ``"OCC"``) must hash to the same cache key;
-    hashing the raw string would store them separately. Canonicalisation is
-    memoised per unique input string. SMILES that RDKit cannot parse fall back
-    to the raw string so invalid inputs still get a stable, deterministic key.
-    """
-    from rdkit import Chem
-
-    canon_cache: dict[str, str] = {}
-    result: list[str] = []
-    for s in smiles_list:
-        cached = canon_cache.get(s)
-        if cached is None:
-            mol = Chem.MolFromSmiles(s)
-            cached = Chem.MolToSmiles(mol) if mol is not None else s
-            canon_cache[s] = cached
-        result.append(cached)
-    return result
-
-
 def _cache_keys_bytes16(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
     """Compute the 128-bit BLAKE2b cache key for each SMILES.
 
-    SMILES are canonicalised before hashing so equivalent representations share
-    a cache entry. Returns an ``np.ndarray`` of shape ``(len(smiles_list),)``
-    and dtype ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
+    The SMILES strings are keyed verbatim — there is no per-cycle
+    canonicalization step (feature 025, Item 5). Callers route SMILES through
+    :func:`learnm8.core.validation.canonicalize_for_cache` once, during the
+    validation phase (or, on the ``skip_validation`` path, as a standalone
+    pass), so equivalent representations (``"CCO"`` / ``"OCC"``) already
+    collapse to one RDKit-canonical string before reaching the cache. Because
+    that helper reproduces the legacy in-cache canonicalization byte-for-byte,
+    the keys are identical to the pre-change recipe — Item 5 triggers no cold
+    rebuild.
+
+    Returns an ``np.ndarray`` of shape ``(len(smiles_list),)`` and dtype
+    ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
     FIPS-locked hosts (BLAKE2b would otherwise still be admitted, but the
     flag mirrors the MD5-era contract).
     """
     name = featurizer.get_name()
     config_hash = featurizer.get_config_hash()
-    canonical_smiles = _canonicalize_smiles(smiles_list)
     out = np.empty(len(smiles_list), dtype=HASH_DTYPE)
-    for i, s in enumerate(canonical_smiles):
+    for i, s in enumerate(smiles_list):
         digest = hashlib.blake2b(
             f'{s}_{name}_{config_hash}'.encode(),
             digest_size=16,

@@ -25,6 +25,53 @@ MAX_SMILES_LENGTH = 10000
 # keys disambiguate different seeds.
 DEFAULT_3D_RANDOM_STATE: int = 0xF00D
 
+# Cache-irrelevant featurizer parameters (feature 025, Item 1). These are
+# surfaced by scikit-fingerprints' ``get_params()`` but never change feature
+# VALUES: ``n_jobs`` is a parallelism knob, ``verbose`` a logging knob, and
+# ``batch_size`` a per-call working-set knob (feature 025, Item 6). They are
+# denylisted (excluded) from the config hash so the cache is not fragmented by
+# core count, verbosity, or chunk size. The filter is a denylist: any
+# ``get_params()`` key NOT in this set is hashed by default — a fail-safe
+# direction so an unknown / future feature-determining parameter still changes
+# the hash rather than being silently ignored.
+_CACHE_IRRELEVANT_PARAMS: frozenset[str] = frozenset(
+    {'n_jobs', 'verbose', 'batch_size'}
+)
+
+# One-shot guard for the orphaned-cache WARNING (feature 025, REQ-4).
+_orphan_cache_warning_emitted: bool = False
+
+
+def _warn_orphaned_cache_once() -> None:
+    """Emit a single WARNING that the Item-1 hash-recipe change orphans old cache.
+
+    Feature 025 Item 1 widens the config-hash denylist (``verbose`` and
+    ``batch_size`` join ``n_jobs``), which changes ``get_config_hash()`` for
+    every featurizer. Cache rows written by earlier LearnM8 versions therefore
+    become unreachable. This fires once per process from :meth:`get_config` —
+    the first hash computation after the upgrade — as a heads-up; the orphaned
+    rows are left in place and may be deleted manually.
+    """
+    global _orphan_cache_warning_emitted
+    if _orphan_cache_warning_emitted:
+        return
+    _orphan_cache_warning_emitted = True
+    logger.warning(
+        'Featurization cache config-hash recipe changed in this version '
+        '(LearnM8 feature 025 / Item 1: n_jobs, verbose, and batch_size are '
+        'now excluded from the hash). If you have a feature cache from an '
+        'earlier LearnM8 version, its rows for this featurizer are now '
+        'orphaned — they will not be reused and new rows are appended '
+        'alongside them. Delete stale features_*.h5 files in your cache '
+        'directory to reclaim space.'
+    )
+
+
+def _reset_orphan_cache_warning() -> None:
+    """Reset the one-shot orphaned-cache WARNING guard (test convenience)."""
+    global _orphan_cache_warning_emitted
+    _orphan_cache_warning_emitted = False
+
 
 class SkfpFeaturizer(Featurizer):
     """Base class for scikit-fingerprints wrappers.
@@ -298,10 +345,17 @@ class SkfpFeaturizer(Featurizer):
 
         Note:
             Includes fingerprint class, auto_generate_conformers flag,
-            conformer generation parameters, and all fingerprint-specific
-            parameters from get_params(). ``n_jobs`` is deliberately excluded:
-            it controls parallelism only and has no effect on feature values,
-            so including it would needlessly fragment the cache by core count.
+            conformer generation parameters, and the fingerprint-specific
+            parameters from ``get_params()``. The :data:`_CACHE_IRRELEVANT_PARAMS`
+            denylist (``n_jobs``, ``verbose``, ``batch_size``) is filtered out
+            of the ``get_params()`` sub-dict only — these knobs control
+            parallelism, logging, and per-call chunk size, never feature
+            values, so including them would needlessly fragment the cache. The
+            manually-assembled keys (``random_state``, ``conformer_params``,
+            ``auto_generate_conformers``) are feature-determining and are NOT
+            filtered. Any unknown / future ``get_params()`` key is kept by
+            default (fail-safe: a new feature-determining param changes the
+            hash).
         """
         config: dict[str, Any] = {
             'fingerprint_class': self.fingerprint.__class__.__name__,
@@ -315,11 +369,15 @@ class SkfpFeaturizer(Featurizer):
             config['conformer_params'] = self.conformer_params
 
         params = self.fingerprint.get_params()
-        # Drop n_jobs: a parallelism knob that scikit-fingerprints reports via
-        # get_params() but which never changes feature values. Keeping it would
-        # fragment the cache by core count.
-        params.pop('n_jobs', None)
-        config.update(params)
+        # REQ-1: explicit denylist filter applied ONLY to the get_params()
+        # sub-dict. Drops n_jobs / verbose / batch_size (parallelism, logging,
+        # and per-call chunk-size knobs that never change feature values);
+        # every other key — including unknown ones — is kept.
+        config.update(
+            {k: v for k, v in params.items() if k not in _CACHE_IRRELEVANT_PARAMS}
+        )
+
+        _warn_orphaned_cache_once()
 
         return config
 

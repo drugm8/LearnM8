@@ -7,6 +7,7 @@ hardcoded batch size heuristic with adaptive memory-aware batching.
 Public API:
     get_available_memory(device) — query available bytes for CPU or GPU
     estimate_batch_size(learner, ...) — compute optimal batch from memory profile
+    featurization_chunk_size(input_len) — fixed-cap chunk size for featurization
     predict_with_batching(pool, learner, ...) — memory-safe batched prediction
 """
 
@@ -36,6 +37,12 @@ MIN_BATCH_CPU = 1000
 GPU_ALIGNMENT = 32
 DEFAULT_SAFETY_FACTOR = 0.7
 FALLBACK_MEMORY_BYTES = 2 * 1024**3  # 2 GiB
+
+# Featurization chunk-size bounds (feature 025, Item 6). CAP bounds each loky
+# worker's working set; FLOOR prevents pathologically small chunks. Distinct
+# from the prediction-time batch size — see featurization_chunk_size().
+FEATURIZATION_CHUNK_FLOOR = 1024
+FEATURIZATION_CHUNK_CAP = 50_000
 
 _allocator_configured = False
 
@@ -173,6 +180,34 @@ def estimate_batch_size(
 
     batch_size = min(batch_size, n_samples)
     return batch_size
+
+
+def featurization_chunk_size(input_len: int) -> int:
+    """Return the per-call scikit-fingerprints ``batch_size`` for featurization.
+
+    Fixed-cap-with-floor heuristic: ``clamp(input_len, FLOOR, CAP)``.
+
+    ``CAP`` (:data:`FEATURIZATION_CHUNK_CAP`) bounds each loky worker's working
+    set — a worker streams CAP-row SMILES chunks rather than holding
+    ``1/n_jobs`` of the whole input. ``FLOOR``
+    (:data:`FEATURIZATION_CHUNK_FLOOR`) prevents pathologically small chunks
+    whose per-chunk overhead would dominate; below the floor the featurizer
+    simply processes everything in a single batch.
+
+    This is deliberately NOT :func:`estimate_batch_size`: that helper sizes a
+    learner's prediction batch from a memory profile and a host-memory probe.
+    Featurization has no learner — a fixed cap suffices and avoids a per-call
+    probe. The return value is passed to scikit-fingerprints' own
+    ``batch_size`` keyword argument; it is a distinct concept from the
+    prediction-time ``batch_size`` produced by ``estimate_batch_size``.
+
+    Args:
+        input_len: number of SMILES to featurize in this call.
+
+    Returns:
+        The per-call chunk size, clamped to ``[FLOOR, CAP]``.
+    """
+    return max(FEATURIZATION_CHUNK_FLOOR, min(input_len, FEATURIZATION_CHUNK_CAP))
 
 
 def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):

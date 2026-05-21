@@ -7,8 +7,8 @@ based on dataset size and optional progress tracking.
 Updated to support both string-based and Featurizer instance-based extraction.
 """
 
+import copy
 import logging
-import os
 from pathlib import Path
 
 import numpy as np
@@ -16,39 +16,10 @@ import numpy as np
 from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import FeatureExtractionError
 
+from .base import SkfpFeaturizer
 from .cache import cache_features
 
 logger = logging.getLogger(__name__)
-
-
-def _get_optimal_n_jobs(n_compounds: int, n_jobs: int = -1) -> int:
-    """
-    Determine optimal number of parallel jobs based on dataset size.
-
-    Args:
-        n_compounds: Number of compounds to process
-        n_jobs: User-specified number of jobs (-1 for auto)
-
-    Returns:
-        Optimal number of parallel jobs
-
-    Strategy:
-        - < 100: Sequential (overhead > benefit)
-        - 100-10k: All available cores
-        - > 10k: Cap at 32 cores (diminishing returns)
-    """
-    if n_jobs == 1:
-        return 1
-
-    if n_jobs == -1:
-        if n_compounds < 100:
-            return 1
-        elif n_compounds < 10000:
-            return os.cpu_count() or 1
-        else:
-            return min(os.cpu_count() or 1, 32)
-
-    return max(1, n_jobs)
 
 
 @cache_features(Path('.cache'))
@@ -82,8 +53,29 @@ def _extract_features_with_featurizer(
             f'Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds'
         )
 
+    # REQ-15/15a (feature 025, Item 6): bound each loky worker's working set by
+    # setting scikit-fingerprints' native batch_size. It is set on a per-call
+    # deepcopy of the featurizer — the shared featurizer instance is used
+    # concurrently by other extract_features callers (e.g.
+    # acquisition/simulated_annealing.py), so it must never be mutated. The
+    # deepcopy (~0.02 ms) is unconditional for skfp-backed featurizers. A custom
+    # (non-SkfpFeaturizer) Featurizer has no skfp batch_size and is left as-is.
+    transform_featurizer: Featurizer = featurizer
+    if isinstance(featurizer, SkfpFeaturizer):
+        from learnm8.core.batching import featurization_chunk_size
+
+        featurizer_copy = copy.deepcopy(featurizer)
+        try:
+            featurizer_copy.fingerprint.set_params(
+                batch_size=featurization_chunk_size(len(smiles_list))
+            )
+            transform_featurizer = featurizer_copy
+        except (ValueError, TypeError):
+            # Fingerprint does not accept a batch_size param — featurize as-is.
+            transform_featurizer = featurizer
+
     try:
-        features_array = featurizer.transform(smiles_list)
+        features_array = transform_featurizer.transform(smiles_list)
     except FeatureExtractionError:
         raise
     except (ValueError, RuntimeError, TypeError) as e:

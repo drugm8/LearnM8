@@ -100,13 +100,12 @@ def test_empty_input_returns_empty_s16_array(morgan: SkfpFeaturizer) -> None:
 
 @pytest.mark.unit
 def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
-    """Verify the digest equals the naive recipe on canonicalised SMILES.
+    """Verify the digest equals the naive recipe on the verbatim SMILES input.
 
-    SMILES are canonicalised before hashing, so the expected digest is computed
-    over ``Chem.MolToSmiles(Chem.MolFromSmiles(s))`` for each sample.
+    After feature 025 Item 5, _cache_keys_bytes16 keys SMILES verbatim — there
+    is no internal canonicalization step.  The expected digest is therefore
+    computed over the raw input string (not the RDKit-canonical form).
     """
-    from rdkit import Chem
-
     name = morgan.get_name()
     config_hash = morgan.get_config_hash()
 
@@ -114,7 +113,7 @@ def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
     expected = np.array(
         [
             hashlib.blake2b(
-                f'{Chem.MolToSmiles(Chem.MolFromSmiles(s))}_{name}_{config_hash}'.encode(),
+                f'{s}_{name}_{config_hash}'.encode(),
                 digest_size=16,
                 usedforsecurity=False,
             ).digest()
@@ -127,12 +126,33 @@ def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
 
 @pytest.mark.unit
 def test_equivalent_smiles_share_cache_key(morgan: SkfpFeaturizer) -> None:
-    """Equivalent SMILES representations canonicalise to the same digest."""
-    # "CCO" / "OCC" (ethanol) and two benzene spellings.
-    keys = _cache_keys_bytes16(['CCO', 'OCC', 'c1ccccc1', 'C1=CC=CC=C1'], morgan)
-    assert keys[0] == keys[1]
-    assert keys[2] == keys[3]
-    assert keys[0] != keys[2]
+    """Equivalent SMILES share a cache key after canonicalization via canonicalize_for_cache.
+
+    After feature 025 Item 5, _cache_keys_bytes16 does NOT canonicalize SMILES
+    internally.  Equivalence is established by first passing SMILES through
+    canonicalize_for_cache (which replicates what validate_compound_pool does),
+    then computing keys on the resulting canonical strings.
+    """
+    from learnm8.core.validation import canonicalize_for_cache
+
+    raw = ['CCO', 'OCC', 'c1ccccc1', 'C1=CC=CC=C1']
+    canonical = [canonicalize_for_cache(s) for s in raw]
+
+    # 'CCO' and 'OCC' (ethanol) must map to the same canonical form.
+    assert canonical[0] == canonical[1], (
+        f'Expected CCO and OCC to canonicalize identically, '
+        f'got {canonical[0]!r} and {canonical[1]!r}'
+    )
+    # Benzene kekulé and aromatic forms must also map identically.
+    assert canonical[2] == canonical[3], (
+        f'Expected c1ccccc1 and C1=CC=CC=C1 to canonicalize identically, '
+        f'got {canonical[2]!r} and {canonical[3]!r}'
+    )
+
+    keys = _cache_keys_bytes16(canonical, morgan)
+    assert keys[0] == keys[1], 'Canonical ethanol forms must share a cache key'
+    assert keys[2] == keys[3], 'Canonical benzene forms must share a cache key'
+    assert keys[0] != keys[2], 'Ethanol and benzene must have distinct cache keys'
 
 
 @pytest.mark.unit

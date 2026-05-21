@@ -98,16 +98,44 @@ def test_single_smiles_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_equivalent_smiles_dedup_in_cache(tmp_path: Path):
-    """Equivalent SMILES canonicalise to one cache entry (Item 2 regression)."""
+    """Equivalent SMILES share one cache row when routed through validation (Item 5).
+
+    After feature 025 Item 5, raw extract_features() does NOT canonicalize SMILES
+    internally — so calling it with 'CCO' then 'OCC' directly would create 2 rows.
+    Equivalence collapses to a single cache entry only when SMILES are first
+    canonicalized via validate_compound_pool (or canonicalize_for_cache directly).
+    """
+    import polars as pl
+
+    from learnm8.core.validation import validate_compound_pool
+
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
-    cold = extract_features(['CCO'], feat, cache_dir=tmp_path)
+
+    df_cco = pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']})
+    df_occ = pl.DataFrame({'ID': ['C2'], 'SMILES': ['OCC']})
+
+    result_cco = validate_compound_pool(df_cco, n_jobs=1, progress=False)
+    result_occ = validate_compound_pool(df_occ, n_jobs=1, progress=False)
+
+    canon_cco = result_cco.valid_compounds['SMILES'].to_list()
+    canon_occ = result_occ.valid_compounds['SMILES'].to_list()
+
+    # Both must canonicalize to the same SMILES string.
+    assert canon_cco == canon_occ, (
+        f'Expected CCO and OCC to share canonical form, '
+        f'got {canon_cco!r} and {canon_occ!r}'
+    )
+
+    cold = extract_features(canon_cco, feat, cache_dir=tmp_path)
 
     cache_file = tmp_path / 'features_morgan.h5'
     with h5py.File(cache_file, 'r') as f:
         assert f['hash_index'].shape == (1,)
 
-    # "OCC" is the same molecule as "CCO" — must be a 100% cache hit, no new row.
-    warm = extract_features(['OCC'], feat, cache_dir=tmp_path)
+    # canon_occ == canon_cco, so this is a 100% cache hit — no new row.
+    warm = extract_features(canon_occ, feat, cache_dir=tmp_path)
     assert np.array_equal(cold, warm)
     with h5py.File(cache_file, 'r') as f:
-        assert f['hash_index'].shape == (1,), 'OCC must reuse the CCO cache entry'
+        assert f['hash_index'].shape == (1,), (
+            'Canonical OCC must reuse the canonical CCO cache entry'
+        )

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from learnm8.exceptions import FeatureExtractionError
-from learnm8.features.extraction import _get_optimal_n_jobs, extract_features
+from learnm8.features.extraction import extract_features
 
 
 @pytest.mark.integration
@@ -48,10 +48,7 @@ class TestExtractFeatures:
         assert features.dtype == np.float32
 
     def test_skip_descriptors_if_unavailable(self, tmp_path):
-        try:
-            import mordred
-        except ImportError:
-            pytest.skip('Mordred not available')
+        pytest.importorskip('mordred', reason='Mordred not available')
 
         smiles_list = ['CCO', 'CCC']
         features = extract_features(smiles_list, 'descriptors', tmp_path)
@@ -74,7 +71,7 @@ class TestExtractFeatures:
 
     @pytest.mark.slow
     def test_invalid_smiles_raises_error(self, tmp_path):
-        with pytest.raises(Exception):
+        with pytest.raises((ValueError, RuntimeError, FeatureExtractionError)):
             extract_features(['INVALID_SMILES'], 'morgan', tmp_path)
 
     def test_n_jobs_sequential(self, tmp_path):
@@ -162,31 +159,3 @@ class TestExtractFeatures:
 
         with pytest.raises((ValueError, RuntimeError, FeatureExtractionError)):
             extract_features(smiles_list, 'morgan', cache_dir=tmp_path)
-
-
-@pytest.mark.integration
-@pytest.mark.molecular
-class TestGetOptimalNJobs:
-    def test_small_dataset_uses_sequential(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=50, n_jobs=-1)
-        assert n_jobs == 1
-
-    def test_medium_dataset_uses_all_cores(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=500, n_jobs=-1)
-        assert n_jobs >= 1
-
-    def test_large_dataset_caps_at_32(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=20000, n_jobs=-1)
-        assert n_jobs <= 32
-
-    def test_explicit_n_jobs_respected(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=1000, n_jobs=4)
-        assert n_jobs == 4
-
-    def test_n_jobs_one_always_sequential(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=10000, n_jobs=1)
-        assert n_jobs == 1
-
-    def test_negative_n_jobs_uses_auto(self):
-        n_jobs = _get_optimal_n_jobs(n_compounds=1000, n_jobs=-1)
-        assert n_jobs >= 1
