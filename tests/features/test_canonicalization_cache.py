@@ -148,7 +148,7 @@ def test_raw_extract_features_no_dedup(tmp_path: Path) -> None:
     extract_features(['OCC'], feat, cache_dir=tmp_path)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_morgan.h5'
+    cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         n_rows = f['hash_index'].shape[0]
 
@@ -234,7 +234,7 @@ def test_skip_validation_reuses_cache_rows(tmp_path: Path) -> None:
         n_jobs=1,
     )
 
-    h5_path = cache_dir / 'features_morgan.h5'
+    h5_path = cache_dir / 'features_morgan_packed_uint8.h5'
     assert h5_path.exists(), f'Cache file not found at {h5_path}'
 
     with h5py.File(h5_path, 'r') as f:

@@ -186,7 +186,7 @@ def test_strong_ref_survives_caller_scope(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_load_hash_index_uses_cache(tmp_path: Path) -> None:
     """SC-002 acceptance: second `_load_hash_index` returns the cached strong ref."""
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
     _write_minimal_v3_cache(cache_path)
 
     with h5py.File(cache_path, 'r') as f:

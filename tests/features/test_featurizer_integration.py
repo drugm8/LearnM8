@@ -109,7 +109,7 @@ class TestExtractFeaturesAPI:
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
         extract_features(smiles, 'morgan', tmp_path, n_jobs=1)
 
-        cache_file = tmp_path / 'features_morgan.h5'
+        cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
         with h5py.File(cache_file, 'r') as f:
             assert f['hash_index'].shape == (10,)
 

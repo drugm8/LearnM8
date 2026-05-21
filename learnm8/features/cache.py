@@ -1157,7 +1157,7 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                 return np.empty((0, dim), dtype=out_np_dtype)
 
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = cache_dir / f'features_{featurizer_name}.h5'
+            cache_path = cache_dir / f'features_{featurizer_name}_{storage_dtype}.h5'
 
             query_hashes = _cache_keys_bytes16(smiles_list, featurizer)
 
