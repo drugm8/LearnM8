@@ -107,10 +107,12 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
         z_scores = improvement / sigma_safe
         z_clipped = np.clip(z_scores, -37.0, 37.0)
         pi_scores = ndtr(z_clipped)
-        # Botorch convention: sigma=0 means PI is 0 (no uncertainty -> no
-        # improvement-probability information). Behavioural-test-locked in
+        # sigma -> 0 limit: a fully-certain compound has PI = 1.0 when it
+        # improves over current_best, else 0.0. Behavioural-test-locked in
         # tests/acquisition/test_probability_improvement.py.
-        pi_scores = np.where(std_devs > 0, pi_scores, 0.0)
+        pi_scores = np.where(
+            std_devs > 0, pi_scores, np.where(improvement > 0, 1.0, 0.0)
+        )
 
         # Select top compounds
         selected = self._safe_select_top_k(
