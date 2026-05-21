@@ -1004,6 +1004,12 @@ def run_active_learning(
         n_jobs = validate_n_jobs(n_jobs)
         device = validate_device(device)
 
+        # Cap glibc malloc arenas before any featurization worker is spawned
+        # so workers inherit MALLOC_ARENA_MAX (cold-featurization peak RAM).
+        from learnm8.core.batching import configure_host_allocator
+
+        configure_host_allocator()
+
         original_compound_pool_path = None
 
         if output_dir is None:

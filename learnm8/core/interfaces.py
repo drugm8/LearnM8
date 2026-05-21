@@ -366,6 +366,28 @@ class Featurizer(ABC):
         """
         return 'float32'
 
+    def get_compute_dtype(self) -> str:
+        """Return the in-memory dtype for the freshly-computed feature matrix.
+
+        Distinct from :meth:`get_storage_dtype` (on-disk encoding): this is the
+        dtype the cold feature-extraction path holds the matrix in before it is
+        cached. Binary fingerprints are 0/1 and lossless as ``'uint8'``, so a
+        binary featurizer may override this to avoid the 4x float32 inflation
+        during cold featurization. Continuous descriptors and integer-count
+        featurizers MUST stay ``'float32'`` here so the cache's write-time
+        range validation runs on the true values rather than a truncated cast.
+
+        Returns:
+            One of:
+                'float32'  -- hold the computed matrix as float32 (default)
+                'uint8'    -- hold as uint8 (binary fingerprints only)
+
+        Note:
+            Default returns 'float32' so existing custom featurizers are
+            unaffected.
+        """
+        return 'float32'
+
     def get_config_hash(self) -> str:
         """Get a hash of the featurizer configuration.
 

@@ -250,30 +250,38 @@ class SkfpFeaturizer(Featurizer):
                 f"Run 'learnm8 validate your_file.csv' to check SMILES validity."
             )
 
-        features_array = np.array(features, dtype=np.float32)
+        raw = np.asarray(features)
 
-        nonfinite_rows = np.where(~np.isfinite(features_array).all(axis=1))[0]
-        if nonfinite_rows.size > 0:
-            example_idx = int(nonfinite_rows[0])
-            if self._feature_type == 'binary':
-                # Binary fingerprints are 0/1 by construction; NaN/Inf here means
-                # genuine corruption. Fail fast so it never reaches the cache.
-                raise FeatureExtractionError(
-                    f'Non-finite values (NaN/Inf) in binary fingerprint '
-                    f'{self.get_name()} for {nonfinite_rows.size} of '
-                    f"{len(smiles_list)} compounds — first offender: "
-                    f"'{smiles_list[example_idx]}'. Caching aborted to avoid "
-                    f'poisoning the cache with invalid rows. '
-                    f"Run 'learnm8 validate your_file.csv' to check SMILES validity."
+        # Detect corruption on the RAW featurizer output, before narrowing the
+        # dtype — a NaN/Inf would be silently lost in an integer downcast.
+        # Integer raw output (binary fingerprints) is finite by construction.
+        if np.issubdtype(raw.dtype, np.floating):
+            nonfinite_rows = np.where(~np.isfinite(raw).all(axis=1))[0]
+            if nonfinite_rows.size > 0:
+                example_idx = int(nonfinite_rows[0])
+                if self._feature_type == 'binary':
+                    # Binary fingerprints are 0/1 by construction; NaN/Inf here
+                    # means genuine corruption. Fail fast before the cache.
+                    raise FeatureExtractionError(
+                        f'Non-finite values (NaN/Inf) in binary fingerprint '
+                        f'{self.get_name()} for {nonfinite_rows.size} of '
+                        f'{len(smiles_list)} compounds — first offender: '
+                        f"'{smiles_list[example_idx]}'. Caching aborted to avoid "
+                        f'poisoning the cache with invalid rows. '
+                        f"Run 'learnm8 validate your_file.csv' to check SMILES validity."
+                    )
+                # Continuous/descriptor featurizers (e.g. mordred) legitimately
+                # emit NaN for descriptors that cannot be computed; the
+                # learner-side median imputer handles these. Warn, don't abort.
+                logger.warning(
+                    f'Non-finite values in {self.get_name()} features for '
+                    f'{nonfinite_rows.size} of {len(smiles_list)} compounds '
+                    f'(continuous featurizer; imputed downstream)'
                 )
-            # Continuous/descriptor featurizers (e.g. mordred) legitimately emit
-            # NaN for descriptors that cannot be computed; the learner-side
-            # median imputer handles these. Warn but do not abort.
-            logger.warning(
-                f'Non-finite values in {self.get_name()} features for '
-                f'{nonfinite_rows.size} of {len(smiles_list)} compounds '
-                f'(continuous featurizer; imputed downstream)'
-            )
+
+        # Narrow to the compute dtype (uint8 for binary fingerprints).
+        compute_dtype = np.dtype(self.get_compute_dtype())
+        features_array = raw.astype(compute_dtype, copy=False)
 
         return features_array
 
@@ -318,6 +326,17 @@ class SkfpFeaturizer(Featurizer):
 
     def get_storage_dtype(self) -> str:
         return self._storage_dtype
+
+    def get_compute_dtype(self) -> str:
+        """Return the in-memory dtype for the freshly-computed feature matrix.
+
+        Binary fingerprints are 0/1 and lossless as ``uint8`` — holding them
+        as ``uint8`` rather than ``float32`` is a 4x RAM saving on the cold
+        featurization path (e.g. a 2048-bit Morgan matrix). Count and
+        descriptor featurizers stay ``float32`` so the cache's write-time
+        range validation runs on the true values, not a truncated cast.
+        """
+        return 'uint8' if self._feature_type == 'binary' else 'float32'
 
     def get_description(self) -> str:
         return self._description if self._description else self.get_name()
