@@ -172,8 +172,8 @@ class MCDropoutLearner(TorchLearner):
     ) -> tuple[np.ndarray, np.ndarray]:
         try:
             return self._predict_chunk(X_chunk)
-        except torch.cuda.OutOfMemoryError:
-            pass
+        except torch.cuda.OutOfMemoryError as e:
+            oom_error: RuntimeError = e
         except RuntimeError as e:
             if 'out of memory' not in str(e).lower():
                 raise
@@ -202,7 +202,7 @@ class MCDropoutLearner(TorchLearner):
         torch.cuda.empty_cache()
 
         half1 = X_chunk[:new_chunk_size]
-        half2 = X_chunk[new_chunk_size : new_chunk_size * 2]
+        half2 = X_chunk[new_chunk_size:]
 
         mean1, std1 = self._predict_chunk_with_oom_retry(half1, retry_count)
         mean2, std2 = self._predict_chunk_with_oom_retry(half2, retry_count)
