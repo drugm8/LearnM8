@@ -55,6 +55,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import datamol as dm  # type: ignore[import-untyped]
 import polars as pl
 
 from learnm8.core.config import CycleConfig, parse_cycle_schedule
@@ -66,9 +67,14 @@ from learnm8.core.initialization import (
 from learnm8.core.interfaces import Featurizer, Learner, Oracle
 from learnm8.core.persistence import save_results
 from learnm8.core.resources import validate_device, validate_n_jobs
-from learnm8.core.validation import ValidationResult, validate_compound_pool
+from learnm8.core.validation import (
+    ValidationResult,
+    canonicalize_for_cache,
+    validate_compound_pool,
+)
 from learnm8.evaluation.metrics.similarity import RunCache
 from learnm8.exceptions import ConfigurationError, LearnM8Error
+from learnm8.features.worker_pool import shutdown_featurization_pool
 from learnm8.learners import (
     DecisionTreeLearner,
     DTEnsemble,
@@ -472,6 +478,11 @@ def _initialize_active_learning(
         disable_molecular_similarity=disable_molecular_similarity,
     )
 
+    # REQ-9 (call site a): reap the loky featurization worker pool after
+    # cycle 0's featurization so its idle workers do not linger through the
+    # active-learning loop. Safe no-op if cycle 0 needed no featurization.
+    shutdown_featurization_pool()
+
     all_metrics = [cycle_0_metrics]
     logger.info(
         f'Cycle 0 metrics captured: '
@@ -574,6 +585,12 @@ def _execute_loop(
                 f'(strategy: {config.strategy}, batch_fraction: {config.batch_fraction})'
             )
             raise err from e
+        finally:
+            # REQ-9 (call site b): reap the loky featurization worker pool at
+            # the end of every cycle — after training, prediction, AND
+            # acquisition-time featurization. In `finally` so it also fires on
+            # the pool-exhausted `break` and on any re-raise.
+            shutdown_featurization_pool()
 
     return compounds_df, all_metrics, prediction_files
 
@@ -1221,6 +1238,26 @@ def run_active_learning(
                 invalid_compounds=pl.DataFrame(schema=compound_pool.schema),
                 validation_errors={},
             )
+            # REQ-14a: validation did not run, so its one-pass SMILES
+            # canonicalization did not run either. Apply the same
+            # canonicalize_for_cache helper as a standalone parallel pass so
+            # the master DataFrame's SMILES and the feature-cache keys match a
+            # validated run of the same raw pool — no skip-vs-validated cache
+            # divergence. Run via dm.parallelized (process scheduler) so it
+            # does not become a serial multi-hour parse at the 100M scale.
+            if len(validation_result.valid_compounds) > 0:
+                _canonical_smiles = dm.parallelized(
+                    canonicalize_for_cache,
+                    validation_result.valid_compounds['SMILES'].to_list(),
+                    n_jobs=n_jobs,
+                    progress=False,
+                    scheduler='processes',
+                )
+                validation_result.valid_compounds = (
+                    validation_result.valid_compounds.with_columns(
+                        pl.Series('SMILES', _canonical_smiles)
+                    )
+                )
         else:
             validation_result = _validate_pool(
                 compound_pool, oracle, target_col, n_jobs

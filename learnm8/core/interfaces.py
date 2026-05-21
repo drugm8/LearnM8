@@ -381,6 +381,16 @@ class Featurizer(ABC):
 
             Includes featurizer name to prevent collisions between different
             featurizers with identical configurations.
+
+            Contract: the hash MUST be derived only from parameters that
+            affect feature VALUES. Parameters that control parallelism,
+            logging, or per-call working-set size (``n_jobs``, ``verbose``,
+            ``batch_size``) MUST NOT change the hash — otherwise the cache
+            fragments by core count / verbosity / chunk size. ``SkfpFeaturizer``
+            enforces this via the ``_CACHE_IRRELEVANT_PARAMS`` denylist
+            (feature 025, Item 1); any other parameter — including unknown
+            ones — is hashed by default so a new feature-determining param
+            still invalidates the cache.
         """
         config = self.get_config()
         config['_featurizer_name'] = self.get_name()

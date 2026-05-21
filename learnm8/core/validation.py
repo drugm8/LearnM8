@@ -8,10 +8,38 @@ from dataclasses import dataclass
 
 import datamol as dm
 import polars as pl
+from rdkit import Chem
 
 from learnm8.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
+
+
+def canonicalize_for_cache(smiles: str) -> str:
+    """Return the RDKit-canonical SMILES of the raw input molecule.
+
+    Computes bare ``Chem.MolToSmiles(Chem.MolFromSmiles(smiles))`` with RDKit
+    default keyword arguments — no ``isomericSmiles`` / ``canonical`` /
+    ``kekuleSmiles`` override — so the result is character-identical to the
+    legacy in-cache ``_canonicalize_smiles`` recipe. Computing it once at the
+    validation phase lets the feature-cache key path drop its per-cycle
+    canonicalization while keeping cache keys byte-identical (feature 025,
+    Item 5).
+
+    RDKit canonicalization only reorders atoms; it does not change the
+    molecule, so feature values and run results are unchanged.
+
+    Args:
+        smiles: a SMILES string.
+
+    Returns:
+        The RDKit-canonical SMILES. If ``Chem.MolFromSmiles`` cannot parse the
+        input (returns ``None``), the verbatim input string is returned so an
+        unparseable SMILES still gets a stable, deterministic cache key —
+        matching the legacy ``_canonicalize_smiles`` fallback.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    return Chem.MolToSmiles(mol) if mol is not None else smiles
 
 
 def _validate_target_dtype(valid_df: pl.DataFrame, target_col: str) -> pl.DataFrame:
@@ -76,13 +104,17 @@ class ValidationResult:
 
 def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
     """
-    Validate and standardize a SMILES string using datamol.
+    Validate a SMILES string using datamol and return its cache-canonical form.
 
     Args:
         smiles: SMILES string to validate
 
     Returns:
-        Tuple of (is_valid, standardized_smiles, error_message)
+        Tuple of (is_valid, canonical_smiles, error_message). ``canonical_smiles``
+        is the RDKit-canonical form of the *raw* input molecule
+        (:func:`canonicalize_for_cache`), computed once here so the per-cycle
+        feature-cache key path no longer canonicalizes (feature 025, Item 5).
+        On failure the second element is the empty string.
     """
     try:
         std_smiles = dm.standardize_smiles(smiles)
@@ -98,7 +130,13 @@ def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
         if mol is None:
             return False, '', "Molecule sanitization failed"
 
-        return True, std_smiles, ""
+        # REQ-12: the cache-canonical form is the RDKit canonical of the *raw*
+        # input molecule — NOT the datamol-standardized mol, whose tautomer /
+        # charge normalisation would change feature values. Computed inside
+        # this try-block so a parse/serialize failure marks the compound
+        # invalid rather than crashing the run.
+        canonical = canonicalize_for_cache(smiles)
+        return True, canonical, ""
 
     except (ValueError, RuntimeError, TypeError, AttributeError, OSError) as e:
         return False, '', str(e)
@@ -188,11 +226,15 @@ def validate_compound_pool(
     invalid_compounds = []
     smiles_errors = {}
 
-    for idx, (compound_row, (is_valid, std_smiles, error_msg)) in enumerate(
-        zip(unique_pool.iter_rows(named=True), results)
+    for idx, (compound_row, (is_valid, canonical_smiles, error_msg)) in enumerate(
+        zip(unique_pool.iter_rows(named=True), results, strict=False)
     ):
         if is_valid:
-            valid_compounds.append(compound_row)
+            # REQ-13: carry the RDKit-canonical SMILES into the master
+            # DataFrame by replacing the SMILES value in place — keeps the row
+            # at the original column set. invalid_compounds retain raw SMILES
+            # (they are a diagnostic surface).
+            valid_compounds.append({**compound_row, 'SMILES': canonical_smiles})
         else:
             invalid_compounds.append(compound_row)
             compound_id = str(compound_row['ID']) if compound_row['ID'] is not None else str(idx)
