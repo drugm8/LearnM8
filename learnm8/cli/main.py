@@ -161,8 +161,8 @@ def create_parser() -> argparse.ArgumentParser:
         '--target',
         '--target-column',
         dest='target_col',
-        required=True,
-        help='Target property column',
+        default=None,
+        help='Target property column (or set "target_col" in --config)',
     )
     core_group.add_argument(
         '--smiles-col',
@@ -184,9 +184,10 @@ def create_parser() -> argparse.ArgumentParser:
 
     core_group.add_argument(
         '--featurizer',
-        required=True,
+        default=None,
         choices=featurizer_choices,
-        help='Featurizer type (2D or 3D molecular representations)',
+        help='Featurizer type (2D or 3D molecular representations) '
+        '(or set "featurizer" in --config)',
     )
     # Get available learners from registry
     from learnm8.api import list_available_learners
@@ -449,6 +450,20 @@ def cmd_run(args: argparse.Namespace):
         if not args.compound_pool.exists():
             console.print(
                 f'[red]Error:[/red] Compound pool file not found: {args.compound_pool}'
+            )
+            sys.exit(1)
+
+        if not getattr(args, 'target_col', None):
+            console.print(
+                '[red]Error:[/red] target column is required '
+                '(provide --target/--target-column or set "target_col" in --config)'
+            )
+            sys.exit(1)
+
+        if not getattr(args, 'featurizer', None):
+            console.print(
+                '[red]Error:[/red] featurizer is required '
+                '(provide --featurizer or set "featurizer" in --config)'
             )
             sys.exit(1)
 
