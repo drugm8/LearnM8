@@ -167,3 +167,49 @@ class TestPythonOracleMeasure:
         result = simple_oracle.measure(compounds, ['score'])
         assert isinstance(result, pl.DataFrame)
         assert result.height == 0
+
+    def test_measure_shuffled_result_no_mislabeling(self, tmp_path):
+        f = _write_oracle_file(tmp_path,
+            "import polars as pl\n"
+            "def oracle(compound_ids):\n"
+            "    rows = [(cid, float(len(cid))) for cid in compound_ids][::-1]\n"
+            "    return pl.DataFrame({'ID': [r[0] for r in rows], 'score': [r[1] for r in rows]})\n"
+        )
+        oracle = PythonOracle(module_path=str(f))
+        compounds = pl.DataFrame({'ID': ['A', 'BB', 'CCC', 'DDDD'], 'SMILES': ['C', 'CC', 'CCC', 'CCCC']})
+        result = oracle.measure(compounds, ['score'])
+        true_values = {'A': 1.0, 'BB': 2.0, 'CCC': 3.0, 'DDDD': 4.0}
+        for rid, rscore in zip(
+            result['ID'].to_list(), result['score'].to_list(), strict=True
+        ):
+            assert rscore == pytest.approx(true_values[rid])
+        assert result['ID'].to_list() == ['A', 'BB', 'CCC', 'DDDD']
+
+    def test_measure_shuffled_result_logs_warning(self, tmp_path, caplog):
+        f = _write_oracle_file(tmp_path,
+            "import polars as pl\n"
+            "def oracle(compound_ids):\n"
+            "    rows = [(cid, float(len(cid))) for cid in compound_ids][::-1]\n"
+            "    return pl.DataFrame({'ID': [r[0] for r in rows], 'score': [r[1] for r in rows]})\n"
+        )
+        oracle = PythonOracle(module_path=str(f))
+        compounds = pl.DataFrame({'ID': ['A', 'BB', 'CCC', 'DDDD'], 'SMILES': ['C', 'CC', 'CCC', 'CCCC']})
+        import logging
+        logging.getLogger('learnm8').propagate = True
+        with caplog.at_level('WARNING', logger='learnm8.oracles.python_oracle'):
+            oracle.measure(compounds, ['score'])
+        assert any('row order' in rec.message for rec in caplog.records)
+
+    def test_measure_in_order_result_no_warning(self, simple_oracle, caplog):
+        compounds = pl.DataFrame({'ID': ['A', 'BB', 'CCC'], 'SMILES': ['C', 'CC', 'CCC']})
+        import logging
+        logging.getLogger('learnm8').propagate = True
+        with caplog.at_level('WARNING', logger='learnm8.oracles.python_oracle'):
+            result = simple_oracle.measure(compounds, ['score'])
+        assert not any('row order' in rec.message for rec in caplog.records)
+        assert result['ID'].to_list() == ['A', 'BB', 'CCC']
+        true_values = {'A': 1.0, 'BB': 2.0, 'CCC': 3.0}
+        for rid, rscore in zip(
+            result['ID'].to_list(), result['score'].to_list(), strict=True
+        ):
+            assert rscore == pytest.approx(true_values[rid])

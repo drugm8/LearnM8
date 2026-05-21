@@ -157,4 +157,18 @@ class PythonOracle(Oracle):
         if missing_ids:
             logger.warning("Oracle did not return results for %d compounds", len(missing_ids))
 
-        return result
+        if result.height == 0:
+            return result
+
+        # Realign result rows to the requested order: downstream consumers
+        # extract the target column positionally, so unaligned rows mislabel.
+        requested_order = compounds.select('ID').with_row_index('_input_order')
+        realigned = requested_order.join(result, on='ID', how='inner').sort('_input_order')
+
+        if realigned.get_column('ID').to_list() != result.get_column('ID').to_list():
+            logger.warning(
+                "Oracle function did not preserve input row order; "
+                "results were realigned by ID."
+            )
+
+        return realigned.drop('_input_order')
