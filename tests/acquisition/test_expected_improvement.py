@@ -14,24 +14,32 @@ def _pool_with_predictions_and_uncertainty(
     predictions: list[float] | np.ndarray,
     uncertainty: list[float] | np.ndarray,
 ) -> pl.DataFrame:
-    return compounds.with_columns([
-        pl.Series('prediction', predictions),
-        pl.Series('uncertainty', uncertainty),
-    ])
+    return compounds.with_columns(
+        [
+            pl.Series('prediction', predictions),
+            pl.Series('uncertainty', uncertainty),
+        ]
+    )
 
 
 @pytest.mark.unit
 class TestExpectedImprovementAcquisition:
-    def test_expected_improvement_returns_non_negative_scores(self, compounds_with_uncertainty):
+    def test_expected_improvement_returns_non_negative_scores(
+        self, compounds_with_uncertainty
+    ):
         compounds = compounds_with_uncertainty.head(10).clone()
         current_best = compounds.get_column('prediction').max()
 
-        selected = ExpectedImprovementAcquisition(current_best=current_best).select(compounds, n_select=5)
+        selected = ExpectedImprovementAcquisition(current_best=current_best).select(
+            compounds, n_select=5
+        )
 
         assert len(selected) == 5
         assert np.all(selected.get_column('acquisition_score').to_numpy() >= 0)
 
-    def test_expected_improvement_uses_score_direction_for_minimization(self, small_real_compounds):
+    def test_expected_improvement_uses_score_direction_for_minimization(
+        self, small_real_compounds
+    ):
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(4).clone(),
             [1.0, 0.8, 0.4, 1.2],
@@ -45,22 +53,56 @@ class TestExpectedImprovementAcquisition:
         ).select(compounds, n_select=2)
 
         assert len(selected) == 2
-        assert selected.get_column('acquisition_score')[0] >= selected.get_column('acquisition_score')[1]
+        assert (
+            selected.get_column('acquisition_score')[0]
+            >= selected.get_column('acquisition_score')[1]
+        )
 
-    def test_ei_returns_zero_when_sigma_is_zero(self, small_real_compounds):
-        """Spec 022 FR-006: Botorch σ=0 → EI=0 convention.
+    def test_ei_at_zero_sigma_equals_improvement_floor(self, small_real_compounds):
+        """At sigma=0 EI is the deterministic ``max(improvement, 0)`` limit.
 
-        Replaces the prior Močkus ``max(improvement, 0)`` semantics.
-        When σ=0 the model is fully certain — no improvement opportunity
-        beyond the deterministic prediction. This convention is locked in
-        per ``contracts/inline-norm.md``.
+        The sigma->0 limit of Expected Improvement is
+        ``max(mean - f_best - xi, 0)``. A fully-confident compound above the
+        current best must score its real improvement, not 0.
         """
         base = small_real_compounds.head(2).clone()
-        compounds = _pool_with_predictions_and_uncertainty(base, [12.0, 8.0], [0.0, 0.0])
+        compounds = _pool_with_predictions_and_uncertainty(
+            base, [12.0, 8.0], [0.0, 0.0]
+        )
 
-        result = ExpectedImprovementAcquisition(current_best=10.0, xi=0.0).select(compounds, n_select=2).sort('ID')
+        result = (
+            ExpectedImprovementAcquisition(current_best=10.0, xi=0.0)
+            .select(compounds, n_select=2)
+            .sort('ID')
+        )
 
-        assert result.get_column('acquisition_score').to_list() == [0.0, 0.0]
+        assert result.get_column('acquisition_score').to_list() == [2.0, 0.0]
+
+    def test_ei_deterministic_winner_outranks_uncertain_non_improver(
+        self, small_real_compounds
+    ):
+        """A confident improving compound must outrank an uncertain non-improver.
+
+        sigma=0 with mean well above current_best is the best possible
+        candidate; it must get a strictly positive score and rank ahead of a
+        sigma>0 compound whose mean is below current_best.
+        """
+        base = small_real_compounds.head(2).clone()
+        compounds = _pool_with_predictions_and_uncertainty(
+            base, [20.0, 4.0], [0.0, 1.5]
+        )
+
+        result = ExpectedImprovementAcquisition(current_best=10.0, xi=0.0).select(
+            compounds, n_select=2
+        )
+
+        winner = result.filter(pl.col('prediction') == 20.0)
+        loser = result.filter(pl.col('prediction') == 4.0)
+        winner_score = winner.get_column('acquisition_score')[0]
+        loser_score = loser.get_column('acquisition_score')[0]
+        assert winner_score > 0
+        assert winner_score > loser_score
+        assert result.get_column('prediction')[0] == 20.0
 
     def test_ei_no_nan_intermediates_when_sigma_zero(self, small_real_compounds):
         """Spec 022 FR-006: σ=0 must NOT produce NaN intermediates.
@@ -72,9 +114,11 @@ class TestExpectedImprovementAcquisition:
         compounds = _pool_with_predictions_and_uncertainty(
             base, [12.0, 5.0, 11.0], [0.0, 0.0, 0.5]
         )
-        result = ExpectedImprovementAcquisition(current_best=10.0, xi=0.0).select(compounds, n_select=3)
+        result = ExpectedImprovementAcquisition(current_best=10.0, xi=0.0).select(
+            compounds, n_select=3
+        )
         scores = result.get_column('acquisition_score').to_numpy()
-        assert not np.isnan(scores).any(), f"NaN in EI scores: {scores}"
+        assert not np.isnan(scores).any(), f'NaN in EI scores: {scores}'
 
     def test_ei_symmetric_clipping_at_extreme_z(self, small_real_compounds):
         """Spec 022 FR-007: z clipped to ±37 must not produce NaN or inf.
@@ -85,20 +129,36 @@ class TestExpectedImprovementAcquisition:
         base = small_real_compounds.head(2).clone()
         # σ=0.001 makes z = (μ - f_best - xi) / σ ≈ ±10000 — would underflow
         # exp(-z²/2) without clipping.
-        compounds = _pool_with_predictions_and_uncertainty(base, [50.0, -50.0], [0.001, 0.001])
-        result = ExpectedImprovementAcquisition(current_best=0.0, xi=0.0).select(compounds, n_select=2)
+        compounds = _pool_with_predictions_and_uncertainty(
+            base, [50.0, -50.0], [0.001, 0.001]
+        )
+        result = ExpectedImprovementAcquisition(current_best=0.0, xi=0.0).select(
+            compounds, n_select=2
+        )
         scores = result.get_column('acquisition_score').to_numpy()
-        assert np.all(np.isfinite(scores)), f"Non-finite EI under extreme z: {scores}"
+        assert np.all(np.isfinite(scores)), f'Non-finite EI under extreme z: {scores}'
 
-    def test_expected_improvement_rejects_missing_current_best(self, compounds_with_uncertainty):
-        with pytest.raises(ValueError, match='requires \'current_best\' parameter'):
-            ExpectedImprovementAcquisition().select(compounds_with_uncertainty.head(5).clone(), n_select=2)
+    def test_expected_improvement_rejects_missing_current_best(
+        self, compounds_with_uncertainty
+    ):
+        with pytest.raises(ValueError, match="requires 'current_best' parameter"):
+            ExpectedImprovementAcquisition().select(
+                compounds_with_uncertainty.head(5).clone(), n_select=2
+            )
 
-    def test_expected_improvement_rejects_missing_uncertainty(self, small_real_compounds):
-        compounds = small_real_compounds.head(5).clone().with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
+    def test_expected_improvement_rejects_missing_uncertainty(
+        self, small_real_compounds
+    ):
+        compounds = (
+            small_real_compounds.head(5)
+            .clone()
+            .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
+        )
 
-        with pytest.raises(ValueError, match='requires an \'uncertainty\' column'):
-            ExpectedImprovementAcquisition(current_best=0.5).select(compounds, n_select=2)
+        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+            ExpectedImprovementAcquisition(current_best=0.5).select(
+                compounds, n_select=2
+            )
 
     def test_expected_improvement_rejects_negative_xi(self):
         with pytest.raises(ValueError, match='xi must be non-negative'):
@@ -125,7 +185,9 @@ class TestExpectedImprovementAcquisition:
         z_score = improvement / sigma
         expected_score = improvement * norm.cdf(z_score) + sigma * norm.pdf(z_score)
 
-        score = result.filter(pl.col('prediction') == 12.0).get_column('acquisition_score')[0]
+        score = result.filter(pl.col('prediction') == 12.0).get_column(
+            'acquisition_score'
+        )[0]
         assert np.isclose(score, expected_score, rtol=1e-5)
 
     def test_inf_uncertainty_raises_learner_error(self, small_real_compounds):
@@ -135,4 +197,6 @@ class TestExpectedImprovementAcquisition:
             [1.0, np.inf, 1.0],
         )
         with pytest.raises(LearnerError, match='Inf uncertainties'):
-            ExpectedImprovementAcquisition(current_best=0.5).select(compounds, n_select=2)
+            ExpectedImprovementAcquisition(current_best=0.5).select(
+                compounds, n_select=2
+            )

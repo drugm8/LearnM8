@@ -109,11 +109,9 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         Phi = ndtr(z_clipped)
         phi = np.exp(-0.5 * z_clipped * z_clipped) / np.sqrt(2.0 * np.pi)
         ei_scores = improvement * Phi + std_devs * phi
-        # Botorch convention: when sigma = 0 the model is fully certain -- no
-        # improvement opportunity beyond what the deterministic prediction
-        # already says, so EI = 0. This is behavioural-test-locked in
-        # tests/acquisition/test_expected_improvement.py.
-        ei_scores = np.where(std_devs > 0, ei_scores, 0.0)
+        # sigma -> 0 limit: a fully-certain compound has EI = max(improvement, 0).
+        # Behavioural-test-locked in tests/acquisition/test_expected_improvement.py.
+        ei_scores = np.where(std_devs > 0, ei_scores, np.maximum(improvement, 0.0))
 
         logger.debug(
             f'EI statistics: {(ei_scores > 0).sum()} compounds with positive EI'
