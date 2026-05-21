@@ -19,7 +19,7 @@ def populated_cache(tmp_path: Path) -> Path:
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
     _HASH_INDEX_CACHE.clear()
-    return tmp_path / 'features_morgan.h5'
+    return tmp_path / 'features_morgan_packed_uint8.h5'
 
 
 def _break_invariant_1_length_mismatch(cache_file: Path) -> None:

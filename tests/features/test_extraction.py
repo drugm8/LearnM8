@@ -114,7 +114,7 @@ class TestExtractFeatures:
 
         features1 = extract_features(smiles_list, 'morgan', cache_dir=cache_dir)
 
-        cache_file = cache_dir / 'features_morgan.h5'
+        cache_file = cache_dir / 'features_morgan_packed_uint8.h5'
         assert cache_file.exists()
 
         assert features1.shape[0] == len(smiles_list)

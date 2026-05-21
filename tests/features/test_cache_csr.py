@@ -71,7 +71,7 @@ def test_csr_storage_layout_attr_written(tmp_path: Path):
     feat = _FakeCsrFeaturizer(values, dim=128, name='fake_csr_attr')
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_fake_csr_attr.h5'
+    cache_file = tmp_path / 'features_fake_csr_attr_csr_uint16.h5'
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'csr_uint16'
         assert str(f.attrs['storage_layout']) == 'csr'
@@ -99,7 +99,7 @@ def test_csr_density_check_does_not_corrupt_existing_file(tmp_path: Path):
     feat = _FakeCsrFeaturizer(okay, dim=64, name='fake_csr_no_corrupt')
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_fake_csr_no_corrupt.h5'
+    cache_file = tmp_path / 'features_fake_csr_no_corrupt_csr_uint16.h5'
     with h5py.File(cache_file, 'r') as f:
         pre = {
             'csr_data': np.asarray(f['csr_data'][:]),
@@ -152,7 +152,7 @@ def test_csr_indptr_invariant_holds_after_two_writes(tmp_path: Path):
     extract_features(['A', 'B', 'C', 'D'], feat_a, cache_dir=tmp_path)
     extract_features(['E', 'F', 'G'], feat_b, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_fake_csr_indptr.h5'
+    cache_file = tmp_path / 'features_fake_csr_indptr_csr_uint16.h5'
     with h5py.File(cache_file, 'r') as f:
         indptr = np.asarray(f['csr_indptr'][:], dtype=np.uint64)
         n_rows = int(f['row_index'].shape[0])
@@ -192,7 +192,7 @@ def test_csr_back_compat_dense_v2_file_reads_unchanged(tmp_path: Path):
     feat = create_featurizer('morgan', n_jobs=1)
     cold = extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_morgan.h5'
+    cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_file, 'a') as f:
         if 'storage_layout' in f.attrs:
             del f.attrs['storage_layout']
@@ -220,7 +220,7 @@ def test_csr_100k_pharmacophore_cache_size_under_200mb(tmp_path: Path):
     smiles = [f'C{"C" * (i % 200)}O' for i in range(n_rows)]
 
     extract_features(smiles, feat, cache_dir=tmp_path)
-    cache_file = tmp_path / 'features_perf_csr_pharmacophore_100k.h5'
+    cache_file = tmp_path / 'features_perf_csr_pharmacophore_100k_csr_uint16.h5'
     size_mb = cache_file.stat().st_size / (1024 * 1024)
     assert size_mb <= 200, (
         f'100k pharmacophore CSR cache size {size_mb:.1f} MB > 200 MB'

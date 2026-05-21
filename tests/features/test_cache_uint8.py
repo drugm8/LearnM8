@@ -80,7 +80,7 @@ def test_uint8_storage_dtype_attr_written(tmp_path: Path):
     feat = _FakeUint8Featurizer(values, dim=3, name='fake_uint8_attr')
     extract_features(['CCO'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_fake_uint8_attr.h5'
+    cache_file = tmp_path / 'features_fake_uint8_attr_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'uint8'
         layout = f.attrs.get('storage_layout', 'dense')
@@ -103,7 +103,7 @@ def test_uint8_value_above_255_raises_feature_extraction_error(tmp_path: Path):
         ),
         cache_dir=tmp_path,
     )
-    cache_file = tmp_path / 'features_fake_uint8_overflow.h5'
+    cache_file = tmp_path / 'features_fake_uint8_overflow_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         pre_features = np.asarray(f['features'][:])
         pre_hash_index = np.asarray(f['hash_index'][:])

@@ -22,7 +22,7 @@ def test_writer_lock_contention_raises_within_timeout(
     monkeypatch.setattr('learnm8.features.cache.LOCK_TIMEOUT_S', 0.2)
 
     extract_features(['CCO'], create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
 
     holder_started = threading.Event()
     holder_release = threading.Event()
@@ -83,7 +83,7 @@ def test_concurrent_readers_do_not_block(tmp_path: Path):
 def test_shared_reader_does_not_block_concurrent_shared_reader(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
 
     enter_a = threading.Event()
     release_a = threading.Event()
@@ -134,7 +134,7 @@ def test_lock_holder_pid_message_when_proc_locks_unavailable(
     monkeypatch.setattr('learnm8.features.cache.LOCK_TIMEOUT_S', 0.1)
 
     extract_features(['CCO'], create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
 
     # Force /proc/locks unavailable.
     real_exists = Path.exists

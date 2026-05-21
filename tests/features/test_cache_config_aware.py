@@ -176,7 +176,7 @@ class TestCacheWithDifferentParameters:
         assert feat_4096.shape[1] == 4096
 
         # Stale cache replaced; active file reflects latest bit_count.
-        active = tmp_path / 'features_morgan.h5'
+        active = tmp_path / 'features_morgan_packed_uint8.h5'
         assert active.exists()
 
         with h5py.File(active, 'r') as h5f:
@@ -215,7 +215,8 @@ class TestCacheFileStructure:
     """Test HDF5 cache file structure and naming."""
 
     def test_cache_file_naming_convention(self, small_real_compounds, tmp_path):
-        """Cache files follow naming convention (features_<featurizer_name>.h5)."""
+        """Cache files follow naming convention
+        (features_<featurizer_name>_<storage_dtype>.h5)."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
         featurizer = create_featurizer('morgan', radius=2, fp_size=2048)
 
@@ -225,8 +226,8 @@ class TestCacheFileStructure:
         assert len(cache_files) == 1
 
         cache_file = cache_files[0]
-        # Format: features_<featurizer_name>.h5
-        assert cache_file.name == 'features_morgan.h5'
+        # Format: features_<featurizer_name>_<storage_dtype>.h5
+        assert cache_file.name == f'features_morgan_{featurizer.get_storage_dtype()}.h5'
 
     def test_multiple_featurizers_separate_files(self, small_real_compounds, tmp_path):
         """Same-name featurizer configs with same bit_count share file; different
@@ -243,14 +244,17 @@ class TestCacheFileStructure:
 
         cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
-        assert cache_files[0].name == 'features_morgan.h5'
+        assert cache_files[0].name == 'features_morgan_packed_uint8.h5'
 
         # Different featurizer type creates separate file
         extract_features(smiles, create_featurizer('maccs'), tmp_path, n_jobs=1)
         cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 2
         file_names = {f.name for f in cache_files}
-        assert file_names == {'features_morgan.h5', 'features_maccs.h5'}
+        assert file_names == {
+            'features_morgan_packed_uint8.h5',
+            'features_maccs_packed_uint8.h5',
+        }
 
 
 @pytest.mark.integration
@@ -393,7 +397,7 @@ class TestCacheHashDenylist:
 
         extract_features(smiles, create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
 
-        cache_file = tmp_path / 'features_morgan.h5'
+        cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
         assert cache_file.exists()
         with h5py.File(cache_file, 'r') as h5f:
             row_count_before = len(h5f['hash_index'][:])

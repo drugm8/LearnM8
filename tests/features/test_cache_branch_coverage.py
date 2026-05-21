@@ -32,7 +32,7 @@ def test_from_storage_empty_packed_returns_empty():
 def test_hash_index_cache_invalidates_on_write_epoch_bump(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC'], feat, cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
 
     with h5py.File(cache_path, 'r') as f:
         idx_a = _load_hash_index(f, cache_path)
@@ -61,7 +61,7 @@ def test_hash_index_cache_put_typeerror_silenced():
 def test_validate_cache_integrity_featurizer_name_mismatch(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_path, 'r+') as f:
         f.attrs['featurizer_name'] = 'wrongname'
 
@@ -76,7 +76,7 @@ def test_validate_cache_integrity_featurizer_name_mismatch(tmp_path: Path):
 def test_validate_cache_integrity_schema_version_mismatch(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
-    cache_path = tmp_path / 'features_morgan.h5'
+    cache_path = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_path, 'r+') as f:
         f.attrs['schema_version'] = np.uint8(99)
 

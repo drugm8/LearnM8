@@ -185,7 +185,7 @@ output_dir/
 ├── validation_report.csv        # SMILES validation results
 ├── experiment_config.json       # Complete configuration
 └── .cache/                      # Feature cache (if cache-dir not specified)
-    └── features_morgan.h5       # Cached molecular features
+    └── features_morgan_packed_uint8.h5   # Cached molecular features
 ```
 
 **Cache Directory:** The feature cache persists across runs, providing 100x speedup when reusing the same compounds and featurizer. Share cache across experiments by specifying a common `--cache-dir`.

@@ -22,7 +22,7 @@ def test_morgan_packed_uint8_roundtrip(tmp_path: Path):
     assert cold.dtype == np.float32
     assert set(np.unique(cold).tolist()) <= {0.0, 1.0}
 
-    cache_file = tmp_path / 'features_morgan.h5'
+    cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         assert int(f.attrs['schema_version']) == 3
         assert str(f.attrs['storage_dtype']) == 'packed_uint8'
@@ -51,7 +51,7 @@ def test_maccs_166_non_multiple_of_8_roundtrip(tmp_path: Path):
     assert cold.shape == (2, bit_count)
     assert cold.dtype == np.float32
 
-    cache_file = tmp_path / 'features_maccs.h5'
+    cache_file = tmp_path / 'features_maccs_packed_uint8.h5'
     expected_packed_width = (bit_count + 7) // 8
     with h5py.File(cache_file, 'r') as f:
         assert int(f.attrs['bit_count']) == bit_count
@@ -68,7 +68,7 @@ def test_mordred_float32_roundtrip(tmp_path: Path):
 
     assert cold.dtype == np.float32
 
-    cache_file = tmp_path / 'features_mordred.h5'
+    cache_file = tmp_path / 'features_mordred_float32.h5'
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'float32'
         assert f['features'].dtype == np.float32
@@ -128,7 +128,7 @@ def test_equivalent_smiles_dedup_in_cache(tmp_path: Path):
 
     cold = extract_features(canon_cco, feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_morgan.h5'
+    cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         assert f['hash_index'].shape == (1,)
 
