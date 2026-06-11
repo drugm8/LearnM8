@@ -133,3 +133,6 @@ docs/decisions/TEMPLATE.md
 .claude/migration_008_parquet.md
 site/*
 output/
+.benchmarks/
+scripts/bench_streaming_memory.py
+.claude/
