@@ -132,3 +132,14 @@ __all__ = [
     'run_active_learning',
     'validate_compound_pool',
 ]
+
+# --- memory/OOM diagnostics (branch diag/oom-memory ONLY; always-on) ---------
+# Not on main; not part of the public API. Auto-installs observe-only hooks that
+# log node-vs-cgroup/Condor-slot confinement and batch-sizing decisions to a
+# memdiag.jsonl sidecar. See learnm8/diagnostics/memdiag.py.
+try:
+    from learnm8.diagnostics import memdiag as _memdiag
+
+    _memdiag.activate()
+except Exception:  # diagnostics must never break the import
+    pass
