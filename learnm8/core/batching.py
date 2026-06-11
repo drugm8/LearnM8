@@ -396,6 +396,7 @@ def _predict_chunk_with_oom_retry(
             n_samples,
             n_features,
             device,
+            compute_uncertainty=compute_uncertainty,
         )
         feature_time += sft
         sub_preds.append(sp)

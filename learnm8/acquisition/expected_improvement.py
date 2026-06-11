@@ -10,9 +10,37 @@ import numpy as np
 import polars as pl
 from scipy.special import ndtr
 
+from learnm8.exceptions import AcquisitionError
+
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
 logger = logging.getLogger(__name__)
+
+
+def _ei_scores(
+    predictions: np.ndarray,
+    uncertainties: np.ndarray,
+    current_best: float,
+    xi: float,
+    maximize: bool,
+) -> np.ndarray:
+    """Higher-is-better Expected Improvement (single source for select + score_chunk).
+
+    Spec 022 FR-006/FR-007: ndtr (C-level Cephes) + symmetric z-clipping for
+    IEEE-754 safety + Botorch sigma=0 → max(improvement, 0) convention.
+    """
+    if maximize:
+        improvement = predictions - current_best - xi
+    else:
+        improvement = current_best - predictions - xi
+    std_devs = uncertainties
+    sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
+    z_scores = improvement / sigma_safe
+    z_clipped = np.clip(z_scores, -37.0, 37.0)
+    Phi = ndtr(z_clipped)
+    phi = np.exp(-0.5 * z_clipped * z_clipped) / np.sqrt(2.0 * np.pi)
+    ei_scores = improvement * Phi + std_devs * phi
+    return np.where(std_devs > 0, ei_scores, np.maximum(improvement, 0.0))
 
 
 class ExpectedImprovementAcquisition(AcquisitionFunction):
@@ -93,25 +121,10 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             f'EIAcquisition: current_best={current_best:.3f}, calculating expected improvement'
         )
 
-        # Calculate improvement based on score direction
-        if self.maximize:
-            improvement = predictions - current_best - self.xi
-        else:
-            improvement = current_best - predictions - self.xi
-
-        # Spec 022 FR-006/FR-007: inline EI with scipy.special.ndtr (C-level
-        # Cephes; bit-exact equivalent of scipy.stats.norm.cdf) + symmetric
-        # z-clipping for IEEE 754 safety + Botorch sigma=0 -> 0 convention.
-        std_devs = uncertainties
-        sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
-        z_scores = improvement / sigma_safe
-        z_clipped = np.clip(z_scores, -37.0, 37.0)
-        Phi = ndtr(z_clipped)
-        phi = np.exp(-0.5 * z_clipped * z_clipped) / np.sqrt(2.0 * np.pi)
-        ei_scores = improvement * Phi + std_devs * phi
-        # sigma -> 0 limit: a fully-certain compound has EI = max(improvement, 0).
-        # Behavioural-test-locked in tests/acquisition/test_expected_improvement.py.
-        ei_scores = np.where(std_devs > 0, ei_scores, np.maximum(improvement, 0.0))
+        # Single source: identical math to score_chunk (Spec 022 FR-006/FR-007).
+        ei_scores = _ei_scores(
+            predictions, uncertainties, current_best, self.xi, self.maximize
+        )
 
         logger.debug(
             f'EI statistics: {(ei_scores > 0).sum()} compounds with positive EI'
@@ -132,6 +145,31 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
     def requires_uncertainty(self) -> bool:
         """Return True since EI requires uncertainty estimates."""
         return True
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        if uncertainties is None:
+            raise AcquisitionError(
+                'Expected Improvement requires uncertainty estimates, but the '
+                'chunk provided none.'
+            )
+        if self.current_best is None:
+            raise AcquisitionError(
+                "Expected Improvement requires 'current_best'; it must be set on "
+                'the acquisition function at cycle start.'
+            )
+        return _ei_scores(
+            predictions, uncertainties, self.current_best, self.xi, self.maximize
+        )
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

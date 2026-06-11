@@ -42,7 +42,13 @@ from .metrics.similarity import (
 logger = logging.getLogger(__name__)
 
 _GT_STATS_CACHE: dict[int, dict[tuple[str, str], dict[str, Any]]] = {}
-_GT_STATS_LOCK = threading.Lock()
+# RLock (not Lock): `_get_gt_stats` holds this lock while calling
+# `_compute_gt_stats`, whose logging can trigger GC and fire the
+# `_evict_gt_cache` weakref finalizer ON THE SAME THREAD. A plain Lock would
+# self-deadlock there; RLock lets the reentrant eviction of an unrelated,
+# already-dead cache entry proceed. A finalizer firing on a *different* thread
+# still blocks normally until the holder releases.
+_GT_STATS_LOCK = threading.RLock()
 
 
 def _evict_gt_cache(df_id: int) -> None:

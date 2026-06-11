@@ -179,6 +179,90 @@ def update_status(
     return _update_status_inplace(df, compound_ids, new_status, cycle, target_col, target_values)
 
 
+def iter_status_chunks(
+    df: pl.DataFrame,
+    status: str,
+    chunk_size: int,
+    columns: tuple[str, ...] = ('ID', 'SMILES'),
+):
+    """Yield ``(global_offset, chunk_df)`` over rows with the given status.
+
+    Streaming pass 1 uses this instead of materializing a full
+    ``df.filter(status==...).select(ID, SMILES)`` copy (the ~8 GB
+    ``prediction_pool`` at 100M). Row indices of the matching rows are computed
+    once (UInt32, ~0.4 GB at 100M) and each chunk is gathered positionally.
+
+    ``global_offset`` is the chunk's start position within the filtered
+    sequence (0-based), so it aligns with the parquet write order and the
+    ``StreamingTopK`` global index space.
+
+    Args:
+        df: Master DataFrame.
+        status: Status to iterate ('unlabeled', 'labeled', 'pruned').
+        chunk_size: Rows per chunk (must be positive).
+        columns: Columns to project into each chunk.
+
+    Yields:
+        ``(global_offset, chunk_df)`` tuples; no chunk is empty.
+    """
+    if status not in VALID_STATUSES:
+        raise ValueError(
+            f"Invalid status filter '{status}'. Must be one of {VALID_STATUSES}."
+        )
+    if chunk_size <= 0:
+        raise ValueError(f'chunk_size must be positive, got {chunk_size}')
+
+    idx = df.select(
+        pl.arg_where(pl.col('status') == status).alias('i')
+    ).to_series()
+    total = idx.len()
+    cols = list(columns)
+    for start in range(0, total, chunk_size):
+        chunk_idx = idx.slice(start, chunk_size)
+        yield start, df[chunk_idx].select(cols)
+
+
+def mark_pruned_by_ids(
+    df: pl.DataFrame,
+    pruned_ids: pl.Series,
+    cycle: int,
+) -> pl.DataFrame:
+    """Set ``status='pruned'`` + ``pruned_cycle=cycle`` for ``pruned_ids`` via join.
+
+    Streaming pruning can mark tens of millions of compounds; a join against a
+    Polars/Arrow ID Series avoids the per-element Python-object overhead of
+    ``is_in(python_list)`` in :func:`update_status`. Only the status and
+    ``pruned_cycle`` columns change (no target values), matching the
+    ``new_status == 'pruned'`` branch of :func:`_update_status_inplace`.
+
+    Args:
+        df: Master DataFrame.
+        pruned_ids: Polars Series of compound IDs to mark pruned.
+        cycle: Current cycle number.
+
+    Returns:
+        New DataFrame with the pruned rows updated.
+    """
+    if pruned_ids.len() == 0:
+        return df
+    marker = pl.DataFrame({'ID': pruned_ids}).with_columns(
+        pl.lit(True).alias('_pruned_marker')
+    )
+    df = df.join(marker, on='ID', how='left')
+    mask = pl.col('_pruned_marker').fill_null(False)
+    df = df.with_columns(
+        pl.when(mask)
+        .then(pl.lit('pruned'))
+        .otherwise(pl.col('status'))
+        .alias('status'),
+        pl.when(mask)
+        .then(pl.lit(cycle))
+        .otherwise(pl.col('pruned_cycle'))
+        .alias('pruned_cycle'),
+    ).drop('_pruned_marker')
+    return df
+
+
 def get_compounds_by_status(
     df: pl.DataFrame,
     status: str,

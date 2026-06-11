@@ -76,6 +76,67 @@ class AcquisitionFunction(ABC):
         """
         return False
 
+    # ------------------------------------------------------------------
+    # Streaming pointwise tier (streaming predict→select fusion feature).
+    #
+    # Defaults keep third-party / non-streamable strategies on the legacy
+    # in-memory `select()` path (no breaking change), mirroring the
+    # `requires_uncertainty()` default-False precedent. A strategy opts in by
+    # overriding `supports_streaming()` to True and implementing `score_chunk`.
+    # ------------------------------------------------------------------
+
+    def supports_streaming(self) -> bool:
+        """Return True if this strategy can score the pool chunk-by-chunk.
+
+        Streamable strategies must implement :meth:`score_chunk` (and, if they
+        select from a larger candidate set, :meth:`shortlist_size` /
+        :meth:`finalize`). Default False routes the strategy to the legacy path.
+        """
+        return False
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        """Return per-row **higher-is-better** acquisition scores for one chunk.
+
+        Scores fold in ``score_direction`` so the streaming reducer always keeps
+        the highest scores. ``global_offset`` is the chunk's start position in
+        the pool (used to seed position-invariant RNG for stochastic
+        strategies); ``n_total`` is the full pool size.
+
+        Raises:
+            AcquisitionError: if uncertainty is required but ``uncertainties``
+                is None.
+        """
+        raise NotImplementedError(
+            f'{self.get_name()} does not implement score_chunk; '
+            f'supports_streaming() should be False.'
+        )
+
+    def shortlist_size(self, n_select: int, pool_size: int) -> int:
+        """Number of top-scoring candidates to retain before :meth:`finalize`.
+
+        Defaults to ``n_select`` (the reducer keeps exactly the batch). Strategies
+        that select from a wider candidate set (e.g. Top-K's random draw from the
+        top fraction) override this.
+        """
+        return n_select
+
+    def finalize(self, shortlist: 'pl.DataFrame', n_select: int) -> 'pl.DataFrame':
+        """Reduce the streamed shortlist to the final ``n_select`` rows.
+
+        ``shortlist`` is already in canonical best-first order with columns
+        ``ID``, ``prediction``, optional ``uncertainty``, ``acquisition_score``
+        and ``global_index`` (no ``SMILES``). The default returns the best
+        ``n_select`` rows.
+        """
+        return shortlist.head(n_select)
+
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function.
 

@@ -321,6 +321,19 @@ def create_parser() -> argparse.ArgumentParser:
         'already verified (e.g., via prior learnm8 validate). '
         'Oracle-pool reconciliation is still performed. Default: off.',
     )
+    advanced_group.add_argument(
+        '--streaming',
+        choices=['auto', 'always', 'never'],
+        default='auto',
+        help=(
+            "Memory-efficient streaming predict→select path for large pools. "
+            "'auto' (default) uses it when eligible (streamable strategy, output "
+            "dir set, pruning in {none, score}) and falls back to the legacy path "
+            "otherwise; 'always' errors if a cycle is ineligible; 'never' forces "
+            "the legacy in-memory path. Stochastic strategies (thompson/random/"
+            "topk) draw different (but equivalent) samples under streaming."
+        ),
+    )
 
     validate_parser = subparsers.add_parser(
         'validate', help='Validate compound pool using datamol SMILES validation'
@@ -410,6 +423,7 @@ def _build_run_kwargs(
         output_format=getattr(args, 'output_format', 'auto'),
         force_uncertainty=getattr(args, 'force_uncertainty', False),
         skip_validation=getattr(args, 'skip_validation', False),
+        streaming=getattr(args, 'streaming', 'auto'),
     )
 
 
