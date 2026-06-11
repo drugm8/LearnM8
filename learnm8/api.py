@@ -514,6 +514,7 @@ def _execute_loop(
     output_dir: Path,
     feature_type: str,
     force_uncertainty: bool = False,
+    streaming: str = 'auto',
 ) -> tuple[pl.DataFrame, list[dict[str, Any]], list[Path]]:
     cumulative_selected_ids = set(
         compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list()
@@ -553,6 +554,7 @@ def _execute_loop(
                 output_dir=output_dir,
                 feature_type=feature_type,
                 force_uncertainty=force_uncertainty,
+                streaming=streaming,
             )
             all_metrics.append(metrics)
 
@@ -799,6 +801,8 @@ def run_active_learning(
     force_uncertainty: bool = False,
     # Skip validation (feature 030)
     skip_validation: bool = False,
+    # Streaming predict→select fusion (memory-efficient path)
+    streaming: Literal['auto', 'always', 'never'] = 'auto',
 ) -> dict[str, Any]:
     """Execute active learning experiment.
 
@@ -1386,6 +1390,7 @@ def run_active_learning(
             output_dir=output_dir,
             feature_type=feature_type,
             force_uncertainty=force_uncertainty,
+            streaming=streaming,
         )
 
         logger.debug('Calculating aggregate metrics')

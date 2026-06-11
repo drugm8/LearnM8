@@ -2,6 +2,69 @@
 
 ## [Unreleased]
 
+### Fixed — GT-stats cache finalizer self-deadlock
+
+`evaluation/core.py`'s `_GT_STATS_LOCK` is now a `threading.RLock` instead of
+`Lock`. `_get_gt_stats` holds the lock while calling `_compute_gt_stats`, whose
+logging can trigger GC and fire the `_evict_gt_cache` weakref finalizer on the
+**same thread**; the non-reentrant `Lock` self-deadlocked there. GC-timing
+dependent (surfaced under long benchmark-mode test runs). A finalizer firing on
+a different thread still blocks normally.
+
+### Added — Streaming predict→select fusion (memory-efficient large-pool path)
+
+A memory-efficient two-pass cycle path that avoids materializing the full
+``(N,)`` prediction arrays, the per-cycle ``all_valid_ids`` Python list, the
+unlabeled⋈predictions join, and the full ``cycle_predictions`` DataFrame in the
+parent heap. At 1M compounds these structures accounted for ~6.6 GB of
+Python/numpy allocation (measured); the streaming path eliminates them.
+
+- **New `streaming` parameter** on ``run_active_learning(...)`` and CLI
+  ``learnm8 run --streaming {auto,always,never}`` (default ``'auto'``).
+  ``'auto'`` uses streaming when the cycle is eligible and falls back to the
+  legacy path otherwise; ``'always'`` raises ``ConfigurationError`` on an
+  ineligible cycle; ``'never'`` forces the legacy in-memory path.
+- **Eligibility**: a streamable acquisition strategy (greedy, ucb, ei, pi,
+  entropy, thompson, random, topk — all but simulated_annealing), an
+  ``output_dir`` (the per-cycle parquet is the dataflow medium), and a pruning
+  strategy in ``{None, 'score'}``.
+- **Pass 1** predicts the unlabeled pool chunk-by-chunk into
+  ``prediction_cycle_N.parquet`` via the new ``CyclePredictionsWriter`` (atomic,
+  exact 1M-row groups). **Pass 2** scores the parquet by row group with a new
+  pointwise acquisition tier (``score_chunk``) and reduces to the batch with a
+  bounded ``StreamingTopK`` index buffer.
+- **New `metrics['selection_path']`** records ``'streaming'`` or ``'legacy'``
+  per cycle (provenance, mirrors ``fingerprint_used``).
+- **Determinism (re-scoped)**: deterministic strategies (greedy/ucb/ei/pi/
+  entropy) select the **identical** batch as the legacy path whenever the
+  k-th-place score boundary is tie-free. At exact score ties the streaming
+  path defines a NEW canonical order — best first, ties broken by smaller pool
+  index — deterministic and invariant to chunking (the legacy
+  ``np.argpartition`` membership was pivot-arbitrary at ties).
+- **RNG change (intentional)**: stochastic strategies (thompson, random,
+  topk's random draw) now use a counter-based RNG keyed on
+  ``(random_state, cycle)`` and the candidate's pool position
+  (``learnm8/utils/rng.py``). Draws are identical regardless of chunking and
+  host memory, but **differ from v0.11** for the same seed. The sampling
+  distributions are unchanged.
+- **Pruning** on the streaming path uses ``StreamingTopK`` to find the exact
+  ``n_to_remove`` worst predictions (matching ``ScoreBasedPruner``'s count;
+  boundary ties broken by smaller pool index) and marks them in the master
+  DataFrame via a join (``mark_pruned_by_ids``) rather than an ``is_in`` over a
+  multi-million-ID Python list. Per-cycle ``pruned_ids`` is an empty list on the
+  streaming path (already dropped from ``cycle_metrics.csv``); ``pruned_count``
+  remains exact.
+- **Benchmark mode** still runs streaming for pass 1/2, but its ground-truth
+  ranking metrics (and the CSV oracle / ``original_pool``) remain O(N) by
+  design; the memory win targets **run mode** at scale.
+- **Bug fix**: ``predict_with_batching``'s OOM-retry recursion now forwards
+  ``compute_uncertainty`` (previously dropped), so OOM sub-chunks no longer
+  compute uncertainty the cycle opted out of.
+- Internal: ``PredictionStats`` value object carries the per-cycle metric
+  reductions (computed once from the parquet on the streaming path, from arrays
+  on the legacy path — value-identical); ``_select_and_measure`` split to share
+  the oracle/label tail (``_measure_and_label``) with the streaming path.
+
 ### Removed — Dead-code cleanup
 
 Unused public surface and empty stub packages removed. None of these

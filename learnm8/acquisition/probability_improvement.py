@@ -10,9 +10,35 @@ import numpy as np
 import polars as pl
 from scipy.special import ndtr
 
+from learnm8.exceptions import AcquisitionError
+
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
 logger = logging.getLogger(__name__)
+
+
+def _pi_scores(
+    predictions: np.ndarray,
+    uncertainties: np.ndarray,
+    current_best: float,
+    xi: float,
+    maximize: bool,
+) -> np.ndarray:
+    """Higher-is-better Probability of Improvement (single source).
+
+    Spec 022 FR-006/FR-007: ndtr + symmetric z-clipping + Botorch sigma=0 →
+    1.0 if improving else 0.0 convention.
+    """
+    if maximize:
+        improvement = predictions - current_best - xi
+    else:
+        improvement = current_best - predictions - xi
+    std_devs = uncertainties
+    sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
+    z_scores = improvement / sigma_safe
+    z_clipped = np.clip(z_scores, -37.0, 37.0)
+    pi_scores = ndtr(z_clipped)
+    return np.where(std_devs > 0, pi_scores, np.where(improvement > 0, 1.0, 0.0))
 
 
 class ProbabilityImprovementAcquisition(AcquisitionFunction):
@@ -93,25 +119,9 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             f'PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement'
         )
 
-        # Calculate improvement based on score direction
-        if self.maximize:
-            improvement = predictions - current_best - self.xi
-        else:
-            improvement = current_best - predictions - self.xi
-
-        # Spec 022 FR-006/FR-007: inline PI with scipy.special.ndtr (C-level
-        # Cephes; bit-exact equivalent of scipy.stats.norm.cdf) + symmetric
-        # z-clipping + Botorch sigma=0 -> 0 convention.
-        std_devs = uncertainties
-        sigma_safe = np.where(std_devs > 0, std_devs, 1.0)
-        z_scores = improvement / sigma_safe
-        z_clipped = np.clip(z_scores, -37.0, 37.0)
-        pi_scores = ndtr(z_clipped)
-        # sigma -> 0 limit: a fully-certain compound has PI = 1.0 when it
-        # improves over current_best, else 0.0. Behavioural-test-locked in
-        # tests/acquisition/test_probability_improvement.py.
-        pi_scores = np.where(
-            std_devs > 0, pi_scores, np.where(improvement > 0, 1.0, 0.0)
+        # Single source: identical math to score_chunk (Spec 022 FR-006/FR-007).
+        pi_scores = _pi_scores(
+            predictions, uncertainties, current_best, self.xi, self.maximize
         )
 
         # Select top compounds
@@ -129,6 +139,31 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
     def requires_uncertainty(self) -> bool:
         """Return True since PI requires uncertainty estimates."""
         return True
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        if uncertainties is None:
+            raise AcquisitionError(
+                'Probability of Improvement requires uncertainty estimates, but '
+                'the chunk provided none.'
+            )
+        if self.current_best is None:
+            raise AcquisitionError(
+                "Probability of Improvement requires 'current_best'; it must be "
+                'set on the acquisition function at cycle start.'
+            )
+        return _pi_scores(
+            predictions, uncertainties, self.current_best, self.xi, self.maximize
+        )
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

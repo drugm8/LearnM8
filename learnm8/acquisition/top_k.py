@@ -5,6 +5,7 @@ This module provides the Top-K acquisition strategy which selects based on rank 
 
 import logging
 
+import numpy as np
 import polars as pl
 
 from .base import AcquisitionFunction
@@ -100,6 +101,40 @@ class TopKAcquisition(AcquisitionFunction):
                     f"{self.score_direction} {k_consider} candidates")
 
         return selected
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        """Higher-is-better = prediction (negated when ranking from the bottom).
+
+        The streaming reducer keeps the top ``shortlist_size`` by this score
+        (the top/bottom ``k_fraction`` of the pool); :meth:`finalize` then draws
+        the batch randomly from that shortlist.
+        """
+        preds = np.asarray(predictions, dtype=np.float64)
+        return preds if self.from_top else -preds
+
+    def shortlist_size(self, n_select: int, pool_size: int) -> int:
+        """Top/bottom ``k_fraction`` of the pool, never fewer than ``n_select``."""
+        k_consider = max(n_select, int(pool_size * self.k_fraction))
+        return min(k_consider, pool_size)
+
+    def finalize(self, shortlist: pl.DataFrame, n_select: int) -> pl.DataFrame:
+        """Randomly draw ``n_select`` from the shortlist (seeded); all if smaller."""
+        n = min(n_select, len(shortlist))
+        if len(shortlist) <= n:
+            selected = shortlist
+        else:
+            selected = shortlist.sample(n=n, seed=self.random_state)
+        return selected.with_columns(pl.col('prediction').alias('acquisition_score'))
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

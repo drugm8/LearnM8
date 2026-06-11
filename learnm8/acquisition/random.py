@@ -73,6 +73,25 @@ class RandomAcquisition(AcquisitionFunction):
 
         return selected
 
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        """Position-invariant uniform scores; top-k of i.i.d. uniforms == a
+        uniform sample without replacement, reproducible across any chunking.
+        """
+        from learnm8.utils.rng import chunk_uniform
+
+        n = len(predictions)
+        return chunk_uniform((self.random_state,), global_offset, n)
+
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
         return f"Random(seed={self.random_state})"

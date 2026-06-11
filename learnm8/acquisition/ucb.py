@@ -6,11 +6,30 @@ and exploration using uncertainty estimates.
 
 import logging
 
+import numpy as np
 import polars as pl
+
+from learnm8.exceptions import AcquisitionError
 
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
 logger = logging.getLogger(__name__)
+
+
+def _ucb_scores(
+    predictions: np.ndarray,
+    uncertainties: np.ndarray,
+    beta: float,
+    maximize: bool,
+) -> np.ndarray:
+    """Higher-is-better UCB score (single source for select + score_chunk).
+
+    Maximise: ``μ + βσ`` (pick highest). Minimise: legacy picks lowest of
+    ``μ − βσ``, equivalent to picking highest of ``−μ + βσ``.
+    """
+    preds = np.asarray(predictions, dtype=np.float64)
+    sigma = np.asarray(uncertainties, dtype=np.float64)
+    return (preds + beta * sigma) if maximize else (-preds + beta * sigma)
 
 
 class UCBAcquisition(AcquisitionFunction):
@@ -73,11 +92,9 @@ class UCBAcquisition(AcquisitionFunction):
 
         logger.debug(f"UCB score statistics: min={ucb_scores.min():.3f}, max={ucb_scores.max():.3f}, mean={ucb_scores.mean():.3f}")
 
-        # Select top compounds (always ascending=False because we want highest UCB scores)
-        if self.maximize:
-            ascending = False
-        else:
-            ascending = True
+        # For maximization, pick the highest UCB (ascending=False); for
+        # minimization, the lowest LCB (ascending=True).
+        ascending = not self.maximize
         selected = self._safe_select_top_k(
             compounds, ucb_scores, n_select, ascending=ascending
         )
@@ -89,6 +106,24 @@ class UCBAcquisition(AcquisitionFunction):
     def requires_uncertainty(self) -> bool:
         """Return True since UCB requires uncertainty estimates."""
         return True
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        if uncertainties is None:
+            raise AcquisitionError(
+                'UCB requires uncertainty estimates, but the chunk provided none. '
+                'Use an uncertainty-capable learner or a non-uncertainty strategy.'
+            )
+        return _ucb_scores(predictions, uncertainties, self.beta, self.maximize)
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
