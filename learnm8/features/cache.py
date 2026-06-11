@@ -193,6 +193,19 @@ def _hash_index_cache_clear() -> None:
         _HASH_INDEX_CACHE.clear()
 
 
+def hash_index_cache_bytes() -> int:
+    """Total resident bytes held by the process-level ``/hash_index`` LRU.
+
+    Sums ``arr.nbytes`` over every cached hash_index array. This is the
+    persistent, cross-cycle component of the cache's parent-process footprint
+    (the ``/row_index`` array at :func:`_lookup_cache` is loaded transiently per
+    lookup and is NOT counted here). Intended for memory benchmarking /
+    instrumentation; safe to call from any thread.
+    """
+    with _HASH_INDEX_LOCK:
+        return int(sum(arr.nbytes for arr in _HASH_INDEX_CACHE.values()))
+
+
 # ---------------------------------------------------------------------------
 # Storage dtype helpers (T006, T007, T008)
 # ---------------------------------------------------------------------------
