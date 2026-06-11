@@ -6,6 +6,7 @@ with the highest model predictions.
 
 import logging
 
+import numpy as np
 import polars as pl
 
 from .base import AcquisitionFunction
@@ -69,6 +70,21 @@ class GreedyAcquisition(AcquisitionFunction):
                     f"({'maximizing' if self.maximize else 'minimizing'})")
 
         return selected
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        """Higher-is-better score = prediction (negated when minimising)."""
+        preds = np.asarray(predictions, dtype=np.float64)
+        return preds if self.maximize else -preds
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

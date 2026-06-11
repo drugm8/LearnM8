@@ -9,6 +9,8 @@ import logging
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import AcquisitionError
+
 from .base import AcquisitionFunction, validate_uncertainty_inputs
 
 logger = logging.getLogger(__name__)
@@ -72,6 +74,38 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
     def requires_uncertainty(self) -> bool:
         """Return True since Thompson sampling requires uncertainty estimates."""
         return True
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        """Posterior sample ``μ + σ·z`` with position-invariant normal draws.
+
+        ``z`` is keyed on this cycle's ``random_state`` and the row's global
+        position, so the draw for a candidate is identical regardless of
+        chunking. Higher-is-better: negated when minimising (matches the legacy
+        ``ascending=not maximize`` selection).
+        """
+        if uncertainties is None:
+            raise AcquisitionError(
+                'Thompson sampling requires uncertainty estimates, but the chunk '
+                'provided none.'
+            )
+        from learnm8.utils.rng import chunk_normal
+
+        n = len(predictions)
+        z = chunk_normal((self.random_state,), global_offset, n)
+        samples = np.asarray(predictions, dtype=np.float64) + (
+            np.asarray(uncertainties, dtype=np.float64) * z
+        )
+        return samples if self.maximize else -samples
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

@@ -16,7 +16,7 @@ from typing import Final
 import numpy as np
 import polars as pl
 
-from learnm8.exceptions import LearnM8Warning
+from learnm8.exceptions import AcquisitionError, LearnM8Warning
 from learnm8.utils.numerical import (
     SIGMA_FLOOR,
     assert_no_inf_uncertainty,
@@ -30,6 +30,18 @@ logger = logging.getLogger(__name__)
 
 # Pre-computed 0.5 · log(2πe) for the differential entropy of a unit-σ Gaussian.
 _HALF_LOG_2_PI_E: Final[float] = 0.5 * float(np.log(2.0 * np.pi * np.e))
+
+
+def _entropy_scores(uncertainties: np.ndarray, entropy_type: str) -> np.ndarray:
+    """Higher-is-better Gaussian differential entropy in nats (single source).
+
+    Expanded form (FR-007): numerically robust at σ < 1e-154. Monotone in σ, so
+    rank-equivalent to σ-descending for both ``entropy_type`` values.
+    """
+    log_sigma = np.log(clamp_sigma(uncertainties))
+    if entropy_type == 'uncertainty':
+        return _HALF_LOG_2_PI_E + log_sigma
+    return _HALF_LOG_2_PI_E + 2.0 * log_sigma
 
 
 class EntropyAcquisition(AcquisitionFunction):
@@ -100,16 +112,8 @@ class EntropyAcquisition(AcquisitionFunction):
             else:
                 logger.debug(msg)
 
-        sigma_clamped = clamp_sigma(uncertainties)
-
-        # FR-007: differential entropy in nats. Expanded form is algebraically
-        # identical to 0.5·log(2πe·σ²) but numerically robust at σ < 1e-154
-        # (avoids float64 σ² underflow).
-        log_sigma = np.log(sigma_clamped)
-        if self.entropy_type == "uncertainty":
-            entropy_scores = _HALF_LOG_2_PI_E + log_sigma
-        else:  # 'variance' — entropy of σ²; rank-equivalent to 'uncertainty'.
-            entropy_scores = _HALF_LOG_2_PI_E + 2.0 * log_sigma
+        # Single source: identical math to score_chunk (FR-007).
+        entropy_scores = _entropy_scores(uncertainties, self.entropy_type)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -133,6 +137,24 @@ class EntropyAcquisition(AcquisitionFunction):
 
     def requires_uncertainty(self) -> bool:
         return True
+
+    def supports_streaming(self) -> bool:
+        return True
+
+    def score_chunk(
+        self,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+        *,
+        global_offset: int,
+        n_total: int,
+    ) -> np.ndarray:
+        if uncertainties is None:
+            raise AcquisitionError(
+                'Entropy acquisition requires uncertainty estimates, but the '
+                'chunk provided none.'
+            )
+        return _entropy_scores(uncertainties, self.entropy_type)
 
     def get_name(self) -> str:
         return f"Entropy({self.entropy_type})"

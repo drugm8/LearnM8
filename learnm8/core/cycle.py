@@ -41,6 +41,7 @@ import polars as pl
 from learnm8.core.batching import predict_with_batching
 from learnm8.core.config import CycleConfig
 from learnm8.core.interfaces import Learner, Oracle
+from learnm8.core.prediction_stats import PredictionStats
 from learnm8.evaluation import RunCache, evaluate_cycle
 from learnm8.exceptions import (
     AcquisitionError,
@@ -111,6 +112,7 @@ def execute_cycle(
     random_state: int | None = None,
     feature_type: str = 'binary',
     force_uncertainty: bool = False,
+    streaming: str = 'auto',
 ) -> tuple[pl.DataFrame, dict[str, Any]]:
     """
     Execute a single active learning cycle.
@@ -298,95 +300,159 @@ def execute_cycle(
         }
         return compounds_df, metrics
 
-    cycle_predictions, prediction_time, predict_feature_time, _valid_compound_ids = (
-        _predict_pool(
-            learner=learner,
-            prediction_pool=prediction_pool,
-            featurizer=featurizer,
-            cache_dir=cache_dir,
-            memory_safety_factor=memory_safety_factor,
-            n_jobs=n_jobs,
-            cycle=cycle,
-            compute_uncertainty=compute_uncertainty,
-        )
+    # Streaming dispatch: the streaming path predicts→persists→selects in two
+    # passes without materializing the full (N,) arrays / ID lists / joins.
+    # Eligibility: streamable strategy + output_dir present + pruning in
+    # (None, 'score'). Falls back to the byte-for-byte legacy path otherwise.
+    from learnm8.core.streaming_cycle import (
+        execute_streaming_selection,
+        is_streaming_eligible,
     )
 
-    # Derive raw arrays from cycle_predictions for downstream consumers
-    # (_calculate_cycle_metrics + evaluate_cycle). Roundtrip is lossless for
-    # Float64 so REQ-5 value-equality is preserved.
-    predictions = cycle_predictions['prediction'].to_numpy()
-    uncertainties = (
-        cycle_predictions['uncertainty'].to_numpy()
-        if 'uncertainty' in cycle_predictions.columns
-        else None
-    )
-
-    # FR-005 (019): single-source-of-truth NaN/Inf guard immediately after prediction.
-    # `valid_compound_ids` is passed lazily; numerical.py only materialises it on the
-    # error path, so the canonical clean path pays no per-cycle Python-list cost.
-    valid_compound_ids = cycle_predictions['ID'].to_list()
-    assert_no_nan(predictions, valid_compound_ids, 'predictions')
-    if uncertainties is not None:
-        assert_no_nan(uncertainties, valid_compound_ids, 'uncertainties')
-        assert_no_inf_uncertainty(uncertainties, valid_compound_ids)
-
-    parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
-
-    selection_pool_cols = ['ID', 'prediction'] + (
-        ['uncertainty'] if uncertainties is not None else []
-    )
-    selection_pool = (
-        compounds_df.filter(pl.col('status') == 'unlabeled')
-        .select(['ID', 'SMILES'])
-        .join(cycle_predictions, on='ID', how='inner')
-        .select(['ID', 'SMILES'] + [c for c in selection_pool_cols if c != 'ID'])
-    )
-
-    if len(selection_pool) == 0:
-        raise AcquisitionError(
-            f'No unlabeled compounds with predictions available for selection in cycle {cycle}. '
-            f'The compound pool may be exhausted. Consider reducing n_cycles or increasing '
-            f'the pool size. Current pool: {len(unlabeled_df)} unlabeled, '
-            f'{len(labeled_df)} labeled.'
+    use_streaming = is_streaming_eligible(acq_func, config, output_dir, streaming)
+    if streaming == 'always' and not use_streaming:
+        raise ConfigurationError(
+            f"streaming='always' but cycle {cycle} is not streaming-eligible "
+            f"(strategy={config.strategy}, pruning={config.pruning_strategy}, "
+            f'output_dir={"set" if output_dir is not None else "None"}). '
+            f"Use streaming='auto' to fall back, or a streamable configuration."
         )
 
-    logger.debug(
-        f'Selection pool: {len(selection_pool)} unlabeled compounds with predictions'
-    )
+    # Metric-input variables shared by both branches.
+    precomputed_stats = None
+    pruned_count_override = None
+    pruned_ids_for_metrics: list = []
 
-    # Step 8: Apply Pruning (If Specified)
-    compounds_df, selection_pool, pruning_stats = _apply_pruning(
-        selection_pool=selection_pool,
-        compounds_df=compounds_df,
-        cycle=cycle,
-        target_col=target_col,
-        pruning_strategy=config.pruning_strategy,
-        pruning_params=config.pruning_params,
-        score_direction=score_direction,
-    )
-
-    compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions = (
-        _select_and_measure(
+    if use_streaming:
+        logger.info('Cycle %d selection path: streaming (output_dir=%s)', cycle, output_dir)
+        assert output_dir is not None
+        result = execute_streaming_selection(
             compounds_df=compounds_df,
-            selection_pool=selection_pool,
-            cycle_predictions=cycle_predictions,
             cycle=cycle,
             config=config,
-            target_col=target_col,
-            score_direction=score_direction,
-            original_pool_size=original_pool_size,
+            learner=learner,
             oracle=oracle,
-            random_state=random_state,
-            featurizer_obj=featurizer_obj,
+            target_col=target_col,
+            featurizer=featurizer,
             cache_dir=cache_dir,
+            output_dir=output_dir,
+            original_pool_size=original_pool_size,
+            score_direction=score_direction,
+            oracle_type=oracle_type,
+            memory_safety_factor=memory_safety_factor,
+            n_jobs=n_jobs,
             acq_func=acq_func,
+            compute_uncertainty=compute_uncertainty,
+            measure_and_label=_measure_and_label,
         )
-    )
+        compounds_df = result['compounds_df']
+        selected_ids = result['selected_ids']
+        selected_predictions = result['selected_predictions']
+        parquet_path = result['parquet_path']
+        prediction_time = result['prediction_time']
+        predict_feature_time = result['predict_feature_time']
+        acquisition_time = result['acquisition_time']
+        oracle_time = result['oracle_time']
+        precomputed_stats = result['pred_stats']
+        pruned_count_override = result['pruned_count']
+        metrics_cycle_predictions = result['metrics_cycle_predictions']
+        predictions = None
+        uncertainties = None
+        selection_path = 'streaming'
+    else:
+        logger.info('Cycle %d selection path: legacy', cycle)
+        selection_path = 'legacy'
+        cycle_predictions, prediction_time, predict_feature_time, _valid_compound_ids = (
+            _predict_pool(
+                learner=learner,
+                prediction_pool=prediction_pool,
+                featurizer=featurizer,
+                cache_dir=cache_dir,
+                memory_safety_factor=memory_safety_factor,
+                n_jobs=n_jobs,
+                cycle=cycle,
+                compute_uncertainty=compute_uncertainty,
+            )
+        )
 
-    # Re-derive cumulative_selected_ids from the post-_select_and_measure
-    # compounds_df so it includes the batch just labeled this cycle. The stale
-    # caller-supplied value omits it; this single source feeds both the
-    # discovery metrics and the unlabeled-pool ranking exclusion.
+        # Derive raw arrays from cycle_predictions for downstream consumers
+        # (_calculate_cycle_metrics + evaluate_cycle). Roundtrip is lossless for
+        # Float64 so REQ-5 value-equality is preserved.
+        predictions = cycle_predictions['prediction'].to_numpy()
+        uncertainties = (
+            cycle_predictions['uncertainty'].to_numpy()
+            if 'uncertainty' in cycle_predictions.columns
+            else None
+        )
+
+        # FR-005 (019): single-source-of-truth NaN/Inf guard immediately after prediction.
+        # `valid_compound_ids` is passed lazily; numerical.py only materialises it on the
+        # error path, so the canonical clean path pays no per-cycle Python-list cost.
+        valid_compound_ids = cycle_predictions['ID'].to_list()
+        assert_no_nan(predictions, valid_compound_ids, 'predictions')
+        if uncertainties is not None:
+            assert_no_nan(uncertainties, valid_compound_ids, 'uncertainties')
+            assert_no_inf_uncertainty(uncertainties, valid_compound_ids)
+
+        parquet_path = write_cycle_predictions(cycle_predictions, output_dir, cycle)
+        metrics_cycle_predictions = cycle_predictions
+
+        selection_pool_cols = ['ID', 'prediction'] + (
+            ['uncertainty'] if uncertainties is not None else []
+        )
+        selection_pool = (
+            compounds_df.filter(pl.col('status') == 'unlabeled')
+            .select(['ID', 'SMILES'])
+            .join(cycle_predictions, on='ID', how='inner')
+            .select(['ID', 'SMILES'] + [c for c in selection_pool_cols if c != 'ID'])
+        )
+
+        if len(selection_pool) == 0:
+            raise AcquisitionError(
+                f'No unlabeled compounds with predictions available for selection in cycle {cycle}. '
+                f'The compound pool may be exhausted. Consider reducing n_cycles or increasing '
+                f'the pool size. Current pool: {len(unlabeled_df)} unlabeled, '
+                f'{len(labeled_df)} labeled.'
+            )
+
+        logger.debug(
+            f'Selection pool: {len(selection_pool)} unlabeled compounds with predictions'
+        )
+
+        # Step 8: Apply Pruning (If Specified)
+        compounds_df, selection_pool, pruning_stats = _apply_pruning(
+            selection_pool=selection_pool,
+            compounds_df=compounds_df,
+            cycle=cycle,
+            target_col=target_col,
+            pruning_strategy=config.pruning_strategy,
+            pruning_params=config.pruning_params,
+            score_direction=score_direction,
+        )
+
+        compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions = (
+            _select_and_measure(
+                compounds_df=compounds_df,
+                selection_pool=selection_pool,
+                cycle_predictions=cycle_predictions,
+                cycle=cycle,
+                config=config,
+                target_col=target_col,
+                score_direction=score_direction,
+                original_pool_size=original_pool_size,
+                oracle=oracle,
+                random_state=random_state,
+                featurizer_obj=featurizer_obj,
+                cache_dir=cache_dir,
+                acq_func=acq_func,
+            )
+        )
+        pruned_ids_for_metrics = pruning_stats.get('pruned_ids', [])
+
+    # Re-derive cumulative_selected_ids from the post-selection compounds_df so
+    # it includes the batch just labeled this cycle. The stale caller-supplied
+    # value omits it; this single source feeds both the discovery metrics and
+    # the unlabeled-pool ranking exclusion.
     cumulative_selected_ids = set(
         compounds_df.filter(pl.col('status') == 'labeled')['ID'].to_list()
     )
@@ -400,10 +466,10 @@ def execute_cycle(
         predictions,
         uncertainties,
         selected_ids,
-        pruning_stats.get('pruned_ids', []),
+        pruned_ids_for_metrics,
         target_col,
         score_direction,
-        cycle_predictions=cycle_predictions,
+        cycle_predictions=metrics_cycle_predictions,
         oracle_type=oracle_type,
         original_pool=original_pool,
         cumulative_selected_ids=cumulative_selected_ids,
@@ -412,7 +478,10 @@ def execute_cycle(
         featurizer_obj=featurizer_obj,
         cache_dir=cache_dir,
         random_state=random_state,
+        precomputed_stats=precomputed_stats,
+        pruned_count=pruned_count_override,
     )
+    metrics['selection_path'] = selection_path
     evaluation_time = time.time() - evaluation_start_time
 
     # Calculate total cycle time
@@ -467,7 +536,7 @@ def _calculate_cycle_metrics(
     compounds_df: pl.DataFrame,
     cycle: int,
     strategy: str,
-    predictions: np.ndarray,
+    predictions: np.ndarray | None,
     uncertainties: np.ndarray | None,
     selected_ids: list[str],
     pruned_ids: list[str],
@@ -483,6 +552,8 @@ def _calculate_cycle_metrics(
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
     random_state: int | None = None,
+    precomputed_stats: 'PredictionStats | None' = None,
+    pruned_count: int | None = None,
 ) -> dict[str, Any]:
     """
     Calculate comprehensive metrics for the cycle.
@@ -537,8 +608,12 @@ def _calculate_cycle_metrics(
         compounds_df.filter(pl.col('status') == 'unlabeled').height
     )
 
-    # Pruning statistics
-    metrics['pruned_count'] = len(pruned_ids)
+    # Pruning statistics. Streaming path passes `pruned_count` explicitly (the
+    # pruned IDs are marked in the master DF via a join, not carried as a Python
+    # list), so `pruned_ids` stays empty while the count remains exact.
+    metrics['pruned_count'] = (
+        len(pruned_ids) if pruned_count is None else int(pruned_count)
+    )
     metrics['pruned_ids'] = pruned_ids
 
     # Selection statistics
@@ -549,67 +624,28 @@ def _calculate_cycle_metrics(
     # 100M scale (np.mean on float32 accumulator loses ~1e-5 relative precision).
     # min/max/median are order statistics — dtype doesn't affect them — but we
     # pass dtype=float64 on the reductions where it matters.
-    # Prediction statistics (with NaN safeguards)
-    if predictions is not None and len(predictions) > 0:
-        metrics['prediction_mean'] = (
-            float(np.nanmean(predictions, dtype=np.float64))
-            if not np.all(np.isnan(predictions))
-            else None
-        )
-        metrics['prediction_std'] = (
-            float(np.nanstd(predictions, dtype=np.float64))
-            if not np.all(np.isnan(predictions))
-            else None
-        )
-        metrics['prediction_min'] = (
-            float(np.nanmin(predictions)) if not np.all(np.isnan(predictions)) else None
-        )
-        metrics['prediction_max'] = (
-            float(np.nanmax(predictions)) if not np.all(np.isnan(predictions)) else None
-        )
-        metrics['prediction_median'] = (
-            float(np.nanmedian(predictions))
-            if not np.all(np.isnan(predictions))
-            else None
-        )
-    else:
-        metrics['prediction_mean'] = None
-        metrics['prediction_std'] = None
-        metrics['prediction_min'] = None
-        metrics['prediction_max'] = None
-        metrics['prediction_median'] = None
+    #
+    # Streaming path: `precomputed_stats` (computed once from the predictions
+    # parquet, value-identical conventions) replaces the full-array reductions
+    # so the parent heap never holds the (N,) prediction/uncertainty arrays.
+    stats = precomputed_stats
+    if stats is None:
+        stats = PredictionStats.from_arrays(predictions, uncertainties)
 
-    # Uncertainty statistics (with NaN safeguards). Feature 023 FR-011:
-    # always populate the four uncertainty_* keys (with None when uncertainty
-    # was skipped) so downstream cycle_metrics.csv schema stays stable.
-    if uncertainties is not None and len(uncertainties) > 0:
-        metrics['uncertainty_mean'] = (
-            float(np.nanmean(uncertainties, dtype=np.float64))
-            if not np.all(np.isnan(uncertainties))
-            else None
-        )
-        metrics['uncertainty_std'] = (
-            float(np.nanstd(uncertainties, dtype=np.float64))
-            if not np.all(np.isnan(uncertainties))
-            else None
-        )
-        metrics['uncertainty_min'] = (
-            float(np.nanmin(uncertainties))
-            if not np.all(np.isnan(uncertainties))
-            else None
-        )
-        metrics['uncertainty_max'] = (
-            float(np.nanmax(uncertainties))
-            if not np.all(np.isnan(uncertainties))
-            else None
-        )
-        metrics['has_uncertainty'] = True
-    else:
-        metrics['uncertainty_mean'] = None
-        metrics['uncertainty_std'] = None
-        metrics['uncertainty_min'] = None
-        metrics['uncertainty_max'] = None
-        metrics['has_uncertainty'] = False
+    metrics['prediction_mean'] = stats.pred_mean
+    metrics['prediction_std'] = stats.pred_std
+    metrics['prediction_min'] = stats.pred_min
+    metrics['prediction_max'] = stats.pred_max
+    metrics['prediction_median'] = stats.pred_median
+
+    # Uncertainty statistics. Feature 023 FR-011: always populate the four
+    # uncertainty_* keys (None when uncertainty was skipped) so downstream
+    # cycle_metrics.csv schema stays stable.
+    metrics['uncertainty_mean'] = stats.unc_mean
+    metrics['uncertainty_std'] = stats.unc_std
+    metrics['uncertainty_min'] = stats.unc_min
+    metrics['uncertainty_max'] = stats.unc_max
+    metrics['has_uncertainty'] = stats.has_uncertainty
 
     # Measured value statistics (for selected compounds this cycle, with NaN safeguards)
     measured_values = compounds_df.filter(pl.col('ID').is_in(selected_ids))[
@@ -733,6 +769,15 @@ def _calculate_cycle_metrics(
                         cache_dir=cache_dir,
                         random_state=random_state,
                     )
+
+                    # Streaming path: uncertainty stats come from
+                    # `precomputed_stats` (the full uncertainty array is never
+                    # materialised, so `uncertainties=None` is passed to
+                    # evaluate_cycle). Don't let evaluate_cycle's None-valued
+                    # uncertainty keys clobber the precomputed ones.
+                    if precomputed_stats is not None:
+                        for _k in ('uncertainty_mean', 'uncertainty_std'):
+                            eval_metrics.pop(_k, None)
 
                     metrics.update(eval_metrics)
         except (
@@ -1246,7 +1291,6 @@ def _select_and_measure(
     Returns:
         (compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions)
     """
-    from learnm8.core.dataframe_ops import update_status
 
     # Step 9: Calculate Batch Size from Fraction
     batch_size = min(
@@ -1327,9 +1371,45 @@ def _select_and_measure(
     # selection_history.csv without re-reading the parquet file at save time.
     selected_predictions = cycle_predictions.filter(pl.col('ID').is_in(selected_ids))
 
-    # Step 12: Measure Selected Compounds
+    # Step 12 + 13: Measure selected compounds and label them in the master DF.
+    compounds_df, oracle_time = _measure_and_label(
+        compounds_df=compounds_df,
+        selected_ids=selected_ids,
+        cycle=cycle,
+        target_col=target_col,
+        oracle=oracle,
+    )
+
+    return (
+        compounds_df,
+        selected_ids,
+        acquisition_time,
+        oracle_time,
+        selected_predictions,
+    )
+
+
+def _measure_and_label(
+    *,
+    compounds_df: pl.DataFrame,
+    selected_ids: list,
+    cycle: int,
+    target_col: str,
+    oracle: Oracle,
+) -> tuple[pl.DataFrame, float]:
+    """Measure ``selected_ids`` via the oracle and label them in the master DF.
+
+    Shared verbatim by the legacy ``_select_and_measure`` and the streaming
+    selection path. Owns the oracle try/except #3 and the ``oracle_time``
+    stopwatch. Preserves ``selected_ids`` order into the oracle (a missing ID
+    raises rather than mis-sorting).
+
+    Returns:
+        (updated_compounds_df, oracle_time)
+    """
+    from learnm8.core.dataframe_ops import update_status
+
     oracle_start_time = time.time()
-    # Restore selected_ids order; a missing ID raises rather than mis-sorting.
     order_lookup = build_selection_order_lookup(selected_ids, context='Selected')
 
     selected_compounds = (
@@ -1376,18 +1456,9 @@ def _select_and_measure(
 
     logger.debug(f'Measured {len(measurements)} compounds')
 
-    # Step 13: Update Master DataFrame with Measurements
-    # Create Polars Series with target values indexed by ID
+    # Update Master DataFrame with Measurements (Series indexed by selected_ids).
     target_series = measurements.select([target_col]).to_series()
-
     compounds_df = update_status(
         compounds_df, selected_ids, 'labeled', cycle, target_col, target_series
     )
-
-    return (
-        compounds_df,
-        selected_ids,
-        acquisition_time,
-        oracle_time,
-        selected_predictions,
-    )
+    return compounds_df, oracle_time

@@ -881,6 +881,9 @@ class TestNarrowExceptPaths:
                 original_pool_size=len(sample_compounds),
                 oracle_type='run',
                 output_dir=tmp_path,
+                # Legacy pruner exception path: the streaming pruner uses
+                # StreamingTopK, not create_pruning_strategy, so force legacy.
+                streaming='never',
             )
 
     def test_evaluation_column_missing_logs_warning_and_continues(

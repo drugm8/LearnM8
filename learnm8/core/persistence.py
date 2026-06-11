@@ -15,6 +15,8 @@ All CSV files include metadata comments for self-documentation.
 No query classes - files are directly usable with pandas, Excel, etc.
 """
 
+from __future__ import annotations
+
 import errno
 import json
 import logging
@@ -25,6 +27,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import polars as pl
 
 from learnm8.evaluation.metrics.similarity import DIVERSITY_KEYS
@@ -179,6 +182,212 @@ def write_cycle_predictions(
 
     _atomic_write(parquet_path, _write_fn)
     return parquet_path
+
+
+SCORING_CHUNK = 1_000_000
+
+
+class CyclePredictionsWriter:
+    """Incremental, atomic parquet writer for streaming cycle predictions.
+
+    Streaming pass 1 writes predictions chunk-by-chunk instead of building the
+    full ``cycle_predictions`` DataFrame in memory. The arrow schema is fixed at
+    construction from ``with_uncertainty`` so it matches feature 023's
+    column-presence semantics (no ``uncertainty`` column at all when the cycle
+    skips it) and ``pyarrow``'s requirement of a stable schema across row groups.
+
+    Incoming chunks are buffered and emitted as **exact ``SCORING_CHUNK``-row
+    row groups** regardless of the prediction batch size, so pass 2 can iterate
+    by row group with bounded, alignment-free decompression. The final partial
+    group is the ``ceil(N / SCORING_CHUNK)`` tail.
+
+    Atomicity mirrors :func:`_atomic_write`: data is streamed into a sibling
+    ``.tmp`` file, fsync'd, then ``os.replace``d into place on :meth:`close`.
+    An exception inside the ``with`` block aborts the writer and unlinks the
+    ``.tmp`` so a failed pass never finalizes (and never matches the
+    ``prediction_cycle_*.parquet`` glob used by the animation reader).
+
+    Usage::
+
+        with CyclePredictionsWriter(out_dir, cycle, with_uncertainty=True) as w:
+            for ids, preds, uncs in chunks:
+                w.write_chunk(ids, preds, uncs)
+        path = w.path  # finalized parquet, or None if output_dir was None
+    """
+
+    def __init__(
+        self,
+        output_dir: Path | None,
+        cycle: int,
+        *,
+        with_uncertainty: bool,
+        row_group_size: int = SCORING_CHUNK,
+        compression: str = PARQUET_COMPRESSION,
+        compression_level: int = PARQUET_COMPRESSION_LEVEL,
+    ):
+        self.output_dir = output_dir
+        self.cycle = cycle
+        self.with_uncertainty = with_uncertainty
+        self.row_group_size = row_group_size
+        self._compression = compression
+        self._compression_level = compression_level
+        self.path: Path | None = None
+        self._tmp_path: Path | None = None
+        self._writer = None  # pa.parquet.ParquetWriter
+        self._pa = None
+        self._pq = None
+        self._schema = None
+        # Row-aligned buffer (lists of arrow-convertible arrays).
+        self._buf_ids: list = []
+        self._buf_pred: list = []
+        self._buf_unc: list = []
+        self._buffered = 0
+        self._closed = False
+
+    def __enter__(self) -> CyclePredictionsWriter:
+        if self.output_dir is None:
+            return self
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        self._pa = pa
+        self._pq = pq
+        fields = [pa.field('ID', pa.large_string()), pa.field('prediction', pa.float32())]
+        if self.with_uncertainty:
+            fields.append(pa.field('uncertainty', pa.float32()))
+        self._schema = pa.schema(fields)
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.path = prediction_parquet_path(self.output_dir, self.cycle)
+        self._tmp_path = self.path.with_name(f'{self.path.name}.tmp')
+        if self._tmp_path.exists():
+            logger.info('Overwriting orphan .tmp file: %s', self._tmp_path)
+            self._tmp_path.unlink(missing_ok=True)
+        self._writer = pq.ParquetWriter(
+            str(self._tmp_path),
+            self._schema,
+            compression=self._compression,
+            compression_level=self._compression_level,
+        )
+        return self
+
+    def write_chunk(
+        self,
+        ids: pl.Series,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None,
+    ) -> None:
+        """Buffer one chunk; flush full ``row_group_size`` groups as they fill.
+
+        Raises:
+            LearnerError: if the chunk's uncertainty presence contradicts the
+                schema declared at construction (mirrors the per-chunk invariant
+                in ``predict_with_batching``).
+            PersistenceError: on a write to a writer that has been closed.
+        """
+        if self.output_dir is None:
+            return
+        if self._closed or self._writer is None:
+            raise PersistenceError('write_chunk called on a closed/unopened writer')
+
+        if self.with_uncertainty and uncertainties is None:
+            from learnm8.exceptions import LearnerError
+
+            raise LearnerError(
+                'CyclePredictionsWriter declared with_uncertainty=True but a chunk '
+                'returned None uncertainties. Every chunk must return non-None '
+                'uncertainties of equal length to predictions.'
+            )
+        if not self.with_uncertainty and uncertainties is not None:
+            from learnm8.exceptions import LearnerError
+
+            raise LearnerError(
+                'CyclePredictionsWriter declared with_uncertainty=False but a chunk '
+                'returned uncertainties. The cycle opted out of uncertainty; no '
+                'uncertainty column exists in the schema.'
+            )
+
+        preds = np.asarray(predictions, dtype=np.float32)
+        n = preds.shape[0]
+        if n == 0:
+            return
+        self._buf_ids.append(ids.to_arrow() if hasattr(ids, 'to_arrow') else ids)
+        self._buf_pred.append(preds)
+        if self.with_uncertainty:
+            self._buf_unc.append(np.asarray(uncertainties, dtype=np.float32))
+        self._buffered += n
+
+        while self._buffered >= self.row_group_size:
+            self._flush_one_group(self.row_group_size)
+
+    def _concat_buffer(self):
+        pa = self._pa
+        ids = pa.concat_arrays(
+            [a if isinstance(a, pa.Array) else pa.array(a, type=pa.large_string())
+             for a in self._buf_ids]
+        )
+        pred = np.concatenate(self._buf_pred) if len(self._buf_pred) > 1 else self._buf_pred[0]
+        unc = None
+        if self.with_uncertainty:
+            unc = np.concatenate(self._buf_unc) if len(self._buf_unc) > 1 else self._buf_unc[0]
+        return ids, pred, unc
+
+    def _flush_one_group(self, take: int) -> None:
+        pa = self._pa
+        ids, pred, unc = self._concat_buffer()
+        head_ids = ids.slice(0, take)
+        cols = [head_ids, pa.array(pred[:take], type=pa.float32())]
+        if self.with_uncertainty:
+            cols.append(pa.array(unc[:take], type=pa.float32()))
+        table = pa.Table.from_arrays(cols, schema=self._schema)
+        self._writer.write_table(table, row_group_size=self.row_group_size)
+
+        remaining = self._buffered - take
+        self._buffered = remaining
+        if remaining == 0:
+            self._buf_ids, self._buf_pred, self._buf_unc = [], [], []
+        else:
+            self._buf_ids = [ids.slice(take)]
+            self._buf_pred = [pred[take:]]
+            self._buf_unc = [unc[take:]] if self.with_uncertainty else []
+
+    def close(self) -> Path | None:
+        """Flush remaining buffer, fsync, and atomically replace into place."""
+        if self.output_dir is None or self._closed:
+            self._closed = True
+            return self.path
+        self._closed = True
+        if self._buffered > 0:
+            self._flush_one_group(self._buffered)
+        self._writer.close()
+
+        assert self._tmp_path is not None and self.path is not None
+        fd_tmp = os.open(self._tmp_path, os.O_RDONLY)
+        os.fsync(fd_tmp)
+        os.close(fd_tmp)
+        fd_dir = os.open(self._tmp_path.parent, os.O_RDONLY)
+        os.fsync(fd_dir)
+        os.close(fd_dir)
+        os.replace(self._tmp_path, self.path)
+        return self.path
+
+    def abort(self) -> None:
+        """Close the underlying writer and remove the unfinished ``.tmp``."""
+        self._closed = True
+        try:
+            if self._writer is not None:
+                self._writer.close()
+        except Exception:
+            pass
+        if self._tmp_path is not None:
+            self._tmp_path.unlink(missing_ok=True)
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is not None:
+            self.abort()
+            return
+        if not self._closed:
+            self.close()
 
 
 def read_cycle_predictions(parquet_path: Path) -> pl.DataFrame:
