@@ -401,6 +401,22 @@ def set_phase(name: str) -> None:
         )
 
 
+def _sizer_available_gb() -> Any:
+    """Live value ``core.batching.get_available_memory('cpu')`` returns (in GB).
+
+    This is the *clamped* number the chunk sizer actually uses, so emitting it on
+    every high-water record makes "did the cgroup clamp engage?" a one-line grep
+    on the streamed log: under confinement it reads the cgroup headroom (and
+    shrinks as usage grows), not the whole-node free RAM. None if unavailable.
+    """
+    try:
+        from learnm8.core import batching
+
+        return _gb(batching.get_available_memory('cpu'))
+    except Exception:
+        return None
+
+
 def _proc_rss() -> int | None:
     try:
         with open('/proc/self/status') as f:
@@ -452,6 +468,7 @@ class _PeakSampler:
                         'event': 'rss_high_water',
                         'rss_gb': _gb(rss),
                         'cgroup_current_gb': _gb(cur),
+                        'sizer_available_gb': _sizer_available_gb(),
                     }
                 )
             self._stop.wait(self._interval)
