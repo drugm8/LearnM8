@@ -108,6 +108,93 @@ def _get_learner_device(learner: Learner) -> str:
     return 'cpu'
 
 
+def _read_int_file(path: str) -> int | None:
+    """Read a single integer from a sysfs/cgroup file; None on 'max'/error."""
+    try:
+        with open(path) as f:
+            txt = f.read().strip()
+        if txt in ('max', ''):
+            return None
+        return int(txt)
+    except (OSError, ValueError):
+        return None
+
+
+def _cgroup_memory_headroom() -> int | None:
+    """Bytes still allocatable under the effective cgroup memory limit.
+
+    Walks the cgroup hierarchy (v2 ``memory.max`` / v1 ``memory.limit_in_bytes``)
+    for the tightest finite cap and subtracts current usage. Returns None when no
+    finite limit applies (unconfined) or the cgroup files are unreadable. Never
+    raises — confinement-awareness must never break sizing.
+    """
+    try:
+        rel_paths: list[tuple[str, str]] = []
+        with open('/proc/self/cgroup') as f:
+            for line in f:
+                parts = line.strip().split(':', 2)
+                if len(parts) == 3:
+                    rel_paths.append((parts[1], parts[2]))
+
+        # cgroup v2: unified hierarchy, '0::<path>'.
+        if os.path.exists('/sys/fs/cgroup/cgroup.controllers'):
+            rel = (rel_paths[0][1] if rel_paths else '/').lstrip('/')
+            cur = Path('/sys/fs/cgroup') / rel
+            root = Path('/sys/fs/cgroup')
+            limit = None
+            current = None
+            while True:
+                lim = _read_int_file(str(cur / 'memory.max'))
+                if lim is not None:
+                    limit = lim if limit is None else min(limit, lim)
+                if current is None:
+                    current = _read_int_file(str(cur / 'memory.current'))
+                if cur == root:
+                    break
+                cur = cur.parent
+            if limit is None:
+                return None
+            return max(0, limit - (current or 0))
+
+        # cgroup v1: per-controller hierarchy under /sys/fs/cgroup/memory.
+        mem_rel = None
+        for controllers, path in rel_paths:
+            if 'memory' in controllers.split(','):
+                mem_rel = path
+                break
+        if mem_rel is not None and os.path.isdir('/sys/fs/cgroup/memory'):
+            node = Path('/sys/fs/cgroup/memory') / mem_rel.lstrip('/')
+            limit = _read_int_file(str(node / 'memory.limit_in_bytes'))
+            if limit is None or limit >= (1 << 62):  # v1 'unlimited' sentinel
+                return None
+            current = _read_int_file(str(node / 'memory.usage_in_bytes')) or 0
+            return max(0, limit - current)
+    except Exception:
+        return None
+    return None
+
+
+def _clamp_to_confinement(available: int) -> int:
+    """Clamp node-reported available bytes to the cgroup memory headroom.
+
+    ``psutil.virtual_memory().available`` reports whole-node free RAM, which on a
+    shared HPC node vastly exceeds the cgroup / HTCondor slot the job actually
+    runs under. Sizing a prediction chunk against the node total over-allocates
+    and gets the job OOM-killed at the cgroup wall. Clamp to the real headroom.
+    """
+    headroom = _cgroup_memory_headroom()
+    if headroom is None or headroom <= 0:
+        return available
+    if headroom < available:
+        logger.debug(
+            'Clamping available memory %d -> %d bytes (cgroup headroom)',
+            available,
+            headroom,
+        )
+        return headroom
+    return available
+
+
 def get_available_memory(device: str = 'cpu') -> int:
     """Query available memory for the target device.
 
@@ -137,6 +224,7 @@ def get_available_memory(device: str = 'cpu') -> int:
         import psutil
 
         available = psutil.virtual_memory().available
+        available = _clamp_to_confinement(available)
         logger.debug('CPU available memory: %d bytes', available)
         return available
     except Exception:
