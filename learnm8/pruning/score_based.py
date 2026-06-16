@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 class ScoreBasedPruner(DesignSpacePruner):
     """Simple score-based pruning strategy.
-    
+
     This pruner removes a specified fraction of compounds with the worst
-    predicted scores, based on the optimization direction. For 'higher' 
+    predicted scores, based on the optimization direction. For 'higher'
     direction, it removes compounds with the lowest predicted scores.
     For 'lower' direction, it removes compounds with the highest scores.
-    
+
     Args:
         pruning_fraction: Fraction of compounds to remove (0.0 to 0.9)
         score_direction: Optimization direction ('higher' or 'lower')
@@ -31,11 +31,11 @@ class ScoreBasedPruner(DesignSpacePruner):
 
     def __init__(self, pruning_fraction: float = 0.1, score_direction: str = 'higher'):
         """Initialize the score-based pruner.
-        
+
         Args:
             pruning_fraction: Fraction of compounds to remove (0.0-0.9)
             score_direction: Score optimization direction ('higher' or 'lower')
-            
+
         Raises:
             PruningError: If parameters are invalid
         """
@@ -61,15 +61,15 @@ class ScoreBasedPruner(DesignSpacePruner):
               predictions: np.ndarray,
               uncertainties: np.ndarray | None = None) -> pl.DataFrame:
         """Prune compounds based on predicted scores.
-        
+
         Args:
             compounds: DataFrame with 'ID', 'SMILES' columns
             predictions: Model predictions for each compound
             uncertainties: Not used for score-based pruning
-            
+
         Returns:
             DataFrame with worst-scoring compounds removed
-            
+
         Raises:
             PruningError: If pruning fails or inputs are invalid
         """
@@ -99,20 +99,29 @@ class ScoreBasedPruner(DesignSpacePruner):
             n_to_remove = n_compounds - 1
 
         # Sort compounds by score based on optimization direction.
-        # FR-015 (refined): use argpartition (O(n)) + np.sort on the kept slice
-        # to restore input-order stability within the kept set. ~3-5x faster
-        # than full stable timsort on 100M-compound libraries; cross-run
-        # reproducibility is preserved since argpartition is deterministic
-        # given identical input bytes. Boundary-tie membership may differ from
-        # the legacy `[-n:]` of stable argsort but the kept set is itself
-        # always sorted by input index for downstream stability.
+        # FR-015 (refined): use argpartition (O(n)) to locate the kept slice,
+        # ~3-5x faster than full stable timsort on 100M-compound libraries.
+        # argpartition's boundary-tie membership is pivot-dependent and varies
+        # across numpy versions, so resolve ties explicitly by input index
+        # (lowest index kept first). This makes the kept set fully cross-machine
+        # reproducible — independent of the pivot — and keeps the kept indices
+        # sorted by input order for downstream stability.
         n_to_remove = n_compounds - n_to_keep
         if self.score_direction == 'higher':
             partition = np.argpartition(predictions, n_to_remove)
-            keep_indices = np.sort(partition[n_to_remove:])
+            candidate = partition[n_to_remove:]
+            threshold = predictions[candidate].min()
+            decided = candidate[predictions[candidate] > threshold]
         else:
             partition = np.argpartition(predictions, n_to_keep - 1)
-            keep_indices = np.sort(partition[:n_to_keep])
+            candidate = partition[:n_to_keep]
+            threshold = predictions[candidate].max()
+            decided = candidate[predictions[candidate] < threshold]
+        # Fill the remaining slots from the boundary-tied compounds, choosing
+        # the lowest input indices so the result is deterministic everywhere.
+        n_tied_slots = n_to_keep - decided.size
+        tied = np.flatnonzero(predictions == threshold)
+        keep_indices = np.sort(np.concatenate([decided, tied[:n_tied_slots]]))
 
         # Create pruned dataset
         pruned_compounds = self._safe_prune_by_indices(compounds, keep_indices)
@@ -144,7 +153,7 @@ class ScoreBasedPruner(DesignSpacePruner):
 
     def get_name(self) -> str:
         """Return the name of this pruning strategy.
-        
+
         Returns:
             Strategy name string
         """
@@ -152,7 +161,7 @@ class ScoreBasedPruner(DesignSpacePruner):
 
     def requires_uncertainty(self) -> bool:
         """Return False as this strategy only needs predictions.
-        
+
         Returns:
             False - uncertainty is not required
         """
