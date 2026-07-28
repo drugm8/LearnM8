@@ -264,6 +264,66 @@ def run_cli(*args, timeout=120):
     return result
 
 
+@pytest.mark.unit
+class TestFeaturizerRequirement:
+    """The featurizer guard must be learner-aware.
+
+    An unconditional guard rejected `--learner chemprop` with no featurizer,
+    even though chemprop is SMILES-native and a featurizer merely switches it
+    into hybrid MPNN + descriptor mode — a different model.
+    """
+
+    @pytest.mark.parametrize('learner', ['chemprop', 'chemprop_ensemble'])
+    def test_smiles_native_learner_runs_without_featurizer(
+        self, minimal_compounds, tmp_path, monkeypatch, mock_run_success, learner
+    ):
+        from learnm8.cli.main import cmd_run
+
+        args = make_run_namespace(
+            minimal_compounds,
+            tmp_path,
+            learner=learner,
+            featurizer=None,
+            output=str(tmp_path / learner),
+            n_cycles=1,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0, result.stdout
+
+    def test_smiles_native_learner_does_not_receive_a_featurizer(
+        self, minimal_compounds, tmp_path, monkeypatch, mock_run_success
+    ):
+        """Guard must not silently substitute a featurizer — that would turn a
+        pure MPNN run into a hybrid MPNN + descriptors run."""
+        from learnm8.cli.main import cmd_run
+
+        captured = {}
+        cli_module = _get_cli_module()
+        monkeypatch.setattr(
+            cli_module,
+            'run_active_learning',
+            lambda **kwargs: captured.update(kwargs) or mock_run_success(**kwargs),
+        )
+
+        args = make_run_namespace(
+            minimal_compounds, tmp_path, learner='chemprop', featurizer=None, n_cycles=1
+        )
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert captured['featurizer'] is None
+
+    def test_feature_based_learner_still_requires_featurizer(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        args = make_run_namespace(
+            minimal_compounds, tmp_path, learner='rf', featurizer=None
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode != 0
+        assert 'featurizer is required' in result.stdout
+
+
 @pytest.mark.slow
 class TestRunSubcommand:
     """Test 'run' subcommand functionality."""

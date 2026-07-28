@@ -149,6 +149,14 @@ except ImportError:
     pass
 
 
+# Registry names whose learners consume SMILES directly (``requires_smiles()``
+# is True), so a featurizer is optional: supplying one switches them into
+# hybrid mode where features become extra descriptors (x_d). Lets callers that
+# only hold a learner *name* — the CLI — skip the featurizer-required guard
+# without instantiating the learner.
+SMILES_NATIVE_LEARNERS = frozenset({'chemprop', 'chemprop_ensemble'})
+
+
 LEARNER_DISPLAY_NAMES = {
     'rf': 'Random Forest',
     'gp': 'Gaussian Process',
