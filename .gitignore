@@ -136,3 +136,4 @@ output/
 .benchmarks/
 scripts/bench_streaming_memory.py
 .claude/
+cluster*/
