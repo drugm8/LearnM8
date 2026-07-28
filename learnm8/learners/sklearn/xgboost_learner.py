@@ -54,10 +54,18 @@ class XGBoostLearner(SklearnLearner):
             reg_lambda: L2 regularization term
             random_state: Random seed for reproducibility
             n_jobs: Number of parallel jobs (-1 for all cores)
-            device: Device for XGBoost computation ('cpu' or 'cuda')
+            device: Device for XGBoost computation ('cpu', 'cuda', 'cuda:N' or
+                'auto'). 'auto' resolves here to 'cuda' when a GPU is visible,
+                else 'cpu' — XGBoost rejects any non-concrete device string.
             enable_aggressive_gc: Delete old model and call gc.collect() before refit
             **kwargs: Additional arguments passed to SklearnLearner
         """
+        if device == 'auto':
+            import torch
+
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            logger.debug(f"Resolved device='auto' to '{device}'")
+
         self.device = device
         self.enable_aggressive_gc = enable_aggressive_gc
 

@@ -74,6 +74,38 @@ class TestXGBoostDeviceCuda:
             assert not learner.is_trained
 
 
+class TestXGBoostDeviceAuto:
+    """`--device auto` (the CLI default) used to reach XGBoost verbatim.
+
+    XGBoost accepts only 'cpu' / 'cuda' / 'cuda:N', so every CPU run launched
+    with default flags died at train time. Resolution happens in __init__,
+    matching how fastprop/svgp/gpu_gp resolve 'auto' themselves.
+    """
+
+    def test_auto_resolves_to_concrete_device(self):
+        learner = XGBoostLearner(device='auto')
+        assert learner.device in ('cpu', 'cuda')
+        assert learner.model.get_params()['device'] == learner.device
+
+    def test_auto_resolves_to_cpu_without_cuda(self):
+        with patch('torch.cuda.is_available', return_value=False):
+            learner = XGBoostLearner(device='auto')
+        assert learner.device == 'cpu'
+        assert learner.model.get_params()['device'] == 'cpu'
+
+    def test_auto_resolves_to_cuda_when_available(self):
+        with patch('torch.cuda.is_available', return_value=True):
+            learner = XGBoostLearner(device='auto')
+        assert learner.device == 'cuda'
+        assert learner.model.get_params()['device'] == 'cuda'
+
+    def test_auto_trains_without_device_error(self, features, targets):
+        with patch('torch.cuda.is_available', return_value=False):
+            learner = XGBoostLearner(device='auto', n_estimators=5)
+        learner.train(features, targets)
+        assert learner.is_trained
+
+
 class TestXGBoostAggressiveGc:
     def test_enable_aggressive_gc_default_true(self):
         learner = XGBoostLearner()

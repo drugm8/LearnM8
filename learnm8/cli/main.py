@@ -28,7 +28,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.traceback import install
 
-from learnm8.api import run_active_learning
+from learnm8.api import SMILES_NATIVE_LEARNERS, run_active_learning
 from learnm8.core.config import CycleConfig, parse_cycle_spec
 from learnm8.core.validation import validate_compound_pool
 from learnm8.exceptions import (
@@ -474,12 +474,17 @@ def cmd_run(args: argparse.Namespace):
             )
             sys.exit(1)
 
+        learner = getattr(args, 'learner', None)
         if not getattr(args, 'featurizer', None):
+            if learner not in SMILES_NATIVE_LEARNERS:
+                console.print(
+                    f"[red]Error:[/red] featurizer is required for learner '{learner}' "
+                    '(provide --featurizer or set "featurizer" in --config)'
+                )
+                sys.exit(1)
             console.print(
-                '[red]Error:[/red] featurizer is required '
-                '(provide --featurizer or set "featurizer" in --config)'
+                f'[cyan]No featurizer:[/cyan] {learner} learns directly from SMILES'
             )
-            sys.exit(1)
 
         console.print(f'[cyan]Compound pool:[/cyan] {args.compound_pool}')
 
@@ -522,7 +527,7 @@ def cmd_run(args: argparse.Namespace):
         table.add_row('Compound Pool', str(args.compound_pool))
         table.add_row('Oracle', args.oracle or 'Auto-detect')
         table.add_row('Target Column', args.target_col)
-        table.add_row('Featurizer', args.featurizer)
+        table.add_row('Featurizer', args.featurizer or 'None (SMILES-native)')
         table.add_row('Learner', args.learner)
         table.add_row('Score Direction', args.score_direction)
         table.add_row('Total Cycles', str(len(cycles) if cycles else args.n_cycles))
