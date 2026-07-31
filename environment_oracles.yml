@@ -9,7 +9,9 @@ dependencies:
   - python=3.12
 
   # --- Core scientific computing ---
-  - numpy>=1.24,<3.0
+  # Floor is >=2.0 to match pyproject.toml (spec 022: bit-exact ndtr/erfc,
+  # NEP-19 seed-array semantics). Keep in step with environment.yml.
+  - numpy>=2.0,<3.0
   - scipy>=1.10,<2.0
   - pandas>=1.5,<3.0
   - polars>=1.0

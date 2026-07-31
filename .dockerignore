@@ -1,0 +1,31 @@
+# Whitelist build context.
+#
+# The Dockerfile does `COPY . .`, and Docker does NOT read .gitignore — so
+# without this file the build ships the whole 79 GB working tree (validation/
+# 75 GB, output/ 2.5 GB, .git 702 MB, caches) instead of the ~13 MB of tracked
+# source. Ignore everything, then re-admit only what `pip install -e .` needs.
+#
+# Adding a new top-level file the build needs? Add a matching `!` line below.
+
+*
+
+!learnm8/
+!tests/
+!pyproject.toml
+!README.md
+!LICENSE
+!.coveragerc
+
+# Needed by Dockerfile.base — it is the single source of truth for the conda env.
+!environment.yml
+
+# Re-exclude junk that would otherwise ride along inside the un-ignored dirs.
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ipynb_checkpoints/
+**/.cache/
+**/*.h5
+**/*.parquet
+**/*.bak

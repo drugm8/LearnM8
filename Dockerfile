@@ -1,98 +1,42 @@
-# Start with NVIDIA CUDA base image
-FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04
+# LearnM8 application image — thin layer on top of the pinned base.
+#
+#   docker build -t tonylac77/learnm8:v1.1 --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+#   docker push tonylac77/learnm8:v1.1
+#
+# Everything heavy lives in learnm8-base, so this rebuild takes seconds and the
+# pushed layer is a few MB — the cluster re-pulls only that layer.
+#
+# Tags are IMMUTABLE. Bump v1.1 -> v1.2 on every rebuild; never overwrite a tag.
+# The cluster caches images by tag, and a mutable :latest is what silently split
+# the May and June benchmark waves onto different code.
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    wget curl git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Miniconda
-ENV CONDA_DIR=/opt/conda
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    bash /tmp/miniconda.sh -b -p $CONDA_DIR && \
-    rm /tmp/miniconda.sh
-
-ENV PATH=$CONDA_DIR/bin:$PATH
-
-# CUDA environment
-ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=$CUDA_HOME/bin:$PATH
-ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-
-# Configure conda channels (order matches environment.yml: rapidsai, pytorch, conda-forge, nvidia)
-RUN conda config --set channel_priority flexible && \
-    conda config --add channels nvidia && \
-    conda config --add channels conda-forge && \
-    conda config --add channels pytorch && \
-    conda config --add channels rapidsai
+ARG BASE_TAG=cuda12.6-2026-07
+FROM tonylac77/learnm8-base:${BASE_TAG}
 
 WORKDIR /app
 
-RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
-    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+# Package metadata and source only. tests/ is deliberately copied AFTER the
+# install so setuptools' `packages = {find = {}}` discovers just `learnm8` and
+# does not install `tests` as a top-level package.
+COPY pyproject.toml README.md LICENSE ./
+COPY learnm8/ ./learnm8/
 
-# Install core scientific + ML stack into base env
-RUN conda install -y \
-    python=3.11 \
-    "numpy>=1.24,<3.0" \
-    "scipy>=1.10,<2.0" \
-    "pandas>=1.5,<3.0" \
-    "polars>=1.0" \
-    "pyarrow>=15.0" \
-    "scikit-learn>=1.2,<1.8" \
-    "xgboost>=1.7,<3.0" \
-    "statsmodels>=0.14" \
-    "joblib>=1.2" \
-    "rdkit>=2023.03" \
-    "datamol>=0.12" \
-    mordredcommunity \
-    "h5py>=3.0" \
-    "hdf5plugin>=3.0" \
-    "matplotlib-base>=3.5" \
-    "rich>=10.0" \
-    "pyyaml>=5.0" \
-    "pytest>=7.0" \
-    "ruff>=0.4" \
-    "mypy>=1.0" \
-    ipython \
-    ipykernel \
-    setuptools \
-    -c conda-forge && \
-    conda clean -afy
+# Installed into the `learnm8` env created by environment.yml in the base image.
+#
+# --no-deps: every runtime dependency is already solved there by conda. Letting
+# pip resolve them here would pull generic PyPI wheels over conda's CUDA-linked
+# builds (notably matplotlib over matplotlib-base, and the torch/cuml stack),
+# which is how a working GPU image quietly becomes a CPU one.
+RUN conda run -n learnm8 pip install --no-deps --no-cache-dir .
 
-# Install GPU stack: PyTorch + CUDA, gpytorch, RAPIDS cuml, cupy, treelite
-# pytorch-cuda is a metapackage pinning the CUDA runtime PyTorch was built against.
-RUN conda install -y \
-    "pytorch>=2.0,<3.0" \
-    "pytorch-cuda>=12.4" \
-    "pytorch-lightning>=2.0,<3.0" \
-    "gpytorch>=1.11" \
-    "treelite>=4.4,<5.0" \
-    cupy \
-    -c pytorch -c nvidia -c conda-forge && \
-    conda clean -afy
+# Available for in-container smoke tests; not installed as a package.
+COPY tests/ ./tests/
+COPY .coveragerc ./
 
-# RAPIDS cuML (GPU-accelerated scikit-learn) installed separately
-# from rapidsai channel to avoid solver conflicts with the pytorch stack above.
-RUN conda install -y \
-    "cuml>=25.04" \
-    -c rapidsai -c conda-forge -c nvidia && \
-    conda clean -afy
-
-# Install pip-only packages (chemprop, fastprop, scikit-fingerprints, gauche, bitbirch)
-RUN pip install --no-cache-dir \
-    chemprop \
-    fastprop \
-    scikit-fingerprints \
-    "gauche>=0.1.6" \
-    "pytest-xdist>=3.5" \
-    git+https://github.com/mqcomplab/bitbirch.git
-
-# Copy project and install in editable mode
-COPY . .
-RUN pip install -e .
+# Provenance: which commit produced this image.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="${GIT_SHA}"
+LABEL org.opencontainers.image.source="https://github.com/Tonylac77/LearnM8"
+ENV LEARNM8_IMAGE_REVISION=${GIT_SHA}
 
 CMD ["/bin/bash"]

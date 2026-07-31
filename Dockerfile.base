@@ -1,0 +1,79 @@
+# LearnM8 base image — heavy scientific/GPU stack, NO application code.
+#
+#   docker build -f Dockerfile.base -t tonylac77/learnm8-base:cuda12.6-2026-07 .
+#   docker push tonylac77/learnm8-base:cuda12.6-2026-07
+#
+# The application image (Dockerfile) is FROM this and adds only the package, so
+# a code rebuild produces a few-MB layer instead of a multi-GB one and the
+# cluster re-pulls only that layer. Rebuild this image only when environment.yml
+# changes. Never reuse a tag — the cluster caches images by tag.
+#
+# The environment is defined ENTIRELY by environment.yml, which is the file the
+# project maintains. The previous Dockerfile hand-transcribed the package list
+# and had drifted badly from it (python 3.11 vs 3.12, scikit-learn 1.2 vs 1.4,
+# cuml 25.04 vs 25.10, and the deprecated pytorch-cuda metapackage that
+# environment.yml explicitly warns against). Do not reintroduce a second copy of
+# the dependency list here.
+
+FROM nvidia/cuda:12.6.2-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+RUN apt-get update && apt-get install -y \
+    wget curl git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Miniforge, NOT Miniconda: it defaults to conda-forge only, so the Anaconda
+# repo (repo.anaconda.com/pkgs/main, /pkgs/r) is never consulted. That removes
+# the `conda tos accept` step entirely — with Miniconda the acceptance recorded
+# in one layer did not survive into a later one, so the pytorch layer failed
+# with CondaToSNonInteractiveError despite ToS having been accepted earlier.
+# It also avoids relying on Anaconda's commercial terms for institutional use.
+ENV CONDA_DIR=/opt/conda
+RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && \
+    bash /tmp/miniforge.sh -b -p $CONDA_DIR && \
+    rm /tmp/miniforge.sh
+
+ENV PATH=$CONDA_DIR/bin:$PATH
+
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=$CUDA_HOME/bin:$PATH
+ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
+# CRITICAL: no GPU is visible during `docker build`, so conda cannot detect the
+# __cuda virtual package and will resolve CPU-ONLY builds of pytorch and cuml —
+# giving an image that builds cleanly, pushes fine, and then silently runs every
+# GPU job on the CPU. This override declares the target CUDA version and must
+# stay in step with the FROM tag above.
+#
+# 12.6 is deliberate. The cluster has 236 GPU slots at driver CUDA 12.8 and 103
+# at 12.4, so 12.8 is the ceiling rather than a requirement, and the 85
+# completed Wave-2 runs (svgp, rf_fil, ridge_cuml, mc_dropout, fastprop) ran on
+# a CUDA 12.6.2 image. Note environment-gpu-pinned.yml resolved to cuda 12.9,
+# which is ABOVE what any node on this cluster supports — do not build from it.
+ENV CONDA_OVERRIDE_CUDA=12.6
+
+RUN conda config --set channel_priority strict
+
+# Single source of truth. Creates the env named `learnm8` (python 3.12) declared
+# inside environment.yml — the same layout as the image that produced Wave 2, so
+# the cluster wrapper's `conda run -n learnm8 ...` keeps working unchanged.
+COPY environment.yml /tmp/environment.yml
+RUN conda env create -f /tmp/environment.yml && \
+    conda clean -afy && \
+    rm /tmp/environment.yml
+
+# Put the env on PATH so `learnm8` is callable directly as well as via
+# `conda run -n learnm8`. Both forms then work, whichever the wrapper uses.
+ENV PATH=$CONDA_DIR/envs/learnm8/bin:$PATH
+
+# Test-only dependencies, deliberately NOT in environment.yml (which describes
+# the runtime env). Needed to run the suite inside the container during a smoke
+# test; harmless at runtime.
+RUN conda run -n learnm8 pip install --no-cache-dir \
+    "pytest-cov>=4.0" \
+    "hypothesis>=6.0" \
+    "psutil>=5.9"
+
+CMD ["/bin/bash"]
