@@ -159,8 +159,12 @@ class RandomForestLearner(SklearnLearner):
                     f'Cannot compute tree-level uncertainty.'
                 )
 
+            # Only the std is taken: `predictions` stays the `model.predict()`
+            # value from above so the mean is bit-identical across the
+            # `compute_uncertainty` toggle (D9). Welford's mean agrees to ~1e-15
+            # but not to the last bit, which is enough to reorder tied compounds.
             n_jobs = getattr(self.model, 'n_jobs', -1) or -1
-            predictions, uncertainty = fused_mean_std(
+            _, uncertainty = fused_mean_std(
                 self.model.estimators_, preprocessed, n_jobs=n_jobs
             )
             logger.debug(

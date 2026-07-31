@@ -34,6 +34,18 @@ class _ConstantEstimator:
         return self._value.copy()
 
 
+class _RecordingEstimator(_ConstantEstimator):
+    """Fake estimator that records the array object handed to ``predict``."""
+
+    def __init__(self, value: np.ndarray, seen: list[tuple[np.dtype, int]]):
+        super().__init__(value)
+        self._seen = seen
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        self._seen.append((X.dtype, id(X)))
+        return super().predict(X)
+
+
 def _baseline_mean_std(estimators, X):
     """Reference: stack all predictions in float64, take mean and ddof=0 std."""
     preds = np.stack([np.asarray(e.predict(X), dtype=np.float64) for e in estimators])
@@ -124,6 +136,46 @@ class TestFusedMeanStd:
         np.testing.assert_allclose(mean_par, mean_serial, atol=1e-12, rtol=1e-12)
         np.testing.assert_allclose(std_par, std_serial, atol=1e-12, rtol=1e-12)
 
+    def test_non_float32_input_is_converted_once_before_the_fan_out(self):
+        """Regression: peak memory must not scale with the worker count.
+
+        sklearn's per-tree ``check_array(X, dtype=float32)`` allocates a new
+        array whenever the input dtype differs, and ``require='sharedmem'``
+        shares only the input — so a uint8 matrix used to be upcast inside
+        every worker thread, costing ``n_threads`` full float32 copies.
+        Every estimator must instead see the same, already-converted array.
+        """
+        rng = np.random.default_rng(5)
+        n, n_est = 200, 16
+        X = rng.integers(0, 2, size=(n, 32)).astype(np.uint8)
+        seen: list[tuple[np.dtype, int]] = []
+        estimators = [
+            _RecordingEstimator(rng.standard_normal(n), seen) for _ in range(n_est)
+        ]
+
+        fused_mean_std(estimators, X, n_jobs=4)
+
+        assert len(seen) == n_est
+        assert {dtype for dtype, _ in seen} == {np.dtype(np.float32)}
+        assert len({obj_id for _, obj_id in seen}) == 1, (
+            'estimators saw more than one array object — the float32 '
+            'conversion is happening per worker instead of once up front'
+        )
+
+    def test_float32_input_is_passed_through_without_a_copy(self):
+        """An already-float32 matrix must reach the estimators untouched."""
+        rng = np.random.default_rng(6)
+        n, n_est = 100, 8
+        X = rng.standard_normal((n, 4)).astype(np.float32)
+        seen: list[tuple[np.dtype, int]] = []
+        estimators = [
+            _RecordingEstimator(rng.standard_normal(n), seen) for _ in range(n_est)
+        ]
+
+        fused_mean_std(estimators, X, n_jobs=4)
+
+        assert {obj_id for _, obj_id in seen} == {id(X)}
+
     def test_n_workers_resolution(self):
         # joblib convention: -1 = all cores, -2 = all but one
         import os
@@ -168,3 +220,29 @@ class TestIntegrationWithSklearnRF:
         np.testing.assert_allclose(mean, baseline_mean, atol=1e-12, rtol=1e-12)
         np.testing.assert_allclose(mean, sklearn_pred, atol=1e-12, rtol=1e-12)
         np.testing.assert_allclose(std, baseline_std, atol=1e-12, rtol=1e-12)
+
+    def test_uint8_input_matches_float32_input_bit_for_bit(self):
+        """Hoisting the upcast must not change a single bit of the output.
+
+        Guards against a future attempt to make the conversion cheaper by
+        making it lossy (e.g. float16 or an in-place reinterpretation).
+        """
+        from sklearn.ensemble import RandomForestRegressor
+
+        rng = np.random.default_rng(7)
+        X_train = rng.integers(0, 2, size=(200, 16)).astype(np.uint8)
+        y_train = (X_train[:, 0] * 0.7 + X_train[:, 3] * 0.2).astype(np.float32)
+        X_pred = rng.integers(0, 2, size=(300, 16)).astype(np.uint8)
+
+        model = RandomForestRegressor(
+            n_estimators=25, max_depth=6, random_state=42, n_jobs=-1
+        )
+        model.fit(X_train, y_train)
+
+        mean_u8, std_u8 = fused_mean_std(model.estimators_, X_pred, n_jobs=4)
+        mean_f32, std_f32 = fused_mean_std(
+            model.estimators_, X_pred.astype(np.float32), n_jobs=4
+        )
+
+        np.testing.assert_array_equal(mean_u8, mean_f32)
+        np.testing.assert_array_equal(std_u8, std_f32)

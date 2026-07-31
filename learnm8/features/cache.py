@@ -120,6 +120,35 @@ VECTORIZED_MERGE_THRESHOLD = 10_000_000
 # h5py docs: >1000 fancy-index elements may degrade; chunk the gather.
 H5_FANCY_INDEX_CHUNK = 1000
 
+# Row count at or above which cache-key hashing is dispatched to loky workers
+# (feature 026, REQ-7). ``hashlib`` only releases the GIL for inputs larger
+# than 2 KB, so a thread pool cannot help on SMILES-sized strings — processes
+# are the only way to use more than one core.
+#
+# Measured on the 026 merge gate (32-core dev host, real Enamine REAL SMILES,
+# 'morgan'; see the spec's Acceptance Checklist):
+#
+#     N       serial     parallel (cold pool)   parallel (warm pool)
+#     200k    0.094 s    8.86 s  (94x SLOWER)   0.047 s  (1.99x)
+#     1M      0.464 s    8.78 s  (19x SLOWER)   0.243 s  (1.91x)
+#     2M      0.904 s    9.07 s  (10x SLOWER)   0.472 s  (1.92x)
+#
+# Two facts set this constant. First, loky pool spin-up is a FIXED ~8.7 s, and
+# ``worker_pool.shutdown_featurization_pool()`` (feature 025, Item 4) tears the
+# pool down once per cycle — while this function runs BEFORE featurization in
+# the ``cache_features`` wrapper. The pool is therefore cold on essentially
+# every real call, so cold is the case to design for. Second, the warm speedup
+# plateaus near 1.9x regardless of core count: the cost is dominated by
+# pickling the SMILES out and the digests back, not by BLAKE2b.
+#
+# Cold break-even against the serial loop:
+#     8.7 s / (0.452 - 0.236) us/row  ~=  40.3M rows
+#
+# The spec proposed 200_000, which the measurement showed to be a 94x
+# regression at that size. Set to the measured break-even instead, so the
+# parallel path can never be slower than the serial one it replaces.
+PARALLEL_HASH_MIN_ROWS: int = 40_000_000
+
 # Default lock timeout (FR-009); env-overridable.
 LOCK_TIMEOUT_S: float = float(os.environ.get('LEARNM8_LOCK_TIMEOUT_S', '5.0'))
 
@@ -371,7 +400,34 @@ def _acquire_lock(
 # ---------------------------------------------------------------------------
 
 
-def _cache_keys_bytes16(smiles_list: list[str], featurizer: Featurizer) -> np.ndarray:
+def _hash_smiles_slice(smiles: list[str], suffix: bytes) -> np.ndarray:
+    """Digest one contiguous slice of SMILES into an ``|S16`` array.
+
+    Module-level (not a closure or lambda) so loky can pickle it by reference
+    rather than shipping the enclosing scope — feature 026, REQ-9.
+
+    Args:
+        smiles: Contiguous slice of the caller's SMILES list.
+        suffix: Pre-encoded ``_{name}_{config_hash}`` bytes, hoisted out of the
+            loop by :func:`_cache_keys_bytes16` (REQ-6). Concatenating bytes is
+            equivalent to the pre-026 ``f'{s}_{name}_{config_hash}'.encode()``
+            because UTF-8 encoding is concatenative across whole strings.
+
+    Returns:
+        Array of shape ``(len(smiles),)`` and dtype ``|S16``.
+    """
+    blake2b = hashlib.blake2b
+    out = np.empty(len(smiles), dtype=HASH_DTYPE)
+    for i, s in enumerate(smiles):
+        out[i] = blake2b(
+            s.encode() + suffix, digest_size=16, usedforsecurity=False
+        ).digest()
+    return out
+
+
+def _cache_keys_bytes16(
+    smiles_list: list[str], featurizer: Featurizer, *, n_jobs: int = 1
+) -> np.ndarray:
     """Compute the 128-bit BLAKE2b cache key for each SMILES.
 
     The SMILES strings are keyed verbatim — there is no per-cycle
@@ -388,17 +444,65 @@ def _cache_keys_bytes16(smiles_list: list[str], featurizer: Featurizer) -> np.nd
     ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
     FIPS-locked hosts (BLAKE2b would otherwise still be admitted, but the
     flag mirrors the MD5-era contract).
+
+    Feature 026 makes this the last single-threaded term on both the cache-hit
+    and cache-miss paths. Two changes: the ``_{name}_{config_hash}`` suffix is
+    encoded once and concatenated as ``bytes`` rather than re-interpolated per
+    row (REQ-6), and above :data:`PARALLEL_HASH_MIN_ROWS` the work is split
+    across loky workers (REQ-7). Digests are byte-identical to the pre-026
+    recipe in every path (REQ-8).
+
+    Args:
+        smiles_list: SMILES to key, already canonicalized by the caller.
+        featurizer: Supplies ``get_name()`` and ``get_config_hash()`` for the
+            key suffix. Never shipped to workers — only the suffix bytes are.
+        n_jobs: Worker count for the parallel path, threaded through from
+            ``extract_features`` via the :func:`cache_features` wrapper
+            (REQ-10). The default of 1 keeps every existing two-argument call
+            site on the serial loop.
+
+    Returns:
+        Array of shape ``(len(smiles_list),)`` and dtype ``|S16``.
     """
-    name = featurizer.get_name()
-    config_hash = featurizer.get_config_hash()
-    out = np.empty(len(smiles_list), dtype=HASH_DTYPE)
-    for i, s in enumerate(smiles_list):
-        digest = hashlib.blake2b(
-            f'{s}_{name}_{config_hash}'.encode(),
-            digest_size=16,
-            usedforsecurity=False,
-        ).digest()
-        out[i] = digest
+    import joblib
+
+    # REQ-6: hoist the constant tail out of the per-row work. UTF-8 encoding is
+    # concatenative across whole strings, so s.encode() + suffix is byte-for-byte
+    # f'{s}_{name}_{config_hash}'.encode() — pinned by the REQ-8 tests.
+    suffix = f'_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode()
+
+    n_rows = len(smiles_list)
+    n_workers = joblib.effective_n_jobs(n_jobs)
+    if n_rows < PARALLEL_HASH_MIN_ROWS or n_workers <= 1:
+        return _hash_smiles_slice(smiles_list, suffix)
+
+    # Exactly one contiguous slice per worker: the fewest pickles for the most
+    # parallelism. Digesting is uniform per row, so finer slices would buy load
+    # balancing this workload does not need.
+    slice_size = -(-n_rows // n_workers)  # ceil division
+    bounds = [
+        (start, min(start + slice_size, n_rows))
+        for start in range(0, n_rows, slice_size)
+    ]
+
+    out = np.empty(n_rows, dtype=HASH_DTYPE)
+    # loky reuses the executor scikit-fingerprints already holds (REQ-9); this
+    # neither creates nor tears down a pool of its own. return_as='generator'
+    # yields in SUBMISSION order (joblib's ordered-generator guarantee), so
+    # chunk i belongs at bounds[i] — 'generator_unordered' would silently
+    # misalign the digests against smiles_list.
+    results = joblib.Parallel(n_jobs=n_workers, backend='loky', return_as='generator')(
+        joblib.delayed(_hash_smiles_slice)(smiles_list[start:end], suffix)
+        for start, end in bounds
+    )
+
+    # Write each chunk into its destination and let it fall out of scope.
+    # np.concatenate(list(results)) would be shorter but materialises every
+    # worker array before allocating the output, peaking at 2x the digest
+    # array (3.2 GB at N=100M) — the opposite of what feature 026 is for.
+    for (start, end), chunk in zip(bounds, results, strict=True):
+        out[start:end] = chunk
+
     return out
 
 
@@ -1177,7 +1281,13 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path = cache_dir / f'features_{featurizer_name}_{storage_dtype}.h5'
 
-            query_hashes = _cache_keys_bytes16(smiles_list, featurizer)
+            # REQ-10: read n_jobs with .get, not .pop — the wrapped function
+            # still needs it. Above PARALLEL_HASH_MIN_ROWS this fans the digest
+            # loop out to loky, which is the largest remaining single-threaded
+            # term on BOTH the hit and the miss path.
+            query_hashes = _cache_keys_bytes16(
+                smiles_list, featurizer, n_jobs=kwargs.get('n_jobs', 1)
+            )
 
             # Phase 1: read-only attempt under LOCK_SH (lets concurrent readers run).
             found = np.zeros(len(smiles_list), dtype=bool)
