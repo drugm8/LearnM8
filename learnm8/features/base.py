@@ -38,8 +38,43 @@ _CACHE_IRRELEVANT_PARAMS: frozenset[str] = frozenset(
     {'n_jobs', 'verbose', 'batch_size'}
 )
 
+# scikit-fingerprints classes whose ``_calculate_fingerprint`` feeds the
+# SMILES *string* into the feature computation (feature 026, REQ-3). For these
+# — and only these — the parent process must keep converting SMILES to ``Mol``
+# first, because skfp's ``ensure_smiles`` canonicalises ``Mol`` input via
+# ``MolToSmiles``. Handing them raw SMILES would silently change feature values
+# for any non-canonical input:
+#   - LingoFingerprint    slices substrings straight out of the SMILES text
+#   - MHFPFingerprint     passes it to MHFPEncoder.EncodeSmilesBulk
+#   - SECFPFingerprint    passes it to MHFPEncoder.EncodeSECFPSmiles
+#
+# This is a DENYLIST: anything absent takes the fast SMILES-through path. Audit
+# it when upgrading scikit-fingerprints.
+#
+# Audit note — grepping skfp for ``ensure_smiles`` returns a fourth class,
+# ``RDKit2DDescriptorsFingerprint``. It is deliberately NOT listed: it computes
+# ``ensure_smiles(X)`` but descriptastorus' ``calculateMol(m, smiles)`` ignores
+# the ``smiles`` argument outright (both RDKit2D and RDKit2DNormalized), so the
+# canonicalisation cannot reach the output. The criterion is "the ensure_smiles
+# RESULT affects feature values", not "ensure_smiles is called".
+_SMILES_CONSUMING_FINGERPRINTS: frozenset[str] = frozenset(
+    {
+        'LingoFingerprint',
+        'MHFPFingerprint',
+        'SECFPFingerprint',
+    }
+)
+
+# Row count at or above which a SMILES-consuming featurizer (REQ-3) warns about
+# its unbounded parent-heap Mol allocation (feature 026, REQ-4). ~11 KB per
+# RDKit Mol puts 1M rows at roughly 11 GB held in the calling process.
+SMILES_CONSUMING_WARN_ROWS: int = 1_000_000
+
 # One-shot guard for the orphaned-cache WARNING (feature 025, REQ-4).
 _orphan_cache_warning_emitted: bool = False
+
+# One-shot guard for the SMILES-consuming large-input WARNING (feature 026, REQ-4).
+_smiles_consuming_warning_emitted: bool = False
 
 
 def _warn_orphaned_cache_once() -> None:
@@ -71,6 +106,45 @@ def _reset_orphan_cache_warning() -> None:
     """Reset the one-shot orphaned-cache WARNING guard (test convenience)."""
     global _orphan_cache_warning_emitted
     _orphan_cache_warning_emitted = False
+
+
+def _warn_smiles_consuming_once(featurizer_name: str, n_smiles: int) -> None:
+    """Warn once that a SMILES-consuming featurizer holds Mols in the parent.
+
+    Feature 026 moves RDKit parsing into the loky workers for every featurizer
+    that can accept SMILES directly, removing the parent-heap ``Mol`` list. The
+    three fingerprints in :data:`_SMILES_CONSUMING_FINGERPRINTS` cannot make
+    that move without changing their feature values (REQ-3), so at large row
+    counts they still allocate the full ``Mol`` list in the calling process —
+    roughly 11 KB per molecule. This flags that cost rather than leaving it to
+    be rediscovered as an OOM on a cluster node.
+
+    Fires at most once per process, following the
+    :func:`_warn_orphaned_cache_once` precedent.
+
+    Args:
+        featurizer_name: Registry name of the featurizer, for the message.
+        n_smiles: Number of SMILES in the triggering call.
+    """
+    global _smiles_consuming_warning_emitted
+    if _smiles_consuming_warning_emitted:
+        return
+    _smiles_consuming_warning_emitted = True
+    logger.warning(
+        f'Featurizer {featurizer_name!r} consumes SMILES strings directly, so '
+        f'its RDKit Mol objects must be built in this process rather than in '
+        f'the featurization workers. This call converts {n_smiles:,} SMILES '
+        f'(~{n_smiles * 11 / 1_000_000:.1f} GB of Mol objects at ~11 KB each) '
+        f'and that allocation grows without bound with the input size. Prefer '
+        f"a featurizer that parses worker-side (e.g. 'morgan', 'ecfp') for "
+        f'large pools, or reduce the chunk size.'
+    )
+
+
+def _reset_smiles_consuming_warning() -> None:
+    """Reset the one-shot SMILES-consuming WARNING guard (test convenience)."""
+    global _smiles_consuming_warning_emitted
+    _smiles_consuming_warning_emitted = False
 
 
 class SkfpFeaturizer(Featurizer):
@@ -151,7 +225,11 @@ class SkfpFeaturizer(Featurizer):
         self._fingerprint_params = fingerprint_params
         self._description = description
 
-        self.mol_from_smiles = MolFromSmilesTransformer()
+        # REQ-5: the paths that still materialise Mol objects in this process
+        # (3D conformer generation, and the SMILES-consuming fingerprints of
+        # REQ-3) parse across n_jobs cores instead of one. Everything else
+        # bypasses this transformer entirely and parses worker-side.
+        self.mol_from_smiles = MolFromSmilesTransformer(n_jobs=n_jobs)
 
         if self.requires_3d() and auto_generate_conformers:
             try:
@@ -196,6 +274,17 @@ class SkfpFeaturizer(Featurizer):
         Note:
             For 3D fingerprints, conformers are auto-generated if
             auto_generate_conformers=True (default).
+
+            Dispatch is three-way (feature 026):
+
+            1. ``requires_3d()`` — SMILES are converted to ``Mol`` here, given
+               conformers, then fingerprinted (REQ-2).
+            2. A fingerprint in :data:`_SMILES_CONSUMING_FINGERPRINTS` — the
+               ``Mol`` round-trip is kept because those fingerprints read the
+               canonicalised SMILES text itself (REQ-3).
+            3. Everything else — SMILES go straight to the fingerprint, which
+               parses them inside its own workers. No ``Mol`` list is
+               materialised in this process (REQ-1).
         """
 
         for smiles in smiles_list:
@@ -211,9 +300,12 @@ class SkfpFeaturizer(Featurizer):
             return np.empty((0, self.get_dimension()), dtype=np.float32)
 
         try:
-            mols = self.mol_from_smiles.transform(smiles_list)
-
             if self.requires_3d():
+                # REQ-2: unchanged 3D path — SMILES -> Mol -> conformers -> fp.
+                # The Mol conversion stays ahead of the conformer_gen guard so
+                # the failure mode for invalid SMILES is exactly as before.
+                mols = self.mol_from_smiles.transform(smiles_list)
+
                 if self.conformer_gen is None:
                     raise FeatureExtractionError(
                         f'{self.get_name()} requires 3D conformers but conformer generation '
@@ -229,8 +321,26 @@ class SkfpFeaturizer(Featurizer):
                     f'(3D fingerprint: {self.get_name()})'
                 )
                 mols = self.conformer_gen.transform(mols)
+                features = self.fingerprint.transform(mols)
 
-            features = self.fingerprint.transform(mols)
+            elif self.fingerprint.__class__.__name__ in _SMILES_CONSUMING_FINGERPRINTS:
+                # REQ-3: these read the SMILES text itself, and skfp's
+                # ensure_smiles canonicalises Mol input via MolToSmiles. Passing
+                # raw SMILES would change their feature values for any
+                # non-canonical input, so the round-trip is load-bearing here.
+                if len(smiles_list) >= SMILES_CONSUMING_WARN_ROWS:
+                    _warn_smiles_consuming_once(self.get_name(), len(smiles_list))
+                mols = self.mol_from_smiles.transform(smiles_list)
+                features = self.fingerprint.transform(mols)
+
+            else:
+                # REQ-1: hand SMILES straight through. Every 2D skfp fingerprint
+                # calls ensure_mols(X) at the top of _calculate_fingerprint, so
+                # the parse still happens — but inside each loky worker, on its
+                # own batch_size slice, instead of as one list in this process.
+                # At the chunk sizes estimate_batch_size picks (B ~ 16.3M) that
+                # list alone was 167-223 GB of parent heap.
+                features = self.fingerprint.transform(smiles_list)
 
         except FeatureExtractionError:
             raise

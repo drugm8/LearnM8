@@ -31,12 +31,18 @@ def fused_mean_std(
         preds = np.stack([e.predict(features) for e in estimators])
         mean, std = preds.mean(0), preds.std(0, ddof=0)
 
-    but uses O(n_samples) memory and runs in parallel via joblib threading
-    (sklearn tree ``predict`` releases the GIL inside Cython).
+    but uses O(n_samples) accumulator memory and runs in parallel via joblib
+    threading (sklearn tree ``predict`` releases the GIL inside Cython).
+
+    A non-float32 ``features`` matrix is upcast once here rather than once per
+    worker thread — see the comment at the conversion site. That single copy is
+    the function's only O(n_samples * n_features) allocation.
 
     Args:
         estimators: Fitted estimators exposing ``.predict(X) -> np.ndarray``.
         features: Feature matrix forwarded to each estimator's ``predict``.
+            Upcast to float32 if it is not already, since sklearn trees
+            require that dtype.
         n_jobs: Parallelism for joblib. ``-1`` = all cores; follows joblib
             convention. Forwarded to ``Parallel(require='sharedmem')``.
 
@@ -49,6 +55,14 @@ def fused_mean_std(
     n_estimators = len(estimators)
     if n_estimators == 0:
         raise ValueError('estimators is empty; cannot compute uncertainty')
+
+    # Convert before the fan-out. sklearn's per-tree `check_array(X, dtype=
+    # float32)` allocates a fresh array whenever the input dtype differs, and
+    # under `require='sharedmem'` only the *input* is shared — each conversion
+    # result is thread-local. A uint8 matrix would therefore be upcast once per
+    # worker thread, costing n_threads full-size float32 copies.
+    if features.dtype != np.float32:
+        features = features.astype(np.float32, copy=False)
 
     if n_estimators == 1:
         pred = np.asarray(estimators[0].predict(features), dtype=np.float64)

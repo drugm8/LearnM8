@@ -225,3 +225,34 @@ class TestRandomForestLearner:
 
         with pytest.raises(LearnerError):
             learner.predict(features)
+
+
+@pytest.mark.unit
+class TestComputeUncertaintyToggle:
+    """Feature 023 D9: the toggle must not perturb the mean predictions."""
+
+    def test_mean_is_bit_identical_across_the_toggle(self):
+        """Both branches must return the ``model.predict()`` mean.
+
+        Welford's mean from ``fused_mean_std`` agrees to ~1e-15 but not to the
+        last bit, which is enough to reorder tied compounds — so a run using
+        ``ucb`` and the same run using ``greedy`` could select differently.
+        """
+        rng = np.random.default_rng(11)
+        n, p = 120, 24
+        features = rng.integers(0, 2, size=(n, p)).astype(np.uint8)
+        targets = (
+            features[:, 0] * 0.5 + features[:, 1] * 0.3 + rng.normal(0, 0.1, size=n)
+        ).astype(np.float32)
+
+        learner = RandomForestLearner(n_estimators=15, random_state=42)
+        learner.train(features, targets)
+
+        with_uncertainty, uncertainty = learner.predict(features)
+        without_uncertainty, no_uncertainty = learner.predict(
+            features, compute_uncertainty=False
+        )
+
+        assert uncertainty is not None
+        assert no_uncertainty is None
+        np.testing.assert_array_equal(with_uncertainty, without_uncertainty)
