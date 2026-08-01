@@ -197,6 +197,60 @@ class TestParseCycleSchedule:
             assert config.pruning_strategy == 'score'
             assert config.pruning_params == {'pruning_fraction': 0.3}
 
+    def test_advanced_api_applies_top_level_pruning(self):
+        """Top-level pruning must reach an explicit cycles=[...] schedule.
+
+        Regression: the CLI expresses pruning only as a top-level flag
+        (--pruning-fraction) while --cycles builds a CycleConfig list, so
+        dropping the top-level values silently disabled pruning entirely.
+        """
+        cycles = [
+            CycleConfig('random', n_cycles=1, batch_fraction=0.01),
+            CycleConfig('greedy', n_cycles=9, batch_fraction=0.01),
+        ]
+
+        schedule = parse_cycle_schedule(
+            cycles=cycles,
+            pruning_strategy='score',
+            pruning_params={'pruning_fraction': 0.7},
+        )
+
+        assert len(schedule) == 10
+        for config in schedule:
+            assert config.pruning_strategy == 'score'
+            assert config.pruning_params == {'pruning_fraction': 0.7}
+
+    def test_advanced_api_per_cycle_pruning_overrides_top_level(self):
+        """An explicit per-cycle pruning_strategy wins over the top-level value."""
+        cycles = [
+            CycleConfig('random', n_cycles=1, batch_fraction=0.01),
+            CycleConfig(
+                'greedy',
+                n_cycles=1,
+                batch_fraction=0.01,
+                pruning_strategy='score',
+                pruning_params={'pruning_fraction': 0.3},
+            ),
+        ]
+
+        schedule = parse_cycle_schedule(
+            cycles=cycles,
+            pruning_strategy='score',
+            pruning_params={'pruning_fraction': 0.7},
+        )
+
+        assert schedule[0].pruning_params == {'pruning_fraction': 0.7}
+        assert schedule[1].pruning_params == {'pruning_fraction': 0.3}
+
+    def test_advanced_api_without_top_level_pruning_stays_disabled(self):
+        cycles = [CycleConfig('greedy', n_cycles=2, batch_fraction=0.01)]
+
+        schedule = parse_cycle_schedule(cycles=cycles)
+
+        for config in schedule:
+            assert config.pruning_strategy is None
+            assert config.pruning_params is None
+
     def test_advanced_api_preserves_acquisition_params(self):
         cycles = [
             CycleConfig(

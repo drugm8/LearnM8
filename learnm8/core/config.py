@@ -220,13 +220,23 @@ def parse_cycle_schedule(
                     f"Example: CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)"
                 )
 
+            # Pruning is a run-level knob (the CLI exposes it only as a top-level
+            # flag), so fall back to the top-level values whenever a block does
+            # not set its own. An explicit per-block strategy always wins.
+            if config.pruning_strategy is not None:
+                block_pruning_strategy = config.pruning_strategy
+                block_pruning_params = config.pruning_params
+            else:
+                block_pruning_strategy = pruning_strategy
+                block_pruning_params = pruning_params
+
             for _ in range(config.n_cycles):
                 new_config = CycleConfig(
                     strategy=config.strategy,
                     n_cycles=1,
                     batch_fraction=config.batch_fraction,
-                    pruning_strategy=config.pruning_strategy,
-                    pruning_params=config.pruning_params,
+                    pruning_strategy=block_pruning_strategy,
+                    pruning_params=block_pruning_params,
                     acquisition_params=config.acquisition_params
                 )
                 expanded.append(new_config)
