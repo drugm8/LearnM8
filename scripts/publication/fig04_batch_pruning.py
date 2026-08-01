@@ -42,7 +42,15 @@ def main() -> None:
     curves = data.curve(batch, ['batch_fraction'], X, Y)
     for frac in fractions:
         s = curves.filter(pl.col('batch_fraction') == frac)
-        ax.plot(s[X], s['mean'], color=colors[frac], label=f'{frac}%')
+        # Conditions run 2-101 cycles; thin the markers so the 101-cycle curve
+        # stays a line rather than a solid band of dots.
+        ax.plot(
+            s[X],
+            s['mean'],
+            color=colors[frac],
+            label=f'{frac}%',
+            markevery=max(1, s.height // 12),
+        )
         style.band(ax, s[X], s['lo'], s['hi'], colors[frac])
     ax.set(xlabel=style.LABELS[X], ylabel=style.LABELS[Y])
     style.compact_axis(ax)

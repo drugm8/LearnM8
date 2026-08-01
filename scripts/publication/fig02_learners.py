@@ -1,8 +1,8 @@
 """F2 - learner comparison (L family, 1M AmpC, greedy, 3 replicates).
 
 A-C  discovery curves at each batch fraction
-D    final discovery vs cumulative ML time (efficiency frontier)
-E    final selected percentile, ranked
+D    final discovery vs cumulative ML time (efficiency frontier), one labelled
+     trajectory per learner across the three batch fractions
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def main() -> None:
     style.apply()
     df = data.load().filter(pl.col('family').is_in(list(data.FAMILY_LEARNER)))
 
-    fig, axd = style.mosaic('ABC\nDDE', panel_h_mm=52)
+    fig, axd = style.mosaic('ABC\nDDD', panel_h_mm=52)
 
     for letter, frac in zip('ABC', FRACTIONS, strict=True):
         ax = axd[letter]
@@ -43,49 +43,53 @@ def main() -> None:
     for letter in 'BC':
         axd[letter].set_yticklabels([])
 
+    # One trajectory per learner across the three batch fractions, labelled at
+    # its most expensive point: colour alone cannot identify ten learners.
     ax = axd['D']
     frontier = data.final(df, ['learner', 'batch_fraction'], [Y, 'cum_ml_time'])
-    for row in frontier.iter_rows(named=True):
-        color, _ = style.learner_style(row['learner'])
+    for index, learner in enumerate(LEARNERS):
+        s = frontier.filter(pl.col('learner') == learner).sort('cum_ml_time_mean')
+        color, ls = style.learner_style(learner)
         ax.plot(
-            row['cum_ml_time_mean'],
-            row[f'{Y}_mean'],
-            marker=MARKERS[row['batch_fraction']],
+            s['cum_ml_time_mean'],
+            s[f'{Y}_mean'],
             color=color,
-            markeredgecolor='none',
+            linestyle=ls,
+            linewidth=0.8,
+            marker='none',
+        )
+        for row in s.iter_rows(named=True):
+            ax.plot(
+                row['cum_ml_time_mean'],
+                row[f'{Y}_mean'],
+                marker=MARKERS[row['batch_fraction']],
+                color=color,
+                markersize=4,
+            )
+        # Final points cluster at 93-99%, so stagger the labels vertically.
+        ax.annotate(
+            learner,
+            (s['cum_ml_time_mean'][-1], s[f'{Y}_mean'][-1]),
+            textcoords='offset points',
+            xytext=(5, (4, -9, 13, -18)[index % 4]),
+            fontsize=6,
+            color=color,
         )
     ax.set(
         xscale='log',
         xlabel=style.LABELS['cum_ml_time'],
         ylabel=f'final {style.LABELS[Y]}',
     )
+    ax.margins(x=0.12)
     ax.legend(
         handles=[
             Line2D([], [], marker=m, color=style.INK, linestyle='none', label=f'{f}%')
             for f, m in MARKERS.items()
         ],
         title='batch fraction',
-        loc='lower right',
+        loc='center left',
+        ncols=1,
     )
-
-    ax = axd['E']
-    ranked = data.final(
-        df.filter(pl.col('batch_fraction') == 0.1), ['learner'], ['selected_percentile']
-    ).sort('selected_percentile_mean')
-    colors = [style.learner_style(x)[0] for x in ranked['learner']]
-    ax.barh(
-        ranked['learner'],
-        ranked['selected_percentile_mean'],
-        xerr=[
-            ranked['selected_percentile_mean'] - ranked['selected_percentile_lo'],
-            ranked['selected_percentile_hi'] - ranked['selected_percentile_mean'],
-        ],
-        color=colors,
-        error_kw={'elinewidth': 0.6, 'ecolor': style.INK},
-    )
-    ax.set_xlabel('final selected percentile (0.1% batch)')
-    ax.grid(axis='y', visible=False)
-    ax.grid(axis='x', visible=True)
 
     style.label_panels(axd)
     fig.legend(

@@ -116,7 +116,11 @@ def apply() -> None:
             'xtick.major.width': 0.6,
             'ytick.major.width': 0.6,
             'lines.linewidth': 1.2,
-            'lines.markersize': 3.5,
+            # Markers on every line by default: cycles are discrete measurements,
+            # not a continuum, and the dots show where the samples actually are.
+            'lines.marker': 'o',
+            'lines.markersize': 2.8,
+            'lines.markeredgewidth': 0,
             'legend.frameon': False,
             'figure.dpi': 150,
             'savefig.bbox': 'tight',
