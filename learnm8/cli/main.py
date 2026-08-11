@@ -83,6 +83,19 @@ For more information: https://github.com/volkamerlab/LearnM8
 """
 
 
+CONFIG_PATH_KEYS = {'compound_pool', 'oracle', 'output'}
+
+# Config files are documented with the run_active_learning() parameter names,
+# which differ from the argparse dest for a handful of flags. Without the
+# aliases those keys land on an attribute nothing reads and are silently lost.
+CONFIG_KEY_ALIASES = {
+    'output_dir': 'output',
+    'smiles_column': 'smiles_col',
+    'id_column': 'id_col',
+    'large_features_ack': 'allow_large_features',
+}
+
+
 def load_config_file(config_path: Path) -> dict:
     """Load configuration from YAML or JSON file.
 
@@ -415,6 +428,7 @@ def _build_run_kwargs(
         random_state=args.random_state,
         pruning_fraction=args.pruning_fraction,
         pruning_strategy=args.pruning_strategy,
+        pruning_params=getattr(args, 'pruning_params', None),
         acquisition_params=acquisition_params,
         memory_safety_factor=getattr(args, 'memory_safety_factor', 0.7),
         n_jobs=getattr(args, 'n_jobs', -1),
@@ -427,12 +441,16 @@ def _build_run_kwargs(
     )
 
 
-def cmd_run(args: argparse.Namespace):
+def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None):
     """Handle run subcommand.
 
     Args:
         args: Parsed command-line arguments
+        cli_provided: Argparse dests the user typed on the command line, used
+            to keep explicit flags winning over config-file values. When None
+            (direct programmatic calls), every config value is applied.
     """
+    cli_provided = cli_provided or set()
     try:
         if args.config:
             console.print(f'[cyan]Loading config from:[/cyan] {args.config}')
@@ -441,12 +459,17 @@ def cmd_run(args: argparse.Namespace):
             )
             config = load_config_file(args.config)
 
-            CONFIG_PATH_KEYS = {'compound_pool', 'oracle', 'output'}
             for key, value in config.items():
-                if key in CONFIG_PATH_KEYS and isinstance(value, str):
-                    setattr(args, key, Path(value))
+                dest = CONFIG_KEY_ALIASES.get(key, key)
+                if dest in cli_provided:
+                    console.print(
+                        f'[dim]Config key "{key}" ignored: overridden by an explicit CLI flag[/dim]'
+                    )
+                    continue
+                if dest in CONFIG_PATH_KEYS and isinstance(value, str):
+                    setattr(args, dest, Path(value))
                 else:
-                    setattr(args, key, value)
+                    setattr(args, dest, value)
 
         if args.compound_pool is None and not hasattr(args, 'compound_pool'):
             console.print(
@@ -543,13 +566,18 @@ def cmd_run(args: argparse.Namespace):
 
         acquisition_params = None
         if args.acquisition_params:
-            try:
-                acquisition_params = json.loads(args.acquisition_params)
-            except json.JSONDecodeError as e:
-                console.print(
-                    f'[red]Error:[/red] Invalid JSON in --acquisition-params: {e}'
-                )
-                sys.exit(1)
+            # --acquisition-params arrives as a JSON string; a config file
+            # already yields the decoded mapping.
+            if isinstance(args.acquisition_params, dict):
+                acquisition_params = args.acquisition_params
+            else:
+                try:
+                    acquisition_params = json.loads(args.acquisition_params)
+                except json.JSONDecodeError as e:
+                    console.print(
+                        f'[red]Error:[/red] Invalid JSON in --acquisition-params: {e}'
+                    )
+                    sys.exit(1)
 
         run_kwargs = _build_run_kwargs(args, acquisition_params, cycles)
 
@@ -713,6 +741,27 @@ def cmd_validate(args: argparse.Namespace):
         _print_learnm8_error(e)
 
 
+def _suppress_defaults(parser: argparse.ArgumentParser) -> None:
+    """Strip every default from a parser and its subparsers, in place."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for subparser in action.choices.values():
+                _suppress_defaults(subparser)
+        action.default = argparse.SUPPRESS
+
+
+def _cli_provided_dests(argv: list[str]) -> set[str]:
+    """Return the argparse dests the user actually typed on the command line.
+
+    Re-parsing with all defaults suppressed leaves only the supplied values,
+    which is what lets config-file entries act as defaults rather than
+    overriding explicit flags (see "Config File Precedence" in the epilog).
+    """
+    parser = create_parser()
+    _suppress_defaults(parser)
+    return set(vars(parser.parse_args(argv)))
+
+
 def main():
     """Main CLI entry point."""
     configure_learnm8_logging(console_type='rich', level='INFO')
@@ -726,7 +775,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == 'run':
-        cmd_run(args)
+        cmd_run(args, _cli_provided_dests(sys.argv[1:]))
     elif args.command == 'validate':
         cmd_validate(args)
     else:
