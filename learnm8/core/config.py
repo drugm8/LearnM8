@@ -230,6 +230,14 @@ def parse_cycle_schedule(
                 block_pruning_strategy = pruning_strategy
                 block_pruning_params = pruning_params
 
+            # Same story for acquisition parameters: the CLI exposes them only
+            # as a top-level flag (--acquisition-params), so a block without
+            # its own value inherits them. An explicit per-block dict wins.
+            if config.acquisition_params is not None:
+                block_acquisition_params = config.acquisition_params
+            else:
+                block_acquisition_params = acquisition_params
+
             for _ in range(config.n_cycles):
                 new_config = CycleConfig(
                     strategy=config.strategy,
@@ -237,7 +245,7 @@ def parse_cycle_schedule(
                     batch_fraction=config.batch_fraction,
                     pruning_strategy=block_pruning_strategy,
                     pruning_params=block_pruning_params,
-                    acquisition_params=config.acquisition_params
+                    acquisition_params=block_acquisition_params
                 )
                 expanded.append(new_config)
                 logger.debug(f"Created CycleConfig(strategy='{new_config.strategy}', n_cycles={new_config.n_cycles}, "
