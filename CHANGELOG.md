@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### Fixed — silently dropped user parameters (`acquisition_params` and the config-file path)
+
+Every `--acquisition-params` value passed alongside `--cycles` (or a config
+file's `cycles:` list) was discarded. `parse_cycle_schedule` declared the
+parameter and then used only the per-block value in its `cycles is not None`
+branch — the branch the CLI always takes — so runs completed normally, reported
+success, and used the acquisition defaults. A UCB `beta` sweep produced
+byte-identical trajectories at every cycle. Fixed by mirroring the top-level
+pruning fallback added in `851d572`: a block without its own
+`acquisition_params` inherits the top-level dict, an explicit per-block dict
+still wins.
+
+An audit of the surrounding plumbing for the same defect class found four more,
+all on the `--config <yaml>` path:
+
+- **`pruning_params` never reached `run_active_learning`** — it was absent from
+  `cli/main.py:_build_run_kwargs` entirely, so the documented YAML key was
+  inert. Now forwarded.
+- **Config keys documented under their API name landed on unread attributes** —
+  `output_dir`, `smiles_column`, `id_column` and `large_features_ack` do not
+  match their argparse dests (`output`, `smiles_col`, `id_col`,
+  `allow_large_features`). `output_dir` appears in every documented config
+  example, so results silently went to an auto-generated timestamped directory.
+  A `CONFIG_KEY_ALIASES` map now resolves them.
+- **A YAML `acquisition_params:` mapping crashed** with
+  `TypeError: the JSON object must be str, bytes or bytearray, not dict` —
+  `cmd_run` ran `json.loads` on a value the YAML loader had already decoded.
+  Mappings are now passed through.
+- **Config values overrode explicit CLI flags** — the reverse of the documented
+  contract printed by the CLI itself. `main()` now records which dests the user
+  actually typed (a second parse with defaults suppressed) and `cmd_run` skips
+  those config keys, logging each one it ignores. `cmd_run(args)` keeps its
+  old behaviour for direct programmatic callers.
+
 ### Fixed — GT-stats cache finalizer self-deadlock
 
 `evaluation/core.py`'s `_GT_STATS_LOCK` is now a `threading.RLock` instead of
