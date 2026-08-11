@@ -1272,6 +1272,143 @@ class TestConfigOnlyRun:
 
 
 @pytest.mark.unit
+class TestConfigFileParameterPlumbing:
+    """BUGFIX3 audit: config-file values must reach run_active_learning().
+
+    Three silent drops on the --config path: `pruning_params` was never added
+    to the run kwargs at all, config keys documented under their API name
+    (`output_dir`, `smiles_column`, ...) landed on argparse dests nothing
+    reads, and config values overrode explicit CLI flags despite the CLI
+    promising the opposite.
+    """
+
+    @staticmethod
+    def _capture_run_kwargs(monkeypatch, tmp_path):
+        cli_module = _get_cli_module()
+
+        captured = {}
+
+        class _StubValidation:
+            valid_compounds = pl.DataFrame({'ID': ['COMP_0001']})
+            invalid_compounds = pl.DataFrame({'ID': []})
+            success_rate = 1.0
+
+        def fake_run(**kwargs):
+            captured.update(kwargs)
+            return {
+                'compounds_df': None,
+                'cycle_metrics': [],
+                'validation_result': _StubValidation(),
+                'output_dir': kwargs.get('output_dir', tmp_path),
+                'saved_files': {},
+                'labeled_count': 0,
+                'unlabeled_count': 0,
+            }
+
+        monkeypatch.setattr(cli_module, 'run_active_learning', fake_run)
+        return captured
+
+    def test_pruning_params_from_config_reaches_run(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        config_path = tmp_path / 'pruning.yaml'
+        config_path.write_text(
+            'pruning_strategy: score\npruning_params:\n  pruning_fraction: 0.4\n'
+        )
+        args = make_run_namespace(minimal_compounds, tmp_path, config=config_path)
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+
+        assert captured.get('pruning_params') == {'pruning_fraction': 0.4}
+
+    def test_output_dir_config_key_maps_to_output(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        expected = tmp_path / 'from_config'
+        config_path = tmp_path / 'output.yaml'
+        config_path.write_text(f'output_dir: {expected}\n')
+        args = make_run_namespace(minimal_compounds, tmp_path, config=config_path)
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+
+        assert Path(captured['output_dir']) == expected
+
+    def test_smiles_column_config_key_maps_to_smiles_col(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        config_path = tmp_path / 'columns.yaml'
+        config_path.write_text('smiles_column: canonical_smiles\nid_column: cid\n')
+        args = make_run_namespace(minimal_compounds, tmp_path, config=config_path)
+        run_cmd_inprocess(cmd_run, args, monkeypatch)
+
+        assert captured.get('smiles_column') == 'canonical_smiles'
+        assert captured.get('id_column') == 'cid'
+
+    def test_acquisition_params_mapping_from_config_reaches_run(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        """A YAML mapping is already decoded; json.loads() on it used to crash."""
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        config_path = tmp_path / 'acquisition.yaml'
+        config_path.write_text('acquisition_params:\n  beta: 0.5\n')
+        args = make_run_namespace(minimal_compounds, tmp_path, config=config_path)
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+
+        assert result.returncode == 0, f'Failed: {result.stdout}'
+        assert captured.get('acquisition_params') == {'beta': 0.5}
+
+    def test_explicit_cli_flag_overrides_config(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        config_path = tmp_path / 'cycles.yaml'
+        config_path.write_text('n_cycles: 3\n')
+        args = make_run_namespace(
+            minimal_compounds, tmp_path, config=config_path, n_cycles=7
+        )
+        run_cmd_inprocess(lambda a: cmd_run(a, {'n_cycles'}), args, monkeypatch)
+
+        assert captured.get('n_cycles') == 7
+
+    def test_config_applies_when_flag_not_provided(
+        self, minimal_compounds, tmp_path, monkeypatch
+    ):
+        from learnm8.cli.main import cmd_run
+
+        captured = self._capture_run_kwargs(monkeypatch, tmp_path)
+        config_path = tmp_path / 'cycles.yaml'
+        config_path.write_text('n_cycles: 3\n')
+        args = make_run_namespace(
+            minimal_compounds, tmp_path, config=config_path, n_cycles=7
+        )
+        run_cmd_inprocess(lambda a: cmd_run(a, set()), args, monkeypatch)
+
+        assert captured.get('n_cycles') == 3
+
+    def test_cli_provided_dests_reports_only_typed_arguments(self):
+        from learnm8.cli.main import _cli_provided_dests
+
+        provided = _cli_provided_dests(
+            ['run', 'compounds.csv', '--target', 'Activity', '--n-cycles', '5']
+        )
+
+        assert {'compound_pool', 'target_col', 'n_cycles'} <= provided
+        assert 'batch_fraction' not in provided
+        assert 'learner' not in provided
+
+
+@pytest.mark.unit
 class TestColumnArgsParsing:
     """Test --smiles-col and --id-col are registered and parse correctly."""
 

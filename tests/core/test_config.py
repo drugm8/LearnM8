@@ -267,6 +267,56 @@ class TestParseCycleSchedule:
         for config in schedule:
             assert config.acquisition_params == {'beta': 2.0}
 
+    def test_advanced_api_applies_top_level_acquisition_params(self):
+        """Top-level acquisition_params must reach an explicit cycles=[...] schedule.
+
+        Regression: the CLI expresses acquisition parameters only as a
+        top-level flag (--acquisition-params) while --cycles builds a
+        CycleConfig list, so dropping the top-level value silently ran every
+        cycle on the acquisition defaults.
+        """
+        cycles = [
+            CycleConfig('random', n_cycles=1, batch_fraction=0.01),
+            CycleConfig('ucb', n_cycles=9, batch_fraction=0.001),
+        ]
+
+        schedule = parse_cycle_schedule(
+            cycles=cycles,
+            acquisition_params={'beta': 0.5},
+        )
+
+        assert len(schedule) == 10
+        for config in schedule:
+            assert config.acquisition_params == {'beta': 0.5}
+
+    def test_advanced_api_per_cycle_acquisition_params_override_top_level(self):
+        """An explicit per-cycle acquisition_params dict wins over the top-level value."""
+        cycles = [
+            CycleConfig('ucb', n_cycles=1, batch_fraction=0.01),
+            CycleConfig(
+                'ucb',
+                n_cycles=1,
+                batch_fraction=0.01,
+                acquisition_params={'beta': 3.0},
+            ),
+        ]
+
+        schedule = parse_cycle_schedule(
+            cycles=cycles,
+            acquisition_params={'beta': 0.5},
+        )
+
+        assert schedule[0].acquisition_params == {'beta': 0.5}
+        assert schedule[1].acquisition_params == {'beta': 3.0}
+
+    def test_advanced_api_without_top_level_acquisition_params_stays_none(self):
+        cycles = [CycleConfig('ucb', n_cycles=2, batch_fraction=0.01)]
+
+        schedule = parse_cycle_schedule(cycles=cycles)
+
+        for config in schedule:
+            assert config.acquisition_params is None
+
     def test_invalid_cycles_not_list(self):
         with pytest.raises(ValueError, match="cycles must be a list"):
             parse_cycle_schedule(cycles="not_a_list")
