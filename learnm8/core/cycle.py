@@ -322,6 +322,10 @@ def execute_cycle(
     precomputed_stats = None
     pruned_count_override = None
     pruned_ids_for_metrics: list = []
+    # Only the legacy branch can produce one: simulated annealing is not
+    # streaming-eligible (supports_streaming() is False), so the streaming
+    # path leaves this None.
+    backfill_fraction: float | None = None
 
     if use_streaming:
         logger.info('Cycle %d selection path: streaming (output_dir=%s)', cycle, output_dir)
@@ -430,7 +434,14 @@ def execute_cycle(
             score_direction=score_direction,
         )
 
-        compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions = (
+        (
+            compounds_df,
+            selected_ids,
+            acquisition_time,
+            oracle_time,
+            selected_predictions,
+            backfill_fraction,
+        ) = (
             _select_and_measure(
                 compounds_df=compounds_df,
                 selection_pool=selection_pool,
@@ -482,6 +493,10 @@ def execute_cycle(
         pruned_count=pruned_count_override,
     )
     metrics['selection_path'] = selection_path
+    # REQ-11: float in [0, 1] for simulated annealing, None for every other
+    # strategy. `selection_path` above is the precedent for assigning a metric
+    # after _calculate_cycle_metrics returns.
+    metrics['acquisition_backfill_fraction'] = backfill_fraction
     evaluation_time = time.time() - evaluation_start_time
 
     # Calculate total cycle time
@@ -1281,7 +1296,7 @@ def _select_and_measure(
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
     acq_func: Any = None,
-) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None]:
+) -> tuple[pl.DataFrame, list, float, float, pl.DataFrame | None, float | None]:
     """Compute batch size, run acquisition, measure via oracle, update master_df.
 
     Owns try/except #3 (oracle), the `acquisition_time` and `oracle_time`
@@ -1289,7 +1304,10 @@ def _select_and_measure(
     (transitive ownership).
 
     Returns:
-        (compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions)
+        (compounds_df, selected_ids, acquisition_time, oracle_time,
+        selected_predictions, backfill_fraction). `backfill_fraction` is None
+        for every strategy that does not report one — only simulated annealing
+        does — so the metric is never a fabricated zero.
     """
 
     # Step 9: Calculate Batch Size from Fraction
@@ -1356,6 +1374,11 @@ def _select_and_measure(
     selected_ids = selected_df['ID'].to_list()
     acquisition_time = time.time() - acquisition_start_time
 
+    # Feature 027: simulated annealing reports how much of the batch came from
+    # greedy backfill rather than the annealing walk. Absent on every other
+    # strategy, which is why this is a getattr and not an interface method.
+    backfill_fraction = getattr(acq_func, 'last_backfill_fraction', None)
+
     if len(selected_ids) == 0:
         raise AcquisitionError(
             f"Acquisition strategy '{config.strategy}' selected 0 compounds in cycle {cycle}. "
@@ -1386,6 +1409,7 @@ def _select_and_measure(
         acquisition_time,
         oracle_time,
         selected_predictions,
+        backfill_fraction,
     )
 
 

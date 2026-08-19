@@ -2,6 +2,74 @@
 
 ## [Unreleased]
 
+### Changed — adaptive annealing schedule (BREAKING behaviour; SemVer **MINOR**, 0.11.0 → 0.12.0)
+
+`SimulatedAnnealingAcquisition` degenerated to `GreedyAcquisition` in
+production and said nothing about it. Energy is `-prediction`, so temperature
+carries the target's units, but `initial_temp` defaulted to a bare `1.0`. On
+the real AmpC cycle-9 predictions (880,541 rows) the mean uphill gap is
+`E[ΔE⁺] = 3.63`, so mean acceptance at `T₀ = 1.0` was **0.178** — the chain
+froze almost immediately. `max_iterations` defaulted to `1000` independent of
+`n_select`, so a 10,000-compound batch could never be supplied by the walk, and
+the shortfall was filled with `argsort(prediction)` with no warning. Measured
+on that pool at `n_select=10000`: **99.8% of the batch came from greedy
+backfill** and the result reproduced greedy's top-k at **99.9% overlap**.
+
+**The three schedule parameters now default to `None`, meaning "derive from
+this cycle's predictions":**
+
+- `initial_temp` / `final_temp` are solved by Ben-Ameur fixed-point iteration
+  so the *realized* mean uphill acceptance equals 0.8 / 0.01. The closed form
+  `T = E[ΔE⁺] / −ln χ` only seeds the iteration: `exp` is convex, so by Jensen
+  it overshoots χ by an amount that grows with the spread of ΔE (0.009 at
+  CV 0.71, 0.039 at CV 2.22 — the tolerance is 0.01). Gaps are sampled through
+  the *same proposal path* the walk uses, never from the global σ, because a
+  `'score_band'` neighbourhood and a `'random'` one differ by orders of
+  magnitude on identical predictions.
+- `max_iterations` is derived from `n_select`, pool size, and a **measured**
+  acceptance rate. On AmpC this gives `T₀ = 14.70` (14.7× the old default) and
+  36,000 steps (36× the old default), yielding **0.0% backfill**.
+
+Passing a number for any of the three still uses it verbatim and disables
+derivation for that parameter alone. **Note the semantic change:** an explicit
+`max_iterations` is now the *total* step budget across all chains
+(`n_chains × chain_length ≤ max_iterations`), not a per-chain length.
+
+**Also changed:**
+
+- **Vectorized `R × L` chains.** The walk now runs `R` independent chains
+  (started at `R` independent random positions, so they explore different
+  basins) advanced together in numpy. The Python loop is `L ≤ 2000` iterations
+  regardless of `n_select` or pool size. At 880k × 10k this is **13× faster**
+  than the old single chain: 0.07 s vs 0.92 s.
+- **Backfill is now visible and fatal past a threshold.** New
+  `last_backfill_fraction` attribute and `acquisition_backfill_fraction` cycle
+  metric (`None` for every non-SA strategy — no fabricated zeros). Above 10%
+  logs a WARNING; above 50% raises `AcquisitionError`. Silent degradation to
+  greedy is no longer possible.
+- **`select()` returns rows best-first** by `acquisition_score`. Previously it
+  returned pool order, so `core/cycle.py`'s `.head(batch_size)` truncation
+  dropped arbitrary rather than worst compounds.
+- **A position is recorded as visited only when the move was accepted.** The
+  old code appended unconditionally, re-logging the same index once per
+  rejected iteration.
+- `supports_streaming()` **remains `False`.** Annealing is a path-dependent
+  walk over the full pool and cannot be expressed as the pointwise
+  `score_chunk` contract, so SA continues to run the legacy cycle path. This is
+  unchanged behaviour, stated explicitly so it is not read as an oversight.
+
+**RNG-stream break:** every seeded SA selection differs from v0.11 output. The
+walk is a different algorithm (R chains vs one, a calibration sample and a
+pilot walk drawn before it starts), so identical seeds no longer reproduce
+identical batches. Determinism *within* 0.12.0 is preserved and tested.
+
+**Migration:** delete `initial_temp`, `final_temp` and `max_iterations` from
+existing `acquisition_params` unless you specifically know the target's energy
+scale — hand-set values are what caused the defect. Archived benchmark runs of
+the `simulated_annealing` arm are **not** recoverable: they are greedy runs
+mislabelled as SA, and must be re-run against this implementation if SA is to
+be reported.
+
 ### Fixed — silently dropped user parameters (`acquisition_params` and the config-file path)
 
 Every `--acquisition-params` value passed alongside `--cycles` (or a config

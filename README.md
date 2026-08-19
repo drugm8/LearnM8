@@ -153,7 +153,7 @@ Pool size reflects the total compound pool. GP is limited by labeled set growth 
 | `pi` | `ProbabilityImprovementAcquisition` | Yes | `xi` (0.01) | Probability of improving over current best; more conservative than EI |
 | `thompson` | `ThompsonSamplingAcquisition` | Yes | `random_state` | Stochastic — samples from posterior predictive distribution |
 | `entropy` | `EntropyAcquisition` | Yes | `entropy_type` | Maximum information gain — selects most uncertain compounds |
-| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `initial_temp`, `cooling_schedule` | Temperature-based probabilistic selection; starts random, cools to greedy |
+| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `neighbor_strategy`, `cooling_schedule` | Temperature-based probabilistic selection; starts random, cools to greedy. The temperature schedule and step budget are **derived from the data each cycle** — `initial_temp`/`final_temp`/`max_iterations` default to `None` and should normally be left alone |
 
 **Uncertainty-based strategies** (`ucb`, `ei`, `pi`, `thompson`, `entropy`) require a learner that supports uncertainty. See the Learners table above — the **Uncertainty Method** column indicates compatibility.
 
