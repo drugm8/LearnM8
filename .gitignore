@@ -107,7 +107,6 @@ docs/BBLEAN_FEASIBILITY_STUDY.md
 examples/notebooks/results/
 
 # Validation outputs
-validation/bitbirch_clustering/bitbirch_sweep/*
 validation/score_based_pruning/pruning_results/*
 validation/uncertainty_acquisition/*_validation_*
 validation/uncertainty_acquisition/generate_all_notebooks.py
@@ -156,7 +155,4 @@ publication/scripts/fig09_scaffold_coverage.py
 publication/scripts/fig10_top_candidate_diversity.py
 publication/scripts/consolidate.py
 
-# Validation outputs mistakenly committed
-validation/bitbirch_clustering/*.png
-validation/bitbirch_clustering/bitbirch_validation_v2.ipynb
 cluster*/
