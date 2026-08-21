@@ -134,6 +134,27 @@ Selection depends on dataset characteristics, computational resources, and wheth
 | > 10,000 | Yes | No | `rf_ensemble` | Scalable ensemble |
 | > 10,000 | Yes | Yes | `chemprop_ensemble` | Best overall performance |
 
+### Typical Pool Size by Learner
+
+Practical working ranges. Above the stated ceiling a learner still runs, but
+training or memory becomes the bottleneck rather than the oracle.
+
+| Learner | CPU | GPU | Typical pool size |
+|---------|-----|-----|-------------------|
+| `rf`, `dt`, `xgb` | ✓ | `xgb` only | 1K – 10M+ |
+| `lr`, `ridge_cuml` | `lr` | `ridge_cuml` | any size |
+| `gp`, `gpu_gp` | ✓ | `gpu_gp` | < 10K (O(n³) training, O(n²) memory) |
+| `svgp` | ✓ | ✓ | 10K – 100K+ |
+| `mlp`, `fastprop` | ✓ | ✓ | 10K – 1M+ |
+| `mc_dropout`, `chemprop` | ✓ | ✓ | 5K – 50K CPU, 5K – 500K GPU |
+| `rf_fil` | — | ✓ | 1K – 10M+ |
+| `chemprop_ensemble` | ✓ | ✓ | 1K – 20K CPU, 1K – 200K GPU |
+| `mixed_ensemble` | ✓ | ✓ | 1K – 50K |
+| Other ensembles | ✓ | varies | same as the base learner |
+
+`gpu_gp` and `svgp` require GPyTorch ≥ 1.11 and GAUCHE ≥ 0.1.6. `rf_fil` and
+`ridge_cuml` require RAPIDS cuML ≥ 25.04.
+
 ### Decision Matrix by Use Case
 
 | Priority | Recommended Learner | Notes |
