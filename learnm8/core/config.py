@@ -32,7 +32,7 @@ class CycleConfig:
     """Configuration for a single cycle or group of cycles.
 
     Attributes:
-        strategy: Acquisition strategy name (e.g., 'greedy', 'ucb', 'random', 'ei', 'bitbirch')
+        strategy: Acquisition strategy name (e.g., 'greedy', 'ucb', 'random', 'ei')
         n_cycles: Number of cycles with this configuration (default 1)
         batch_fraction: Fraction of original pool to select per cycle
         pruning_strategy: Pruning strategy name (e.g., 'score')

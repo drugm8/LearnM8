@@ -261,13 +261,13 @@ def select_initial_batch(
     """Select and measure initial batch before active learning cycles.
 
     This is the initialization phase (cycle 0) - no model training/prediction needed.
-    Uses acquisition strategies that don't require predictions (random, bitbirch).
+    Uses acquisition strategies that don't require predictions.
 
     Args:
         compounds_df: Master DataFrame (all unlabeled)
         oracle: Oracle for measurements
         target_col: Target property column name
-        strategy: Acquisition strategy ('random' or 'bitbirch')
+        strategy: Acquisition strategy (only 'random' is supported at cycle 0)
         batch_fraction: Fraction of pool to select
         featurizer: Molecular featurizer ('morgan', 'ecfp6', etc.)
         cache_dir: Feature cache directory
@@ -342,7 +342,7 @@ def select_initial_batch(
         logger.warning(
             f"Strategy '{strategy}' not yet supported for initialization. "
             f"Using 'random' strategy instead. "
-            f'(BitBIRCH and other strategies deferred to future release)'
+            f'(cycle 0 has no model, so prediction-free strategies only)'
         )
         strategy = 'random'
 
