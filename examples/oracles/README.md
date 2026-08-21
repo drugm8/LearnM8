@@ -466,6 +466,6 @@ If you use these oracles in your research, please cite:
   title = {LearnM8 Example Oracles},
   author = {LearnM8 Development Team},
   year = {2025},
-  url = {https://github.com/volkamerlab/LearnM8}
+  url = {https://github.com/drugm8/LearnM8}
 }
 ```

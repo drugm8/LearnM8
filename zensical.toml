@@ -2,7 +2,7 @@
 site_name = "LearnM8"
 site_description = "Active Learning Framework for Molecular Screening"
 site_author = "LearnM8 Team"
-site_url = "https://volkamerlab.github.io/LearnM8"
+site_url = "https://drugm8.github.io/LearnM8"
 copyright = "Copyright &copy; 2025 LearnM8 Team"
 
 nav = [
@@ -55,8 +55,8 @@ nav = [
 ]
 
 [project.repo]
-url = "https://github.com/volkamerlab/LearnM8"
-name = "volkamerlab/LearnM8"
+url = "https://github.com/drugm8/LearnM8"
+name = "drugm8/LearnM8"
 edit_uri = "edit/main/docs/"
 
 [project.theme]
@@ -101,7 +101,7 @@ toggle.name = "Switch to light mode"
 
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
-link = "https://github.com/volkamerlab/LearnM8"
+link = "https://github.com/drugm8/LearnM8"
 
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.attr_list]
