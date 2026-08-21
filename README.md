@@ -7,7 +7,7 @@
   <strong>Active Learning Framework for Molecular Screening</strong>
   <br><br>
 
-[![Documentation](https://img.shields.io/badge/docs-mkdocs-blue.svg)](docs/)
+[![Documentation](https://img.shields.io/badge/docs-drugm8.github.io%2FLearnM8-blue.svg)](https://drugm8.github.io/LearnM8/)
 [![Python 3.11.9](https://img.shields.io/badge/python-3.11.9-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -30,14 +30,14 @@ no model; cycles 1–N are the active learning proper.
 
 ## 📚 Documentation
 
-**[Read the full documentation →](docs/index.md)**
+**📖 [https://drugm8.github.io/LearnM8](https://drugm8.github.io/LearnM8/)**
 
-- [Installation Guide](docs/getting-started/installation.md)
-- [Quickstart Tutorial](docs/getting-started/quickstart.md)
-- [Core Concepts](docs/getting-started/concepts.md)
-- [CLI Reference](docs/user-guide/cli-reference.md)
-- [API Reference](docs/user-guide/api-reference.md)
-- [Learners](docs/components/learners/overview.md) | [Acquisition](docs/components/acquisition/overview.md) | [Featurizers](docs/components/featurizers/overview.md)
+- [Installation Guide](https://drugm8.github.io/LearnM8/getting-started/installation/)
+- [Quickstart Tutorial](https://drugm8.github.io/LearnM8/getting-started/quickstart/)
+- [Core Concepts](https://drugm8.github.io/LearnM8/getting-started/concepts/)
+- [CLI Reference](https://drugm8.github.io/LearnM8/user-guide/cli-reference/)
+- [API Reference](https://drugm8.github.io/LearnM8/user-guide/api-reference/)
+- [Learners](https://drugm8.github.io/LearnM8/components/learners/overview/) | [Acquisition](https://drugm8.github.io/LearnM8/components/acquisition/overview/) | [Featurizers](https://drugm8.github.io/LearnM8/components/featurizers/overview/)
 
 ## 🚀 Quick Start
 
