@@ -53,9 +53,6 @@ ACQUISITION_REGISTRY = {
 
     # Optimization-based methods
     'simulated_annealing': SimulatedAnnealingAcquisition,
-
-    # Diversity-based methods
-    #'bitbirch': BitBIRCHAcquisition,
 }
 
 

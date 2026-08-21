@@ -5,7 +5,6 @@ omit =
     learnm8/__init__.py
     learnm8/cli/__main__.py
     learnm8/learners/sklearn/legacy/*
-    learnm8/acquisition/bitbirch.py
 
 [report]
 exclude_lines =

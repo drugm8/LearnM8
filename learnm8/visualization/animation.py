@@ -121,7 +121,6 @@ def _get_strategy_color_map(strategies):
         'pi': 'green',
         'thompson': 'cyan',
         'simulated_annealing': 'magenta',
-        'bitbirch': 'brown'
     }
 
     color_map = {}
