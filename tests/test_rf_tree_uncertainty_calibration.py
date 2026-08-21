@@ -29,6 +29,15 @@ SCORES_PATH = (
 )
 METADATA_PATH = SCORES_PATH.with_name('rf_uq_metadata.json')
 
+# The study operates on the RF UQ benchmark report, which lives under the
+# gitignored validation/reports/ tree. Without it there is nothing to assert
+# against, so skip rather than fail on a fresh clone or in CI. Regenerate with
+# `python validation/uncertainty/scripts/benchmark_rf_uq_methods.py`.
+pytestmark = pytest.mark.skipif(
+    not (SCORES_PATH.exists() and METADATA_PATH.exists()),
+    reason=f'RF UQ benchmark report not present at {SCORES_PATH.parent}',
+)
+
 
 def _load_study_module() -> ModuleType:
     assert SCRIPT_PATH.exists(), 'tree-calibration study script is missing'
