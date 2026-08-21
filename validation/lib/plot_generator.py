@@ -3,12 +3,12 @@ import polars as pl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.colors import LogNorm
-import seaborn as sns
 import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from learnm8.core.persistence import prediction_parquet_path
+from learnm8.visualization import style
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +33,11 @@ def create_comprehensive_validation_plot(
     strategy_config: Dict[str, Any],
     param_value: float,
     output_path: Path,
-    dpi: int = 300,
+    dpi: int = style.OUTPUT_DPI,
     dataset_name: Optional[str] = None,
     learner_name: Optional[str] = None
 ) -> Path:
+    style.apply()
     param_name = strategy_config['param_name']
     strategy_name = strategy_config['name']
 
@@ -116,7 +117,7 @@ def create_comprehensive_validation_plot(
                 compounds_with_pred['prediction'].to_numpy(),
                 compounds_with_pred['uncertainty'].to_numpy(),
                 gridsize=50,           # Balance between detail and performance
-                cmap='Greys',          # Neutral, shows density clearly
+                cmap=style.SEQUENTIAL,  # Shared density scale
                 mincnt=1,              # Show even single points
                 norm=LogNorm(),        # Logarithmic scale makes low-density areas visible
                 alpha=0.7,             # Slightly more opaque for better visibility
@@ -138,10 +139,10 @@ def create_comprehensive_validation_plot(
                 ax.scatter(
                     selected_this_cycle['prediction'].to_numpy(),
                     selected_this_cycle['uncertainty'].to_numpy(),
-                    c='#7e62df',
+                    c=style.PRIMARY,
                     alpha=0.75,
                     s=35,
-                    edgecolors='black',
+                    edgecolors=style.INK,
                     linewidths=0.5,
                     label=f'Selected (n={len(selected_this_cycle)})',
                     zorder=10             # Ensure visibility on top of hexbin
@@ -151,7 +152,7 @@ def create_comprehensive_validation_plot(
             if col == 0:
                 ax.set_ylabel('Uncertainty', fontsize=9)
             ax.set_title(f'Cycle {cycle}', fontsize=10, fontweight='bold')
-            ax.grid(True, alpha=0.3, linewidth=0.5)
+            style.style_axes(ax)
             if len(selected_this_cycle) > 0:
                 ax.legend(fontsize=7, loc='best', framealpha=0.9)
     else:
@@ -194,8 +195,8 @@ def create_comprehensive_validation_plot(
 
             # Style the violin
             for pc in parts['bodies']:
-                pc.set_facecolor('#d0c9e8')
-                pc.set_edgecolor('#7e62df')
+                pc.set_facecolor(style.PRIMARY_PALE)
+                pc.set_edgecolor(style.PRIMARY)
                 pc.set_alpha(0.6)
                 pc.set_linewidth(1.5)
 
@@ -208,23 +209,23 @@ def create_comprehensive_validation_plot(
                 jitter = np.random.RandomState(42 + cycle).uniform(-0.15, 0.15, n_selected)
 
                 ax.scatter(selected_preds, jitter,
-                          c='#7e62df', s=30, alpha=0.8,
-                          edgecolors='black', linewidths=0.5,
+                          c=style.PRIMARY, s=30, alpha=0.8,
+                          edgecolors=style.INK, linewidths=0.5,
                           zorder=10, label=f'Selected (n={n_selected})')
 
                 # Add vertical lines showing selection range
                 if len(selected_preds) > 1:
                     sel_min, sel_max = selected_preds.min(), selected_preds.max()
-                    ax.axvline(sel_min, color='#7e62df', linestyle='--',
+                    ax.axvline(sel_min, color=style.PRIMARY, linestyle='--',
                               linewidth=1.5, alpha=0.5, zorder=5)
-                    ax.axvline(sel_max, color='#7e62df', linestyle='--',
+                    ax.axvline(sel_max, color=style.PRIMARY, linestyle='--',
                               linewidth=1.5, alpha=0.5, zorder=5)
 
             ax.set_xlabel('Prediction', fontsize=9)
             ax.set_yticks([])
             ax.set_ylim(-0.5, 0.5)
             ax.set_title(f'Cycle {cycle}', fontsize=10, fontweight='bold')
-            ax.grid(True, alpha=0.3, linewidth=0.5, axis='x')
+            style.style_axes(ax, grid_axis='x')
 
             if len(selected_this_cycle) > 0:
                 ax.legend(fontsize=7, loc='upper right', framealpha=0.9)
@@ -238,18 +239,18 @@ def create_comprehensive_validation_plot(
         pool_sizes = cycle_metrics_df['pool_size'].to_numpy()
         cumulative_labeled = cycle_metrics_df['cumulative_labeled'].to_numpy()
 
-        ax_prune.plot(cycles, pool_sizes, color='#7e62df', linewidth=2.5,
+        ax_prune.plot(cycles, pool_sizes, color=style.PRIMARY, linewidth=2.5,
                      marker='o', markersize=5, label='Unlabeled Pool Size')
-        ax_prune.fill_between(cycles, 0, pool_sizes, color='#7e62df', alpha=0.15)
+        ax_prune.fill_between(cycles, 0, pool_sizes, color=style.PRIMARY, alpha=0.15)
 
-        ax_prune_twin.plot(cycles, cumulative_labeled, color='#e67e22', linewidth=2.5,
+        ax_prune_twin.plot(cycles, cumulative_labeled, color=style.ACCENT_ORANGE, linewidth=2.5,
                           marker='s', markersize=5, label='Cumulative Labeled', linestyle='--')
 
         ax_prune.set_xlabel('Cycle', fontsize=11)
-        ax_prune.set_ylabel('Unlabeled Pool Size', fontsize=11, color='#7e62df')
-        ax_prune.tick_params(axis='y', labelcolor='#7e62df')
-        ax_prune_twin.set_ylabel('Cumulative Labeled', fontsize=11, color='#e67e22')
-        ax_prune_twin.tick_params(axis='y', labelcolor='#e67e22')
+        ax_prune.set_ylabel('Unlabeled Pool Size', fontsize=11, color=style.PRIMARY)
+        ax_prune.tick_params(axis='y', labelcolor=style.PRIMARY)
+        ax_prune_twin.set_ylabel('Cumulative Labeled', fontsize=11, color=style.ACCENT_ORANGE)
+        ax_prune_twin.tick_params(axis='y', labelcolor=style.ACCENT_ORANGE)
 
         ax_prune.grid(True, alpha=0.3, linewidth=0.75)
         ax_prune.legend(loc='upper left', fontsize=9, framealpha=0.9)
@@ -264,17 +265,17 @@ def create_comprehensive_validation_plot(
     ax_score = fig.add_subplot(metrics_gs[1], sharex=ax_discovery)
 
     discovery_metrics = [
-        ('top_10_discovery', 'Top-10', '#452997', '-'),
-        ('top_100_discovery', 'Top-100', '#5b3fb5', '-'),
-        ('top_1000_discovery', 'Top-1000', '#7e62df', '-'),
-        ('top_0_1_pct_discovery', 'Top-0.1%', '#a48dd7', '--'),
-        ('top_1_pct_discovery', 'Top-1%', '#c8b5e7', '--'),
-        ('top_10_pct_discovery', 'Top-10%', '#e3d8f0', ':')
+        ('top_10_discovery', 'Top-10', style.PRIMARY_DARK, '-'),
+        ('top_100_discovery', 'Top-100', style.PRIMARY, '-'),
+        ('top_1000_discovery', 'Top-1000', style.PRIMARY_LIGHT, '-'),
+        ('top_0_1_pct_discovery', 'Top-0.1%', style.ACCENT_BLUE, '--'),
+        ('top_1_pct_discovery', 'Top-1%', style.ACCENT_GREEN, '--'),
+        ('top_10_pct_discovery', 'Top-10%', style.MUTED, ':')
     ]
 
     score_metrics = [
-        ('cumulative_avg_score_ratio', 'Cumulative Avg', '#7e62df', '-'),
-        ('batch_avg_score_ratio', 'Batch Avg', '#b7a5df', '-')
+        ('cumulative_avg_score_ratio', 'Cumulative Avg', style.PRIMARY, '-'),
+        ('batch_avg_score_ratio', 'Batch Avg', style.PRIMARY_LIGHT, '-')
     ]
 
     cycles = cycle_metrics_df['cycle'].to_numpy()
@@ -285,13 +286,13 @@ def create_comprehensive_validation_plot(
     xtick_labels = []
     for i, cycle in enumerate(cycles):
         n_compounds = int(cumulative_compounds[i])
-        xtick_labels.append(f'C{cycle}: {cumulative_pct[i]:.1f}%\n({n_compounds})')
+        xtick_labels.append(f'C{cycle}: {n_compounds:,}\n({cumulative_pct[i]:.1f}%)')
 
     # Plot discovery metrics
-    for metric, label, color, style in discovery_metrics:
+    for metric, label, color, line_style in discovery_metrics:
         if metric in cycle_metrics_df.columns:
             values = cycle_metrics_df[metric].to_numpy()
-            ax_discovery.plot(cumulative_pct, values, color=color, linestyle=style,
+            ax_discovery.plot(cumulative_pct, values, color=color, linestyle=line_style,
                             linewidth=2, marker='o', markersize=4, label=label)
 
     ax_discovery.set_ylabel('Discovery Rate (%)', fontsize=11)
@@ -302,14 +303,14 @@ def create_comprehensive_validation_plot(
 
     # Plot score metrics
     score_values_all = []
-    for metric, label, color, style in score_metrics:
+    for metric, label, color, line_style in score_metrics:
         if metric in cycle_metrics_df.columns:
             values = cycle_metrics_df[metric].to_numpy()
             score_values_all.extend(values)
-            ax_score.plot(cumulative_pct, values, color=color, linestyle=style,
+            ax_score.plot(cumulative_pct, values, color=color, linestyle=line_style,
                          linewidth=2, marker='o', markersize=4, label=label)
 
-    ax_score.axhline(y=1.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.5, label='Random baseline')
+    ax_score.axhline(y=1.0, color=style.MUTED, linestyle='--', linewidth=1.5, alpha=0.5, label='Random baseline')
 
     # Dynamic y-axis for score ratio
     if score_values_all:
@@ -319,7 +320,10 @@ def create_comprehensive_validation_plot(
         y_max = min(3.0, score_max + 0.5)
         ax_score.set_ylim(y_min, y_max)
 
-    ax_score.set_xlabel('Cumulative % Compounds Evaluated', fontsize=11)
+    ax_score.set_xlabel(
+        'Cumulative compounds evaluated, n (percentage of initial pool in ticks)',
+        fontsize=11,
+    )
     ax_score.set_ylabel('Score Ratio', fontsize=11)
     ax_score.set_xticks(cumulative_pct)
     ax_score.set_xticklabels(xtick_labels, fontsize=8, rotation=0)
@@ -339,10 +343,10 @@ def create_comprehensive_validation_plot(
     else:
         title = f'{strategy_name} Validation'
 
-    plt.suptitle(title, fontsize=15, fontweight='bold', y=0.998)
+    plt.suptitle(title, fontsize=13, fontweight='bold')
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Comprehensive validation plot saved: %s", output_path.resolve())
@@ -356,10 +360,9 @@ def create_embedding_plots(
     method_name: str,
     output_dir: Path
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
-
-    plt.style.use('default')
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -367,22 +370,25 @@ def create_embedding_plots(
         unique_labels = np.unique(labels)
         n_clusters = len(unique_labels[unique_labels != -1])
         scatter = axes[0].scatter(embeddings[:, 0], embeddings[:, 1],
-                                c=labels, alpha=0.6, s=20, cmap='tab10')
+                                c=labels, alpha=0.6, s=20,
+                                cmap=style.CATEGORICAL_CMAP)
         axes[0].set_title(f"After Clustering ({n_clusters} clusters)")
         if n_clusters <= 10:
             plt.colorbar(scatter, ax=axes[0], label='Cluster')
     else:
-        axes[0].scatter(embeddings[:, 0], embeddings[:, 1], alpha=0.6, s=20, c='blue')
+        axes[0].scatter(
+            embeddings[:, 0], embeddings[:, 1], alpha=0.6, s=20, c=style.ACCENT_BLUE
+        )
         axes[0].set_title("No Clustering Info Available")
     axes[0].set_xlabel("Component 1")
     axes[0].set_ylabel("Component 2")
     axes[0].grid(True, alpha=0.3)
 
     axes[1].scatter(embeddings[:, 0], embeddings[:, 1], alpha=0.3, s=20,
-                   color='lightgray', label='Unselected')
+                   color=style.MUTED_LIGHT, label='Unselected')
     if len(selected_indices) > 0:
         axes[1].scatter(embeddings[selected_indices, 0], embeddings[selected_indices, 1],
-                       alpha=0.8, s=50, color='red', label='Selected')
+                       alpha=0.8, s=50, color=style.ACCENT_ORANGE, label='Selected')
     axes[1].set_title(f"Selected Compounds ({len(selected_indices)} selected)")
     axes[1].set_xlabel("Component 1")
     axes[1].set_ylabel("Component 2")
@@ -400,17 +406,22 @@ def create_embedding_plots(
                     kde = gaussian_kde(counts)
                     x_range = np.linspace(counts.min(), counts.max(), 200)
                     kde_values = kde(x_range)
-                    axes[2].fill_between(x_range, kde_values, alpha=0.7, color='skyblue')
-                    axes[2].plot(x_range, kde_values, color='darkblue', linewidth=2)
+                    axes[2].fill_between(x_range, kde_values, alpha=0.7, color=style.PRIMARY_PALE)
+                    axes[2].plot(x_range, kde_values, color=style.PRIMARY_DARK, linewidth=2)
                     axes[2].set_xlabel("Cluster Size")
                     axes[2].set_ylabel("Density")
                 else:
-                    axes[2].axvline(counts[0], color='darkblue', linewidth=3)
+                    axes[2].axvline(counts[0], color=style.PRIMARY_DARK, linewidth=3)
                     axes[2].set_xlabel("Cluster Size")
                     axes[2].set_ylabel("Density")
                 axes[2].set_title(f"Cluster Size Distribution (KDE, {n_clusters} clusters)")
             else:
-                axes[2].bar(range(len(unique_labels)), counts, color='skyblue', edgecolor='darkblue')
+                axes[2].bar(
+                    range(len(unique_labels)),
+                    counts,
+                    color=style.PRIMARY_PALE,
+                    edgecolor=style.PRIMARY_DARK,
+                )
                 axes[2].set_xlabel("Cluster ID")
                 axes[2].set_ylabel("Number of Compounds")
                 axes[2].set_title(f"Cluster Size Distribution ({n_clusters} clusters)")
@@ -430,11 +441,10 @@ def create_embedding_plots(
                     transform=axes[2].transAxes)
         axes[2].set_title("Cluster Size Distribution")
 
-    plt.suptitle(f"{method_name} - Analysis ({len(embeddings)} compounds)", fontsize=16)
-    plt.tight_layout()
+    plt.suptitle(f'{method_name} · analysis · {len(embeddings):,} compounds', fontsize=13)
 
     plot_file = output_dir / f"{method_name.lower()}_analysis.png"
-    plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+    plt.savefig(plot_file, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     logger.info(f"Saved plot to {plot_file}")
 
     plt.close()
@@ -447,16 +457,22 @@ def create_pruning_efficiency_timeline(
     strategy_labels: Dict[float, str],
     output_path: Path,
     figsize: tuple = (12, 6),
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     strategy_colors = {
-        0.0: '#cabde7',
-        0.15: '#7e62df',
-        0.3: '#452997'
+        0.0: style.PRIMARY_PALE,
+        0.15: style.PRIMARY,
+        0.3: style.PRIMARY_DARK,
     }
 
-    fig, ax1 = plt.subplots(figsize=figsize)
-    ax2 = ax1.twinx()
+    fig, (ax_pool, ax_discovery) = plt.subplots(
+        2,
+        1,
+        figsize=(figsize[0], figsize[1] * 1.15),
+        sharex=True,
+        constrained_layout=True,
+    )
 
     for pruning_frac in sorted(all_results.keys()):
         result = all_results[pruning_frac]
@@ -467,31 +483,46 @@ def create_pruning_efficiency_timeline(
         discovery = cycle_metrics.get('top_0_1_pct_discovery', cycle_metrics.get('top_100_discovery', [0]*len(cycles))).to_numpy()
 
         label = strategy_labels[pruning_frac]
-        color = strategy_colors.get(pruning_frac, '#95a5a6')
+        color = strategy_colors.get(pruning_frac, style.MUTED)
 
-        ax1.plot(cycles, pool_sizes, color=color, linewidth=2.5, label=f'{label} (Pool)', marker='o', markersize=4)
-        ax1.fill_between(cycles, 0, pool_sizes, color=color, alpha=0.15)
+        ax_pool.plot(
+            cycles,
+            pool_sizes,
+            color=color,
+            linewidth=1.8,
+            label=label,
+            marker='o',
+            markersize=4,
+        )
+        ax_pool.fill_between(cycles, 0, pool_sizes, color=color, alpha=0.10)
 
-        ax2.plot(cycles, discovery, color=color, linewidth=2, linestyle='--',
-                marker='s', markersize=4, alpha=0.7)
+        ax_discovery.plot(
+            cycles,
+            discovery,
+            color=color,
+            linewidth=1.8,
+            linestyle='--',
+            marker='s',
+            markersize=4,
+            alpha=0.9,
+        )
 
-    ax1.set_xlabel('Cycle', fontsize=13)
-    ax1.set_ylabel('Unlabeled Pool Size (compounds)', fontsize=13, color='black')
-    ax1.tick_params(axis='y', labelcolor='black')
-    ax1.grid(True, alpha=0.3, linewidth=0.75)
-
-    ax2.set_ylabel('Top-0.1% Discovery Rate (%)', fontsize=13, color='black')
-    ax2.tick_params(axis='y', labelcolor='black')
-    ax2.set_ylim(0, 100)
-
-    ax1.set_title('Pruning Efficiency: Pool Size Reduction vs Discovery Progress',
-                  fontsize=14, fontweight='bold', pad=15)
-
-    ax1.legend(loc='upper left', fontsize=10, framealpha=0.9)
+    ax_pool.set_ylabel('Remaining unlabeled compounds, n')
+    ax_pool.set_title(
+        'Pruning efficiency: pool reduction and initial-pool recovery',
+        fontsize=12,
+        fontweight='bold',
+        loc='left',
+    )
+    ax_pool.legend(loc='best', fontsize=8)
+    ax_discovery.set_xlabel('Active-learning cycle')
+    ax_discovery.set_ylabel('Top-0.1% recovered from initial pool (%)')
+    ax_discovery.set_ylim(0, 100)
+    for axis in (ax_pool, ax_discovery):
+        style.style_axes(axis)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Pruning efficiency timeline saved: %s", output_path.resolve())
@@ -503,12 +534,13 @@ def create_discovery_efficiency_scatter(
     strategy_labels: Dict[float, str],
     output_path: Path,
     figsize: tuple = (10, 7),
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     strategy_colors = {
-        0.0: '#cabde7',
-        0.15: '#7e62df',
-        0.3: '#452997'
+        0.0: style.PRIMARY_PALE,
+        0.15: style.PRIMARY,
+        0.3: style.PRIMARY_DARK,
     }
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -522,7 +554,7 @@ def create_discovery_efficiency_scatter(
         cycles = cycle_metrics['cycle'].to_numpy()
 
         label = strategy_labels[pruning_frac]
-        color = strategy_colors.get(pruning_frac, '#95a5a6')
+        color = strategy_colors.get(pruning_frac, style.MUTED)
 
         ax.plot(cumulative_labeled, discovery, color=color, linewidth=2.5,
                label=label, marker='o', markersize=6, alpha=0.8)
@@ -534,17 +566,35 @@ def create_discovery_efficiency_scatter(
                            textcoords="offset points", xytext=(0,8),
                            ha='center', fontsize=8, alpha=0.7)
 
-    ax.set_xlabel('Cumulative Compounds Evaluated', fontsize=13)
-    ax.set_ylabel('Top-100 Discovery Rate (%)', fontsize=13)
-    ax.set_title('Discovery Efficiency: How Many Compounds Needed to Find Top-100?',
+    ax.set_xlabel(
+        'Cumulative compounds evaluated, n (percentage of initial pool in ticks)',
+        fontsize=13,
+    )
+    ax.set_ylabel('Top-100 recovered from initial pool (%)', fontsize=13)
+    ax.set_title('Discovery efficiency: compounds needed to recover Top-100',
                  fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3, linewidth=0.75)
     ax.legend(fontsize=11, framealpha=0.9, loc='lower right')
     ax.set_ylim(0, 100)
 
+    initial_pool = None
+    for result in all_results.values():
+        cycle_metrics = pl.DataFrame(result['cycle_metrics'])
+        if cycle_metrics.height == 0:
+            continue
+        first = cycle_metrics.row(0, named=True)
+        initial_pool = int(
+            first.get('pool_size', 0)
+            + first.get('cumulative_labeled', 0)
+            + first.get('cumulative_pruned', 0)
+        )
+        if initial_pool > 0:
+            break
+    if initial_pool:
+        style.set_compound_axis(ax, initial_pool, max_ticks=5)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Discovery efficiency scatter saved: %s", output_path.resolve())
@@ -556,17 +606,18 @@ def create_model_quality_facets(
     strategy_labels: Dict[float, str],
     output_path: Path,
     figsize: tuple = (14, 10),
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     strategy_colors = {
-        0.0: '#cabde7',
-        0.15: '#7e62df',
-        0.3: '#452997'
+        0.0: style.PRIMARY_PALE,
+        0.15: style.PRIMARY,
+        0.3: style.PRIMARY_DARK,
     }
 
     fig, axes = plt.subplots(2, 2, figsize=figsize)
-    fig.suptitle('Model Quality on Unlabeled Pool: Ranking Performance',
-                 fontsize=16, fontweight='bold', y=0.995)
+    fig.suptitle('Model quality on the unlabeled pool · ranking performance',
+                 fontsize=13, fontweight='bold')
 
     metrics = [
         ('unlabeled_top_100_overlap', 'Top-100 Overlap (%)', axes[0, 0]),
@@ -587,7 +638,7 @@ def create_model_quality_facets(
             values = cycle_metrics[metric_name].to_numpy()
 
             label = strategy_labels[pruning_frac]
-            color = strategy_colors.get(pruning_frac, '#95a5a6')
+            color = strategy_colors.get(pruning_frac, style.MUTED)
 
             ax.plot(cycles, values, color=color, linewidth=2.5,
                    label=label, marker='o', markersize=5)
@@ -604,8 +655,7 @@ def create_model_quality_facets(
             ax.set_ylim(0, 1)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Model quality facets saved: %s", output_path.resolve())
@@ -618,8 +668,9 @@ def create_uncertainty_prediction_snapshots(
     output_path: Path,
     cycles_to_show: List[int] = [1, 3, 6, 9],
     figsize: tuple = (12, 10),
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     df = result['compounds_df']
     cycle_metrics = pl.DataFrame(result['cycle_metrics'])
     output_dir = result.get('output_dir')
@@ -659,7 +710,7 @@ def create_uncertainty_prediction_snapshots(
             ax.scatter(
                 unlabeled_with_pred['prediction'].to_numpy(),
                 unlabeled_with_pred['uncertainty'].to_numpy(),
-                c='#CCCCCC',
+                c=style.MUTED_LIGHT,
                 alpha=0.25,
                 s=8,
                 edgecolors='none',
@@ -676,10 +727,10 @@ def create_uncertainty_prediction_snapshots(
             ax.scatter(
                 pruned_at_cycle['prediction'].to_numpy(),
                 pruned_at_cycle['uncertainty'].to_numpy(),
-                c='#d89ba5',
+                c=style.PRIMARY_PALE,
                 alpha=0.5,
                 s=20,
-                edgecolors='darkred',
+                edgecolors=style.ACCENT_ORANGE,
                 linewidths=0.3,
                 label=f'Pruned this cycle (n={len(pruned_at_cycle)})'
             )
@@ -695,10 +746,10 @@ def create_uncertainty_prediction_snapshots(
             ax.scatter(
                 selected_up_to['prediction'].to_numpy(),
                 selected_up_to['uncertainty'].to_numpy(),
-                c='#7e62df',
+                c=style.PRIMARY,
                 alpha=0.75,
                 s=35,
-                edgecolors='black',
+                edgecolors=style.INK,
                 linewidths=0.5,
                 label=f'Selected (n={len(selected_up_to)})'
             )
@@ -707,12 +758,11 @@ def create_uncertainty_prediction_snapshots(
         if col == 0:
             ax.set_ylabel('Uncertainty', fontsize=11)
         ax.set_title(f'Cycle {cycle}', fontsize=12, fontweight='bold')
-        ax.grid(True, alpha=0.3, linewidth=0.5)
+        style.style_axes(ax)
         ax.legend(fontsize=8, loc='best', framealpha=0.9)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Uncertainty-prediction snapshots saved: %s", output_path.resolve())
@@ -724,12 +774,13 @@ def create_score_ratio_evolution(
     strategy_labels: Dict[float, str],
     output_path: Path,
     figsize: tuple = (12, 6),
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     strategy_colors = {
-        0.0: '#cabde7',
-        0.15: '#7e62df',
-        0.3: '#452997'
+        0.0: style.PRIMARY_PALE,
+        0.15: style.PRIMARY,
+        0.3: style.PRIMARY_DARK,
     }
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -743,14 +794,14 @@ def create_score_ratio_evolution(
         batch_ratio = cycle_metrics.get('batch_avg_score_ratio', [1.0]*len(cycles)).to_numpy()
 
         label = strategy_labels[pruning_frac]
-        color = strategy_colors.get(pruning_frac, '#95a5a6')
+        color = strategy_colors.get(pruning_frac, style.MUTED)
 
         ax.plot(cycles, cumulative_ratio, color=color, linewidth=2.5,
                label=f'{label} (Cumulative)', marker='o', markersize=5, linestyle='-')
         ax.plot(cycles, batch_ratio, color=color, linewidth=1.5,
                marker='s', markersize=4, linestyle='--', alpha=0.6)
 
-    ax.axhline(y=1.0, color='gray', linestyle='--', linewidth=2, alpha=0.5,
+    ax.axhline(y=1.0, color=style.MUTED, linestyle='--', linewidth=2, alpha=0.5,
               label='Random baseline')
 
     ax.set_xlabel('Cycle', fontsize=13)
@@ -762,8 +813,7 @@ def create_score_ratio_evolution(
     ax.set_ylim(0.8, 2.0)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     logger.info("Score ratio evolution saved: %s", output_path.resolve())

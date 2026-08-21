@@ -7,6 +7,7 @@ import matplotlib.colors as mcolors
 import seaborn as sns
 from datetime import datetime
 from learnm8.api import LEARNER_DISPLAY_NAMES
+from learnm8.visualization import style
 from validation.lib.heatmap_utils import (
     get_purple_colormap,
     auto_scale_range,
@@ -35,6 +36,7 @@ def create_top_k_heatmap(
     Returns:
         Modified axes
     """
+    style.apply()
     cmap = get_purple_colormap()
 
     mean_pd = mean_matrix.to_pandas()
@@ -49,9 +51,12 @@ def create_top_k_heatmap(
         annot=False,
         cmap=cmap,
         mask=mask,
-        cbar_kws={'shrink': 0.8, 'label': 'Discovery Rate (%)'},
+        cbar_kws={
+            'shrink': 0.8,
+            'label': 'Initial-pool top-set recovered (%)',
+        },
         linewidths=0.3,
-        linecolor='white',
+        linecolor=style.BACKGROUND,
         square=False,
         vmin=vmin,
         vmax=vmax,
@@ -71,15 +76,15 @@ def create_top_k_heatmap(
     )
 
     cbar = hm.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=11)
-    cbar.set_label('Discovery Rate (%)', size=11)
+    cbar.ax.tick_params(labelsize=8)
+    cbar.set_label('Initial-pool top-set recovered (%)', size=9)
 
-    ax.set_title(f'{k_label} Discovery Rate (mean ± std)',
-                 fontsize=16, fontweight='bold', pad=12)
+    ax.set_title(f'{k_label} recovered from initial pool (mean ± SD)',
+                 fontsize=11, fontweight='bold', pad=9, loc='left')
     ax.set_xlabel('')
     ax.set_ylabel('')
 
-    ax.tick_params(axis='both', labelsize=11)
+    ax.tick_params(axis='both', labelsize=8)
     ax.set_xticklabels(mean_matrix.columns, rotation=45, ha='right')
 
     if learner_names is not None:
@@ -96,6 +101,7 @@ def create_all_heatmaps(
     output_dir: Path,
     dataset_name: str = None
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -107,24 +113,14 @@ def create_all_heatmaps(
         ('top_100_discovery', 'Top 100')
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=300)
+    fig, axes = plt.subplots(2, 2, figsize=(20, 16), dpi=style.OUTPUT_DPI)
     axes = axes.flatten()
 
-    title = 'Learner-Acquisition Performance Matrix: Discovery Rates'
+    title = 'Learner–acquisition performance: initial-pool recovery'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title,
-                 fontsize=24, fontweight='bold', y=0.995)
-
-    plt.subplots_adjust(
-        left=0.08,
-        right=0.98,
-        top=0.94,
-        bottom=0.06,
-        wspace=0.25,
-        hspace=0.28
-    )
+    fig.suptitle(title, fontsize=15, fontweight='bold')
 
     for idx, (metric_col, k_label) in enumerate(heatmap_configs):
         mean_col = f'{metric_col}_mean'
@@ -154,7 +150,7 @@ def create_all_heatmaps(
         create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx], learner_names)
 
     output_path = plots_dir / 'heatmap_combined.png'
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created combined heatmap: {output_path.name}")
@@ -165,8 +161,9 @@ def create_all_heatmaps(
 def create_greedy_cycle_plot(
     greedy_results: Dict[str, Dict],
     output_path: Path,
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -180,7 +177,7 @@ def create_greedy_cycle_plot(
         ('top_100_discovery', 'Top 100 Discovery Rate')
     ]
 
-    colors = plt.cm.tab20(np.linspace(0, 1, len(greedy_results)))
+    colors = style.categorical_colors(len(greedy_results))
 
     for ax_idx, (metric_col, title) in enumerate(metrics):
         ax = axes[ax_idx]
@@ -194,15 +191,20 @@ def create_greedy_cycle_plot(
             mean_values = [m.get(metric_col, 0) for m in cycle_metrics_mean]
             std_values = [m.get(metric_col, 0) for m in cycle_metrics_std]
 
-            ax.errorbar(cycles, mean_values, yerr=std_values,
-                       marker='o', linewidth=2, label=learner_name,
+            ax.errorbar(
+                       cycles, mean_values, yerr=std_values,
+                       marker=style.CURVE_MARKERS[learner_idx % len(style.CURVE_MARKERS)],
+                       linestyle=style.CURVE_LINESTYLES[
+                           learner_idx % len(style.CURVE_LINESTYLES)
+                       ],
+                       linewidth=1.8, label=learner_name,
                        color=colors[learner_idx], markersize=4,
                        alpha=0.8, capsize=3, capthick=1)
 
         ax.set_title(title, fontsize=12, fontweight='bold')
         ax.set_xlabel('Cycle', fontsize=10)
-        ax.set_ylabel('Discovery Rate (%)', fontsize=10)
-        ax.grid(True, alpha=0.3, linestyle='--')
+        ax.set_ylabel('Initial-pool top-set recovered (%)', fontsize=10)
+        style.style_axes(ax)
         ax.set_xlim(left=0)
         ax.set_ylim(bottom=0, top=100)
 
@@ -210,10 +212,8 @@ def create_greedy_cycle_plot(
             ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left',
                      fontsize=8, framealpha=0.9)
 
-    plt.suptitle('Learner Performance Comparison: Greedy Acquisition',
-                 fontsize=16, fontweight='bold', y=0.995)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    fig.suptitle('Learner performance · greedy acquisition', fontsize=15, fontweight='bold')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created cycle comparison plot: {output_path.name}")
@@ -392,6 +392,7 @@ def featurizer_create_all_heatmaps(
     output_dir: Path,
     dataset_name: str = None
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -405,24 +406,14 @@ def featurizer_create_all_heatmaps(
 
     n_featurizers = results_df['featurizer'].n_unique()
     fig_width = max(20, 1.2 * n_featurizers)
-    fig, axes = plt.subplots(2, 2, figsize=(fig_width, 16), dpi=300)
+    fig, axes = plt.subplots(2, 2, figsize=(fig_width, 16), dpi=style.OUTPUT_DPI)
     axes = axes.flatten()
 
     title = 'Learner-Featurizer Performance Matrix: Discovery Rates'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title,
-                 fontsize=24, fontweight='bold', y=0.995)
-
-    plt.subplots_adjust(
-        left=0.08,
-        right=0.98,
-        top=0.94,
-        bottom=0.06,
-        wspace=0.25,
-        hspace=0.28
-    )
+    fig.suptitle(title, fontsize=15, fontweight='bold')
 
     for idx, (metric_col, k_label) in enumerate(heatmap_configs):
         mean_col = f'{metric_col}_mean'
@@ -452,7 +443,7 @@ def featurizer_create_all_heatmaps(
         create_top_k_heatmap(mean_pivot, std_pivot, k_label, metric_col, axes[idx], learner_names)
 
     output_path = plots_dir / 'heatmap_combined.png'
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created combined heatmap: {output_path.name}")
@@ -463,8 +454,9 @@ def featurizer_create_all_heatmaps(
 def create_learner_cycle_plot(
     learner_results: Dict[str, Dict],
     output_path: Path,
-    dpi: int = 300
+    dpi: int = style.OUTPUT_DPI
 ) -> Path:
+    style.apply()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -478,7 +470,7 @@ def create_learner_cycle_plot(
         ('top_100_discovery', 'Top 100 Discovery Rate')
     ]
 
-    colors = plt.cm.tab10(np.linspace(0, 1, 6))
+    colors = style.categorical_colors(6)
     featurizer_colors = {
         'none': colors[0],
         'morgan': colors[1],
@@ -504,14 +496,14 @@ def create_learner_cycle_plot(
                 label = f"{learner_name} ({featurizer_name})"
                 ax.errorbar(cycles, mean_values, yerr=std_values,
                            marker='o', linewidth=1.5, label=label,
-                           color=featurizer_colors.get(featurizer_name, 'gray'),
+                           color=featurizer_colors.get(featurizer_name, style.MUTED),
                            markersize=3, alpha=0.7, linestyle='-',
                            capsize=2, capthick=1)
 
         ax.set_title(title, fontsize=12, fontweight='bold')
         ax.set_xlabel('Cycle', fontsize=10)
         ax.set_ylabel('Discovery Rate (%)', fontsize=10)
-        ax.grid(True, alpha=0.3, linestyle='--')
+        style.style_axes(ax)
         ax.set_xlim(left=0)
         ax.set_ylim(bottom=0, top=100)
 
@@ -519,10 +511,12 @@ def create_learner_cycle_plot(
             ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left',
                      fontsize=6, framealpha=0.9, ncol=1)
 
-    plt.suptitle('Learner-Featurizer Performance Comparison: Greedy Acquisition',
-                 fontsize=16, fontweight='bold', y=0.995)
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    fig.suptitle(
+        'Learner · featurizer performance · greedy acquisition',
+        fontsize=15,
+        fontweight='bold',
+    )
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created cycle comparison plot: {output_path.name}")
@@ -770,6 +764,7 @@ def create_time_heatmap(
     performance_metric: str = 'top_10_recovery',
     dataset_name: str = None
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -795,13 +790,13 @@ def create_time_heatmap(
 
     n_featurizers = len(ordered_cols)
     fig_width = max(12, 0.8 * n_featurizers)
-    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=style.OUTPUT_DPI)
 
     title = f'Time Matrix: Cumulative Training + Prediction Time (seconds)\n{metric_label} Discovery Rate'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
+    fig.suptitle(title, fontsize=14, fontweight='bold')
 
     cmap = get_purple_colormap(reverse=True)
 
@@ -815,7 +810,7 @@ def create_time_heatmap(
         mask=time_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Time (seconds)'},
         linewidths=0.3,
-        linecolor='white',
+        linecolor=style.BACKGROUND,
         square=False,
         vmin=vmin,
         vmax=vmax,
@@ -842,7 +837,7 @@ def create_time_heatmap(
 
     output_filename = f'time_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created time heatmap: {output_path.name}")
@@ -856,6 +851,7 @@ def create_performance_heatmap(
     performance_metric: str = 'top_10_recovery',
     dataset_name: str = None
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -881,13 +877,13 @@ def create_performance_heatmap(
 
     n_featurizers = len(ordered_cols)
     fig_width = max(12, 0.8 * n_featurizers)
-    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=style.OUTPUT_DPI)
 
     title = f'Performance Matrix: {metric_label} Discovery Rate (%)'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
+    fig.suptitle(title, fontsize=14, fontweight='bold')
 
     cmap = get_purple_colormap()
 
@@ -901,7 +897,7 @@ def create_performance_heatmap(
         mask=perf_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Discovery Rate (%)'},
         linewidths=0.3,
-        linecolor='white',
+        linecolor=style.BACKGROUND,
         square=False,
         vmin=vmin,
         vmax=vmax,
@@ -928,7 +924,7 @@ def create_performance_heatmap(
 
     output_filename = f'performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created performance heatmap: {output_path.name}")
@@ -942,6 +938,7 @@ def create_efficiency_heatmap(
     performance_metric: str = 'top_10_recovery',
     dataset_name: str = None
 ) -> Path:
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -971,13 +968,13 @@ def create_efficiency_heatmap(
 
     n_featurizers = len(ordered_cols)
     fig_width = max(12, 0.8 * n_featurizers)
-    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=300)
+    fig, ax = plt.subplots(1, 1, figsize=(fig_width, 10), dpi=style.OUTPUT_DPI)
 
     title = f'Efficiency Matrix: {metric_label} Discovery Rate per Second (%/s)'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.98)
+    fig.suptitle(title, fontsize=14, fontweight='bold')
 
     cmap = get_purple_colormap()
 
@@ -991,7 +988,7 @@ def create_efficiency_heatmap(
         mask=efficiency_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': 'Efficiency (%/s)'},
         linewidths=0.3,
-        linecolor='white',
+        linecolor=style.BACKGROUND,
         square=False,
         vmin=vmin,
         vmax=vmax,
@@ -1018,7 +1015,7 @@ def create_efficiency_heatmap(
 
     output_filename = f'efficiency_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    fig.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     print(f"✓ Created efficiency heatmap: {output_path.name}")

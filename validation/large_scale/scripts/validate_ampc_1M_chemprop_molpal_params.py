@@ -357,7 +357,6 @@ def main():
             strategy_config=strategy_config,
             param_value=None,
             output_path=plot_path,
-            dpi=300,
             dataset_name='AmpC 1M',
             learner_name=LEARNER_NAME
         )

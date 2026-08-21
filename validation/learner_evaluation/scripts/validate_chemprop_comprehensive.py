@@ -25,6 +25,7 @@ from tqdm import tqdm
 from learnm8 import run_active_learning
 from learnm8.learners.torch.chemprop_learner import ChempropLearner
 from learnm8.oracles.csv_oracle import CSVOracle
+from learnm8.visualization import style
 from validation.lib import load_validation_dataset, get_dataset_info, get_dataset_path
 from validation.lib.seed_aggregation import (
     aggregate_seed_results,
@@ -878,6 +879,7 @@ def run_single_experiment(
 
 def create_visualizations(df: pl.DataFrame, output_dir: Path):
     """Create comprehensive visualization plots using Polars."""
+    style.apply()
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
 
@@ -887,7 +889,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         console.print("[yellow]Warning: No successful experiments to visualize[/yellow]")
         return
 
-    fig, axes = plt.subplots(3, 2, figsize=(16, 18))
+    fig, axes = plt.subplots(3, 2, figsize=(16, 18), dpi=style.OUTPUT_DPI)
 
     cmap = get_purple_colormap()
 
@@ -909,7 +911,8 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
 
     sns.heatmap(performance_data, annot=False, cmap=cmap, ax=ax, vmin=vmin, vmax=vmax,
-                linewidths=0.3, linecolor='white', cbar_kws={'label': 'Recovery Rate (%)'})
+                linewidths=0.3, linecolor=style.BACKGROUND,
+                cbar_kws={'label': 'Recovery Rate (%)'})
 
     add_heatmap_annotations(
         ax=ax, data=perf_values, std_data=None, colormap=cmap,
@@ -938,7 +941,8 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     vmin, vmax = auto_scale_range(perf_values, percentile=5, padding=0.05)
 
     sns.heatmap(performance_data, annot=False, cmap=cmap, ax=ax, vmin=vmin, vmax=vmax,
-                linewidths=0.3, linecolor='white', cbar_kws={'label': 'Recovery Rate (%)'})
+                linewidths=0.3, linecolor=style.BACKGROUND,
+                cbar_kws={'label': 'Recovery Rate (%)'})
 
     add_heatmap_annotations(
         ax=ax, data=perf_values, std_data=None, colormap=cmap,
@@ -957,7 +961,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
         pl.col('total_time').mean().alias('mean_time'),
     ]).sort('mean_recovery', descending=True)
 
-    colors = plt.cm.viridis(np.linspace(0.2, 0.8, len(featurizer_comparison)))
+    colors = style.categorical_colors(len(featurizer_comparison))
     bars = ax.barh(
         featurizer_comparison['featurizer'].to_list(),
         featurizer_comparison['mean_recovery'].to_numpy(),
@@ -971,7 +975,8 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     ax.grid(axis='x', alpha=0.3)
 
     for i, row in enumerate(featurizer_comparison.iter_rows(named=True)):
-        ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9, color='white', fontweight='bold')
+        ax.text(0.02, i, f'{row["mean_time"]:.1f}s', va='center', fontsize=9,
+                color=style.BACKGROUND, fontweight='bold')
 
     # Plot 4: Timing Comparison
     ax = axes[1, 1]
@@ -1017,7 +1022,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     timing_data = timing_data.sort(['category_rank', 'avg_training_time'], descending=[False, True])
 
     categories_timing = list(config_categories_timing.keys()) + ['Other']
-    colors_timing = plt.cm.tab10(np.linspace(0, 0.9, len(categories_timing)))
+    colors_timing = style.categorical_colors(len(categories_timing))
     color_map_timing = {cat: colors_timing[i] for i, cat in enumerate(categories_timing)}
 
     bar_colors_timing = [color_map_timing[cat] for cat in timing_data['category'].to_list()]
@@ -1082,7 +1087,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     config_type_data_01 = config_type_data_01.sort(['category_rank', 'performance'], descending=[False, True])
 
     categories_01 = list(config_categories_01.keys()) + ['Other']
-    colors_01 = plt.cm.tab10(np.linspace(0, 0.9, len(categories_01)))
+    colors_01 = style.categorical_colors(len(categories_01))
     color_map_01 = {cat: colors_01[i] for i, cat in enumerate(categories_01)}
 
     bar_colors_01 = [color_map_01[cat] for cat in config_type_data_01['category'].to_list()]
@@ -1150,7 +1155,7 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     config_type_data = config_type_data.sort(['category_rank', 'performance'], descending=[False, True])
 
     categories = list(config_categories.keys()) + ['Other']
-    colors = plt.cm.tab10(np.linspace(0, 0.9, len(categories)))
+    colors = style.categorical_colors(len(categories))
     color_map = {cat: colors[i] for i, cat in enumerate(categories)}
 
     bar_colors = [color_map[cat] for cat in config_type_data['category'].to_list()]
@@ -1171,8 +1176,14 @@ def create_visualizations(df: pl.DataFrame, output_dir: Path):
     legend_labels = [cat for cat in categories if cat in config_type_data['category'].unique().to_list()]
     ax.legend(legend_handles, legend_labels, loc='lower right', fontsize=8, ncol=2)
 
-    plt.tight_layout()
-    plt.savefig(plots_dir / 'comprehensive_analysis.png', dpi=300, bbox_inches='tight')
+    for axis in axes.flat:
+        style.style_axes(axis)
+    plt.savefig(
+        plots_dir / 'comprehensive_analysis.png',
+        dpi=style.OUTPUT_DPI,
+        bbox_inches='tight',
+        pad_inches=0.08,
+    )
     plt.close()
 
     console.print(f"[green]✓ Saved visualizations to {plots_dir}[/green]")
@@ -1236,6 +1247,7 @@ def create_performance_heatmap(
     Returns:
         Path to saved heatmap image
     """
+    style.apply()
     output_dir = Path(output_dir)
     plots_dir = output_dir / 'plots'
     plots_dir.mkdir(parents=True, exist_ok=True)
@@ -1260,14 +1272,14 @@ def create_performance_heatmap(
     perf_pd = perf_pivot.to_pandas()
 
     # Create figure
-    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=300)
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10), dpi=style.OUTPUT_DPI)
 
     metric_label = performance_metric.replace('_', ' ').title()
     title = f'Performance Matrix: {metric_label}'
     if dataset_name:
         title += f'\nDataset: {dataset_name}'
 
-    fig.suptitle(title, fontsize=20, fontweight='bold', y=0.98)
+    fig.suptitle(title, fontsize=14, fontweight='bold')
 
     cmap = get_purple_colormap()
 
@@ -1281,7 +1293,7 @@ def create_performance_heatmap(
         mask=perf_pd.isna(),
         cbar_kws={'shrink': 0.8, 'label': metric_label},
         linewidths=0.3,
-        linecolor='white',
+        linecolor=style.BACKGROUND,
         square=False,
         vmin=vmin,
         vmax=vmax,
@@ -1308,7 +1320,7 @@ def create_performance_heatmap(
 
     output_filename = f'performance_heatmap_{performance_metric}.png'
     output_path = plots_dir / output_filename
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close()
 
     console.print(f"[green]✓ Created performance heatmap: {output_path.name}[/green]")

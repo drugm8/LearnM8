@@ -1,3 +1,5 @@
+import textwrap
+
 import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -7,6 +9,8 @@ from scipy import stats as scipy_stats
 from scipy.stats import norm
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+from learnm8.visualization import style
+
 from .uq_metrics import (
     compute_ause,
     compute_calibration_curve,
@@ -15,35 +19,12 @@ from .uq_metrics import (
     compute_spearman,
 )
 
-OKABE_ITO = [
-    '#0072B2',
-    '#E69F00',
-    '#009E73',
-    '#D55E00',
-    '#CC79A7',
-    '#56B4E9',
-    '#F0E442',
-    '#000000',
-]
-
-DEFAULT_RCPARAMS = {
-    'font.size': 9,
-    'axes.titlesize': 10,
-    'axes.labelsize': 9,
-    'legend.fontsize': 8,
-    'xtick.labelsize': 8,
-    'ytick.labelsize': 8,
-    'figure.dpi': 300,
-    'figure.constrained_layout.use': True,
-    'axes.grid': True,
-    'grid.alpha': 0.3,
-    'axes.spines.top': False,
-    'axes.spines.right': False,
-}
+OKABE_ITO = style.CATEGORICAL
 
 
 def apply_style():
-    plt.rcParams.update(DEFAULT_RCPARAMS)
+    """Install the shared LearnM8 plotting theme."""
+    style.apply()
 
 
 def _lighten_color(color, amount=0.35):
@@ -70,15 +51,60 @@ def _create_subplot_grid(n_models, figsize_per_subplot=(4, 3.5), max_cols=4):
 def _save_and_close(fig, output_path):
     """Save figure and close if output_path is provided."""
     if output_path:
-        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        for ax in fig.axes:
+            if getattr(ax, '_learnm8_heatmap', False):
+                style.style_heatmap(ax)
+            elif getattr(ax, '_colorbar', None) is None:
+                style.style_axes(ax)
+        fig.savefig(
+            output_path,
+            dpi=style.OUTPUT_DPI,
+            bbox_inches='tight',
+            pad_inches=0.08,
+            facecolor=style.BACKGROUND,
+        )
         plt.close(fig)
+
+
+def _curve_kwargs(index: int, n_points: int | None = None) -> dict:
+    """Return redundant line encodings for dense multi-model curves."""
+    kwargs = {
+        'linestyle': style.CURVE_LINESTYLES[index % len(style.CURVE_LINESTYLES)],
+        'marker': style.CURVE_MARKERS[index % len(style.CURVE_MARKERS)],
+    }
+    if n_points:
+        kwargs['markevery'] = max(1, n_points // 8)
+    return kwargs
+
+
+def _directional_scores(values, lower_is_better: list[bool]):
+    """Normalize heterogeneous metrics so darker always means better."""
+    scores = values.copy()
+    for column, lower in zip(values.columns, lower_is_better, strict=True):
+        series = values[column].astype(float)
+        valid = series.dropna()
+        if valid.empty:
+            continue
+        minimum = float(valid.min())
+        maximum = float(valid.max())
+        if np.isclose(minimum, maximum):
+            scores[column] = series.notna().astype(float) * 0.5
+            continue
+        normalized = (series - minimum) / (maximum - minimum)
+        scores[column] = 1.0 - normalized if lower else normalized
+    return scores
 
 
 def _apply_title_layout(fig, title, subtitle=None, **_kwargs):
     """Place figure title and optional subtitle using standard matplotlib spacing."""
     if subtitle:
         title = f'{title}\n{subtitle}'
-    fig.suptitle(title, fontweight='bold', fontsize=11)
+    fig.suptitle(
+        textwrap.fill(title, width=72),
+        fontweight='bold',
+        fontsize=13,
+        y=0.98,
+    )
 
 
 # ── Existing plot functions ──────────────────────────────────────────────────
@@ -99,8 +125,8 @@ def plot_calibration_curves(models_data, output_path=None, figsize=(7, 5.5),
     apply_style()
     fig, ax = plt.subplots(figsize=figsize)
 
-    ax.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5, label='Perfect calibration')
-    ax.fill_between([0, 1], [0, 1], alpha=0.05, color='gray')
+    ax.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55, label='Perfect calibration')
+    ax.fill_between([0, 1], [0, 1], alpha=0.05, color=style.MUTED)
 
     for i, (name, data) in enumerate(models_data.items()):
         color = data.get('color', OKABE_ITO[i % len(OKABE_ITO)])
@@ -109,8 +135,16 @@ def plot_calibration_curves(models_data, output_path=None, figsize=(7, 5.5),
         )
         miscal = data.get('miscal_area', None)
         label = f"{name} (MA={miscal:.3f})" if miscal is not None else name
-        ax.plot(expected, observed, 'o-', color=color, lw=1.8, markersize=4,
-                label=label, alpha=0.85)
+        ax.plot(
+            expected,
+            observed,
+            color=color,
+            lw=1.8,
+            markersize=4,
+            label=label,
+            alpha=0.85,
+            **_curve_kwargs(i, len(expected)),
+        )
 
     ax.set_xlabel('Expected Coverage')
     ax.set_ylabel('Observed Coverage')
@@ -139,8 +173,8 @@ def plot_calibration_before_after(models_data_raw, models_data_calibrated,
         (ax1, models_data_raw, 'Before Calibration (Raw)'),
         (ax2, models_data_calibrated, 'After STD Scaling')
     ]:
-        ax.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5)
-        ax.fill_between([0, 1], [0, 1], alpha=0.05, color='gray')
+        ax.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55)
+        ax.fill_between([0, 1], [0, 1], alpha=0.05, color=style.MUTED)
 
         for i, (name, data) in enumerate(data_dict.items()):
             color = data.get('color', OKABE_ITO[i % len(OKABE_ITO)])
@@ -149,8 +183,16 @@ def plot_calibration_before_after(models_data_raw, models_data_calibrated,
             )
             miscal = data.get('miscal_area', None)
             label = f"{name} ({miscal:.3f})" if miscal is not None else name
-            ax.plot(expected, observed, 'o-', color=color, lw=1.8,
-                    markersize=4, label=label, alpha=0.85)
+            ax.plot(
+                expected,
+                observed,
+                color=color,
+                lw=1.8,
+                markersize=4,
+                label=label,
+                alpha=0.85,
+                **_curve_kwargs(i, len(expected)),
+            )
 
         ax.set_xlabel('Expected Coverage')
         ax.set_ylabel('Observed Coverage')
@@ -183,19 +225,27 @@ def plot_summary_heatmap(metrics_df, output_path=None, figsize=(10, 5)):
         rows[model_name] = [metrics.get(m, np.nan) for m in display_metrics]
 
     df = pd.DataFrame(rows, index=display_labels).T
+    score_df = _directional_scores(df, lower_is_better)
 
     fig, ax = plt.subplots(figsize=figsize)
     mask = df.isna()
     sns.heatmap(
-        df, ax=ax, annot=True, fmt='.3f', cmap='RdYlGn_r',
+        score_df,
+        ax=ax,
+        annot=df.to_numpy(),
+        fmt='.3f',
+        cmap=style.SEQUENTIAL,
+        vmin=0,
+        vmax=1,
         linewidths=0.5, mask=mask, annot_kws={'size': 9},
-        cbar_kws={'label': 'Metric Value', 'shrink': 0.8}
+        cbar_kws={'label': 'Relative performance (higher is better)', 'shrink': 0.8}
     )
+    ax._learnm8_heatmap = True
     ax.set_title('Which model provides the most reliable and well-ordered uncertainty estimates?',
                  fontweight='bold', fontsize=10)
     ax.annotate('final model, out-of-sample', xy=(0.5, 1.02),
                 xycoords='axes fraction', ha='center', fontsize=8,
-                style='italic', color='gray')
+                style='italic', color=style.MUTED)
     ax.set_ylabel('')
 
     for j, lib in enumerate(lower_is_better):
@@ -204,7 +254,7 @@ def plot_summary_heatmap(metrics_df, output_path=None, figsize=(10, 5)):
             best_idx = col_vals.idxmin() if lib else col_vals.idxmax()
             row_pos = list(df.index).index(best_idx)
             ax.add_patch(plt.Rectangle((j, row_pos), 1, 1,
-                                        fill=False, edgecolor='green', lw=2.5))
+                                        fill=False, edgecolor=style.ACCENT_GREEN, lw=2.0))
 
     _save_and_close(fig, output_path)
     return fig
@@ -238,19 +288,30 @@ def plot_summary_heatmap_with_std(metrics_mean, metrics_std, output_path=None,
 
     df_mean = pd.DataFrame(rows_mean, index=display_labels).T
     df_annot = pd.DataFrame(rows_annot, index=display_labels).T
+    score_df = _directional_scores(df_mean, lower_is_better)
 
     fig, ax = plt.subplots(figsize=figsize)
     mask = df_mean.isna()
     sns.heatmap(
-        df_mean, ax=ax, annot=df_annot.values, fmt='', cmap='RdYlGn_r',
+        score_df,
+        ax=ax,
+        annot=df_annot.values,
+        fmt='',
+        cmap=style.SEQUENTIAL,
+        vmin=0,
+        vmax=1,
         linewidths=0.5, mask=mask, annot_kws={'size': 8},
-        cbar_kws={'label': 'Metric Value (mean)', 'shrink': 0.8}
+        cbar_kws={
+            'label': 'Relative performance (higher is better)',
+            'shrink': 0.8,
+        }
     )
+    ax._learnm8_heatmap = True
     ax.set_title('Which model provides the most reliable and well-ordered uncertainty estimates?',
                  fontweight='bold', fontsize=10)
     ax.annotate('final model, out-of-sample', xy=(0.5, 1.02),
                 xycoords='axes fraction', ha='center', fontsize=8,
-                style='italic', color='gray')
+                style='italic', color=style.MUTED)
     ax.set_ylabel('')
 
     for j, lib in enumerate(lower_is_better):
@@ -259,7 +320,7 @@ def plot_summary_heatmap_with_std(metrics_mean, metrics_std, output_path=None,
             best_idx = col_vals.idxmin() if lib else col_vals.idxmax()
             row_pos = list(df_mean.index).index(best_idx)
             ax.add_patch(plt.Rectangle((j, row_pos), 1, 1,
-                                        fill=False, edgecolor='green', lw=2.5))
+                                        fill=False, edgecolor=style.ACCENT_GREEN, lw=2.0))
 
     _save_and_close(fig, output_path)
     return fig
@@ -299,8 +360,17 @@ def plot_ensemble_size_ablation(size_metrics, output_path=None, figsize=(14, 8),
             label = _metric_label_map.get(key, key)
             means = [size_metrics[s]['metrics_mean'].get(key, np.nan) for s in sizes]
             stds = [size_metrics[s]['metrics_std'].get(key, 0.0) for s in sizes]
-            ax.errorbar(sizes, means, yerr=stds, fmt='o-', color=OKABE_ITO[i],
-                        lw=2, markersize=8, capsize=5, capthick=1.5)
+            ax.errorbar(
+                sizes,
+                means,
+                yerr=stds,
+                color=OKABE_ITO[i],
+                lw=1.8,
+                markersize=6,
+                capsize=4,
+                capthick=1.2,
+                **_curve_kwargs(i, len(sizes)),
+            )
             ax.set_xlabel(xlabel)
             ax.set_ylabel(label)
             ax.set_title(label, fontweight='bold')
@@ -323,8 +393,17 @@ def plot_ensemble_size_ablation(size_metrics, output_path=None, figsize=(14, 8),
         means = [size_metrics[s]['metrics_mean'].get(key, np.nan) for s in sizes]
         stds = [size_metrics[s]['metrics_std'].get(key, 0.0) for s in sizes]
 
-        ax.errorbar(sizes, means, yerr=stds, fmt='o-', color=OKABE_ITO[i],
-                    lw=2, markersize=8, capsize=5, capthick=1.5)
+        ax.errorbar(
+            sizes,
+            means,
+            yerr=stds,
+            color=OKABE_ITO[i],
+            lw=1.8,
+            markersize=6,
+            capsize=4,
+            capthick=1.2,
+            **_curve_kwargs(i, len(sizes)),
+        )
         ax.set_xlabel(xlabel)
         ax.set_ylabel(label)
         ax.set_title(label, fontweight='bold')
@@ -333,8 +412,17 @@ def plot_ensemble_size_ablation(size_metrics, output_path=None, figsize=(14, 8),
     ax_mae = axes_flat[5]
     maes = [size_metrics[s]['metrics_mean'].get('mae', np.nan) for s in sizes]
     mae_stds = [size_metrics[s]['metrics_std'].get('mae', 0.0) for s in sizes]
-    ax_mae.errorbar(sizes, maes, yerr=mae_stds, fmt='s-', color=OKABE_ITO[5],
-                    lw=2, markersize=8, capsize=5, capthick=1.5)
+    ax_mae.errorbar(
+        sizes,
+        maes,
+        yerr=mae_stds,
+        color=OKABE_ITO[5],
+        lw=1.8,
+        markersize=6,
+        capsize=4,
+        capthick=1.2,
+        **_curve_kwargs(5, len(sizes)),
+    )
     ax_mae.set_xlabel(xlabel)
     ax_mae.set_ylabel('MAE')
     ax_mae.set_title('MAE (Prediction Accuracy)', fontweight='bold')
@@ -422,8 +510,8 @@ def plot_dataset_calibration_comparison(models_30k, models_500k,
         (ax1, models_30k, '30K Compounds'),
         (ax2, models_500k, '500K Compounds')
     ]:
-        ax.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5)
-        ax.fill_between([0, 1], [0, 1], alpha=0.05, color='gray')
+        ax.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55)
+        ax.fill_between([0, 1], [0, 1], alpha=0.05, color=style.MUTED)
 
         for i, (name, data) in enumerate(data_dict.items()):
             color = data.get('color', OKABE_ITO[i % len(OKABE_ITO)])
@@ -432,8 +520,16 @@ def plot_dataset_calibration_comparison(models_30k, models_500k,
             )
             miscal = data.get('miscal_area', None)
             label = f"{name} ({miscal:.3f})" if miscal is not None else name
-            ax.plot(expected, observed, 'o-', color=color, lw=1.8,
-                    markersize=4, label=label, alpha=0.85)
+            ax.plot(
+                expected,
+                observed,
+                color=color,
+                lw=1.8,
+                markersize=4,
+                label=label,
+                alpha=0.85,
+                **_curve_kwargs(i, len(expected)),
+            )
 
         ax.set_xlabel('Expected Coverage')
         ax.set_ylabel('Observed Coverage')
@@ -471,8 +567,16 @@ def plot_cycle_progression(cycle_metrics_by_model, metric_key='ence',
         vals = [cycle_data[c] for c in cycles]
         means = np.array([v[0] if isinstance(v, tuple) else v for v in vals])
         stds = np.array([v[1] if isinstance(v, tuple) else 0.0 for v in vals])
-        ax.plot(cycles, means, 'o-', color=color, lw=1.8, markersize=6,
-                label=name, alpha=0.85)
+        ax.plot(
+            cycles,
+            means,
+            color=color,
+            lw=1.8,
+            markersize=5,
+            label=name,
+            alpha=0.85,
+            **_curve_kwargs(i, len(cycles)),
+        )
         if np.any(stds > 0):
             ax.fill_between(cycles, means - stds, means + stds,
                             color=color, alpha=0.15)
@@ -519,11 +623,17 @@ def plot_sparsification(models_data, output_path=None, figsize=None,
 
         ause = compute_ause(data['y_true'], data['y_pred'], data['y_std'])
 
-        ax.plot(sp['fractions'], sp['model_maes'], '-', color=color, lw=1.8,
-                label='Model')
-        ax.plot(sp['fractions'], sp['oracle_maes'], '--', color='black', lw=1.2,
+        ax.plot(
+            sp['fractions'],
+            sp['model_maes'],
+            color=color,
+            lw=1.8,
+            label='Model',
+            **_curve_kwargs(i, len(sp['fractions'])),
+        )
+        ax.plot(sp['fractions'], sp['oracle_maes'], '--', color=style.INK, lw=1.2,
                 label='Oracle')
-        ax.axhline(y=sp['random_mae'], color='gray', ls=':', lw=1, alpha=0.7,
+        ax.axhline(y=sp['random_mae'], color=style.MUTED, ls=':', lw=1, alpha=0.7,
                    label='Random')
         ax.fill_between(sp['fractions'], sp['oracle_maes'], sp['model_maes'],
                         alpha=0.15, color=color)
@@ -579,7 +689,7 @@ def plot_uncertainty_vs_error_scatter(models_data, output_path=None, figsize=Non
         n = len(errors)
 
         if n > 5000:
-            hb = ax.hexbin(y_std, errors, gridsize=40, cmap='Blues',
+            hb = ax.hexbin(y_std, errors, gridsize=40, cmap=style.SEQUENTIAL,
                            mincnt=1, linewidths=0.2)
             fig.colorbar(hb, ax=ax, shrink=0.7, label='Count')
         else:
@@ -589,14 +699,14 @@ def plot_uncertainty_vs_error_scatter(models_data, output_path=None, figsize=Non
         n_lowess = min(n, 10000)
         idx = rng.choice(n, size=n_lowess, replace=False) if n > n_lowess else np.arange(n)
         smoothed = lowess(errors[idx], y_std[idx], frac=0.3, return_sorted=True)
-        ax.plot(smoothed[:, 0], smoothed[:, 1], '-', color='red', lw=2,
+        ax.plot(smoothed[:, 0], smoothed[:, 1], '-', color=style.ACCENT_ORANGE, lw=2,
                 label='LOWESS')
 
         rho, _ = compute_spearman(y_true, y_pred, y_std)
         ax.text(0.95, 0.95, f'\u03c1={rho:.3f}', transform=ax.transAxes,
                 fontsize=9, va='top', ha='right',
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                          edgecolor='gray', alpha=0.8))
+                bbox=dict(boxstyle='round,pad=0.3', facecolor=style.BACKGROUND,
+                          edgecolor=style.MUTED, alpha=0.8))
 
         ax.set_xlabel('Predicted \u03c3')
         ax.set_ylabel('|Error|')
@@ -654,13 +764,13 @@ def plot_prediction_interval_coverage(models_data, output_path=None, figsize=Non
         width = 0.35
         labels = [f'{int(p * 100)}%' for p in confidence_levels]
 
-        ax.bar(x - width / 2, confidence_levels, width, color='lightgray',
-               edgecolor='gray', label='Expected')
+        ax.bar(x - width / 2, confidence_levels, width, color=style.MUTED_LIGHT,
+               edgecolor=style.MUTED, label='Expected')
         bars = ax.bar(x + width / 2, observed_coverages, width, color=color,
                       alpha=0.8, label='Observed')
 
         for bar, obs, exp in zip(bars, observed_coverages, confidence_levels, strict=True):
-            edge = 'green' if abs(obs - exp) < 0.05 else 'red'
+            edge = style.ACCENT_GREEN if abs(obs - exp) < 0.05 else style.ACCENT_ORANGE
             bar.set_edgecolor(edge)
             bar.set_linewidth(1.5)
 
@@ -714,7 +824,7 @@ def plot_qq_residuals(models_data, output_path=None, figsize=None, subtitle=None
         ax.scatter(osm, osr, s=6, alpha=0.5, color=color, edgecolors='none')
 
         line_range = np.array([osm.min(), osm.max()])
-        ax.plot(line_range, line_range, 'k--', lw=1, alpha=0.7, label='N(0,1)')
+        ax.plot(line_range, line_range, '--', color=style.INK, lw=1, alpha=0.7, label='N(0,1)')
 
         rng = np.random.default_rng(42)
         z_sample = z if len(z) <= 5000 else z[rng.choice(len(z), 5000, replace=False)]
@@ -722,8 +832,8 @@ def plot_qq_residuals(models_data, output_path=None, figsize=None, subtitle=None
 
         ax.text(0.05, 0.95, f'SW={sw_stat:.3f}\np={sw_p:.2e}',
                 transform=ax.transAxes, fontsize=9, va='top', ha='left',
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
-                          edgecolor='gray', alpha=0.8))
+                bbox=dict(boxstyle='round,pad=0.3', facecolor=style.BACKGROUND,
+                          edgecolor=style.MUTED, alpha=0.8))
 
         ax.set_xlabel('Theoretical Quantiles')
         ax.set_ylabel('Sample Quantiles')
@@ -772,11 +882,11 @@ def plot_ence_decomposition(models_data, output_path=None, figsize=None, n_bins=
 
         bars_rmse = ax.bar(x - width / 2, decomp['rmse'], width, color=color,
                            alpha=0.8, label='RMSE')
-        bars_rmv = ax.bar(x + width / 2, decomp['rmv'], width, color='lightgray',
-                          edgecolor='gray', label='RMV')
+        bars_rmv = ax.bar(x + width / 2, decomp['rmv'], width, color=style.MUTED_LIGHT,
+                          edgecolor=style.MUTED, label='RMV')
 
         for j_bin, overconf in enumerate(decomp['overconfident']):
-            edge_color = 'red' if overconf else 'blue'
+            edge_color = style.ACCENT_ORANGE if overconf else style.ACCENT_BLUE
             bars_rmse[j_bin].set_edgecolor(edge_color)
             bars_rmse[j_bin].set_linewidth(1.5)
             bars_rmv[j_bin].set_edgecolor(edge_color)
@@ -816,11 +926,21 @@ def create_publication_summary(all_models_data, all_metrics, output_path=None,
     import pandas as pd
 
     fig = plt.figure(figsize=figsize)
-    gs = gridspec.GridSpec(2, 2, hspace=0.35, wspace=0.3)
+    gs = gridspec.GridSpec(
+        2,
+        2,
+        figure=fig,
+        hspace=0.28,
+        wspace=0.25,
+        top=0.86,
+        bottom=0.08,
+        left=0.06,
+        right=0.96,
+    )
 
     # A) Calibration curves
     ax_cal = fig.add_subplot(gs[0, 0])
-    ax_cal.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5)
+    ax_cal.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55)
     for i, (name, data) in enumerate(all_models_data.items()):
         color = data.get('color', OKABE_ITO[i % len(OKABE_ITO)])
         expected, observed = compute_calibration_curve(
@@ -828,8 +948,16 @@ def create_publication_summary(all_models_data, all_metrics, output_path=None,
         )
         miscal = all_metrics.get(name, {}).get('miscalibration_area', None)
         label = f"{name} ({miscal:.3f})" if miscal is not None else name
-        ax_cal.plot(expected, observed, 'o-', color=color, lw=1.5,
-                    markersize=3, label=label, alpha=0.85)
+        ax_cal.plot(
+            expected,
+            observed,
+            color=color,
+            lw=1.5,
+            markersize=3,
+            label=label,
+            alpha=0.85,
+            **_curve_kwargs(i, len(expected)),
+        )
     ax_cal.set_xlabel('Expected Coverage')
     ax_cal.set_ylabel('Observed Coverage')
     ax_cal.set_title('A) Calibration Curves', fontweight='bold')
@@ -846,12 +974,19 @@ def create_publication_summary(all_models_data, all_metrics, output_path=None,
         sp = compute_sparsification_data(
             data['y_true'], data['y_pred'], data['y_std']
         )
-        ax_sp.plot(sp['fractions'], sp['model_maes'], '-', color=color, lw=1.5,
-                   label=name, alpha=0.85)
+        ax_sp.plot(
+            sp['fractions'],
+            sp['model_maes'],
+            color=color,
+            lw=1.5,
+            label=name,
+            alpha=0.85,
+            **_curve_kwargs(i, len(sp['fractions'])),
+        )
         if not oracle_plotted:
-            ax_sp.plot(sp['fractions'], sp['oracle_maes'], '--', color='black',
+            ax_sp.plot(sp['fractions'], sp['oracle_maes'], '--', color=style.INK,
                        lw=1.2, label='Oracle')
-            ax_sp.axhline(y=sp['random_mae'], color='gray', ls=':', lw=1,
+            ax_sp.axhline(y=sp['random_mae'], color=style.MUTED, ls=':', lw=1,
                          alpha=0.7, label='Random')
             oracle_plotted = True
     ax_sp.set_xlabel('Fraction Removed')
@@ -900,9 +1035,23 @@ def create_publication_summary(all_models_data, all_metrics, output_path=None,
         rows[model_name] = [metrics.get(m, np.nan) for m in display_metrics]
     if rows:
         df = pd.DataFrame(rows, index=display_labels).T
-        sns.heatmap(df, ax=ax_heat, annot=True, fmt='.3f', cmap='RdYlGn_r',
-                    linewidths=0.5, annot_kws={'size': 8},
-                    cbar_kws={'shrink': 0.8})
+        score_df = _directional_scores(df, [True, True, True, False])
+        sns.heatmap(
+            score_df,
+            ax=ax_heat,
+            annot=df.to_numpy(),
+            fmt='.3f',
+            cmap=style.SEQUENTIAL,
+            vmin=0,
+            vmax=1,
+            linewidths=0.5,
+            annot_kws={'size': 8},
+            cbar_kws={
+                'label': 'Relative performance (higher is better)',
+                'shrink': 0.8,
+            },
+        )
+        ax_heat._learnm8_heatmap = True
     ax_heat.set_title('D) UQ Metrics Summary', fontweight='bold')
     ax_heat.set_ylabel('')
 
@@ -933,7 +1082,7 @@ def plot_discovery_curves(named_seed_results, top_k_fraction=0.01,
     metric_key = 'top_1_pct_discovery' if top_k_fraction == 0.01 else 'top_10_pct_discovery'
     label_pct = f'{int(top_k_fraction * 100)}%'
 
-    pct_explored_per_cycle = {}
+    compounds_evaluated_per_cycle = {}
 
     for i, (name, seed_results) in enumerate(named_seed_results.items()):
         color = OKABE_ITO[i % len(OKABE_ITO)]
@@ -958,8 +1107,11 @@ def plot_discovery_curves(named_seed_results, top_k_fraction=0.01,
                 pool_size = row.get('pool_size', None)
                 if cum_labeled is not None and pool_size is not None:
                     try:
-                        pct = float(cum_labeled) / float(pool_size) * 100
-                        pct_explored_per_cycle.setdefault(cycle, []).append(pct)
+                        count = float(cum_labeled)
+                        pct = count / float(pool_size) * 100
+                        compounds_evaluated_per_cycle.setdefault(cycle, []).append(
+                            (count, pct)
+                        )
                     except (TypeError, ValueError, ZeroDivisionError):
                         pass
 
@@ -969,24 +1121,49 @@ def plot_discovery_curves(named_seed_results, top_k_fraction=0.01,
         cycles = sorted(all_cycle_vals.keys())
         means = np.array([np.mean(all_cycle_vals[c]) for c in cycles])
         stds = np.array([np.std(all_cycle_vals[c]) for c in cycles])
+        x_values = np.array(
+            [
+                np.mean([value[0] for value in compounds_evaluated_per_cycle[c]])
+                if c in compounds_evaluated_per_cycle
+                else c
+                for c in cycles
+            ]
+        )
 
-        ax.plot(cycles, means, 'o-', color=color, lw=2, markersize=6,
-                label=name, alpha=0.9)
-        ax.fill_between(cycles, means - stds, means + stds,
+        ax.plot(
+            x_values,
+            means,
+            color=color,
+            lw=1.8,
+            markersize=5,
+            label=name,
+            alpha=0.9,
+            **_curve_kwargs(i, len(cycles)),
+        )
+        ax.fill_between(x_values, means - stds, means + stds,
                         color=color, alpha=0.15)
 
-    ax.set_xlabel('Active Learning Cycle')
-    ax.set_ylabel(f'Top-{label_pct} Compounds Found (%)')
+    ax.set_xlabel(
+        'Cumulative compounds evaluated, n (initial-pool percentage in ticks)'
+    )
+    ax.set_ylabel(f'Top-{label_pct} recovered from initial pool (%)')
     ax.legend(loc='upper left', fontsize=8, framealpha=0.9)
 
-    if pct_explored_per_cycle:
-        ax2 = ax.twiny()
-        all_cycles = sorted(pct_explored_per_cycle.keys())
-        mean_pcts = [np.mean(pct_explored_per_cycle[c]) for c in all_cycles]
-        ax2.set_xlim(ax.get_xlim())
-        ax2.set_xticks(all_cycles)
-        ax2.set_xticklabels([f'{p:.1f}%' for p in mean_pcts], fontsize=8)
-        ax2.set_xlabel('Pool Explored', fontsize=9)
+    if compounds_evaluated_per_cycle:
+        cycles = sorted(compounds_evaluated_per_cycle)
+        stats = [compounds_evaluated_per_cycle[c] for c in cycles]
+        counts = np.array([np.mean([value[0] for value in row]) for row in stats])
+        percentages = np.array([np.mean([value[1] for value in row]) for row in stats])
+        ax.set_xticks(counts)
+        ax.set_xticklabels(
+            [
+                f'{int(count):,}\n({percentage:.1f}%)'
+                for count, percentage in zip(counts, percentages, strict=True)
+            ],
+            rotation=45,
+            ha='right',
+            fontsize=7,
+        )
 
     _apply_title_layout(
         fig,
@@ -1017,18 +1194,25 @@ def plot_triple_comparison(models_data, title='', output_path=None, figsize=(15,
 
     # ── Panel 1: Calibration ──────────────────────────────────────────────
     ax = axes[0]
-    for (name, d), color in zip(models_data.items(), colors):
+    for (name, d), color in zip(models_data.items(), colors, strict=True):
         try:
             levels, coverages = compute_calibration_curve(
                 d['y_true'], d['y_pred'], d['y_std']
             )
             ma = d.get('miscal_area', np.nan)
             label = f'{name} (MA={ma:.3f})' if np.isfinite(ma) else name
-            ax.plot(levels, coverages, 'o-', color=color, lw=2,
-                    markersize=4, label=label)
+            ax.plot(
+                levels,
+                coverages,
+                color=color,
+                lw=2,
+                markersize=4,
+                label=label,
+                **_curve_kwargs(len(ax.lines), len(levels)),
+            )
         except Exception:
             pass
-    ax.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5)
+    ax.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55)
     ax.set_xlabel('Expected Coverage')
     ax.set_ylabel('Observed Coverage')
     ax.set_title('Calibration', fontweight='bold')
@@ -1037,12 +1221,20 @@ def plot_triple_comparison(models_data, title='', output_path=None, figsize=(15,
     # ── Panel 2: Sparsification ───────────────────────────────────────────
     ax = axes[1]
     ause_labels = []
-    for idx, ((name, d), color) in enumerate(zip(models_data.items(), colors)):
+    for idx, ((name, d), color) in enumerate(
+        zip(models_data.items(), colors, strict=True)
+    ):
         try:
             sd = compute_sparsification_data(d['y_true'], d['y_pred'], d['y_std'])
             ause_val = compute_ause(d['y_true'], d['y_pred'], d['y_std'])
-            ax.plot(sd['fractions'], sd['model_maes'], '-', color=color,
-                    lw=2, label=name)
+            ax.plot(
+                sd['fractions'],
+                sd['model_maes'],
+                color=color,
+                lw=2,
+                label=name,
+                **_curve_kwargs(idx, len(sd['fractions'])),
+            )
             ax.plot(sd['fractions'], sd['oracle_maes'], '--', color=color,
                     lw=1, alpha=0.5)
             ax.fill_between(sd['fractions'], sd['oracle_maes'], sd['model_maes'],
@@ -1064,7 +1256,7 @@ def plot_triple_comparison(models_data, title='', output_path=None, figsize=(15,
 
     # ── Panel 3: Uncertainty vs Error scatter ─────────────────────────────
     ax = axes[2]
-    for (name, d), color in zip(models_data.items(), colors):
+    for (name, d), color in zip(models_data.items(), colors, strict=True):
         try:
             errors = np.abs(np.asarray(d['y_true']) - np.asarray(d['y_pred']))
             stds = np.asarray(d['y_std'])
@@ -1117,7 +1309,7 @@ def plot_ensemble_baselines_calibration(models_data, title='', output_path=None,
         axes = np.array([axes])
 
     for col, (name, d, color) in enumerate(
-        zip(model_names, models_data.values(), colors)
+        zip(model_names, models_data.values(), colors, strict=True)
     ):
         ax = axes[col]
         try:
@@ -1125,8 +1317,15 @@ def plot_ensemble_baselines_calibration(models_data, title='', output_path=None,
                 d['y_true'], d['y_pred'], d['y_std']
             )
             ma = d.get('miscal_area', np.nan)
-            ax.plot(levels, coverages, 'o-', color=color, lw=2, markersize=4)
-            ax.plot([0, 1], [0, 1], 'k--', lw=1, alpha=0.5)
+            ax.plot(
+                levels,
+                coverages,
+                color=color,
+                lw=2,
+                markersize=4,
+                **_curve_kwargs(col, len(levels)),
+            )
+            ax.plot([0, 1], [0, 1], '--', color=style.INK, lw=1, alpha=0.55)
             suffix = f'\nMA={ma:.3f}' if np.isfinite(ma) else ''
             ax.set_title(f'{name}{suffix}', fontweight='bold', fontsize=9)
         except Exception:
@@ -1160,18 +1359,23 @@ def plot_ensemble_baselines_sparsification(models_data, title='',
         axes = np.array([axes])
 
     for col, (name, d, color) in enumerate(
-        zip(model_names, models_data.values(), colors)
+        zip(model_names, models_data.values(), colors, strict=True)
     ):
         ax = axes[col]
         try:
-    
             sd = compute_sparsification_data(d['y_true'], d['y_pred'], d['y_std'])
             ause = compute_ause(d['y_true'], d['y_pred'], d['y_std'])
-            ax.plot(sd['fractions'], sd['model_maes'], '-', color=color, lw=2,
-                    label='Model')
-            ax.plot(sd['fractions'], sd['oracle_maes'], '--', color='black',
+            ax.plot(
+                sd['fractions'],
+                sd['model_maes'],
+                color=color,
+                lw=2,
+                label='Model',
+                **_curve_kwargs(col, len(sd['fractions'])),
+            )
+            ax.plot(sd['fractions'], sd['oracle_maes'], '--', color=style.INK,
                     lw=1.2, label='Oracle')
-            ax.axhline(y=sd['random_mae'], color='gray', ls=':', lw=1,
+            ax.axhline(y=sd['random_mae'], color=style.MUTED, ls=':', lw=1,
                        alpha=0.7, label='Random')
             ax.fill_between(sd['fractions'], sd['oracle_maes'], sd['model_maes'],
                             alpha=0.15, color=color)

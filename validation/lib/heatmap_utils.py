@@ -1,17 +1,16 @@
-"""
-Shared utilities for creating consistent heatmap visualizations across validation scripts.
+"""Shared heatmap utilities used by the validation plotting functions."""
 
-Provides purple-themed colormaps, text contrast calculation, and dynamic scaling utilities.
-"""
-import numpy as np
-import matplotlib.pyplot as plt
+from typing import Optional, Tuple
+
 import matplotlib.colors as mcolors
-from typing import Tuple, Optional
+import matplotlib.pyplot as plt
+import numpy as np
+
+from learnm8.visualization import style
 
 
 def get_purple_colormap(reverse: bool = False) -> mcolors.LinearSegmentedColormap:
-    """
-    Get standard purple gradient colormap for heatmaps.
+    """Return the shared LearnM8 sequential heatmap colormap.
 
     Args:
         reverse: If True, reverse the colormap (dark→light for "lower is better" metrics)
@@ -19,23 +18,7 @@ def get_purple_colormap(reverse: bool = False) -> mcolors.LinearSegmentedColorma
     Returns:
         LinearSegmentedColormap with muted purple gradient based on LearnM8 brand color
     """
-    colors = [
-        '#f0edf7',  # Very light muted purple
-        '#ddd5ef',  # Light muted purple
-        '#cabde7',  # Medium-light muted purple
-        '#b7a5df',  # Medium muted purple
-        '#a48dd7',  # Medium-deep muted purple
-        '#7e62df',  # LearnM8 brand purple (RGB 126, 98, 223)
-        '#6b4fc7',  # Deep muted purple
-        '#583caf',  # Deeper muted purple
-        '#452997',  # Very deep muted purple
-        '#32167f',  # Dark muted purple
-    ]
-
-    if reverse:
-        colors = colors[::-1]
-
-    return mcolors.LinearSegmentedColormap.from_list('purple_gradient', colors)
+    return style.SEQUENTIAL.reversed() if reverse else style.SEQUENTIAL
 
 
 def calculate_luminance(rgb: Tuple[float, float, float]) -> float:
@@ -66,7 +49,7 @@ def calculate_text_color(rgb: Tuple[float, float, float]) -> str:
         'white' for dark backgrounds, 'black' for light backgrounds
     """
     luminance = calculate_luminance(rgb)
-    return 'white' if luminance < 0.5 else 'black'
+    return style.BACKGROUND if luminance < 0.5 else style.INK
 
 
 def get_cell_color_from_value(
@@ -157,6 +140,7 @@ def add_heatmap_annotations(
         show_std: If True and std_data provided, show mean±std format
         fontsize: Font size for annotations (default: 8)
     """
+    style.style_heatmap(ax)
     rows, cols = data.shape
 
     for i in range(rows):

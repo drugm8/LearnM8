@@ -37,6 +37,7 @@ from learnm8 import run_active_learning
 from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner
 from learnm8.learners.gpytorch.svgp import SVGPLearner
 from learnm8.oracles import CSVOracle
+from learnm8.visualization import style
 from validation.lib import get_dataset_info, get_dataset_path, load_validation_dataset
 
 logger = logging.getLogger(__name__)
@@ -48,10 +49,10 @@ SENTINEL_FILES = ['compounds_final.csv', 'cycle_metrics.csv', 'selection_history
 RANDOM_STATE = 42
 
 COLORS = {
-    'ExactGP-LOVE': '#2ca02c',
-    'SVGP-M256': '#d62728',
-    'SVGP-M512': '#9467bd',
-    'SVGP-M1024': '#8c564b',
+    'ExactGP-LOVE': style.ACCENT_GREEN,
+    'SVGP-M256': style.ACCENT_BLUE,
+    'SVGP-M512': style.PRIMARY,
+    'SVGP-M1024': style.ACCENT_AMBER,
 }
 LABELS = {
     'ExactGP-LOVE': 'ExactGP-LOVE (100K pool)',
@@ -180,25 +181,34 @@ def run_config(config: dict) -> dict:
 
 
 def plot_results(all_results: list[dict], output_dir: Path):
+    style.apply()
     completed = [r for r in all_results if r['cycle_metrics']]
     if not completed:
         console.print('[yellow]No completed results to plot[/yellow]')
         return
 
-    plt.style.use('seaborn-v0_8-whitegrid')
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     (ax_top1, ax_top01), (ax_train, ax_total) = axes
 
-    for r in completed:
+    for config_index, r in enumerate(completed):
         name = r['name']
         metrics = r['cycle_metrics']
-        color = COLORS.get(name, '#888888')
+        color = COLORS.get(name, style.MUTED)
         label = LABELS.get(name, name)
         marker = MARKERS.get(name, 'o')
 
         cycles = [m['cycle'] for m in metrics]
-        kw = dict(color=color, label=label, linewidth=2, marker=marker,
-                  markersize=5, zorder=3)
+        kw = dict(
+            color=color,
+            label=label,
+            linewidth=1.8,
+            linestyle=style.CURVE_LINESTYLES[
+                config_index % len(style.CURVE_LINESTYLES)
+            ],
+            marker=marker,
+            markersize=5,
+            zorder=3,
+        )
 
         top1 = [m.get('top_1_pct_discovery') for m in metrics]
         ax_top1.plot(cycles, top1, **kw)
@@ -231,9 +241,16 @@ def plot_results(all_results: list[dict], output_dir: Path):
         (ax_top1, 'A', 'Top 1% Discovery'),
         (ax_top01, 'B', 'Top 0.1% Discovery'),
     ]:
-        ax_main.set_xlabel('Cycle', fontsize=12, fontweight='bold')
-        ax_main.set_ylabel('Discovery (%)', fontsize=12, fontweight='bold')
-        ax_main.set_title(f'({title_letter}) {title_metric}', fontsize=13, fontweight='bold')
+        ax_main.set_xlabel('Active-learning cycle', fontsize=9)
+        ax_main.set_ylabel(
+            f'{title_metric} recovered from initial pool (%)',
+            fontsize=9,
+        )
+        ax_main.set_title(
+            f'({title_letter}) {title_metric} recovered from initial pool',
+            fontsize=11,
+            fontweight='bold',
+        )
         ax_main.legend(fontsize=9, framealpha=0.9)
         ax_main.set_ylim(bottom=0)
 
@@ -241,27 +258,31 @@ def plot_results(all_results: list[dict], output_dir: Path):
         ax_pct.set_xlim(ax_main.get_xlim())
         ax_pct.set_xticks(ref_cycles)
         ax_pct.set_xticklabels([f'{p:.0f}%' for p in ref_pct], fontsize=8)
-        ax_pct.set_xlabel('% Pool Explored', fontsize=10, fontweight='bold')
+        ax_pct.set_xlabel('Series-specific initial-pool fraction (%)', fontsize=8)
 
-    ax_train.set_xlabel('Cycle', fontsize=12, fontweight='bold')
-    ax_train.set_ylabel('Time (s)', fontsize=12, fontweight='bold')
-    ax_train.set_title('(C) Training Time per Cycle', fontsize=13, fontweight='bold')
+    ax_train.set_xlabel('Active-learning cycle', fontsize=9)
+    ax_train.set_ylabel('Training time (s)', fontsize=9)
+    ax_train.set_title('(C) Training time per cycle', fontsize=11, fontweight='bold')
     ax_train.legend(fontsize=9, framealpha=0.9)
 
     ax_total.set_xscale('log')
-    ax_total.set_xlabel('Cumulative Labeled Compounds', fontsize=12, fontweight='bold')
-    ax_total.set_ylabel('Time (s)', fontsize=12, fontweight='bold')
-    ax_total.set_title('(D) Total Cycle Time vs Training Set Size', fontsize=13, fontweight='bold')
+    ax_total.set_xlabel('Cumulative labeled compounds, n', fontsize=9)
+    ax_total.set_ylabel('Total cycle time (s)', fontsize=9)
+    ax_total.set_title(
+        '(D) Total cycle time vs labeled-set size',
+        fontsize=11,
+        fontweight='bold',
+    )
     ax_total.legend(fontsize=9, framealpha=0.9)
 
     for ax in axes.flat:
+        style.style_axes(ax)
         ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
 
-    plt.tight_layout()
     figures_dir = output_dir / 'figures'
     figures_dir.mkdir(parents=True, exist_ok=True)
     out_path = figures_dir / 'benchmark_active_learning.png'
-    plt.savefig(out_path, dpi=150, bbox_inches='tight')
+    plt.savefig(out_path, dpi=style.OUTPUT_DPI, bbox_inches='tight', pad_inches=0.08)
     plt.close(fig)
     console.print(f'\nPlot saved to {out_path}')
 
