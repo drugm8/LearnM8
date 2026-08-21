@@ -24,7 +24,6 @@ import logging
 import math
 import os
 import platform
-import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -46,16 +45,12 @@ from rdkit.Chem import rdFingerprintGenerator
 from scipy.stats import spearmanr
 from sklearn.base import BaseEstimator, RegressorMixin
 
+from learnm8.features import extract_features
+from learnm8.learners.base import _preprocess_features
+from learnm8.learners.sklearn.random_forest import RandomForestLearner
+from learnm8.visualization import style
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from learnm8.features import extract_features  # noqa: E402
-from learnm8.learners.base import _preprocess_features  # noqa: E402
-from learnm8.learners.sklearn.random_forest import RandomForestLearner  # noqa: E402
-
-sys.path.insert(0, str(REPO_ROOT / 'scripts' / 'publication'))
-import style  # noqa: E402,I001
 
 
 LOGGER = logging.getLogger('rf_uq_benchmark')

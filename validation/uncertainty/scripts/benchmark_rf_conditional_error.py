@@ -18,7 +18,6 @@ import json
 import logging
 import os
 import platform
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,15 +37,11 @@ from rdkit.Chem import Descriptors
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import GroupKFold
 
+from learnm8.evaluation.metrics.similarity import _scaffold_for_smiles
+from learnm8.visualization import style
+from validation.uncertainty.scripts import benchmark_rf_uq_methods as uq
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from learnm8.evaluation.metrics.similarity import _scaffold_for_smiles  # noqa: E402
-from validation.uncertainty.scripts import benchmark_rf_uq_methods as uq  # noqa: E402
-
-sys.path.insert(0, str(REPO_ROOT / 'scripts' / 'publication'))
-import style  # noqa: E402,I001
 
 
 LOGGER = logging.getLogger('rf_conditional_error')
