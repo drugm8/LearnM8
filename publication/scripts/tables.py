@@ -16,7 +16,9 @@ TABLE_DIR = style.FIGURE_DIR.parent / 'tables'
 
 
 def main() -> None:
-    df = data.load()
+    design = data.design_arg(__doc__)
+    suffix = data.design_suffix(design)
+    df = data.load(design)
     group = [
         'family',
         'learner',
@@ -41,18 +43,24 @@ def main() -> None:
         ]
     ).select([*group, *METRICS])
 
+    seed_rule = (
+        'cycle 0 seeded with one acquisition batch'
+        if design == 'matched'
+        else 'cycle 0 seeded with 1% of the pool'
+    )
     TABLE_DIR.mkdir(parents=True, exist_ok=True)
-    summary.write_csv(TABLE_DIR / 'table2_benchmark_summary.csv')
-    (TABLE_DIR / 'table2_benchmark_summary.md').write_text(
-        'Values are final-cycle mean [min, max] across replicates.\n\n'
+    summary.write_csv(TABLE_DIR / f'table2_benchmark_summary{suffix}.csv')
+    (TABLE_DIR / f'table2_benchmark_summary{suffix}.md').write_text(
+        f'Values are final-cycle mean [min, max] across replicates ({seed_rule}).\n\n'
         + summary.to_pandas().to_markdown(index=False)
     )
 
-    df.write_csv(TABLE_DIR / 'si_all_runs_per_cycle.csv')
+    df.write_csv(TABLE_DIR / f'si_all_runs_per_cycle{suffix}.csv')
     print(
-        f'wrote {TABLE_DIR}/table2_benchmark_summary.{{csv,md}} ({summary.height} conditions)'
+        f'wrote {TABLE_DIR}/table2_benchmark_summary{suffix}.{{csv,md}} '
+        f'({summary.height} conditions)'
     )
-    print(f'wrote {TABLE_DIR}/si_all_runs_per_cycle.csv ({df.height} rows)')
+    print(f'wrote {TABLE_DIR}/si_all_runs_per_cycle{suffix}.csv ({df.height} rows)')
 
 
 if __name__ == '__main__':

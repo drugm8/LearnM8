@@ -136,4 +136,27 @@ output/
 .benchmarks/
 scripts/bench_streaming_memory.py
 .claude/
+
+# Publication material - only scripts, the tidy parquet and the README are tracked
+publication/figures/
+publication/tables/
+publication/plans/
+publication/data/*
+!publication/data/benchmark_tidy.parquet
+# figS1 inputs: the D4 histogram cannot be regenerated without the 116M scored
+# pool, and the AmpC cache saves streaming four multi-GB CSVs. Both are small.
+!publication/data/d4_116M_score_hist.csv
+!publication/data/score_distributions.parquet
+# Figure scripts whose status is undecided - moved but deliberately not committed
+publication/scripts/fig06_adaptive_ranking.py
+publication/scripts/fig07_uncertainty_calibration.py
+publication/scripts/fig07_uncertainty_ranking.py
+publication/scripts/fig08_topk_heatmap.py
+publication/scripts/fig09_scaffold_coverage.py
+publication/scripts/fig10_top_candidate_diversity.py
+publication/scripts/consolidate.py
+
+# Validation outputs mistakenly committed
+validation/bitbirch_clustering/*.png
+validation/bitbirch_clustering/bitbirch_validation_v2.ipynb
 cluster*/
