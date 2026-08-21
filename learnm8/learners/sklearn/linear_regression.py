@@ -153,7 +153,7 @@ class LinearRegressionLearner(SklearnLearner):
                 f'Call train() with labeled data first.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             preprocessed, _, _ = _preprocess_features(
@@ -171,7 +171,7 @@ class LinearRegressionLearner(SklearnLearner):
             predictions = self.model.predict(preprocessed)
 
             if not compute_uncertainty:
-                pred_time = time.time() - start_time
+                pred_time = time.perf_counter() - start_time
                 logger.debug(
                     f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
                 )
@@ -181,7 +181,7 @@ class LinearRegressionLearner(SklearnLearner):
             variance = self._sigma_hat_sq * np.maximum(1.0 + leverages, 0.0)
             uncertainty = np.sqrt(variance)
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )

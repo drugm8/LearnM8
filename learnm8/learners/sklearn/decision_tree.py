@@ -106,7 +106,7 @@ class DecisionTreeLearner(SklearnLearner):
                 f'Call train() with labeled data first.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             preprocessed, _, _ = _preprocess_features(
@@ -135,7 +135,7 @@ class DecisionTreeLearner(SklearnLearner):
             else:
                 uncertainty = None
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )

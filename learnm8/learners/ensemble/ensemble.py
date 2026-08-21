@@ -138,7 +138,7 @@ class EnsembleLearner(Learner):
                 f'Check that batch_fraction is large enough to select at least one compound.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         logger.debug(
             f'Training ensemble of {len(self.learners)} learners on {len(features)} samples'
         )
@@ -163,7 +163,7 @@ class EnsembleLearner(Learner):
                 ) from e
 
         self.is_trained = True
-        train_time = time.time() - start_time
+        train_time = time.perf_counter() - start_time
         logger.debug(
             f'Trained ensemble of {len(self.learners)} learners in {train_time:.2f}s'
         )
@@ -203,7 +203,7 @@ class EnsembleLearner(Learner):
                 f'Call train() with labeled data first.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             predictions_list = []
@@ -230,7 +230,7 @@ class EnsembleLearner(Learner):
             ensemble_predictions = self._aggregate_predictions(predictions_array)
 
             if not compute_uncertainty:
-                pred_time = time.time() - start_time
+                pred_time = time.perf_counter() - start_time
                 logger.debug(
                     f'Ensemble prediction: aggregated '
                     f'{len(predictions_list)} predictions using '
@@ -244,7 +244,7 @@ class EnsembleLearner(Learner):
                 f'Ensemble prediction: aggregated {len(predictions_list)} predictions using {self.aggregation_method}'
             )
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(ensemble_predictions)} samples with {self.get_name()} '
                 f'using {len(predictions_list)} learners in {pred_time:.2f}s'

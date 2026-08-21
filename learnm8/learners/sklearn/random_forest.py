@@ -128,7 +128,7 @@ class RandomForestLearner(SklearnLearner):
                 f'ensure at least one training cycle has completed before predicting.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             preprocessed, _, _ = _preprocess_features(
@@ -147,7 +147,7 @@ class RandomForestLearner(SklearnLearner):
             predictions = self.model.predict(preprocessed)
 
             if not compute_uncertainty:
-                pred_time = time.time() - start_time
+                pred_time = time.perf_counter() - start_time
                 logger.debug(
                     f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
                 )
@@ -171,7 +171,7 @@ class RandomForestLearner(SklearnLearner):
                 f'Computing uncertainty from {len(self.model.estimators_)} trees'
             )
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )
