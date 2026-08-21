@@ -79,7 +79,7 @@ Config File Precedence:
   - CLI flags override config values when explicitly provided
   - Use --config to load YAML/JSON configuration files
 
-For more information: https://github.com/volkamerlab/LearnM8
+For more information: https://github.com/drugm8/LearnM8
 """
 
 
