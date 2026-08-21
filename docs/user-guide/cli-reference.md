@@ -51,7 +51,7 @@ learnm8 run COMPOUND_POOL [ORACLE] --target COLUMN --featurizer TYPE --learner M
 | `--target COLUMN` | string | Target property column name in CSV |
 | `--featurizer TYPE` | choice | Molecular featurizer. Required unless using chemprop or fastprop (see Available Featurizers for the full list of 39 options) |
 
-**Featurizer Choices:** See [Available Featurizers](../index.md#featurizers-39-registered-names-38-unique) for the full list of 39 options. Common choices: `morgan`, `maccs`, `ecfp6`, `descriptors`, `morgan_feat`.
+**Featurizer Choices:** See [Available Featurizers](../components/featurizers/available-featurizers.md) for the full list of 39 options. Common choices: `morgan`, `maccs`, `ecfp6`, `descriptors`, `morgan_feat`.
 
 ### Core Configuration
 
