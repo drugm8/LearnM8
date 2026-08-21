@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from learnm8.exceptions import LearnerError
+from learnm8.learners.base import _cleanup_gpu_memory
 
 from ..torch.chemprop_learner import ChempropLearner
 from .ensemble import EnsembleLearner, _derive_random_states
@@ -197,7 +198,7 @@ class ChempropEnsemble(EnsembleLearner):
 
 		self.is_trained = True
 
-		self._cleanup_gpu_memory("after ensemble training")
+		_cleanup_gpu_memory(self.enable_aggressive_gc, "after ensemble training")
 
 	def predict(self, features, smiles=None):
 		"""Predict with SMILES strings.
@@ -227,7 +228,7 @@ class ChempropEnsemble(EnsembleLearner):
 		ensemble_predictions = self._aggregate_predictions(predictions_array)
 		uncertainties = self._calculate_uncertainty(predictions_array)
 
-		self._cleanup_gpu_memory("after ensemble prediction")
+		_cleanup_gpu_memory(self.enable_aggressive_gc, "after ensemble prediction")
 
 		return ensemble_predictions, uncertainties
 
@@ -261,49 +262,3 @@ class ChempropEnsemble(EnsembleLearner):
 	def requires_smiles(self) -> bool:
 		"""ChempropEnsemble requires SMILES strings."""
 		return True
-
-	def _cleanup_gpu_memory(self, context: str = "") -> None:
-		"""Force garbage collection and clear GPU cache if enabled.
-
-		This method performs two cleanup operations:
-		1. torch.cuda.empty_cache() - Releases cached GPU memory
-		2. gc.collect() - Forces Python garbage collection
-
-		This is particularly important in active learning scenarios where
-		models are trained repeatedly over many cycles, which can lead to
-		GPU memory accumulation from unreferenced tensors and PyTorch's
-		caching allocator.
-
-		The cleanup is a best-effort operation that won't raise exceptions
-		if it fails. It only runs if enable_aggressive_gc=True.
-
-		Args:
-			context: Optional description of when cleanup is being called,
-					used for debug logging (e.g., "after training")
-
-		Note:
-			This is safe to call after predictions have been moved to CPU
-			memory via .cpu().numpy(), as it only affects unreferenced
-			GPU tensors and Python objects.
-		"""
-		if not self.enable_aggressive_gc:
-			return
-
-		try:
-			import gc
-
-			import torch
-
-			if torch.cuda.is_available():
-				torch.cuda.empty_cache()
-			gc.collect()
-
-			if context:
-				import logging
-				logger = logging.getLogger(__name__)
-				logger.debug(f"GPU memory cleanup: {context}")
-
-		except (RuntimeError, OSError, ImportError) as e:
-			import logging
-			logger = logging.getLogger(__name__)
-			logger.warning(f"GPU memory cleanup failed ({context}): {e}")

@@ -15,6 +15,8 @@ from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
+from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
+from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
 
 
 @pytest.fixture(scope="session")
@@ -121,6 +123,34 @@ def trained_xgb_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     or remove_learner().
     """
     ensemble = XGBEnsemble(learning_rates=[0.05, 0.1], random_states=[42, 123])
+    features = _small_real_morgan_features_raw.copy()
+    targets = small_real_compounds['Activity'].to_numpy()
+    ensemble.train(features, targets)
+    return ensemble
+
+
+@pytest.fixture(scope="session")
+def trained_chemprop_ensemble(small_real_compounds):
+    """Pre-trained ChempropEnsemble for read-only tests.
+
+    WARNING: Shared across session. Do NOT call train(), add_learner(),
+    or remove_learner().
+    """
+    ensemble = ChempropEnsemble(depth=2, max_epochs=3, message_hidden_dim=300)
+    smiles = small_real_compounds['SMILES'].to_list()
+    targets = small_real_compounds['Activity'].to_numpy()
+    ensemble.train(features=None, targets=targets, smiles=smiles)
+    return ensemble
+
+
+@pytest.fixture(scope="session")
+def trained_fastprop_ensemble(small_real_compounds, _small_real_morgan_features_raw):
+    """Pre-trained FastpropEnsemble for read-only tests.
+
+    WARNING: Shared across session. Do NOT call train(), add_learner(),
+    or remove_learner().
+    """
+    ensemble = FastpropEnsemble(fnn_layers=1, hidden_size=64, max_epochs=3, device='cpu')
     features = _small_real_morgan_features_raw.copy()
     targets = small_real_compounds['Activity'].to_numpy()
     ensemble.train(features, targets)

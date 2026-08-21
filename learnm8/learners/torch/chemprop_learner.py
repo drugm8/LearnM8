@@ -9,6 +9,7 @@ from lightning import pytorch as pl
 from learnm8.core.interfaces import Learner
 from learnm8.core.resources import parse_device_for_lightning
 from learnm8.exceptions import LearnerError
+from learnm8.learners.base import _cleanup_gpu_memory, _validate_and_resolve_precision
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ class ChempropLearner(Learner):
 		self.max_epochs = max_epochs
 		self.batch_size = batch_size
 		self.predict_batch_size = predict_batch_size if predict_batch_size is not None else (batch_size * 4)
-		self.precision = self._validate_and_resolve_precision(precision)
+		self.precision = _validate_and_resolve_precision(precision)
 		self.pin_memory = pin_memory
 		self.learning_rate = learning_rate
 		self.random_state = random_state
@@ -162,32 +163,6 @@ class ChempropLearner(Learner):
 			logger.debug(
 				f"Fine-tuning enabled: checkpoints will be saved to {self.checkpoint_dir}"
 			)
-
-	def _validate_and_resolve_precision(self, precision: str) -> str:
-		"""Validate precision parameter and resolve 'auto' setting."""
-		import torch
-
-		valid_precisions = ['auto', '16-mixed', '32-true', 'bf16-mixed', '32', '16']
-		if precision not in valid_precisions:
-			raise ValueError(
-				f"Invalid precision '{precision}'. "
-				f"Must be one of: {valid_precisions}"
-			)
-
-		if precision == 'auto':
-			if torch.cuda.is_available():
-				precision = '16-mixed'
-				logger.debug("Auto-detected GPU: using mixed precision '16-mixed'")
-			else:
-				precision = '32-true'
-				logger.debug("No GPU detected: using full precision '32-true'")
-
-		if precision == '32':
-			precision = '32-true'
-		elif precision == '16':
-			precision = '16-mixed'
-
-		return precision
 
 	def requires_smiles(self) -> bool:
 		return True
@@ -386,7 +361,7 @@ class ChempropLearner(Learner):
 
 		logger.debug("Training complete")
 
-		self._cleanup_gpu_memory("after training")
+		_cleanup_gpu_memory(self.enable_aggressive_gc, "after training")
 
 	def predict(self,
 				features: np.ndarray | None,
@@ -440,48 +415,6 @@ class ChempropLearner(Learner):
 			'working_multiplier': 3.0,
 			'fixed_overhead': 0,
 		}
-
-	def _cleanup_gpu_memory(self, context: str = "") -> None:
-		"""Force garbage collection and clear GPU cache if enabled.
-
-		This method performs two cleanup operations:
-		1. torch.cuda.empty_cache() - Releases cached GPU memory
-		2. gc.collect() - Forces Python garbage collection
-
-		This is particularly important in active learning scenarios where
-		models are trained repeatedly over many cycles, which can lead to
-		GPU memory accumulation from unreferenced tensors and PyTorch's
-		caching allocator.
-
-		The cleanup is a best-effort operation that won't raise exceptions
-		if it fails. It only runs if enable_aggressive_gc=True.
-
-		Args:
-			context: Optional description of when cleanup is being called,
-					used for debug logging (e.g., "after training")
-
-		Note:
-			This is safe to call after predictions have been moved to CPU
-			memory via .cpu().numpy(), as it only affects unreferenced
-			GPU tensors and Python objects.
-		"""
-		if not self.enable_aggressive_gc:
-			return
-
-		try:
-			import gc
-
-			import torch
-
-			if torch.cuda.is_available():
-				torch.cuda.empty_cache()
-			gc.collect()
-
-			if context:
-				logger.debug(f"GPU memory cleanup: {context}")
-
-		except (RuntimeError, OSError, ImportError) as e:
-			logger.warning(f"GPU memory cleanup failed ({context}): {e}")
 
 	def _create_dataset(self,
 					   smiles: list[str],
@@ -639,7 +572,7 @@ class ChempropLearner(Learner):
 		predictions = torch.cat(predictions, dim=0)
 		predictions = predictions.cpu().numpy().flatten()
 
-		self._cleanup_gpu_memory("after prediction")
+		_cleanup_gpu_memory(self.enable_aggressive_gc, "after prediction")
 		logger.debug(f"Chemprop prediction finalized: {len(predictions)} predictions")
 
 		return predictions

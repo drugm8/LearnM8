@@ -21,7 +21,7 @@ from sklearn.preprocessing import StandardScaler
 
 # Core imports
 from learnm8.core.interfaces import Learner
-from learnm8.exceptions import LearnerError
+from learnm8.exceptions import ConfigurationError, LearnerError
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +239,42 @@ def _predict_with_oom_retry(
         f'Input has {n_samples} samples with {features.shape[1]} features. '
         f'Try reducing the dataset size or freeing GPU memory.'
     )
+
+
+def _cleanup_gpu_memory(enable_aggressive_gc: bool, context: str = "") -> None:
+    if not enable_aggressive_gc:
+        return
+    try:
+        import gc
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+        if context:
+            logger.debug(f"GPU memory cleanup: {context}")
+    except (RuntimeError, OSError, ImportError) as e:
+        logger.warning(f"GPU memory cleanup failed ({context}): {e}")
+
+
+def _validate_and_resolve_precision(precision: str) -> str:
+    import torch
+    valid_precisions = ['auto', '16-mixed', '32-true', 'bf16-mixed', '32', '16']
+    if precision not in valid_precisions:
+        raise ConfigurationError(
+            f"Invalid precision '{precision}'. Must be one of: {valid_precisions}"
+        )
+    if precision == 'auto':
+        if torch.cuda.is_available():
+            precision = '16-mixed'
+            logger.debug("Auto-detected GPU: using mixed precision '16-mixed'")
+        else:
+            precision = '32-true'
+            logger.debug("No GPU detected: using full precision '32-true'")
+    if precision == '32':
+        precision = '32-true'
+    elif precision == '16':
+        precision = '16-mixed'
+    return precision
 
 
 class SklearnLearner(Learner):

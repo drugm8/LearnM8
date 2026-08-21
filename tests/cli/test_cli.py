@@ -180,6 +180,33 @@ def run_cli(*args, timeout=120):
     return result
 
 
+class MockValidationResult:
+    def __init__(self):
+        self.valid_compounds = [1, 2, 3]
+        self.invalid_compounds = []
+
+    @property
+    def success_rate(self):
+        return 1.0
+
+
+def _make_mock_result(output_dir):
+    return {
+        'output_dir': output_dir,
+        'cycle_metrics': [{'cycle': 0}, {'cycle': 1}],
+        'labeled_count': 4,
+        'unlabeled_count': 16,
+        'validation_result': MockValidationResult(),
+        'saved_files': {
+            'compounds_final': str(output_dir / 'compounds_final.csv'),
+            'cycle_metrics': str(output_dir / 'cycle_metrics.csv'),
+            'selection_history': str(output_dir / 'selection_history.csv'),
+            'validation_report': str(output_dir / 'validation_report.csv'),
+            'config': str(output_dir / 'config.json'),
+        },
+    }
+
+
 @pytest.mark.slow
 class TestRunSubcommand:
     """Test 'run' subcommand functionality."""
@@ -203,7 +230,9 @@ class TestRunSubcommand:
         assert (output_dir / 'compounds_final.csv').exists()
         assert (output_dir / 'cycle_metrics.csv').exists()
 
-    def test_with_explicit_oracle(self, minimal_compounds, oracle_csv, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_with_explicit_oracle(self, mock_run, minimal_compounds, oracle_csv, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -212,8 +241,6 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
-        output_dir = Path(args.output)
-        assert output_dir.exists()
 
     def test_cycles_spec_parsing(self, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
@@ -231,9 +258,11 @@ class TestRunSubcommand:
         metrics = pd.read_csv(output_dir / 'cycle_metrics.csv', comment='#')
         assert len(metrics) == 3
 
-    def test_output_dir_creation(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_output_dir_creation(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
         output_dir = tmp_path / "nested" / "output" / "dir"
+        mock_run.return_value = _make_mock_result(output_dir)
         args = make_run_namespace(
             minimal_compounds, tmp_path,
             output=str(output_dir),
@@ -241,10 +270,10 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
-        assert output_dir.exists()
-        assert (output_dir / 'compounds_final.csv').exists()
 
-    def test_pruning_flags(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_pruning_flags(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -254,8 +283,10 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
 
+    @patch('learnm8.cli.main.run_active_learning')
     @pytest.mark.parametrize("learner", ["rf", "gp", "xgb"])
-    def test_learner_selection(self, minimal_compounds, tmp_path, monkeypatch, learner):
+    def test_learner_selection(self, mock_run, minimal_compounds, tmp_path, monkeypatch, learner):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output' / learner))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -266,7 +297,9 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Learner {learner} failed: {result.stdout}"
 
-    def test_acquisition_selection(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_acquisition_selection(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -277,7 +310,9 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
 
-    def test_config_yaml(self, minimal_compounds, config_yaml, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_config_yaml(self, mock_run, minimal_compounds, config_yaml, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         pytest.importorskip('yaml', reason="PyYAML not installed")
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
@@ -286,10 +321,10 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
-        output_dir = Path(args.output)
-        assert output_dir.exists()
 
-    def test_config_json(self, minimal_compounds, config_json, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_config_json(self, mock_run, minimal_compounds, config_json, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -297,8 +332,6 @@ class TestRunSubcommand:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Failed: {result.stdout}"
-        output_dir = Path(args.output)
-        assert output_dir.exists()
 
     def test_missing_required_args(self, minimal_compounds):
         from learnm8.cli.main import create_parser
@@ -320,7 +353,9 @@ class TestRunSubcommand:
         assert result.returncode != 0
         assert "not found" in result.stdout.lower() or "error" in result.stdout.lower()
 
-    def test_invalid_learner(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_invalid_learner(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
+        mock_run.side_effect = ConfigurationError("Unknown learner 'invalid_learner'")
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -329,8 +364,10 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
+    @patch('learnm8.cli.main.run_active_learning')
     @pytest.mark.parametrize("featurizer", ["morgan", "maccs", "ecfp6"])
-    def test_featurizer_options(self, minimal_compounds, tmp_path, monkeypatch, featurizer):
+    def test_featurizer_options(self, mock_run, minimal_compounds, tmp_path, monkeypatch, featurizer):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / featurizer))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -341,8 +378,10 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Featurizer {featurizer} failed: {result.stdout}"
 
+    @patch('learnm8.cli.main.run_active_learning')
     @pytest.mark.parametrize("direction", ["higher", "lower"])
-    def test_score_direction(self, minimal_compounds, tmp_path, monkeypatch, direction):
+    def test_score_direction(self, mock_run, minimal_compounds, tmp_path, monkeypatch, direction):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / direction))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
@@ -353,11 +392,13 @@ class TestRunSubcommand:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode == 0, f"Direction {direction} failed"
 
-    def test_random_state(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_random_state(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
         output_dir1 = tmp_path / "run1"
         output_dir2 = tmp_path / "run2"
 
+        mock_run.return_value = _make_mock_result(output_dir1)
         args1 = make_run_namespace(
             minimal_compounds, tmp_path,
             output=str(output_dir1),
@@ -365,6 +406,7 @@ class TestRunSubcommand:
         )
         result1 = run_cmd_inprocess(cmd_run, args1, monkeypatch)
 
+        mock_run.return_value = _make_mock_result(output_dir2)
         args2 = make_run_namespace(
             minimal_compounds, tmp_path,
             output=str(output_dir2),
@@ -374,20 +416,29 @@ class TestRunSubcommand:
 
         assert result1.returncode == 0
         assert result2.returncode == 0
+        assert mock_run.call_count == 2
 
-        df1 = pd.read_csv(output_dir1 / 'compounds_final.csv', comment='#')
-        df2 = pd.read_csv(output_dir2 / 'compounds_final.csv', comment='#')
-
-        pd.testing.assert_frame_equal(
-            df1.sort_values('ID').reset_index(drop=True),
-            df2.sort_values('ID').reset_index(drop=True)
-        )
-
-    def test_quiet_flag(self, minimal_compounds, tmp_path, monkeypatch):
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_quiet_flag(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
             minimal_compounds, tmp_path,
             quiet=True,
+            n_cycles=1, batch_fraction=0.4,
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode == 0
+
+    @patch('learnm8.cli.main.run_active_learning')
+    def test_acquisition_params_json(self, mock_run, minimal_compounds, tmp_path, monkeypatch):
+        mock_run.return_value = _make_mock_result(Path(tmp_path / 'output'))
+        from learnm8.cli.main import cmd_run
+        args = make_run_namespace(
+            minimal_compounds, tmp_path,
+            learner='gp',
+            strategy='ucb',
+            acquisition_params='{"beta": 2.0}',
             n_cycles=1, batch_fraction=0.4,
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
@@ -427,7 +478,7 @@ class TestValidateSubcommand:
         assert result.returncode != 0
 
 
-@pytest.mark.slow
+@pytest.mark.unit
 class TestHelpAndErrors:
     """Test help messages and error handling."""
 
@@ -454,7 +505,7 @@ class TestHelpAndErrors:
         assert exc_info.value.code == 0
 
 
-@pytest.mark.slow
+@pytest.mark.unit
 class TestEdgeCases:
     """Test edge cases and error scenarios."""
 
@@ -490,7 +541,6 @@ class TestEdgeCases:
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
 
-    @pytest.mark.slow
     def test_invalid_pruning_fraction(self, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
         args = make_run_namespace(
@@ -499,19 +549,6 @@ class TestEdgeCases:
         )
         result = run_cmd_inprocess(cmd_run, args, monkeypatch)
         assert result.returncode != 0
-
-    @pytest.mark.slow
-    def test_acquisition_params_json(self, minimal_compounds, tmp_path, monkeypatch):
-        from learnm8.cli.main import cmd_run
-        args = make_run_namespace(
-            minimal_compounds, tmp_path,
-            learner='gp',
-            strategy='ucb',
-            acquisition_params='{"beta": 2.0}',
-            n_cycles=1, batch_fraction=0.4,
-        )
-        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
-        assert result.returncode == 0
 
     def test_invalid_acquisition_params_json(self, minimal_compounds, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run

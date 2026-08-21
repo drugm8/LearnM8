@@ -19,7 +19,7 @@ class TestMLPLearner:
         """Create MLPLearner instance for testing."""
         return MLPLearner(
             hidden_sizes=(64, 32),
-            max_epochs=5,
+            max_epochs=2,
             random_state=42
         )
     
@@ -29,11 +29,11 @@ class TestMLPLearner:
         assert learner.activation == 'relu'
         assert learner.dropout_rate == 0.2
         assert learner.batch_norm is True
-        assert learner.max_epochs == 5
+        assert learner.max_epochs == 2
         assert not learner.is_trained
         assert learner.supports_uncertainty() is False
     
-    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -41,7 +41,7 @@ class TestMLPLearner:
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         assert learner.is_trained
         assert learner.model is not None
@@ -51,10 +51,12 @@ class TestMLPLearner:
         assert uncertainty is None
         assert np.all(np.isfinite(predictions))
 
-    def test_predict_without_training(self, learner, small_real_compounds, tmp_path):
+    def test_predict_without_training(self, learner, small_real_morgan_features):
         """Test error when predicting without training."""
-        features = extract_features(small_real_compounds['SMILES'].to_list(), 'morgan', tmp_path)
-        with pytest.raises(RuntimeError, match="must be trained before prediction"):
+        from learnm8.exceptions import LearnerError
+
+        features = small_real_morgan_features.copy()
+        with pytest.raises(LearnerError, match="must be trained before prediction"):
             learner.predict(features)
     
     def test_get_name_includes_architecture_activation_and_dropout(self, learner):
@@ -65,7 +67,7 @@ class TestMLPLearner:
         assert "relu" in name
         assert "dropout=0.2" in name
     
-    def test_custom_hidden_layer_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
+    def test_custom_hidden_layer_configuration_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test learner with different architectures."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -81,7 +83,7 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
@@ -89,7 +91,7 @@ class TestMLPLearner:
         assert learner.activation == 'gelu'
         assert predictions.shape[0] == len(compounds)
 
-    def test_supported_activation_functions_train_and_predict_finite_values(self, tmp_path, small_real_compounds):
+    def test_supported_activation_functions_train_and_predict_finite_values(self, small_real_compounds, small_real_morgan_features):
         """Test different activation functions."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -105,14 +107,14 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            features = small_real_morgan_features.copy()
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert predictions.shape[0] == len(compounds)
             assert np.all(np.isfinite(predictions))
 
-    def test_batch_norm_toggle_trains_and_predicts(self, tmp_path, small_real_compounds):
+    def test_batch_norm_toggle_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test with and without batch normalization."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -128,13 +130,13 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            features = small_real_morgan_features.copy()
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
             assert predictions.shape[0] == len(compounds)
 
-    def test_dropout_rate_is_preserved_across_training_runs(self, tmp_path, small_real_compounds):
+    def test_dropout_rate_is_preserved_across_training_runs(self, small_real_compounds, small_real_morgan_features):
         """Test different dropout rates."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -150,7 +152,7 @@ class TestMLPLearner:
                 random_state=42
             )
 
-            features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+            features = small_real_morgan_features.copy()
             learner.train(features, compounds['Activity'].to_numpy())
             predictions, _ = learner.predict(features)
 
@@ -182,7 +184,7 @@ class TestMLPLearner:
         assert len(predictions) == 1
         assert np.isfinite(predictions[0])
     
-    def test_training_history_contains_epoch_and_loss_entries_after_training(self, learner, small_real_compounds, tmp_path):
+    def test_training_history_contains_epoch_and_loss_entries_after_training(self, learner, small_real_compounds, small_real_morgan_features):
         """Test training history tracking."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -192,7 +194,7 @@ class TestMLPLearner:
 
         assert len(learner.get_training_history()) == 0
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         history = learner.get_training_history()
 
@@ -201,7 +203,7 @@ class TestMLPLearner:
         assert 'train_loss' in history[0]
         assert 'val_loss' in history[0]
 
-    def test_early_stopping_configuration_is_respected_during_training(self, tmp_path, small_real_compounds):
+    def test_early_stopping_configuration_is_respected_during_training(self, small_real_compounds, small_real_morgan_features):
         """Test early stopping mechanism."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -216,7 +218,7 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         history = learner.get_training_history()
 
@@ -224,7 +226,7 @@ class TestMLPLearner:
         assert learner.early_stopping_patience == 2
         assert len(history) > 0
 
-    def test_cpu_device_configuration_trains_and_predicts(self, tmp_path, small_real_compounds):
+    def test_cpu_device_configuration_trains_and_predicts(self, small_real_compounds, small_real_morgan_features):
         """Test device compatibility."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -239,21 +241,21 @@ class TestMLPLearner:
             random_state=42
         )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
         assert str(learner.device) == 'cpu'
         assert predictions.shape[0] == len(compounds)
 
-    def test_predict_returns_no_uncertainty_when_uncertainty_support_is_disabled(self, learner, small_real_compounds, tmp_path):
+    def test_predict_returns_no_uncertainty_when_uncertainty_support_is_disabled(self, learner, small_real_compounds, small_real_morgan_features):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
                 pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
             )
 
-        features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = small_real_morgan_features.copy()
         learner.train(features, compounds['Activity'].to_numpy())
 
         predictions, uncertainty = learner.predict(features)

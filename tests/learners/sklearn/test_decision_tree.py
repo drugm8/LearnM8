@@ -147,7 +147,7 @@ class TestDecisionTreeLearner:
         learner_shallow = DecisionTreeLearner(max_depth=2, random_state=42)
         learner_shallow.train(features, targets)
 
-        learner_deep = DecisionTreeLearner(max_depth=20, random_state=42)
+        learner_deep = DecisionTreeLearner(max_depth=20, min_samples_split=4, min_samples_leaf=1, random_state=42)
         learner_deep.train(features, targets)
 
         assert learner_shallow.model.get_depth() <= 2

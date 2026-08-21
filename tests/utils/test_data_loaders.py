@@ -1,6 +1,7 @@
+import logging
 import pytest
 import polars as pl
-from learnm8.utils.data_loaders import (
+from tests.fixtures.data_helpers import (
     validate_csv_columns,
     load_run_data,
     detect_score_direction_from_data,

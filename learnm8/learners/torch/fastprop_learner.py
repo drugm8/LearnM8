@@ -19,6 +19,7 @@ from torch.utils.data import TensorDataset
 
 from learnm8.core.interfaces import Learner
 from learnm8.exceptions import ConfigurationError, LearnerError
+from learnm8.learners.base import _cleanup_gpu_memory, _validate_and_resolve_precision
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class FastpropLearner(Learner):
         self.predict_batch_size = (
             predict_batch_size if predict_batch_size is not None else (batch_size * 4)
         )
-        self.precision = self._validate_and_resolve_precision(precision)
+        self.precision = _validate_and_resolve_precision(precision)
         self.pin_memory = pin_memory
         self.clamp_input = clamp_input
         self.early_stopping_patience = early_stopping_patience
@@ -113,31 +114,6 @@ class FastpropLearner(Learner):
             torch.cuda.manual_seed_all(random_state)
 
         logger.debug(f'Initialized FastpropLearner on device: {self.device}')
-
-    def _validate_and_resolve_precision(self, precision: str) -> str:
-        """Validate precision parameter and resolve 'auto' setting."""
-        import torch
-
-        valid_precisions = ['auto', '16-mixed', '32-true', 'bf16-mixed', '32', '16']
-        if precision not in valid_precisions:
-            raise ConfigurationError(
-                f"Invalid precision '{precision}'. Must be one of: {valid_precisions}"
-            )
-
-        if precision == 'auto':
-            if torch.cuda.is_available():
-                precision = '16-mixed'
-                logger.debug("Auto-detected GPU: using mixed precision '16-mixed'")
-            else:
-                precision = '32-true'
-                logger.debug("No GPU detected: using full precision '32-true'")
-
-        if precision == '32':
-            precision = '32-true'
-        elif precision == '16':
-            precision = '16-mixed'
-
-        return precision
 
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Train Fastprop model using PyTorch Lightning.
@@ -287,7 +263,7 @@ class FastpropLearner(Learner):
             train_time = time.time() - start_time
             logger.debug(f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s')
 
-            self._cleanup_gpu_memory('after training')
+            _cleanup_gpu_memory(self.enable_aggressive_gc, 'after training')
 
         except (ValueError, RuntimeError, TypeError) as e:
             logger.error(f'Failed to train {self.get_name()}: {e}')
@@ -359,7 +335,7 @@ class FastpropLearner(Learner):
             elif np.isscalar(predictions):
                 predictions = np.array([predictions])
 
-            self._cleanup_gpu_memory('after prediction')
+            _cleanup_gpu_memory(self.enable_aggressive_gc, 'after prediction')
 
             logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')
 
@@ -386,45 +362,3 @@ class FastpropLearner(Learner):
         For uncertainty, use FastpropEnsemble (future implementation).
         """
         return False
-
-    def _cleanup_gpu_memory(self, context: str = '') -> None:
-        """Force garbage collection and clear GPU cache if enabled.
-
-        This method performs two cleanup operations:
-        1. torch.cuda.empty_cache() - Releases cached GPU memory
-        2. gc.collect() - Forces Python garbage collection
-
-        This is particularly important in active learning scenarios where
-        models are trained repeatedly over many cycles, which can lead to
-        GPU memory accumulation from unreferenced tensors and PyTorch's
-        caching allocator.
-
-        The cleanup is a best-effort operation that won't raise exceptions
-        if it fails. It only runs if enable_aggressive_gc=True.
-
-        Args:
-                context: Optional description of when cleanup is being called,
-                                used for debug logging (e.g., "after training")
-
-        Note:
-                This is safe to call after predictions have been moved to CPU
-                memory via .cpu().numpy(), as it only affects unreferenced
-                GPU tensors and Python objects.
-        """
-        if not self.enable_aggressive_gc:
-            return
-
-        try:
-            import gc
-
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            gc.collect()
-
-            if context:
-                logger.debug(f'GPU memory cleanup: {context}')
-
-        except (RuntimeError, OSError, ImportError) as e:
-            logger.warning(f'GPU memory cleanup failed ({context}): {e}')

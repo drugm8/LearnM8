@@ -35,198 +35,150 @@ def small_targets():
     return rng.random(30).astype(np.float64)
 
 
-@pytest.mark.slow
 @pytest.mark.unit
-def test_instantiation_default():
-    learner = GPyTorchGPLearner(device='cpu')
-    assert not learner.is_trained
+class TestGPyTorchGPUnit:
+    """Unit tests for GPyTorchGPLearner constructor, validation, and attribute checks."""
 
+    def test_instantiation_default(self):
+        learner = GPyTorchGPLearner(device='cpu')
+        assert not learner.is_trained
 
-@pytest.mark.slow
-@pytest.mark.unit
-def test_gpytorch_not_installed(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'gpytorch', None)
-    with pytest.raises(ConfigurationError):
-        GPyTorchGPLearner(device='cpu')
+    def test_gpytorch_not_installed(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, 'gpytorch', None)
+        with pytest.raises(ConfigurationError):
+            GPyTorchGPLearner(device='cpu')
 
+    def test_predict_before_train(self, binary_features):
+        learner = GPyTorchGPLearner(device='cpu')
+        with pytest.raises(LearnerError, match='must be trained'):
+            learner.predict(binary_features)
 
-@pytest.mark.slow
-@pytest.mark.unit
-def test_kernel_auto_binary(binary_features, targets):
-    learner = GPyTorchGPLearner(device='cpu')
-    learner.train(binary_features, targets)
-    assert 'tanimoto' in learner.get_name().lower()
+    def test_max_train_size_exceeded(self, continuous_features, targets):
+        rng = np.random.default_rng(42)
+        big_features = rng.random(size=(101, 100)).astype(np.float64)
+        big_targets = rng.random(101).astype(np.float64)
+        learner = GPyTorchGPLearner(device='cpu', max_train_size=100)
+        with pytest.raises(LearnerError, match='exceed'):
+            learner.train(big_features, big_targets)
 
+    def test_supports_uncertainty(self):
+        assert GPyTorchGPLearner(device='cpu').supports_uncertainty() is True
 
-@pytest.mark.slow
-@pytest.mark.unit
-def test_kernel_auto_continuous(continuous_features, targets):
-    learner = GPyTorchGPLearner(device='cpu')
-    learner._feature_type = 'continuous'
-    learner.train(continuous_features, targets)
-    assert 'rbf' in learner.get_name().lower()
+    def test_requires_smiles(self):
+        assert GPyTorchGPLearner(device='cpu').requires_smiles() is False
 
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_target_standardization_round_trip(binary_features):
-    rng = np.random.default_rng(42)
-    high_targets = rng.normal(loc=100.0, scale=10.0, size=50).astype(np.float64)
-    learner = GPyTorchGPLearner(device='cpu')
-    learner.train(binary_features, high_targets)
-    means, _ = learner.predict(binary_features)
-    assert np.abs(np.mean(means) - 100.0) < 30.0
+    def test_get_name_untrained(self):
+        learner = GPyTorchGPLearner(device='cpu')
+        assert learner.get_name() == 'GPyTorchGP(untrained)'
 
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_zero_variance_removal_all_constant():
-    features = np.ones((30, 10), dtype=np.float64)
-    rng = np.random.default_rng(42)
-    targets = rng.random(30).astype(np.float64)
-    learner = GPyTorchGPLearner(device='cpu')
-    with pytest.raises(LearnerError, match='zero-variance'):
-        learner.train(features, targets)
+class TestGPyTorchGP:
+    """GPyTorchGPLearner tests requiring model training."""
 
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_nan_inf_preprocessing(targets):
-    rng = np.random.default_rng(42)
-    features = rng.random(size=(50, 100)).astype(np.float64)
-    features[0, 0] = np.nan
-    features[1, 1] = np.inf
-    features[2, 2] = -np.inf
-    learner = GPyTorchGPLearner(device='cpu')
-    learner.train(features, targets)
-    assert learner.is_trained
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_max_train_size_exceeded(continuous_features, targets):
-    rng = np.random.default_rng(42)
-    big_features = rng.random(size=(101, 100)).astype(np.float64)
-    big_targets = rng.random(101).astype(np.float64)
-    learner = GPyTorchGPLearner(device='cpu', max_train_size=100)
-    with pytest.raises(LearnerError, match='exceed'):
-        learner.train(big_features, big_targets)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_training_size_warning_large(capsys):
-    rng = np.random.default_rng(42)
-    features = rng.random(size=(5001, 5)).astype(np.float64)
-    targets = rng.random(5001).astype(np.float64)
-    learner = GPyTorchGPLearner(device='cpu', max_train_size=10000, n_iterations=2)
-    learner.train(features, targets)
-    captured = capsys.readouterr()
-    assert 'O(n^2)' in captured.out or 'n^2' in captured.out.lower()
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_predict_before_train(binary_features):
-    learner = GPyTorchGPLearner(device='cpu')
-    with pytest.raises(LearnerError, match='must be trained'):
-        learner.predict(binary_features)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_train_predict_cpu(binary_features, targets):
-    learner = GPyTorchGPLearner(device='cpu')
-    learner.train(binary_features, targets)
-    means, stds = learner.predict(binary_features)
-    assert means.shape == (50,)
-    assert stds.shape == (50,)
-    assert means.dtype == np.float64
-    assert stds.dtype == np.float64
-    assert np.all(stds > 0)
-    assert 'tanimoto' in learner.get_name().lower()
-
-
-@pytest.mark.slow
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-def test_gpu_train_predict(binary_features, targets):
-    learner = GPyTorchGPLearner(device='auto')
-    learner.train(binary_features, targets)
-    means, stds = learner.predict(binary_features)
-    assert learner._device.type == 'cuda'
-    assert means.shape == (50,)
-    assert stds.shape == (50,)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_chunked_prediction_shape(binary_features):
-    rng = np.random.default_rng(42)
-    train_features = binary_features[:30]
-    train_targets = rng.random(30).astype(np.float64)
-    learner = GPyTorchGPLearner(device='cpu', predict_chunk_size=20)
-    learner.train(train_features, train_targets)
-    means, stds = learner.predict(binary_features)
-    assert means.shape == (50,)
-    assert stds.shape == (50,)
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_supports_uncertainty():
-    assert GPyTorchGPLearner(device='cpu').supports_uncertainty() is True
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_requires_smiles():
-    assert GPyTorchGPLearner(device='cpu').requires_smiles() is False
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_retrain_creates_fresh_model(binary_features, targets):
-    learner = GPyTorchGPLearner(device='cpu')
-    learner.train(binary_features, targets)
-    model_id_first = id(learner._model)
-    learner.train(binary_features, targets)
-    model_id_second = id(learner._model)
-    assert model_id_first != model_id_second
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_kernel_explicit_tanimoto(continuous_features, targets):
-    learner = GPyTorchGPLearner(device='cpu', kernel='tanimoto')
-    learner.train(continuous_features, targets)
-    assert 'tanimoto' in learner.get_name().lower()
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_kernel_explicit_rbf(binary_features, targets):
-    learner = GPyTorchGPLearner(device='cpu', kernel='rbf')
-    learner.train(binary_features, targets)
-    assert 'rbf' in learner.get_name().lower()
-
-
-@pytest.mark.slow
-@pytest.mark.unit
-def test_gauche_missing_tanimoto_raises(monkeypatch, binary_features, targets):
-    monkeypatch.setitem(sys.modules, 'gauche', None)
-    monkeypatch.setitem(sys.modules, 'gauche.kernels', None)
-    monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels', None)
-    monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels.tanimoto_kernel', None)
-    learner = GPyTorchGPLearner(device='cpu', kernel='tanimoto')
-    with pytest.raises(ConfigurationError, match='GAUCHE'):
+    def test_kernel_auto_binary(self, binary_features, targets):
+        learner = GPyTorchGPLearner(device='cpu')
         learner.train(binary_features, targets)
+        assert 'tanimoto' in learner.get_name().lower()
 
+    def test_kernel_auto_continuous(self, continuous_features, targets):
+        learner = GPyTorchGPLearner(device='cpu')
+        learner._feature_type = 'continuous'
+        learner.train(continuous_features, targets)
+        assert 'rbf' in learner.get_name().lower()
 
-@pytest.mark.slow
-@pytest.mark.unit
-def test_get_name_untrained():
-    learner = GPyTorchGPLearner(device='cpu')
-    assert learner.get_name() == 'GPyTorchGP(untrained)'
+    def test_target_standardization_round_trip(self, binary_features):
+        rng = np.random.default_rng(42)
+        high_targets = rng.normal(loc=100.0, scale=10.0, size=50).astype(np.float64)
+        learner = GPyTorchGPLearner(device='cpu')
+        learner.train(binary_features, high_targets)
+        means, _ = learner.predict(binary_features)
+        assert np.abs(np.mean(means) - 100.0) < 30.0
+
+    def test_zero_variance_removal_all_constant(self):
+        features = np.ones((30, 10), dtype=np.float64)
+        rng = np.random.default_rng(42)
+        targets = rng.random(30).astype(np.float64)
+        learner = GPyTorchGPLearner(device='cpu')
+        with pytest.raises(LearnerError, match='zero-variance'):
+            learner.train(features, targets)
+
+    def test_nan_inf_preprocessing(self, targets):
+        rng = np.random.default_rng(42)
+        features = rng.random(size=(50, 100)).astype(np.float64)
+        features[0, 0] = np.nan
+        features[1, 1] = np.inf
+        features[2, 2] = -np.inf
+        learner = GPyTorchGPLearner(device='cpu')
+        learner.train(features, targets)
+        assert learner.is_trained
+
+    def test_training_size_warning_large(self, capsys):
+        rng = np.random.default_rng(42)
+        features = rng.random(size=(5001, 5)).astype(np.float64)
+        targets = rng.random(5001).astype(np.float64)
+        learner = GPyTorchGPLearner(device='cpu', max_train_size=10000, n_iterations=2)
+        learner.train(features, targets)
+        captured = capsys.readouterr()
+        assert 'O(n^2)' in captured.out or 'n^2' in captured.out.lower()
+
+    def test_train_predict_cpu(self, binary_features, targets):
+        learner = GPyTorchGPLearner(device='cpu')
+        learner.train(binary_features, targets)
+        means, stds = learner.predict(binary_features)
+        assert means.shape == (50,)
+        assert stds.shape == (50,)
+        assert means.dtype == np.float64
+        assert stds.dtype == np.float64
+        assert np.all(stds > 0)
+        assert 'tanimoto' in learner.get_name().lower()
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_gpu_train_predict(self, binary_features, targets):
+        learner = GPyTorchGPLearner(device='auto')
+        learner.train(binary_features, targets)
+        means, stds = learner.predict(binary_features)
+        assert learner._device.type == 'cuda'
+        assert means.shape == (50,)
+        assert stds.shape == (50,)
+
+    def test_chunked_prediction_shape(self, binary_features):
+        rng = np.random.default_rng(42)
+        train_features = binary_features[:30]
+        train_targets = rng.random(30).astype(np.float64)
+        learner = GPyTorchGPLearner(device='cpu', predict_chunk_size=20)
+        learner.train(train_features, train_targets)
+        means, stds = learner.predict(binary_features)
+        assert means.shape == (50,)
+        assert stds.shape == (50,)
+
+    def test_retrain_creates_fresh_model(self, binary_features, targets):
+        learner = GPyTorchGPLearner(device='cpu')
+        learner.train(binary_features, targets)
+        model_id_first = id(learner._model)
+        learner.train(binary_features, targets)
+        model_id_second = id(learner._model)
+        assert model_id_first != model_id_second
+
+    def test_kernel_explicit_tanimoto(self, continuous_features, targets):
+        learner = GPyTorchGPLearner(device='cpu', kernel='tanimoto')
+        learner.train(continuous_features, targets)
+        assert 'tanimoto' in learner.get_name().lower()
+
+    def test_kernel_explicit_rbf(self, binary_features, targets):
+        learner = GPyTorchGPLearner(device='cpu', kernel='rbf')
+        learner.train(binary_features, targets)
+        assert 'rbf' in learner.get_name().lower()
+
+    def test_gauche_missing_tanimoto_raises(self, monkeypatch, binary_features, targets):
+        monkeypatch.setitem(sys.modules, 'gauche', None)
+        monkeypatch.setitem(sys.modules, 'gauche.kernels', None)
+        monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels', None)
+        monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels.tanimoto_kernel', None)
+        learner = GPyTorchGPLearner(device='cpu', kernel='tanimoto')
+        with pytest.raises(ConfigurationError, match='GAUCHE'):
+            learner.train(binary_features, targets)
 
 
 @pytest.mark.integration

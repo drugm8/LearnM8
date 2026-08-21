@@ -127,29 +127,39 @@ def make_mock_oracle():
 
 @pytest.fixture
 def mock_learner(make_mock_learner):
-    """Backward-compatible wrapper. Prefer make_mock_learner() for new tests."""
+    """DEPRECATED: Use make_mock_learner() directly. Will be removed in v0.12.0."""
+    import warnings
+    warnings.warn("mock_learner fixture is deprecated; use make_mock_learner()", DeprecationWarning, stacklevel=2)
     return make_mock_learner()
 
 
 @pytest.fixture
 def mock_learner_with_uncertainty(make_mock_learner):
-    """Backward-compatible wrapper. Prefer make_mock_learner(supports_uncertainty=True)."""
+    """DEPRECATED: Use make_mock_learner(supports_uncertainty=True). Will be removed in v0.12.0."""
+    import warnings
+    warnings.warn("mock_learner_with_uncertainty is deprecated; use make_mock_learner(supports_uncertainty=True)", DeprecationWarning, stacklevel=2)
     return make_mock_learner(supports_uncertainty=True)
 
 
 @pytest.fixture
 def mock_oracle(make_mock_oracle):
-    """Backward-compatible wrapper. Prefer make_mock_oracle()."""
+    """DEPRECATED: Use make_mock_oracle() directly. Will be removed in v0.12.0."""
+    import warnings
+    warnings.warn("mock_oracle fixture is deprecated; use make_mock_oracle()", DeprecationWarning, stacklevel=2)
     return make_mock_oracle()
 
 
 @pytest.fixture
 def mock_oracle_low_noise(make_mock_oracle):
-    """Backward-compatible wrapper. Prefer make_mock_oracle(noise=0.01)."""
+    """DEPRECATED: Use make_mock_oracle(noise=0.01). Will be removed in v0.12.0."""
+    import warnings
+    warnings.warn("mock_oracle_low_noise is deprecated; use make_mock_oracle(noise=0.01)", DeprecationWarning, stacklevel=2)
     return make_mock_oracle(noise=0.01)
 
 
 @pytest.fixture
 def mock_oracle_high_noise(make_mock_oracle):
-    """Backward-compatible wrapper. Prefer make_mock_oracle(noise=0.5)."""
+    """DEPRECATED: Use make_mock_oracle(noise=0.5). Will be removed in v0.12.0."""
+    import warnings
+    warnings.warn("mock_oracle_high_noise is deprecated; use make_mock_oracle(noise=0.5)", DeprecationWarning, stacklevel=2)
     return make_mock_oracle(noise=0.5)

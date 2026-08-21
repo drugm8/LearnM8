@@ -9,6 +9,10 @@ invariants:
   bias batch-3 toward 100% survival; global counter yields ~33% survival.
 - Deterministic golden-snapshot (replaces flaky KS-test in fast CI).
 - Provenance suffix activates only when ``cumulative_seen_count > K``.
+
+K_RESERVOIR is monkeypatched from 100_000 → 10_000 (proportional stream-size
+reduction) to speed up CI.  test_reservoir_golden_snapshot_seed42 is excluded
+because it uses its own local K=100 with integers (no RDKit cost).
 """
 
 from __future__ import annotations
@@ -27,6 +31,19 @@ from learnm8.evaluation.metrics.similarity import (
 )
 
 pytestmark = pytest.mark.unit
+
+# Monkeypatched value for fast-CI runs.
+_K_PATCHED = 10_000
+
+
+@pytest.fixture(autouse=True)
+def _patch_k_reservoir(monkeypatch, request):
+    """Monkeypatch K_RESERVOIR to 10_000 for fast CI (skip golden-snapshot)."""
+    if request.node.name == "test_reservoir_golden_snapshot_seed42":
+        return
+    monkeypatch.setattr(
+        "learnm8.evaluation.metrics.similarity.K_RESERVOIR", _K_PATCHED
+    )
 
 
 def _make_fp(seed: int) -> Any:
@@ -49,11 +66,11 @@ def test_reservoir_capped_at_k() -> None:
     """Stream > K_RESERVOIR items; buffer length stays at K."""
     cache = RunCache()
     rng = _derive_rng(global_seed=42, cycle=0)
-    # Stream 150_000 fingerprints (> K=100_000) in two batches.
-    _reservoir_extend(cache, _make_indexed_fps(0, 80_000), rng)
-    _reservoir_extend(cache, _make_indexed_fps(80_000, 70_000), rng)
-    assert len(cache.cumulative_fp_buffer) == K_RESERVOIR
-    assert cache.cumulative_seen_count == 150_000
+    # Stream 15_000 fingerprints (> K=10_000) in two batches.
+    _reservoir_extend(cache, _make_indexed_fps(0, 8_000), rng)
+    _reservoir_extend(cache, _make_indexed_fps(8_000, 7_000), rng)
+    assert len(cache.cumulative_fp_buffer) == _K_PATCHED
+    assert cache.cumulative_seen_count == 15_000
 
 
 def test_reservoir_keeps_all_when_below_k() -> None:
@@ -84,37 +101,37 @@ def test_reservoir_determinism_seed42() -> None:
 def test_reservoir_uses_global_not_per_batch_counter() -> None:
     """Spec 022 Pitfall #1 regression.
 
-    Stream 3 batches × 50_000 fingerprints with K=100_000. With a correct
-    GLOBAL stream counter, expected batch-3 survivors ≈ 50_000 × 100_000 /
-    150_000 ≈ 33_333. With a (buggy) per-batch counter, batch-3 would
+    Stream 3 batches × 5_000 fingerprints with K=10_000. With a correct
+    GLOBAL stream counter, expected batch-3 survivors ≈ 5_000 × 10_000 /
+    15_000 ≈ 3_333. With a (buggy) per-batch counter, batch-3 would
     largely replace batch-1 & batch-2 because each new item would think it
     is "early in its stream".
 
-    We use seed=42 and assert batch-3 survivor count ∈ [28_000, 38_000]:
-    >6σ margin from the 33_333 expectation, far from the 50_000 the bug
+    We use seed=42 and assert batch-3 survivor count ∈ [2_800, 3_800]:
+    >6σ margin from the 3_333 expectation, far from the 5_000 the bug
     would produce.
     """
-    # Use IDs as a marker: batch_id = idx // 50_000 ∈ {0, 1, 2}.
+    # Use IDs as a marker: batch_id = idx // 5_000 ∈ {0, 1, 2}.
     cache = RunCache()
     rng = _derive_rng(global_seed=42, cycle=0)
     # Build fps tagged with their batch id via a unique alkyl chain offset.
-    batch_fps = [_make_indexed_fps(b * 50_000, 50_000) for b in range(3)]
+    batch_fps = [_make_indexed_fps(b * 5_000, 5_000) for b in range(3)]
     for fps in batch_fps:
         _reservoir_extend(cache, fps, rng)
 
-    assert cache.cumulative_seen_count == 150_000
-    assert len(cache.cumulative_fp_buffer) == K_RESERVOIR
+    assert cache.cumulative_seen_count == 15_000
+    assert len(cache.cumulative_fp_buffer) == _K_PATCHED
 
     # Count batch-3 survivors. Since each fp is built from chain length
-    # (seed % 100 + 1), seeds 100_000..149_999 cycle 100→0 in mod-100 space,
-    # producing chains 1..100 each appearing 500 times within batch 3. We
+    # (seed % 100 + 1), seeds 10_000..14_999 cycle 100→0 in mod-100 space,
+    # producing chains 1..100 each appearing 50 times within batch 3. We
     # identify them by checking the actual seed-set used.
     batch3_fp_ids = {id(fp) for fp in batch_fps[2]}
     survivors = sum(1 for fp in cache.cumulative_fp_buffer if id(fp) in batch3_fp_ids)
-    assert 28_000 <= survivors <= 38_000, (
-        f"Batch-3 survivors {survivors} outside [28_000, 38_000]; expected "
-        f"≈33_333 for correct global counter. Per-batch-counter bug would "
-        f"yield ~50_000. Investigate _reservoir_extend's stream-counter logic."
+    assert 2_800 <= survivors <= 3_800, (
+        f"Batch-3 survivors {survivors} outside [2_800, 3_800]; expected "
+        f"≈3_333 for correct global counter. Per-batch-counter bug would "
+        f"yield ~5_000. Investigate _reservoir_extend's stream-counter logic."
     )
 
 
@@ -177,9 +194,9 @@ def test_reservoir_clear_resets_state() -> None:
     """RunCache.clear() resets the reservoir state."""
     cache = RunCache()
     rng = _derive_rng(global_seed=42, cycle=0)
-    _reservoir_extend(cache, _make_indexed_fps(0, 200_000), rng)
-    assert cache.cumulative_seen_count == 200_000
-    assert len(cache.cumulative_fp_buffer) == K_RESERVOIR
+    _reservoir_extend(cache, _make_indexed_fps(0, 20_000), rng)
+    assert cache.cumulative_seen_count == 20_000
+    assert len(cache.cumulative_fp_buffer) == _K_PATCHED
     cache.clear()
     assert cache.cumulative_seen_count == 0
     assert len(cache.cumulative_fp_buffer) == 0
