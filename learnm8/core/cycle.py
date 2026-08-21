@@ -196,7 +196,7 @@ def execute_cycle(
         )
 
     # Start overall cycle timing
-    cycle_start_time = time.time()
+    cycle_start_time = time.perf_counter()
 
     # Step 2 & 3: Training
     # Get Labeled Compounds for Training
@@ -458,7 +458,7 @@ def execute_cycle(
     )
 
     # Step 14: Calculate Cycle Metrics (basic + evaluate_cycle enhancement)
-    evaluation_start_time = time.time()
+    evaluation_start_time = time.perf_counter()
     metrics = _calculate_cycle_metrics(
         compounds_df,
         cycle,
@@ -482,10 +482,10 @@ def execute_cycle(
         pruned_count=pruned_count_override,
     )
     metrics['selection_path'] = selection_path
-    evaluation_time = time.time() - evaluation_start_time
+    evaluation_time = time.perf_counter() - evaluation_start_time
 
     # Calculate total cycle time
-    total_time = time.time() - cycle_start_time
+    total_time = time.perf_counter() - cycle_start_time
 
     # Add timing metrics. `feature_extraction_time` is the wall-clock seconds
     # spent in `extract_features` across both training-side and prediction-side
@@ -1105,7 +1105,7 @@ def _train_learner(
     # Feature-extraction time is tracked separately from learner-side
     # training time so that `feature_extraction_time` (HDF5 cache speedup)
     # can be reported independently in cycle metrics.
-    training_start_time = time.time()
+    training_start_time = time.perf_counter()
     train_feature_time = 0.0
     try:
         training_targets = labeled_df[target_col].to_numpy()
@@ -1113,7 +1113,7 @@ def _train_learner(
 
         if learner.requires_smiles():
             if featurizer is not None:
-                _t0 = time.time()
+                _t0 = time.perf_counter()
                 training_features = extract_features(
                     training_smiles,
                     featurizer,
@@ -1121,7 +1121,7 @@ def _train_learner(
                     n_jobs=n_jobs,
                     preferred_dtype=learner.preferred_feature_dtype(),
                 )
-                train_feature_time += time.time() - _t0
+                train_feature_time += time.perf_counter() - _t0
                 logger.info(
                     f'Training {learner.get_name()} on {len(labeled_df)} compounds '
                     f'(SMILES + {training_features.shape[1]}-D descriptors)'
@@ -1147,7 +1147,7 @@ def _train_learner(
                     f'a featurizer (featurizer=None).'
                 )
 
-            _t0 = time.time()
+            _t0 = time.perf_counter()
             training_features = extract_features(
                 training_smiles,
                 featurizer,
@@ -1155,7 +1155,7 @@ def _train_learner(
                 n_jobs=n_jobs,
                 preferred_dtype=learner.preferred_feature_dtype(),
             )
-            train_feature_time += time.time() - _t0
+            train_feature_time += time.perf_counter() - _t0
             logger.debug(
                 f'Extracted {featurizer} features: {len(labeled_df)} training compounds'
             )
@@ -1183,7 +1183,7 @@ def _train_learner(
 
     # Carve feature-extraction time out of training_time so the two metrics
     # are mutually exclusive (required for stacked-bar compute breakdowns).
-    training_time = max(0.0, (time.time() - training_start_time) - train_feature_time)
+    training_time = max(0.0, (time.perf_counter() - training_start_time) - train_feature_time)
     logger.info(f'Training complete ({training_time:.2f}s)')
     return training_time, train_feature_time
 
@@ -1208,7 +1208,7 @@ def _predict_pool(
     Returns:
         (cycle_predictions, prediction_time, predict_feature_time, valid_compound_ids)
     """
-    prediction_start_time = time.time()
+    prediction_start_time = time.perf_counter()
     try:
         (
             predictions,
@@ -1239,7 +1239,7 @@ def _predict_pool(
     # Carve feature-extraction time out of prediction_time so the two metrics
     # are mutually exclusive (required for stacked-bar compute breakdowns).
     prediction_time = max(
-        0.0, (time.time() - prediction_start_time) - predict_feature_time
+        0.0, (time.perf_counter() - prediction_start_time) - predict_feature_time
     )
     logger.info(
         f'Prediction complete: {len(predictions)} predictions (min={predictions.min():.2f}, max={predictions.max():.2f}, mean={predictions.mean():.2f}) in {prediction_time:.2f}s'
@@ -1324,7 +1324,7 @@ def _select_and_measure(
             )
 
     # Step 11: Select Compounds Using Acquisition Strategy
-    acquisition_start_time = time.time()
+    acquisition_start_time = time.perf_counter()
     logger.debug(
         f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} candidates"
     )
@@ -1354,7 +1354,7 @@ def _select_and_measure(
     )
 
     selected_ids = selected_df['ID'].to_list()
-    acquisition_time = time.time() - acquisition_start_time
+    acquisition_time = time.perf_counter() - acquisition_start_time
 
     if len(selected_ids) == 0:
         raise AcquisitionError(
@@ -1409,7 +1409,7 @@ def _measure_and_label(
     """
     from learnm8.core.dataframe_ops import update_status
 
-    oracle_start_time = time.time()
+    oracle_start_time = time.perf_counter()
     order_lookup = build_selection_order_lookup(selected_ids, context='Selected')
 
     selected_compounds = (
@@ -1440,7 +1440,7 @@ def _measure_and_label(
         )
         raise err from e
 
-    oracle_time = time.time() - oracle_start_time
+    oracle_time = time.perf_counter() - oracle_start_time
 
     measurement_ids = measurements['ID'].to_list()
     if not all(sid in measurement_ids for sid in selected_ids):

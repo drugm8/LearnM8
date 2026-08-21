@@ -15,7 +15,7 @@ from fastprop.data import fastpropDataLoader, fastpropDataset, standard_scale
 from fastprop.model import fastprop
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
-from torch.utils.data import TensorDataset
+from torch.utils.data import DataLoader, TensorDataset
 
 from learnm8.core.interfaces import Learner
 from learnm8.exceptions import ConfigurationError, LearnerError
@@ -176,7 +176,7 @@ class FastpropLearner(Learner):
         for lg in _pl_loggers:
             lg.setLevel(logging.WARNING)
 
-        start_time = time.time()
+        start_time = time.perf_counter()
         try:
             from sklearn.model_selection import train_test_split
 
@@ -284,7 +284,7 @@ class FastpropLearner(Learner):
             self.trainer.fit(self.model, train_dataloader, val_dataloader)
 
             self.is_trained = True
-            train_time = time.time() - start_time
+            train_time = time.perf_counter() - start_time
             logger.debug(f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s')
 
             self._cleanup_gpu_memory('after training')
@@ -340,7 +340,13 @@ class FastpropLearner(Learner):
             X = torch.tensor(features, dtype=torch.float32)
 
             dataset = TensorDataset(X)
-            predict_dataloader = fastpropDataLoader(
+            # Plain DataLoader, NOT fastpropDataLoader: Lightning unconditionally
+            # re-instantiates the predict dataloader and drops any kwarg matching the
+            # base DataLoader default, so num_workers=0 is silently replaced by
+            # fastpropDataLoader's own default of 1 -- forking a worker out of a
+            # multi-threaded process, which deadlocks. The subclass only supplies
+            # different defaults, so nothing is lost here.
+            predict_dataloader = DataLoader(
                 dataset,
                 batch_size=self.predict_batch_size,
                 num_workers=0,

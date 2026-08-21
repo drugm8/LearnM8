@@ -136,7 +136,7 @@ def _pass1_predict_to_parquet(
     with_uncertainty = learner.supports_uncertainty() and compute_uncertainty
 
     feature_time = 0.0
-    start = time.time()
+    start = time.perf_counter()
     with CyclePredictionsWriter(
         output_dir, cycle, with_uncertainty=with_uncertainty
     ) as writer:
@@ -166,7 +166,7 @@ def _pass1_predict_to_parquet(
                 assert_no_inf_uncertainty(chunk_unc, ids)
             writer.write_chunk(ids, preds, chunk_unc)
         parquet_path = writer.path
-    prediction_time = max(0.0, (time.time() - start) - feature_time)
+    prediction_time = max(0.0, (time.perf_counter() - start) - feature_time)
     assert parquet_path is not None
     return parquet_path, with_uncertainty, prediction_time, feature_time
 
@@ -353,7 +353,7 @@ def execute_streaming_selection(
     )
 
     # PASS 2: score + reduce to the batch; collect pruned IDs for the master update.
-    acquisition_start = time.time()
+    acquisition_start = time.perf_counter()
     selected_df, pruned_ids = _pass2_select(
         parquet_path=parquet_path,
         acq_func=acq_func,
@@ -362,7 +362,7 @@ def execute_streaming_selection(
         batch_size=batch_size,
         pruned_mask=pruned_mask,
     )
-    acquisition_time = time.time() - acquisition_start
+    acquisition_time = time.perf_counter() - acquisition_start
 
     selected_ids = selected_df['ID'].to_list()
     # selection_history parity: order by global index (ascending pool order).

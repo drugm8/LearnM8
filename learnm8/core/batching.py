@@ -367,7 +367,7 @@ def _predict_chunk(
     preferred_dtype = learner.preferred_feature_dtype()
     if learner.requires_smiles():
         if featurizer is not None:
-            t0 = time.time()
+            t0 = time.perf_counter()
             chunk_features = extract_features(
                 chunk_smiles,
                 featurizer,
@@ -376,7 +376,7 @@ def _predict_chunk(
                 n_jobs=n_jobs,
                 preferred_dtype=preferred_dtype,
             )
-            feature_time = time.time() - t0
+            feature_time = time.perf_counter() - t0
         else:
             chunk_features = None
         preds, uncerts = learner.predict(
@@ -393,7 +393,7 @@ def _predict_chunk(
                 f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
                 f'a featurizer (featurizer=None).'
             )
-        t0 = time.time()
+        t0 = time.perf_counter()
         chunk_features = extract_features(
             chunk_smiles,
             featurizer,
@@ -402,7 +402,7 @@ def _predict_chunk(
             n_jobs=n_jobs,
             preferred_dtype=preferred_dtype,
         )
-        feature_time = time.time() - t0
+        feature_time = time.perf_counter() - t0
         preds, uncerts = learner.predict(
             chunk_features, compute_uncertainty=compute_uncertainty
         )

@@ -1005,7 +1005,7 @@ def run_active_learning(
         - Results are automatically saved to CSV files in output_dir
     """
 
-    start_time = time.time()
+    start_time = time.perf_counter()
 
     # FR-026: per-run diversity-metric cache, lifetime owned here. The
     # try/finally below guarantees prompt eviction independent of GC timing
@@ -1422,7 +1422,7 @@ def run_active_learning(
         logger.info('═══════════════════════════════════════════════════════════════')
 
         summary_lines = format_experiment_summary(
-            compounds_df, time.time() - start_time, len(all_metrics)
+            compounds_df, time.perf_counter() - start_time, len(all_metrics)
         )
         for line in summary_lines:
             logger.info(line)

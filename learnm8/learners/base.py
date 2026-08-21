@@ -331,7 +331,7 @@ class SklearnLearner(Learner):
             f'Training {self.get_name()} on features shape: {features.shape}, targets shape: {targets.shape}'
         )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             features, self._valid_feature_mask, self._feature_imputer = (
@@ -352,7 +352,7 @@ class SklearnLearner(Learner):
             self.model.fit(features, targets)
             self.is_trained = True
 
-            train_time = time.time() - start_time
+            train_time = time.perf_counter() - start_time
             logger.debug(
                 f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s'
             )
@@ -400,7 +400,7 @@ class SklearnLearner(Learner):
 
         logger.debug(f'Predicting with {self.get_name()} on {len(features)} samples')
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             features, _, _ = _preprocess_features(
@@ -417,7 +417,7 @@ class SklearnLearner(Learner):
 
             predictions = self.model.predict(features)
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )
@@ -656,7 +656,7 @@ class TorchLearner(Learner):
                 f'or increase the initial pool size.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             features, self._valid_feature_mask, self._feature_imputer = (
@@ -736,7 +736,7 @@ class TorchLearner(Learner):
                     )
 
             self.is_trained = True
-            train_time = time.time() - start_time
+            train_time = time.perf_counter() - start_time
             logger.debug(
                 f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s'
             )
@@ -785,7 +785,7 @@ class TorchLearner(Learner):
                 f'ensure at least one training cycle has completed before predicting.'
             )
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         try:
             features, _, _ = _preprocess_features(
@@ -815,7 +815,7 @@ class TorchLearner(Learner):
                 predictions, None
             )
 
-            pred_time = time.time() - start_time
+            pred_time = time.perf_counter() - start_time
             logger.debug(
                 f'Predicted {len(predictions)} samples with {self.get_name()} in {pred_time:.2f}s'
             )
