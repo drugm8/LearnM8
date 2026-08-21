@@ -19,6 +19,15 @@ Built on a pure functional architecture, LearnM8 provides explicit cycle control
 
 **Key Capabilities:** 21 ML models (including Chemprop GNNs, ensembles, and CUDA-accelerated learners), 9 acquisition strategies, 39 featurizers (30 2D + 9 3D), HDF5 caching for ~100× speedup, automatic parallelization, GPU acceleration via GPyTorch and RAPIDS cuML, and design space pruning for large-scale screening.
 
+## 🏗️ Architecture
+
+![LearnM8 architecture](media/fig01_architecture.svg)
+
+A run is a loop: featurize the pool once into an HDF5 cache, train a learner on
+what is labeled, predict over what is not, let an acquisition strategy pick the
+next batch, measure it with an oracle, repeat. Cycle 0 is a random seed batch with
+no model; cycles 1–N are the active learning proper.
+
 ## 📚 Documentation
 
 **[Read the full documentation →](docs/index.md)**
