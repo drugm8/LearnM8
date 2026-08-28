@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="media/learnm8_white_full.svg">
-    <img alt="LearnM8" src="media/learnm8_dark_full.svg" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="media/learnm8_white_full.png">
+    <img alt="LearnM8" src="media/learnm8_dark_full.png" width="420">
   </picture>
   <br><br>
   <strong>Active Learning Framework for Molecular Screening</strong>
