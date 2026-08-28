@@ -60,7 +60,7 @@ name = "drugm8/LearnM8"
 edit_uri = "edit/main/docs/"
 
 [project.theme]
-logo = "assets/learnm8_logo.svg"
+logo = "assets/learnm8_logo.png"
 favicon = "assets/favicon.svg"
 language = "en"
 features = [
