@@ -274,22 +274,7 @@ LearnM8 automatically detects the appropriate mode based on oracle type:
 - Separate oracle specification
 - `module.py:function` syntax
 
-### Overriding Auto-Detection
-
-Explicitly specify mode when auto-detection is ambiguous:
-
-```python
-from learnm8 import run_active_learning
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=oracle,
-    mode='production',
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan'
-)
-```
+Detection follows the oracle type and cannot be overridden — pass a `PythonOracle` (or `module.py:function`) for production mode, a CSV oracle for benchmark mode.
 
 ## Performance Differences
 

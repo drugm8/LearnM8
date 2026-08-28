@@ -95,7 +95,7 @@ class MyLearner(Learner):
         # Receives features directly, doesn't need to know about featurization
         self.model.fit(features, targets)
 
-    def predict(self, features: np.ndarray, smiles=None):
+    def predict(self, features: np.ndarray, smiles=None, *, compute_uncertainty=True):
         return self.model.predict(features), None
 ```
 

@@ -380,7 +380,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 
 # Large-scale with shared cache
 learnm8 run large_lib.csv --target Activity --learner rf --featurizer morgan \
-  --cache-dir .shared_cache --output-format parquet --disable-molecular-similarity \
+  --cache-dir .shared_cache --output-format parquet \
   --n-cycles 10
 
 # Force uncertainty even with greedy

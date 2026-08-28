@@ -35,7 +35,9 @@ class Learner(ABC):
     @abstractmethod
     def predict(self,
                 features: np.ndarray,
-                smiles: Optional[List[str]] = None
+                smiles: Optional[List[str]] = None,
+                *,
+                compute_uncertainty: bool = True
                 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix or SMILES.
 
@@ -281,7 +283,9 @@ class CustomSVRLearner(Learner):
 
     def predict(self,
                 features: np.ndarray,
-                smiles: Optional[List[str]] = None
+                smiles: Optional[List[str]] = None,
+                *,
+                compute_uncertainty: bool = True
                 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Predict on feature matrix with distance-based uncertainty.
 
@@ -386,7 +390,8 @@ Uncertainty estimation varies by model type:
 #### Random Forest - Tree Variance
 
 ```python
-def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None
+def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None,
+            *, compute_uncertainty: bool = True
             ) -> Tuple[np.ndarray, np.ndarray]:
     X_scaled = self.scaler.transform(features)
 
@@ -403,7 +408,8 @@ def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None
 #### Gaussian Process - Native Uncertainty
 
 ```python
-def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None
+def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None,
+            *, compute_uncertainty: bool = True
             ) -> Tuple[np.ndarray, np.ndarray]:
     X_scaled = self.scaler.transform(features)
 
@@ -415,7 +421,8 @@ def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None
 #### Neural Network - Monte Carlo Dropout
 
 ```python
-def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None
+def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None,
+            *, compute_uncertainty: bool = True
             ) -> Tuple[np.ndarray, np.ndarray]:
     X_tensor = torch.FloatTensor(self.scaler.transform(features))
 
@@ -567,7 +574,7 @@ def train(self, features, targets, smiles=None):
     self.model.fit(features, targets)
     self.is_trained = True
 
-def predict(self, features, smiles=None):
+def predict(self, features, smiles=None, *, compute_uncertainty=True):
     if not self.is_trained:
         raise RuntimeError("Model must be trained before prediction")
     return self.model.predict(features), None
