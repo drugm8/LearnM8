@@ -4,6 +4,7 @@ site_description = "Active Learning Framework for Molecular Screening"
 site_author = "LearnM8 Team"
 site_url = "https://drugm8.github.io/LearnM8"
 copyright = "Copyright &copy; 2025 LearnM8 Team"
+extra_css = ["stylesheets/extra.css"]
 
 nav = [
   { "Home" = "index.md" },
@@ -60,7 +61,7 @@ name = "drugm8/LearnM8"
 edit_uri = "edit/main/docs/"
 
 [project.theme]
-logo = "assets/learnm8_logo.png"
+logo = "assets/learnm8_logo_light.png"
 favicon = "assets/favicon.svg"
 language = "en"
 features = [

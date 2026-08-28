@@ -1,8 +1,6 @@
 <div align="center" markdown>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/learnm8_white_full.png">
-    <img alt="LearnM8" src="assets/learnm8_dark_full.png" width="420">
-  </picture>
+  ![LearnM8](assets/learnm8_dark_full.png#only-light){ width="420" }
+  ![LearnM8](assets/learnm8_white_full.png#only-dark){ width="420" }
 </div>
 
 # LearnM8: Active Learning Framework for Molecular Screening
