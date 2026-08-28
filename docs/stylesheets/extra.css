@@ -1,0 +1,7 @@
+/* The modern theme's header is translucent white in the default scheme and
+   near-black in slate, so the wordmark has to invert with the palette toggle.
+   theme.logo only accepts one file, hence the swap here. */
+[data-md-color-scheme="slate"] .md-header__button.md-logo img,
+[data-md-color-scheme="slate"] .md-nav__button.md-logo img {
+  content: url("../assets/learnm8_logo_dark.png");
+}
