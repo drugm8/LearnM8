@@ -65,41 +65,6 @@ learnm8 run large_library.csv oracle.py:score \
   --score-direction higher
 ```
 
-### Uncertainty-Based Pruning
-
-Remove compounds with low uncertainty (model is confident they are uninteresting).
-
-**Example:**
-
-```python
-from learnm8.core.config import CycleConfig
-
-results = run_active_learning(
-    compound_pool='large_library.csv',
-    oracle='oracle.py:score',
-    learner='gp',
-    target_col='affinity',
-    featurizer='morgan',
-    cycles=[
-        CycleConfig('random', n_cycles=1, batch_fraction=0.01),
-        CycleConfig('ucb', n_cycles=5, batch_fraction=0.005),
-        CycleConfig(
-            'greedy',
-            n_cycles=10,
-            batch_fraction=0.005,
-            pruning_strategy='score',
-            pruning_fraction=0.2
-        )
-    ]
-)
-```
-
-**When uncertainty-based pruning works:**
-
-- Learner provides reliable uncertainties (GP, ensembles, MC Dropout)
-- Later cycles when model is confident
-- Exploration phase complete
-
 ### Per-Cycle Pruning Strategy
 
 Apply different pruning strategies per cycle using CycleConfig.
@@ -120,7 +85,7 @@ cycles = [
         n_cycles=5,
         batch_fraction=0.01,
         pruning_strategy='score',
-        pruning_fraction=0.1
+        pruning_params={'pruning_fraction': 0.1}
     ),
 
     # Cycle 11-20: Aggressive pruning (30%)
@@ -129,7 +94,7 @@ cycles = [
         n_cycles=10,
         batch_fraction=0.01,
         pruning_strategy='score',
-        pruning_fraction=0.3
+        pruning_params={'pruning_fraction': 0.3}
     )
 ]
 
@@ -525,7 +490,7 @@ learnm8 run --config experiment_config.yaml
 ```bash
 learnm8 run --config experiment_config.yaml \
   --random-state 123 \
-  --output-dir results/docking_campaign_002
+  --output results/docking_campaign_002
 ```
 
 ### Version Control for Experiments
@@ -641,7 +606,7 @@ cache_dir: .cache/intensive
 # Test different beta values
 for beta in 1.0 1.5 2.0 2.5; do
   learnm8 run --config base_config.yaml \
-    --acquisition-params "beta=$beta" \
-    --output-dir "results/beta_sweep_$beta"
+    --acquisition-params "{\"beta\": $beta}" \
+    --output "results/beta_sweep_$beta"
 done
 ```

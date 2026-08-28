@@ -54,7 +54,6 @@ cycles:
 
 # Optimization Settings
 score_direction: "higher" # or "lower"
-mode: "benchmark" # or "run" (usually auto-detected)
 
 # Output Configuration
 output_dir: "results/experiment_001"
@@ -70,12 +69,11 @@ enable_chemprop_fine_tuning: false
 pruning_fraction: 0.3 # Optional, enables pruning if specified
 pruning_strategy: "score" # Only supported strategy
 pruning_params:
-  pruning_threshold: 0.5 # Optional: absolute score threshold
+  score_direction: "higher" # Optional: overrides the top-level setting
 
 # Acquisition Parameters (optional, strategy-specific)
 acquisition_params:
   beta: 1.5 # for UCB
-  temperature: 1.0 # for Thompson sampling
 ```
 
 ### Simple Configuration Example
@@ -147,14 +145,14 @@ cycles:
     batch_fraction: 0.005
     acquisition_params:
       beta: 1.5
-  -     strategy: "simulated_annealing"
+  - strategy: "simulated_annealing"
     n_cycles: 3
     batch_fraction: 0.01
 
 pruning_fraction: 0.3
 pruning_strategy: "score"
 pruning_params:
-  pruning_threshold: 0.5
+  score_direction: "higher"
 
 cache_dir: ".cache/global"
 random_state: 42
@@ -178,7 +176,6 @@ JSON format is also supported, with identical schema to YAML but different synta
   "strategy": "greedy",
   "initial_strategy": "random",
   "score_direction": "higher",
-  "mode": "benchmark",
   "output_dir": "results/experiment_001",
   "cache_dir": ".cache/shared",
   "random_state": 42
@@ -257,11 +254,10 @@ JSON format is also supported, with identical schema to YAML but different synta
   "pruning_fraction": 0.3,
   "pruning_strategy": "score",
   "pruning_params": {
-    "pruning_threshold": 0.5
+    "score_direction": "lower"
   },
   "acquisition_params": {
-    "beta": 1.5,
-    "temperature": 1.0
+    "beta": 1.5
   },
   "output_dir": "results/chemprop_screening",
   "cache_dir": ".cache/global",
@@ -519,20 +515,19 @@ Cycle dictionary structure:
 | Parameter         | Type     | Default  | Description                                         |
 | ----------------- | -------- | -------- | --------------------------------------------------- |
 | `score_direction` | str      | "higher" | Optimization direction (higher or lower)            |
-| `mode`            | str      | None     | Execution mode (run or benchmark, auto-detected)    |
 | `output_dir`      | str/Path | None     | Output directory (auto-generated if None)           |
 | `cache_dir`       | str/Path | None     | Feature cache directory (output_dir/.cache if None) |
 | `random_state`    | int      | 42       | Random seed for reproducibility                     |
 
 ### Advanced Features
 
-| Parameter                     | Type  | Default | Description                                               |
-| ----------------------------- | ----- | ------- | --------------------------------------------------------- |
-| `enable_chemprop_fine_tuning` | bool  | False   | Enable fine-tuning for Chemprop models                    |
-| `pruning_fraction`            | float | None    | Fraction to prune per cycle (0.0-0.9)                     |
-| `pruning_strategy`            | str   | None    | Pruning method (only "score" is supported)                |
-| `pruning_params`              | dict  | None    | Additional pruning parameters                             |
-| `acquisition_params`          | dict  | None    | Acquisition strategy parameters (beta, temperature, etc.) |
+| Parameter                     | Type  | Default | Description                                          |
+| ----------------------------- | ----- | ------- | ---------------------------------------------------- |
+| `enable_chemprop_fine_tuning` | bool  | False   | Enable fine-tuning for Chemprop models               |
+| `pruning_fraction`            | float | None    | Fraction to prune per cycle (0.0-0.9)                |
+| `pruning_strategy`            | str   | None    | Pruning method (only "score" is supported)           |
+| `pruning_params`              | dict  | None    | Additional pruning parameters                        |
+| `acquisition_params`          | dict  | None    | Acquisition strategy parameters, e.g. `beta` for UCB |
 
 ## Complete Example Configurations
 
@@ -544,7 +539,6 @@ compound_pool: "benchmark_datasets/ADA.csv"
 target_col: "Activity"
 featurizer: "morgan"
 score_direction: "higher"
-mode: "benchmark"
 
 # Will run with both learners in separate experiments
 learner: "rf" # or "gp"
@@ -588,7 +582,7 @@ cycles:
 pruning_fraction: 0.4
 pruning_strategy: "score"
 pruning_params:
-  pruning_threshold: 0.5
+  score_direction: "higher"
 
 cache_dir: ".cache/production"
 output_dir: "results/screening_campaign_001"
@@ -669,8 +663,7 @@ Test configurations with small datasets before production runs:
 
 ```bash
 # Test with subset of data
-learnm8 run --config production_config.yaml \
-  --compound-pool test_subset.csv \
+learnm8 run test_subset.csv --config production_config.yaml \
   -o results/config_test
 ```
 

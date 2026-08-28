@@ -1,6 +1,8 @@
 # Extending the Framework
 
-This guide covers advanced customization of LearnM8 beyond custom learners and acquisition functions, including custom featurizers, pruners, evaluation metrics, and ensemble learners.
+This guide covers advanced customization of LearnM8 beyond custom learners and acquisition functions: custom featurizers and ensemble learners.
+
+Pruning and evaluation metrics are not extensible at runtime. Pruning resolves `pruning_strategy` against a fixed table whose only entry is `'score'`, and there is no metric registry — adding either means changing the package, not registering from user code.
 
 ## Custom Featurizers
 
@@ -79,31 +81,16 @@ def simple_descriptor_featurizer(smiles_list: List[str]) -> np.ndarray:
     return np.array(features, dtype=np.float32)
 ```
 
-### Integration with extract_features()
+### Calling a custom featurizer
 
-Use custom featurizers with LearnM8's caching system:
+Call the function directly on your SMILES:
 
 ```python
-from learnm8.core.features import extract_features
-
-# Method 1: Direct function call (no caching)
 smiles = ['CCO', 'CCC', 'CCCO']
 features = simple_descriptor_featurizer(smiles)
-
-# Method 2: With extract_features for caching
-from pathlib import Path
-
-# Add your featurizer to the registry
-from learnm8.utils import featurizers
-featurizers.FEATURIZER_REGISTRY['simple_desc'] = simple_descriptor_featurizer
-
-# Now use with caching
-features = extract_features(
-    smiles_list=smiles,
-    featurizer='simple_desc',
-    cache_dir=Path('.cache')
-)
 ```
+
+`FEATURIZER_REGISTRY` is a frozenset derived from `_FEATURIZER_CONFIG`, not a mutable mapping, so a featurizer cannot be registered at runtime and custom featurizers do not go through the HDF5 cache. To make one cacheable and usable by name, add an entry to `_FEATURIZER_CONFIG` in `learnm8/features/__init__.py` — see [Contributing Extensions](#contributing-extensions-to-learnm8) below.
 
 ### Advanced Example: Pharmacophore Features
 
@@ -171,292 +158,6 @@ def parallel_featurizer(smiles_list: List[str], n_jobs=-1) -> np.ndarray:
     return np.array(features)
 ```
 
-## Custom Pruners
-
-Pruners reduce the unlabeled compound pool by removing unlikely candidates, improving computational efficiency.
-
-### Pruner Protocol
-
-Custom pruners should implement the `DesignSpacePruner` protocol:
-
-```python
-from learnm8.pruning.base import DesignSpacePruner, PruningError
-import polars as pl
-import numpy as np
-from typing import Dict, Any, Optional
-
-class MyCustomPruner(DesignSpacePruner):
-    def prune(self,
-              compounds: pl.DataFrame,
-              predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
-        """Prune compounds based on custom criteria."""
-        pass
-
-    def get_name(self) -> str:
-        """Return descriptive name for this pruning strategy."""
-        pass
-
-    def requires_uncertainty(self) -> bool:
-        """Return True if uncertainty estimates are required."""
-        return False
-```
-
-### Example: Percentile-Based Pruner
-
-```python
-from learnm8.pruning.base import DesignSpacePruner
-import polars as pl
-import numpy as np
-
-class PercentilePruner(DesignSpacePruner):
-    """Prune compounds below a prediction percentile."""
-
-    def __init__(self, percentile=25, score_direction='higher'):
-        if not 0 <= percentile <= 100:
-            raise ValueError("percentile must be between 0 and 100")
-
-        if score_direction not in ['higher', 'lower']:
-            raise ValueError("score_direction must be 'higher' or 'lower'")
-
-        self.percentile = percentile
-        self.score_direction = score_direction
-
-    def prune(self,
-              compounds: pl.DataFrame,
-              predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
-
-        # Validate inputs
-        self.validate_inputs(compounds, predictions, uncertainties)
-
-        # Calculate threshold based on percentile
-        if self.score_direction == 'higher':
-            # Keep compounds above percentile
-            threshold = np.percentile(predictions, self.percentile)
-            keep_mask = predictions >= threshold
-        else:
-            # Keep compounds below percentile
-            threshold = np.percentile(predictions, 100 - self.percentile)
-            keep_mask = predictions <= threshold
-
-        # Prune compounds
-        pruned_compounds = self._safe_prune_by_indices(compounds, keep_mask)
-
-        return pruned_compounds
-
-    def get_name(self) -> str:
-        return f"PercentilePruner(p={self.percentile}, dir={self.score_direction})"
-
-    def requires_uncertainty(self) -> bool:
-        return False
-```
-
-### Example: Uncertainty-Based Pruner
-
-```python
-class UncertaintyPercentilePruner(DesignSpacePruner):
-    """Prune compounds with high uncertainty (low confidence regions)."""
-
-    def __init__(self, uncertainty_percentile=75):
-        if not 0 <= uncertainty_percentile <= 100:
-            raise ValueError("uncertainty_percentile must be between 0 and 100")
-
-        self.uncertainty_percentile = uncertainty_percentile
-
-    def prune(self,
-              compounds: pl.DataFrame,
-              predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
-
-        self.validate_inputs(compounds, predictions, uncertainties)
-
-        if uncertainties is None:
-            raise PruningError("UncertaintyPercentilePruner requires uncertainty estimates")
-
-        # Calculate uncertainty threshold
-        threshold = np.percentile(uncertainties, self.uncertainty_percentile)
-
-        # Keep compounds with uncertainty below threshold (more confident)
-        keep_mask = uncertainties <= threshold
-
-        pruned_compounds = self._safe_prune_by_indices(compounds, keep_mask)
-
-        return pruned_compounds
-
-    def get_name(self) -> str:
-        return f"UncertaintyPercentilePruner(p={self.uncertainty_percentile})"
-
-    def requires_uncertainty(self) -> bool:
-        return True
-```
-
-### Integration with Active Learning
-
-Use custom pruners in `run_active_learning()`:
-
-```python
-from learnm8 import run_active_learning, CycleConfig
-
-# Create custom pruner instance
-pruner = PercentilePruner(percentile=30, score_direction='higher')
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[
-        CycleConfig(
-            strategy='random',
-            batch_fraction=0.01,
-            pruner=pruner  # Use custom pruner for this cycle
-        )
-    ]
-)
-```
-
-## Custom Evaluation Metrics
-
-Add custom metrics to evaluate active learning performance.
-
-### Metric Function Signature
-
-```python
-from typing import Dict, Any
-import numpy as np
-
-def custom_metric(predictions: np.ndarray,
-                  ground_truth: np.ndarray,
-                  **kwargs) -> Dict[str, Any]:
-    """Calculate custom evaluation metric.
-
-    Args:
-        predictions: Model predictions for compounds
-        ground_truth: True values for compounds
-        **kwargs: Additional parameters (e.g., threshold, top_k)
-
-    Returns:
-        Dictionary with metric name as key and value
-    """
-    metric_value = compute_metric(predictions, ground_truth)
-
-    return {'custom_metric': metric_value}
-```
-
-### Example: Precision@K Metric
-
-```python
-import numpy as np
-from typing import Dict, Any
-
-def precision_at_k(predictions: np.ndarray,
-                   ground_truth: np.ndarray,
-                   k: int = 100,
-                   threshold: float = 0.5) -> Dict[str, Any]:
-    """Calculate precision in top-k predicted compounds.
-
-    Args:
-        predictions: Model predictions
-        ground_truth: True activity values
-        k: Number of top compounds to consider
-        threshold: Activity threshold for defining actives
-
-    Returns:
-        Dictionary with precision@k metric
-    """
-    if len(predictions) != len(ground_truth):
-        raise ValueError("predictions and ground_truth must have same length")
-
-    k = min(k, len(predictions))  # Handle k > dataset size
-
-    # Get indices of top-k predictions
-    top_k_indices = np.argsort(predictions)[-k:]
-
-    # Count true actives in top-k
-    actives_in_top_k = np.sum(ground_truth[top_k_indices] >= threshold)
-
-    # Calculate precision
-    precision = actives_in_top_k / k
-
-    return {
-        f'precision@{k}': precision,
-        f'actives_in_top_{k}': int(actives_in_top_k)
-    }
-```
-
-### Example: Receiver Operating Characteristic AUC
-
-```python
-from sklearn.metrics import roc_auc_score, roc_curve
-
-def roc_metrics(predictions: np.ndarray,
-                ground_truth: np.ndarray,
-                threshold: float = 0.5) -> Dict[str, Any]:
-    """Calculate ROC AUC and related metrics.
-
-    Args:
-        predictions: Model predictions (continuous)
-        ground_truth: True activity values (continuous)
-        threshold: Threshold for binarizing ground truth
-
-    Returns:
-        Dictionary with ROC-related metrics
-    """
-    # Binarize ground truth
-    binary_labels = (ground_truth >= threshold).astype(int)
-
-    # Calculate ROC AUC
-    auc = roc_auc_score(binary_labels, predictions)
-
-    # Calculate ROC curve
-    fpr, tpr, thresholds = roc_curve(binary_labels, predictions)
-
-    # Find optimal threshold (max Youden's J statistic)
-    j_scores = tpr - fpr
-    optimal_idx = np.argmax(j_scores)
-    optimal_threshold = thresholds[optimal_idx]
-
-    return {
-        'roc_auc': auc,
-        'optimal_threshold': float(optimal_threshold),
-        'optimal_tpr': float(tpr[optimal_idx]),
-        'optimal_fpr': float(fpr[optimal_idx])
-    }
-```
-
-### Integration with Evaluation Module
-
-Add custom metrics to LearnM8's evaluation pipeline:
-
-```python
-from learnm8.evaluation import metrics
-
-# Register custom metric
-metrics.METRIC_REGISTRY['precision_at_k'] = precision_at_k
-metrics.METRIC_REGISTRY['roc_metrics'] = roc_metrics
-
-# Now use in evaluation
-from learnm8 import run_active_learning
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=10,
-    custom_metrics=['precision_at_k', 'roc_metrics']
-)
-
-# Access custom metrics in results
-for cycle_result in results['cycle_metrics']:
-    print(f"Cycle {cycle_result['cycle']}: "
-          f"Precision@100 = {cycle_result['precision@100']:.3f}, "
-          f"ROC AUC = {cycle_result['roc_auc']:.3f}")
-```
-
 ## Extending Ensemble Learners
 
 Create custom ensemble combinations for improved uncertainty quantification.
@@ -465,17 +166,22 @@ Create custom ensemble combinations for improved uncertainty quantification.
 
 ```python
 from learnm8.learners.ensemble import EnsembleLearner
-from learnm8.learners import get_learner
+from learnm8.learners.sklearn import (
+    GaussianProcessLearner,
+    RandomForestLearner,
+    XGBoostLearner,
+)
+from learnm8.learners.torch import MLPLearner
 
 # Create ensemble with specific model mix
-base_learners = [
-    get_learner('rf', n_estimators=100),
-    get_learner('gp', kernel='rbf'),
-    get_learner('xgb', n_estimators=100),
-    get_learner('mlp', hidden_dims=[512, 256])
+learners = [
+    RandomForestLearner(n_estimators=100),
+    GaussianProcessLearner(),
+    XGBoostLearner(n_estimators=100),
+    MLPLearner(hidden_sizes=[512, 256])
 ]
 
-ensemble = EnsembleLearner(base_learners=base_learners)
+ensemble = EnsembleLearner(learners=learners)
 
 # Use in active learning
 from learnm8 import run_active_learning
@@ -521,7 +227,8 @@ class WeightedEnsembleLearner(Learner):
         for learner in self.base_learners:
             learner.train(features, targets, smiles)
 
-    def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None,
+                *, compute_uncertainty: bool = True) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Weighted ensemble prediction with uncertainty."""
         all_predictions = []
         all_uncertainties = []
@@ -623,7 +330,8 @@ class AdaptiveEnsemble(Learner):
             'weights': self.weights.copy()
         })
 
-    def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+    def predict(self, features: np.ndarray, smiles: Optional[List[str]] = None,
+                *, compute_uncertainty: bool = True) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Adaptive weighted prediction."""
         all_predictions = []
 
