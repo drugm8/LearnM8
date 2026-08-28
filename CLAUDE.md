@@ -14,7 +14,7 @@ Key governance files:
 
 ## Project Overview
 
-LearnM8 is a general-purpose active learning framework for large-scale screening (v0.10.0). Pure functional API with `run_active_learning()` as main entry point. Modular design with 7 core modules. Polars-first DataFrames (accepts pandas, auto-converts).
+LearnM8 is a general-purpose active learning framework for large-scale screening (v0.11.0). Pure functional API with `run_active_learning()` as main entry point. Modular design (see Package Structure below). Polars-first DataFrames (accepts pandas, auto-converts).
 
 **Tech Stack:** Python 3.11.9, polars, numpy, scikit-learn, rdkit, pytorch, xgboost, chemprop, scikit-fingerprints, PyTorch Lightning, Rich console, HDF5 caching.
 
@@ -52,6 +52,7 @@ learnm8 run --config experiment.yaml  # Config file support
 ## Architecture
 
 ### Seven-Phase Execution Flow
+
 1. **Normalize** inputs → 2. **Validate** inputs → 3. **Initialize** master DataFrame + cycle 0 → 4. **Configure** cycle schedule → 5. **Execute** cycles 1-N → 6. **Persist** CSV results → 7. **Return** results dict
 
 **Cycle numbering:** Cycle 0 = random init (no model). Cycles 1-N = active learning. `n_cycles=10` → cycles 0-9.
@@ -65,12 +66,14 @@ learnm8/
 ├── core/
 │   ├── interfaces.py         # Learner/Oracle abstract interfaces
 │   ├── cycle.py              # Unified cycle execution + batch prediction
+│   ├── streaming_cycle.py    # Streaming predict→select path + eligibility
+│   ├── batching.py           # Chunked prediction/featurization sizing
 │   ├── config.py             # CycleConfig dataclass
-│   ├── validation.py         # Early input validation
+│   ├── validation.py         # Early input validation + canonicalize_for_cache
 │   ├── initialization.py     # Master DataFrame setup
-│   ├── persistence.py        # CSV export
+│   ├── persistence.py        # CSV export + CyclePredictionsWriter
 │   ├── dataframe_ops.py      # Vectorized Polars operations
-│   ├── data_structures.py    # Shared data structures
+│   ├── prediction_stats.py   # PredictionStats (parquet aggregation)
 │   └── resources.py          # CPU/GPU resource validation (n_jobs, device)
 ├── features/                 # HDF5-cached feature extraction
 │   ├── __init__.py           # _FEATURIZER_CONFIG factory (39 featurizers)
@@ -98,9 +101,10 @@ from learnm8 import run_active_learning, CycleConfig, validate_compound_pool, ex
 
 # Simple
 results = run_active_learning(
-    compound_pool='data.csv', target_col='Value',
+    compound_pool='data.csv', oracle=None, target_col='Value',
     learner='rf', featurizer='morgan', n_cycles=10, batch_fraction=0.01
 )
+# `oracle` has no default. Pass None to auto-detect the CSV oracle (benchmark mode).
 
 # Advanced with CycleConfig
 results = run_active_learning(
@@ -120,8 +124,11 @@ results = run_active_learning(
 
 ```python
 class Learner:
+    # Abstract: train, predict, get_name — all three required on subclasses.
     def train(features: np.ndarray, targets: np.ndarray, smiles: list[str] | None = None) -> None
-    def predict(features: np.ndarray, smiles: list[str] | None = None) -> tuple[np.ndarray, np.ndarray | None]
+    def predict(features: np.ndarray, smiles: list[str] | None = None, *,
+                compute_uncertainty: bool = True) -> tuple[np.ndarray, np.ndarray | None]
+    def get_name() -> str
     def supports_uncertainty() -> bool
     def requires_smiles() -> bool    # True for Chemprop/Fastprop
 
@@ -162,9 +169,10 @@ LearnM8Error(Exception)
 ### Two-Mode Architecture
 
 - **Benchmark mode** (CSV oracle): discovery + ranking metrics with ground truth
-- **Run mode** (Python oracle): basic metrics only. Auto-detected, overridable.
+- **Run mode** (Python oracle): basic metrics only. Derived from the oracle type; there is no mode override.
 
 ### Feature Caching
+
 HDF5-based v3 schema (bit-packed, 128-bit BLAKE2b cache keys), 100x speedup on reuse. Persists across sessions. Use `cache_dir=Path('.shared_cache')`.
 
 **Storage dtypes** (`Featurizer.get_storage_dtype()`):
@@ -181,13 +189,14 @@ HDF5-based v3 schema (bit-packed, 128-bit BLAKE2b cache keys), 100x speedup on r
 Per-cycle predictions are written to parquet files (`prediction_cycle_N.parquet`) under the output directory and joined transiently for selection/evaluation. The master DataFrame stays at a constant 7 columns (`ID`, `SMILES`, `status`, `labeled_cycle`, `selected_cycle`, `pruned_cycle`, `<target_col>`) regardless of cycle count (no `prediction_cycle_N` / `uncertainty_cycle_N` accumulation).
 
 ### GPU Memory Management
+
 PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True` by default. Cleans GPU memory after train/predict. Safe, best-effort, negligible overhead.
 
 ## Component Registry
 
 ### Learners
 
-`rf, gp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, chemprop_ensemble, ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble`
+`rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble` (21)
 
 **Uncertainty support:** gp, mc_dropout, rf, lr, dt, gpu_gp, svgp, rf_fil, ridge_cuml, all ensembles (chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble)
 
@@ -219,6 +228,7 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 3. Register in `LEARNER_REGISTRY` in `learnm8/api.py`
 
 ### Adding Featurizers
+
 1. Add an entry to `_FEATURIZER_CONFIG` in `learnm8/features/__init__.py`
    (keyed by name; specify `cls`, `defaults`, `storage_dtype`, `feature_type`,
    `requires_conformers`) — featurizers are config entries, not separate files
@@ -226,6 +236,7 @@ PyTorch learners (Chemprop, Fastprop, ensembles) have `enable_aggressive_gc=True
 3. Create test in `tests/features/`
 
 ### Adding Acquisition Strategies
+
 1. Inherit from base in `learnm8.acquisition.base`
 2. Register in acquisition registry
 3. Handle graceful fallback on errors
@@ -243,6 +254,7 @@ Both support optional `features` as extra descriptors (`x_d`). When `featurizer`
 ## Common Pitfalls
 
 **Mock import paths:** Mock at the import location, not the definition location.
+
 ```python
 # Wrong: @patch('learnm8.acquisition.base.get_acquisition_function')
 # Right: @patch('learnm8.core.cycle.get_acquisition_function')
