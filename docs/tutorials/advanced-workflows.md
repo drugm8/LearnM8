@@ -147,13 +147,13 @@ results = run_active_learning(
 
 **Dataset: 500,000 compounds, 20 cycles, score-based pruning (20%)**
 
-| Cycle | Pool Size | Pruned | Predictions | Time Saved |
-|-------|-----------|--------|-------------|------------|
-| 0 | 500,000 | 0 | 500,000 | - |
-| 1 | 500,000 | 100,000 | 400,000 | 20% |
-| 5 | 400,000 | 80,000 | 320,000 | 36% |
-| 10 | 300,000 | 60,000 | 240,000 | 52% |
-| 20 | 150,000 | 30,000 | 120,000 | 76% |
+| Cycle | Pool Size | Pruned  | Predictions | Time Saved |
+| ----- | --------- | ------- | ----------- | ---------- |
+| 0     | 500,000   | 0       | 500,000     | -          |
+| 1     | 500,000   | 100,000 | 400,000     | 20%        |
+| 5     | 400,000   | 80,000  | 320,000     | 36%        |
+| 10    | 300,000   | 60,000  | 240,000     | 52%        |
+| 20    | 150,000   | 30,000  | 120,000     | 76%        |
 
 Cumulative computational savings: ~40%
 
@@ -171,6 +171,7 @@ Ensemble learning combines multiple models to improve predictions and uncertaint
 - Captures different aspects of data
 
 **Uncertainty calculation:**
+
 ```
 ensemble_uncertainty = sqrt(prediction_variance + model_disagreement)
 ```
@@ -356,6 +357,7 @@ Chemprop fine-tuning is only available via the Python API (no CLI equivalent).
 ### Fine-Tuning Parameters
 
 **Learner initialization:**
+
 ```python
 learner = ChempropLearner(
     enable_fine_tuning=True,
@@ -415,6 +417,7 @@ results = run_active_learning(
 ```
 
 **Checkpoint management:**
+
 ```
 checkpoints/chemprop_ensemble/
 ├── model_0_cycle_1.ckpt
@@ -430,12 +433,12 @@ checkpoints/chemprop_ensemble/
 **Small batch scenario (0.5% per cycle):**
 
 | Cycle | From Scratch Epochs | Fine-Tuning Epochs | Speedup |
-|-------|---------------------|-------------------|---------|
-| 1 | 50 | 50 | 1.0x |
-| 2 | 50 | 20 | 2.5x |
-| 5 | 50 | 15 | 3.3x |
-| 10 | 50 | 12 | 4.2x |
-| 20 | 50 | 10 | 5.0x |
+| ----- | ------------------- | ------------------ | ------- |
+| 1     | 50                  | 50                 | 1.0x    |
+| 2     | 50                  | 20                 | 2.5x    |
+| 5     | 50                  | 15                 | 3.3x    |
+| 10    | 50                  | 12                 | 4.2x    |
+| 20    | 50                  | 10                 | 5.0x    |
 
 Average training time reduction: 60%
 
@@ -633,6 +636,7 @@ cache_dir: .cache/intensive
 5. Archive checkpoints for successful runs
 
 **Parameter search:**
+
 ```bash
 # Test different beta values
 for beta in 1.0 1.5 2.0 2.5; do

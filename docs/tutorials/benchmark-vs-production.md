@@ -80,6 +80,7 @@ results = run_active_learning(
 ```
 
 **CLI alternative:**
+
 ```bash
 learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
@@ -247,6 +248,7 @@ results = run_active_learning(
 ```
 
 **CLI alternative:**
+
 ```bash
 learnm8 run compound_library.csv docking_oracle.py:dock_compounds \
   --target docking_score \
@@ -289,29 +291,27 @@ results = run_active_learning(
 )
 ```
 
-
-
 ## Performance Differences
 
 ### Computational Cost Comparison
 
-| Aspect | Benchmark Mode | Production Mode |
-|--------|----------------|-----------------|
-| **Prediction Scope** | Full dataset (all compounds) | Unlabeled pool only |
-| **Oracle Calls** | Once per cycle | Once per cycle |
-| **Prediction Cost** | High (N compounds) | Low (unlabeled only) |
-| **Metric Accuracy** | Exact enrichment | Approximate |
-| **Use Case** | Algorithm testing | Real screening |
+| Aspect               | Benchmark Mode               | Production Mode      |
+| -------------------- | ---------------------------- | -------------------- |
+| **Prediction Scope** | Full dataset (all compounds) | Unlabeled pool only  |
+| **Oracle Calls**     | Once per cycle               | Once per cycle       |
+| **Prediction Cost**  | High (N compounds)           | Low (unlabeled only) |
+| **Metric Accuracy**  | Exact enrichment             | Approximate          |
+| **Use Case**         | Algorithm testing            | Real screening       |
 
 **Example Dataset: 100,000 compounds, 10 cycles, 1% batch**
 
 | Cycle | Benchmark Predictions | Production Predictions |
-|-------|----------------------|------------------------|
-| 0 | 100,000 | 99,000 |
-| 1 | 100,000 | 98,000 |
-| 2 | 100,000 | 97,000 |
-| 5 | 100,000 | 94,000 |
-| 10 | 100,000 | 90,000 |
+| ----- | --------------------- | ---------------------- |
+| 0     | 100,000               | 99,000                 |
+| 1     | 100,000               | 98,000                 |
+| 2     | 100,000               | 97,000                 |
+| 5     | 100,000               | 94,000                 |
+| 10    | 100,000               | 90,000                 |
 
 **Total predictions:**
 
@@ -387,6 +387,7 @@ production_results = run_active_learning(
 ```
 
 **CLI alternative:**
+
 ```bash
 # 1. Test strategies on benchmark
 learnm8 run ESSENCE_benchmark_input/ADA.csv \

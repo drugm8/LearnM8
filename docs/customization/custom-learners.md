@@ -98,6 +98,7 @@ The `train()` method trains the model on labeled data.
 - `RuntimeError`: If training fails due to model errors
 
 **Example shapes:**
+
 ```python
 features.shape  # (100, 2048) for 100 compounds with Morgan fingerprints
 targets.shape   # (100,) for 100 activity values
@@ -123,6 +124,7 @@ The `predict()` method generates predictions and optional uncertainty estimates 
 - `RuntimeError`: If model is not trained or prediction fails
 
 **Example return values:**
+
 ```python
 predictions, uncertainties = learner.predict(features)
 predictions.shape     # (50,) for 50 compounds
@@ -136,6 +138,7 @@ The `get_name()` method returns a human-readable identifier for the learner.
 **Returns:** str - Descriptive name including model type and key hyperparameters
 
 **Example names:**
+
 ```python
 "RandomForest(n_estimators=100,unlimited_depth)"
 "GaussianProcess(RBF,α=1e-10)"
@@ -149,6 +152,7 @@ The `supports_uncertainty()` method indicates whether the learner provides uncer
 **Returns:** bool - True if `predict()` returns non-None uncertainties
 
 **Implementation:**
+
 ```python
 def supports_uncertainty(self) -> bool:
     return True  # Override to True if providing uncertainties
@@ -174,11 +178,13 @@ Here's a complete step-by-step guide to implementing a custom learner.
 LearnM8 provides two base classes for common scenarios:
 
 **SklearnLearner** - For scikit-learn compatible models:
+
 ```python
 from learnm8.learners.base import SklearnLearner
 ```
 
 **TorchLearner** - For PyTorch neural networks:
+
 ```python
 from learnm8.learners.base import TorchLearner
 ```
@@ -673,7 +679,7 @@ class CustomLearner(Learner):
 
 Document your learner with comprehensive docstrings:
 
-```python
+````python
 class CustomSVRLearner(Learner):
     """Support Vector Regression learner with distance-based uncertainty.
 
@@ -696,6 +702,6 @@ class CustomSVRLearner(Learner):
         predictions, uncertainties = learner.predict(test_features)
         ```
     """
-```
+````
 
 By following these guidelines, you can create custom learners that integrate seamlessly with LearnM8's active learning framework while maintaining robustness and performance.
