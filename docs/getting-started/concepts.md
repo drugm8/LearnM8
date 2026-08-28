@@ -135,6 +135,7 @@ learnm8 validate compounds.csv
 The oracle provides ground truth measurements for compounds. LearnM8 supports two oracle types corresponding to different use cases:
 
 **CSVOracle (Benchmark Mode)**:
+
 ```python
 # Oracle is a CSV file with known measurements
 results = run_active_learning(
@@ -149,6 +150,7 @@ results = run_active_learning(
 Use this when you have complete ground truth data and want to benchmark active learning strategies against random selection.
 
 **PythonOracle (Production Mode)**:
+
 ```python
 # Oracle is a custom function (e.g., docking, experimental measurement)
 results = run_active_learning(
@@ -187,32 +189,35 @@ The learner is the predictive model that learns structure-activity relationships
 
 Key considerations when choosing a learner:
 
-| Dataset Size | Uncertainty Needed | Best Choice |
-|--------------|-------------------|-------------|
-| < 1,000 | Yes | `GaussianProcessLearner` or `ChempropLearner` |
-| < 1,000 | No | `RandomForestLearner` |
-| 1,000-10,000 | Yes | `EnsembleLearner` or `ChempropLearner` |
-| 1,000-10,000 | No | `XGBoostLearner` |
-| > 10,000 | Yes | `ChempropLearner` with ensemble |
-| > 10,000 | No | `XGBoostLearner` or `MLPLearner` |
+| Dataset Size | Uncertainty Needed | Best Choice                                   |
+| ------------ | ------------------ | --------------------------------------------- |
+| < 1,000      | Yes                | `GaussianProcessLearner` or `ChempropLearner` |
+| < 1,000      | No                 | `RandomForestLearner`                         |
+| 1,000-10,000 | Yes                | `EnsembleLearner` or `ChempropLearner`        |
+| 1,000-10,000 | No                 | `XGBoostLearner`                              |
+| > 10,000     | Yes                | `ChempropLearner` with ensemble               |
+| > 10,000     | No                 | `XGBoostLearner` or `MLPLearner`              |
 
 ### Acquisition Function (Selection Strategy)
 
 The acquisition function determines which compounds to measure next based on model predictions and uncertainty. LearnM8 offers several strategy categories:
 
 **Exploitation (Greedy)**:
+
 ```python
 # Select compounds with highest predicted values
 cycles=[('greedy', 0.01)]
 ```
 
 **Exploration (Stochastic)**:
+
 ```python
 # Stochastic optimization-based exploration
 cycles=[('simulated_annealing', 0.01)]
 ```
 
 **Balanced (Uncertainty-Based)**:
+
 ```python
 # Select based on prediction + uncertainty tradeoff
 cycles=[('ucb', 0.01)]  # Upper Confidence Bound
@@ -220,25 +225,25 @@ cycles=[('ucb', 0.01)]  # Upper Confidence Bound
 
 Common strategies:
 
-| Strategy | Type | Requires Uncertainty | When to Use |
-|----------|------|---------------------|-------------|
-| `random` | Baseline | No | Initial sampling, control experiments |
-| `greedy` | Exploitation | No | When you want highest predicted values |
-| `ucb` | Balanced | Yes | General-purpose active learning |
-| `ei` | Balanced | Yes | Optimization campaigns |
-| `thompson` | Balanced | Yes | Stochastic exploration |
-| `simulated_annealing` | Optimization | No | Diversity without uncertainty estimates |
+| Strategy              | Type         | Requires Uncertainty | When to Use                             |
+| --------------------- | ------------ | -------------------- | --------------------------------------- |
+| `random`              | Baseline     | No                   | Initial sampling, control experiments   |
+| `greedy`              | Exploitation | No                   | When you want highest predicted values  |
+| `ucb`                 | Balanced     | Yes                  | General-purpose active learning         |
+| `ei`                  | Balanced     | Yes                  | Optimization campaigns                  |
+| `thompson`            | Balanced     | Yes                  | Stochastic exploration                  |
+| `simulated_annealing` | Optimization | No                   | Diversity without uncertainty estimates |
 
 ### Featurizer (Molecular Representation)
 
 The featurizer converts SMILES strings into numerical vectors that machine learning models can process. LearnM8 provides several molecular representations:
 
-| Featurizer | Type | Dimensions | Best For |
-|------------|------|------------|----------|
-| `morgan` | Fingerprint | 2048 | General-purpose molecular similarity |
-| `maccs` | Fingerprint | 167 | Structural keys, fast computation |
-| `ecfp6` | Fingerprint | 2048 | Larger molecular contexts |
-| `descriptors` | Numerical | 1613 | Mordred physicochemical descriptors |
+| Featurizer    | Type        | Dimensions | Best For                             |
+| ------------- | ----------- | ---------- | ------------------------------------ |
+| `morgan`      | Fingerprint | 2048       | General-purpose molecular similarity |
+| `maccs`       | Fingerprint | 167        | Structural keys, fast computation    |
+| `ecfp6`       | Fingerprint | 2048       | Larger molecular contexts            |
+| `descriptors` | Numerical   | 1613       | Mordred physicochemical descriptors  |
 
 **Note**: Graph neural networks (Chemprop) work directly with SMILES and don't require a featurizer:
 
@@ -265,12 +270,12 @@ results = run_active_learning(
 
 Each active learning cycle follows this sequence:
 
-| Phase | Action | Input | Output |
-|-------|--------|-------|--------|
-| **Train** | Build predictive model | Labeled compounds + features | Trained model |
-| **Predict** | Score compound pool | Unlabeled compounds + features | Predictions + uncertainties |
-| **Acquire** | Select informative compounds | Predictions + uncertainties | Acquired compound IDs |
-| **Measure** | Obtain ground truth | Acquired compound IDs | Measured values |
+| Phase       | Action                       | Input                          | Output                      |
+| ----------- | ---------------------------- | ------------------------------ | --------------------------- |
+| **Train**   | Build predictive model       | Labeled compounds + features   | Trained model               |
+| **Predict** | Score compound pool          | Unlabeled compounds + features | Predictions + uncertainties |
+| **Acquire** | Select informative compounds | Predictions + uncertainties    | Acquired compound IDs       |
+| **Measure** | Obtain ground truth          | Acquired compound IDs          | Measured values             |
 
 ### Cycle 0: Initialization
 
@@ -339,6 +344,7 @@ LearnM8 adapts its behavior based on your use case:
 - Higher computational cost (predicts all compounds)
 
 **Example**:
+
 ```python
 results = run_active_learning(
     compound_pool='benchmark_compounds.csv',
@@ -368,6 +374,7 @@ results = run_active_learning(
 - Designed for expensive oracles (synthesis, docking, etc.)
 
 **Example**:
+
 ```python
 results = run_active_learning(
     compound_pool='virtual_library.csv',
