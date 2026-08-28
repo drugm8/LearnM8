@@ -115,54 +115,54 @@ See [examples/README.md](examples/README.md) for complete guide.
 
 ## 📊 Components Overview
 
-| Component | Count | Examples |
-| --------- | ----- | -------- |
-| **Learners** | 21 | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble, ensemble |
-| **Acquisition** | 9 | greedy, random, topk, ucb, ei, pi, thompson, entropy, simulated_annealing |
-| **Featurizers** | 39 | 30 2D + 9 3D (38 unique; see categories below) |
-| **Pruning** | 1 | score |
+| Component       | Count | Examples                                                                                                                                                                                                        |
+| --------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Learners**    | 21    | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble, ensemble |
+| **Acquisition** | 9     | greedy, random, topk, ucb, ei, pi, thompson, entropy, simulated_annealing                                                                                                                                       |
+| **Featurizers** | 39    | 30 2D + 9 3D (38 unique; see categories below)                                                                                                                                                                  |
+| **Pruning**     | 1     | score                                                                                                                                                                                                           |
 
 ### Learners
 
 Pool size reflects the total compound pool. GP is limited by labeled set growth (O(n³) training). Neural models benefit significantly from GPU for larger pools. GPU learners require CUDA-capable hardware and optional dependencies (GPyTorch, RAPIDS cuML).
 
-| Shortcut | Class | Uncertainty Method | CPU | GPU | CPU Pool Size | GPU Pool Size |
-| -------- | ----- | ------------------ | --- | --- | ------------- | ------------- |
-| `rf` | `RandomForestLearner` | Tree std dev | ✓ | — | 1K – 10M+ | — |
-| `gp` | `GaussianProcessLearner` | GP posterior variance | ✓ | — | < 10K | — |
-| `gpu_gp` | `GPUGaussianProcessLearner` | GP posterior variance | ✓ | ✓ | < 10K | < 10K |
-| `svgp` | `SVGPLearner` | Variational posterior | ✓ | ✓ | < 10K | 10K – 100K+ |
-| `xgb` | `XGBoostLearner` | None | ✓ | ✓ | 1K – 10M+ | 1K – 10M+ |
-| `lr` | `LinearRegressionLearner` | Leverage-based analytical | ✓ | — | any size | — |
-| `dt` | `DecisionTreeLearner` | Leaf impurity | ✓ | — | 1K – 10M+ | — |
-| `mlp` | `MLPLearner` | None | ✓ | ✓ | 10K – 100K | 10K – 1M+ |
-| `mc_dropout` | `MCDropoutLearner` | MC Dropout sampling | ✓ | ✓ | 5K – 50K | 5K – 500K |
-| `fastprop` | `FastpropLearner` | None | ✓ | ✓ | 10K – 100K | 10K – 1M+ |
-| `chemprop` | `ChempropLearner` | None | ✓ | ✓ | 5K – 50K | 5K – 500K |
-| `rf_fil` | `RfFilLearner` | Per-tree std dev | — | ✓ | — | 1K – 10M+ |
-| `ridge_cuml` | `RidgeCumlLearner` | Leverage-based analytical | — | ✓ | — | any size |
-| `chemprop_ensemble` | `ChempropEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 20K | 1K – 200K |
-| `rf_ensemble` | `RFEnsemble` | Ensemble std dev | ✓ | — | 1K – 10M+ | — |
-| `lr_ensemble` | `LREnsemble` | Ensemble std dev | ✓ | ✓ | any size | any size |
-| `xgb_ensemble` | `XGBEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 10M+ | 1K – 10M+ |
-| `dt_ensemble` | `DTEnsemble` | Ensemble std dev | ✓ | — | 1K – 10M+ | — |
-| `mixed_ensemble` | `MixedEnsemble` | Ensemble std dev | ✓ | ✓ | 1K – 50K | 1K – 50K |
-| `fastprop_ensemble` | `FastpropEnsemble` | Ensemble std dev | ✓ | ✓ | 5K – 50K | 5K – 500K |
-| `ensemble` | `EnsembleLearner` | Ensemble std dev | ✓ | — | 1K – 100K | — |
+| Shortcut            | Class                       | Uncertainty Method        | CPU | GPU | CPU Pool Size | GPU Pool Size |
+| ------------------- | --------------------------- | ------------------------- | --- | --- | ------------- | ------------- |
+| `rf`                | `RandomForestLearner`       | Tree std dev              | ✓   | —   | 1K – 10M+     | —             |
+| `gp`                | `GaussianProcessLearner`    | GP posterior variance     | ✓   | —   | < 10K         | —             |
+| `gpu_gp`            | `GPUGaussianProcessLearner` | GP posterior variance     | ✓   | ✓   | < 10K         | < 10K         |
+| `svgp`              | `SVGPLearner`               | Variational posterior     | ✓   | ✓   | < 10K         | 10K – 100K+   |
+| `xgb`               | `XGBoostLearner`            | None                      | ✓   | ✓   | 1K – 10M+     | 1K – 10M+     |
+| `lr`                | `LinearRegressionLearner`   | Leverage-based analytical | ✓   | —   | any size      | —             |
+| `dt`                | `DecisionTreeLearner`       | Leaf impurity             | ✓   | —   | 1K – 10M+     | —             |
+| `mlp`               | `MLPLearner`                | None                      | ✓   | ✓   | 10K – 100K    | 10K – 1M+     |
+| `mc_dropout`        | `MCDropoutLearner`          | MC Dropout sampling       | ✓   | ✓   | 5K – 50K      | 5K – 500K     |
+| `fastprop`          | `FastpropLearner`           | None                      | ✓   | ✓   | 10K – 100K    | 10K – 1M+     |
+| `chemprop`          | `ChempropLearner`           | None                      | ✓   | ✓   | 5K – 50K      | 5K – 500K     |
+| `rf_fil`            | `RfFilLearner`              | Per-tree std dev          | —   | ✓   | —             | 1K – 10M+     |
+| `ridge_cuml`        | `RidgeCumlLearner`          | Leverage-based analytical | —   | ✓   | —             | any size      |
+| `chemprop_ensemble` | `ChempropEnsemble`          | Ensemble std dev          | ✓   | ✓   | 1K – 20K      | 1K – 200K     |
+| `rf_ensemble`       | `RFEnsemble`                | Ensemble std dev          | ✓   | —   | 1K – 10M+     | —             |
+| `lr_ensemble`       | `LREnsemble`                | Ensemble std dev          | ✓   | ✓   | any size      | any size      |
+| `xgb_ensemble`      | `XGBEnsemble`               | Ensemble std dev          | ✓   | ✓   | 1K – 10M+     | 1K – 10M+     |
+| `dt_ensemble`       | `DTEnsemble`                | Ensemble std dev          | ✓   | —   | 1K – 10M+     | —             |
+| `mixed_ensemble`    | `MixedEnsemble`             | Ensemble std dev          | ✓   | ✓   | 1K – 50K      | 1K – 50K      |
+| `fastprop_ensemble` | `FastpropEnsemble`          | Ensemble std dev          | ✓   | ✓   | 5K – 50K      | 5K – 500K     |
+| `ensemble`          | `EnsembleLearner`           | Ensemble std dev          | ✓   | —   | 1K – 100K     | —             |
 
 ### Acquisition Strategies
 
-| Shortcut | Class | Requires Uncertainty | Key Parameter | Strategy |
-| -------- | ----- | -------------------- | ------------- | -------- |
-| `greedy` | `GreedyAcquisition` | No | `score_direction` | Pure exploitation — selects compounds with highest predicted values |
-| `random` | `RandomAcquisition` | No | `random_state` | Random selection — baseline for evaluating other strategies |
-| `topk` | `TopKAcquisition` | No | `k_fraction` (0.1) | Rank-ordered selection from configurable top/bottom fraction |
-| `ucb` | `UCBAcquisition` | Yes | `beta` (2.0) | Exploitation + exploration via `mean + β × uncertainty`; higher β = more exploration |
-| `ei` | `ExpectedImprovementAcquisition` | Yes | `xi` (0.01) | Expected improvement over current best; principled exploitation/exploration trade-off |
-| `pi` | `ProbabilityImprovementAcquisition` | Yes | `xi` (0.01) | Probability of improving over current best; more conservative than EI |
-| `thompson` | `ThompsonSamplingAcquisition` | Yes | `random_state` | Stochastic — samples from posterior predictive distribution |
-| `entropy` | `EntropyAcquisition` | Yes | `entropy_type` | Maximum information gain — selects most uncertain compounds |
-| `simulated_annealing` | `SimulatedAnnealingAcquisition` | No | `initial_temp`, `cooling_schedule` | Temperature-based probabilistic selection; starts random, cools to greedy |
+| Shortcut              | Class                               | Requires Uncertainty | Key Parameter                      | Strategy                                                                              |
+| --------------------- | ----------------------------------- | -------------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `greedy`              | `GreedyAcquisition`                 | No                   | `score_direction`                  | Pure exploitation — selects compounds with highest predicted values                   |
+| `random`              | `RandomAcquisition`                 | No                   | `random_state`                     | Random selection — baseline for evaluating other strategies                           |
+| `topk`                | `TopKAcquisition`                   | No                   | `k_fraction` (0.1)                 | Rank-ordered selection from configurable top/bottom fraction                          |
+| `ucb`                 | `UCBAcquisition`                    | Yes                  | `beta` (2.0)                       | Exploitation + exploration via `mean + β × uncertainty`; higher β = more exploration  |
+| `ei`                  | `ExpectedImprovementAcquisition`    | Yes                  | `xi` (0.01)                        | Expected improvement over current best; principled exploitation/exploration trade-off |
+| `pi`                  | `ProbabilityImprovementAcquisition` | Yes                  | `xi` (0.01)                        | Probability of improving over current best; more conservative than EI                 |
+| `thompson`            | `ThompsonSamplingAcquisition`       | Yes                  | `random_state`                     | Stochastic — samples from posterior predictive distribution                           |
+| `entropy`             | `EntropyAcquisition`                | Yes                  | `entropy_type`                     | Maximum information gain — selects most uncertain compounds                           |
+| `simulated_annealing` | `SimulatedAnnealingAcquisition`     | No                   | `initial_temp`, `cooling_schedule` | Temperature-based probabilistic selection; starts random, cools to greedy             |
 
 **Uncertainty-based strategies** (`ucb`, `ei`, `pi`, `thompson`, `entropy`) require a learner that supports uncertainty. See the Learners table above — the **Uncertainty Method** column indicates compatibility.
 
@@ -170,14 +170,14 @@ Uncertainty computation is automatically skipped when the active strategy does n
 
 ### Featurizers by Category
 
-| Category | Count | Names |
-| -------- | ----- | ----- |
-| **2D Circular** | 5 | morgan, ecfp, ecfp6, morgan_feat, secfp |
-| **2D Structural Keys** | 4 | maccs, pubchem, klekota_roth, laggner |
-| **2D Topological** | 6 | avalon, atom_pair, topological_torsion, rdkit, pattern, layered |
-| **2D Hashed** | 4 | map4, mhfp, lingo, erg |
-| **2D Descriptors** | 10 | mordred/descriptors, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups |
-| **3D** (conformer) | 9 | whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape |
+| Category               | Count | Names                                                                                                                                 |
+| ---------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **2D Circular**        | 5     | morgan, ecfp, ecfp6, morgan_feat, secfp                                                                                               |
+| **2D Structural Keys** | 4     | maccs, pubchem, klekota_roth, laggner                                                                                                 |
+| **2D Topological**     | 6     | avalon, atom_pair, topological_torsion, rdkit, pattern, layered                                                                       |
+| **2D Hashed**          | 4     | map4, mhfp, lingo, erg                                                                                                                |
+| **2D Descriptors**     | 10    | mordred/descriptors, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups |
+| **3D** (conformer)     | 9     | whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape                                                                  |
 
 See the [documentation](docs/) for complete details on all components.
 
@@ -234,11 +234,11 @@ GPU-accelerated Ridge regression via RAPIDS cuML with leverage-based uncertainty
 
 Several ensemble learners automatically use GPU backends when `device='cuda'`:
 
-| Ensemble | CPU Members | GPU Members (`device='cuda'`) |
-| -------- | ----------- | ----------------------------- |
+| Ensemble         | CPU Members       | GPU Members (`device='cuda'`)      |
+| ---------------- | ----------------- | ---------------------------------- |
 | `mixed_ensemble` | RF + LR + XGBoost | RF FIL + Ridge cuML + XGBoost CUDA |
-| `xgb_ensemble` | XGBoost CPU | XGBoost CUDA |
-| `lr_ensemble` | LinearRegression | Ridge cuML |
+| `xgb_ensemble`   | XGBoost CPU       | XGBoost CUDA                       |
+| `lr_ensemble`    | LinearRegression  | Ridge cuML                         |
 
 ### Device Configuration
 
