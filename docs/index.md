@@ -43,13 +43,14 @@ The framework addresses a fundamental challenge in computational chemistry: how 
 
 ### Benchmark mode
 
-Ground truth lives in the same CSV, so the oracle is detected automatically.
+Ground truth lives in the same CSV, so passing `oracle=None` lets LearnM8 detect it automatically.
 
 ```python
 from learnm8 import run_active_learning
 
 results = run_active_learning(
     compound_pool='compounds.csv',
+    oracle=None,
     learner='rf',
     target_col='Activity',
     featurizer='morgan',
@@ -99,16 +100,24 @@ from learnm8 import run_active_learning, CycleConfig
 
 results = run_active_learning(
     compound_pool='compounds.csv',
+    oracle=None,
     target_col='Activity',
     learner='rf_ensemble',
     featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-        CycleConfig('ucb', n_cycles=5, batch_fraction=0.01),
-        CycleConfig('greedy', n_cycles=4, batch_fraction=0.01),
+        CycleConfig('ucb', n_cycles=5, batch_fraction=0.01,
+                    acquisition_params={'beta': 3.0}),
+        CycleConfig('greedy', n_cycles=4, batch_fraction=0.01,
+                    pruning_strategy='score',
+                    pruning_params={'pruning_fraction': 0.3}),
     ]
 )
 ```
+
+`acquisition_params` passes strategy-specific arguments through to the acquisition function. Here `beta` raises UCB's exploration weight above its default of `2.0`, since `prediction + beta * uncertainty` favours uncertain compounds more as `beta` grows.
+
+`pruning_params` works the same way for the pruner. Score-based pruning runs before selection on every cycle of the phase, discarding the worst-predicted 30% of the compounds that are _still unlabeled_, so the design space shrinks geometrically as confidence in the model grows.
 
 ## Next Steps
 
