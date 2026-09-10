@@ -57,8 +57,8 @@ def _extract_features_with_featurizer(
     # batch_size so the transform splits into >= n_jobs tasks (Fix A — fills
     # every loky worker) while still capping each worker's working set. It is
     # set on a per-call deepcopy of the featurizer — the shared featurizer
-    # instance is used concurrently by other extract_features callers (e.g.
-    # acquisition/simulated_annealing.py), so it must never be mutated. The
+    # instance is used concurrently by other extract_features callers, so it
+    # must never be mutated. The
     # deepcopy (~0.02 ms) is unconditional for skfp-backed featurizers. A custom
     # (non-SkfpFeaturizer) Featurizer has no skfp batch_size and is left as-is.
     transform_featurizer: Featurizer = featurizer

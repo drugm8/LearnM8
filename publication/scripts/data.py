@@ -31,10 +31,12 @@ FAMILY_LEARNER = {
     'L-09': 'rf_fil',
     'L-10': 'ridge_cuml',
     'L-11': 'svgp',
-    # AG-01..AG-08 mirror the A-01..A-08 acquisition sweep on svgp rather than rf,
+    # AG-01..AG-07 mirror the A-01..A-07 acquisition sweep on svgp rather than rf,
     # so the uncertainty-driven strategies are measured through a real predictive
     # posterior. They need entries here for the same reason the L-* rows do: the
     # default below is 'rf', so an unmapped family is silently labelled rf.
+    # There is no AG-08: it would have been the svgp simulated-annealing arm, and
+    # that strategy no longer exists.
     'AG-01': 'svgp',
     'AG-02': 'svgp',
     'AG-03': 'svgp',
@@ -42,7 +44,6 @@ FAMILY_LEARNER = {
     'AG-05': 'svgp',
     'AG-06': 'svgp',
     'AG-07': 'svgp',
-    'AG-08': 'svgp',
 }
 # The S-04 family screens 96,214,206 compounds; it was previously labelled "100M",
 # which overstated the pool by 3.9%. There is no 100M run.
@@ -66,10 +67,26 @@ TIME_COLS = [
     'feature_extraction_time',
 ]
 
+# LearnM8 no longer ships a simulated_annealing acquisition strategy, so the runs
+# that used it cannot be reproduced from the current code and are excluded from
+# the publication set: A-08 is the standalone SA acquisition arm, C-03 the
+# greedy->SA composite schedule (its cycles 6-9 are SA, so dropping only those
+# cycles would leave a truncated trajectory rather than a comparable arm). Their
+# run directories remain in the archive; they are simply never read.
+EXCLUDED_FAMILIES = ('A-08', 'C-03')
+
 
 def build(results_dir: Path = RESULTS_DIR, out: Path = TIDY) -> pl.DataFrame:
     """Read every publication run's cycle metrics and write the tidy parquet."""
     manifest = pl.read_csv(results_dir / 'manifest.csv', infer_schema_length=None)
+
+    # Drop the simulated-annealing arms before the bijection check, and subtract
+    # their directories from the on-disk set too, so the check stays a real
+    # both-ways test over the runs that remain in scope.
+    excluded_runs = set(
+        manifest.filter(pl.col('family').is_in(EXCLUDED_FAMILIES))['run_id'].to_list()
+    )
+    manifest = manifest.filter(~pl.col('family').is_in(EXCLUDED_FAMILIES))
 
     # The manifest is the sole index of publication data. Check the bijection in
     # both directions so a run can never be silently plotted or silently dropped.
@@ -78,7 +95,7 @@ def build(results_dir: Path = RESULTS_DIR, out: Path = TIDY) -> pl.DataFrame:
         path.name
         for path in results_dir.glob('lm8_*')
         if path.is_dir() and not path.name.endswith('_FAILED')
-    }
+    } - excluded_runs
     if unlisted := on_disk - listed:
         raise ValueError(
             f'{len(unlisted)} run directories are absent from the manifest: '

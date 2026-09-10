@@ -135,9 +135,26 @@ class TestTopKShortlist:
 
 
 class TestStreamingDefaults:
-    def test_simulated_annealing_not_streamable(self):
-        acq = get_acquisition_function('simulated_annealing')()
-        assert acq.supports_streaming() is False
+    def test_every_registered_strategy_is_streamable(self):
+        from learnm8.acquisition import ACQUISITION_REGISTRY
+
+        for name, cls in ACQUISITION_REGISTRY.items():
+            assert cls(current_best=0.0).supports_streaming() is True, name
+
+    def test_subclass_without_pointwise_tier_is_not_streamable(self):
+        """The base-class default keeps third-party strategies on the legacy path.
+
+        No built-in strategy exercises this branch any more, but `is_streaming_eligible`
+        still depends on it: a subclass that implements only `select()` must not be
+        routed through the streaming path.
+        """
+        from learnm8.acquisition.base import AcquisitionFunction
+
+        class _SelectOnly(AcquisitionFunction):
+            def select(self, compounds, n_select):
+                return compounds.head(n_select)
+
+        assert _SelectOnly().supports_streaming() is False
 
     def test_score_chunk_raises_without_uncertainty(self):
         from learnm8.exceptions import AcquisitionError

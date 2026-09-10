@@ -90,7 +90,7 @@ class _DictOracle(Oracle):
 
 
 def _run_cycle(tmp_path, strategy, streaming, *, with_unc=False, pruning=None,
-               featurizer='morgan', acq_params=None):
+               featurizer='morgan', acq_params=None, with_output_dir=True):
     pool = _make_pool()
     master = initialize_master_dataframe_empty(pool, 'Activity')
     # Seed cycle 0: label a few compounds so training has data.
@@ -113,7 +113,8 @@ def _run_cycle(tmp_path, strategy, streaming, *, with_unc=False, pruning=None,
     df, metrics = execute_cycle(
         compounds_df=master, cycle=1, config=config, learner=learner, oracle=oracle,
         target_col='Activity', featurizer=featurizer, cache_dir=tmp_path / 'cache',
-        original_pool_size=N, oracle_type='run', output_dir=out,
+        original_pool_size=N, oracle_type='run',
+        output_dir=out if with_output_dir else None,
         random_state=42, n_jobs=1, streaming=streaming,
     )
     return df, metrics, out
@@ -172,8 +173,29 @@ class TestUncertaintyColumnDrop:
 
 
 class TestEligibilityFallback:
-    def test_always_on_ineligible_raises(self, tmp_path):
+    def test_always_without_output_dir_raises(self, tmp_path):
         from learnm8.exceptions import ConfigurationError
-        # simulated_annealing is not streamable → 'always' must raise
+        # No output_dir → the parquet dataflow medium is missing → 'always' must raise.
         with pytest.raises(ConfigurationError):
-            _run_cycle(tmp_path, 'simulated_annealing', 'always')
+            _run_cycle(tmp_path, 'greedy', 'always', with_output_dir=False)
+
+    def test_always_on_non_streamable_strategy_raises(self, tmp_path, monkeypatch):
+        """A strategy without the pointwise tier is ineligible even with an output_dir.
+
+        Every built-in strategy is streamable, so the non-streamable branch is
+        reached only by a third-party subclass; stand one in here by patching the
+        cycle's acquisition factory (the import site, not the definition site).
+        """
+        from learnm8.acquisition.base import AcquisitionFunction
+        from learnm8.exceptions import ConfigurationError
+
+        class _SelectOnly(AcquisitionFunction):
+            def select(self, compounds, n_select):
+                return compounds.head(n_select)
+
+        monkeypatch.setattr(
+            'learnm8.core.cycle._build_acquisition_function',
+            lambda **_kwargs: _SelectOnly(),
+        )
+        with pytest.raises(ConfigurationError):
+            _run_cycle(tmp_path, 'greedy', 'always')

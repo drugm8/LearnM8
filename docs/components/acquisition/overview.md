@@ -80,22 +80,21 @@ Does your learner provide uncertainty estimates?
 │   ├─ Want stochastic exploration? → Thompson Sampling
 │   └─ Want maximum information gain? → Entropy
 │
-└─ No → Use basic or diversity strategies
+└─ No → Use a basic strategy
     ├─ Want pure exploitation? → Greedy
     ├─ Want baseline comparison? → Random
-    ├─ Want flexible top selection? → Top-K
-    └─ Want optimization-based? → Simulated Annealing
+    └─ Want flexible top selection? → Top-K
 ```
 
 **Additional considerations**:
 
 - **Early cycles**: Random initialization recommended for unbiased initial sampling
 - **Later cycles**: Switch to exploitation (Greedy) or balanced strategies (UCB)
-- **No uncertainty available**: Use greedy, random, topk, or simulated_annealing
+- **No uncertainty available**: Use greedy, random, or topk
 
 ## Strategy Registry
 
-LearnM8 provides 9 acquisition strategies:
+LearnM8 provides 8 acquisition strategies:
 
 | Strategy | Category | Requires Uncertainty | When to Use | Key Parameters |
 |----------|----------|---------------------|-------------|----------------|
@@ -107,7 +106,6 @@ LearnM8 provides 9 acquisition strategies:
 | `pi` | Uncertainty | Yes | Probability of improvement | `xi` |
 | `thompson` | Uncertainty | Yes | Stochastic sampling | `random_state` |
 | `entropy` | Uncertainty | Yes | Maximum information gain | `entropy_type` |
-| `simulated_annealing` | Optimization | No | Temperature-based optimization | `initial_temp`, `cooling_schedule` |
 
 ## Score Direction
 
@@ -233,5 +231,4 @@ learnm8 run compounds.csv oracle.py:score --target binding \
 
 - [Basic Strategies](basic.md) - Greedy, Random, Top-K
 - [Uncertainty-Based Strategies](uncertainty-based.md) - UCB, EI, PI, Thompson, Entropy
-- [Simulated Annealing](diversity.md) - Simulated Annealing
 - [Custom Acquisition Functions](../../customization/custom-acquisition.md) - Implementing your own strategies

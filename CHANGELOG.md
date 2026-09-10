@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Removed — the `simulated_annealing` acquisition strategy (BREAKING)
+
+`SimulatedAnnealingAcquisition` and its registry entry `'simulated_annealing'`
+are gone. `learnm8.acquisition.simulated_annealing` no longer exists, and
+`get_acquisition_function('simulated_annealing')` raises `KeyError` listing the
+eight remaining strategies. Migration: use `ucb` (balanced exploration via
+uncertainty), `topk` (a random draw from the top-scoring slice), or `random`,
+depending on which property of the annealing schedule you relied on.
+
+Two consequences inside the library:
+
+- **Every built-in acquisition strategy is now streamable.** The non-streamable
+  branch of `is_streaming_eligible` is retained — a third-party
+  `AcquisitionFunction` subclass that implements only `select()` still falls
+  back to the legacy path — but no shipped strategy reaches it. Streaming
+  eligibility now turns on `output_dir` and the pruning strategy in practice.
+- The strategy colour map in `visualization/animation.py` lost its
+  `simulated_annealing` entry; unknown strategies already fall back to `tab10`.
+
+Removed alongside it: the `docs/components/acquisition/diversity.md` page (it
+documented only this strategy), `validation/acquisition_strategies/scripts/validate_simulated_annealing.py`,
+and the A-08 family from the publication benchmark table and figures.
+
 ### Fixed — silently dropped user parameters (`acquisition_params` and the config-file path)
 
 Every `--acquisition-params` value passed alongside `--cycles` (or a config

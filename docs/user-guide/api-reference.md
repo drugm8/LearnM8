@@ -71,7 +71,7 @@ def run_active_learning(
 |-----------|------|---------|-------------|
 | `n_cycles` | `int` | `10` | Total cycles. Cycle 0 uses `initial_strategy`; cycles 1+ use `strategy`. |
 | `batch_fraction` | `float` | `0.01` | Fraction of the **original** pool per cycle. Floor at 1 compound; capped at remaining pool size. Must be in `(0, 1]`. |
-| `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles 1+. One of: `greedy`, `random`, `topk`, `ucb`, `ei`, `pi`, `thompson`, `entropy`, `simulated_annealing`. |
+| `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles 1+. One of: `greedy`, `random`, `topk`, `ucb`, `ei`, `pi`, `thompson`, `entropy`. |
 | `initial_strategy` | `str` | `'random'` | Acquisition strategy for cycle 0. |
 
 #### Cycle control — advanced API
@@ -122,7 +122,7 @@ def run_active_learning(
 | `pruning_fraction` | `float \| None` | `None` | Fraction of compounds to prune per cycle (range `0.0–0.9`). Pruned compounds are excluded from future selection. |
 | `pruning_strategy` | `str \| None` | `None` | Pruning strategy. Defaults to `'score'` when `pruning_fraction` is set. |
 | `pruning_params` | `dict \| None` | `None` | Extra pruning parameters. `pruning_fraction` is merged in automatically. |
-| `acquisition_params` | `dict \| None` | `None` | Extra acquisition parameters passed to the strategy constructor. E.g. `{'beta': 2.0}` for UCB, `{'initial_temp': 2.0, 'neighbor_strategy': 'score_band'}` for simulated annealing. |
+| `acquisition_params` | `dict \| None` | `None` | Extra acquisition parameters passed to the strategy constructor. E.g. `{'beta': 2.0}` for UCB, `{'xi': 0.05}` for EI/PI, `{'k_fraction': 0.05}` for Top-K. |
 | `disable_molecular_similarity` | `bool \| Iterable[str]` | `False` | Disable diversity metric computation. `True` skips all. Pass a list of metric names to skip selectively. |
 | `force_uncertainty` | `bool` | `False` | Force uncertainty computation every cycle even when the active strategy does not require it. Cannot disable uncertainty — only forces it on. |
 
@@ -518,45 +518,6 @@ Selects by differential entropy of the Gaussian predictive distribution. Rank-eq
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `entropy_type` | `str` | `'uncertainty'` | `'uncertainty'`: `H = 0.5·log(2πe·σ²)`. `'variance'`: `H = 0.5·log(2πe·σ⁴)`. Both rank identically to σ-descending. Sigma is floored at `1e-9` for numerical robustness. |
-
----
-
-### SimulatedAnnealingAcquisition
-
-```python
-class SimulatedAnnealingAcquisition(AcquisitionFunction):
-    def __init__(
-        self,
-        initial_temp: float = 1.0,
-        final_temp: float = 0.01,
-        max_iterations: int = 1000,
-        cooling_schedule: str = 'exponential',
-        score_direction: str = 'higher',
-        random_state: int = 42,
-        neighbor_strategy: str = 'random',
-        n_neighbors: int = 10,
-        band_width: int = 50,
-        **kwargs,
-    )
-    def requires_uncertainty(self) -> bool  # False
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Temperature-based probabilistic selection. Starts with high-temperature random exploration and cools toward greedy exploitation following the chosen schedule. Accepts worse candidates with probability `exp(-ΔE / T)`.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `initial_temp` | `float` | `1.0` | Starting temperature. Higher values give more initial randomness. |
-| `final_temp` | `float` | `0.01` | Ending temperature. Must be < `initial_temp`. Near-zero gives greedy behaviour at the end. |
-| `max_iterations` | `int` | `1000` | Metropolis iterations per `select()` call. |
-| `cooling_schedule` | `str` | `'exponential'` | `'exponential'`: rapid early cooling, slow late. `'linear'`: uniform cooling rate. |
-| `score_direction` | `str` | `'higher'` | `'higher'` or `'lower'`. |
-| `random_state` | `int` | `42` | Random seed. |
-| `neighbor_strategy` | `str` | `'random'` | Neighbour generation strategy. `'random'`: uniform random draw from pool — O(1) per move, scales to 100M+ compounds. `'score_band'`: draw from a rank window of width `±band_width` around the current compound — O(n log n) sort once per call, then O(1) moves. `'knn_features'`: draw from `n_neighbors` nearest neighbours in feature space — builds a `NearestNeighbors` index over the whole pool; suitable only for small pools. |
-| `n_neighbors` | `int` | `10` | Neighbours to index when `neighbor_strategy='knn_features'`. |
-| `band_width` | `int` | `50` | Rank-window half-width when `neighbor_strategy='score_band'`. |
-
-> **Note:** `'knn_features'` requires passing `featurizer_obj` and `cache_dir` via `acquisition_params` when using the string-shortcut API.
 
 ---
 

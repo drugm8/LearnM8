@@ -2,7 +2,7 @@
 
 Everything needed to regenerate the figures and tables in the LearnM8 application
 note. Most of them rebuild from this repository alone, because the benchmark runs
-have been reduced to one tidy table (`data/benchmark_tidy.parquet`, 588 KB) that is
+have been reduced to one tidy table (`data/benchmark_tidy.parquet`, 578 KB) that is
 tracked here. Two figures additionally need the raw run archive or the scored
 docking pools; both are called out below.
 
@@ -44,7 +44,7 @@ in the working tree of the authors but gitignored, and simply do not appear.
 | -------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `fig02_learners.py`              | `fig02_learners.png`, `fig02_learners_fixedinit.png`                                  | —                                                             |
 | `fig03_acquisition.py`           | `fig03_acquisition.png`, `fig03_acquisition_fixedinit.png`                            | —                                                             |
-| `fig04_batch_pruning.py`         | `fig04_batch.png`, `fig04_batch_fixedinit.png`, `fig04_pruning.png`                   | `~/LearnM8_DATA/AmpC_screen_10000K.csv` for the pruning panel |
+| `fig04_batch_pruning.py`         | `fig04_batch.png` (both seed designs, one row each), `fig04_pruning.png`              | `~/LearnM8_DATA/AmpC_screen_10000K.csv` for the pruning panel |
 | `fig05_scaling.py`               | `fig05_scaling.png`, `fig05b_scaling_parallel.png`, `fig05c_breakeven_by_machine.png` | —                                                             |
 | `fig11_top_candidate_novelty.py` | `fig11_top_candidate_novelty.png`, `tables/fig11_selection_overlap.csv`               | raw run archive at `~/LearnM8_RESULTS_FINAL`                  |
 | `fig12_target_comparison.py`     | `fig12_target_comparison.png`                                                         | —                                                             |

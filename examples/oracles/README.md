@@ -220,7 +220,7 @@ results = run_active_learning(
     cycles=[
         ('random', 0.01),              # 1% random initial sampling
         ('ucb', 0.005),                # 0.5% exploitation (5 cycles)
-        ('simulated_annealing', 0.01)  # 1% final diversity
+        ('greedy', 0.01)               # 1% final exploitation
     ],
     output_format='csv'
 )

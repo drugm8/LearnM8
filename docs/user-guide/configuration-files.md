@@ -145,7 +145,7 @@ cycles:
     batch_fraction: 0.005
     acquisition_params:
       beta: 1.5
-  - strategy: "simulated_annealing"
+  - strategy: "greedy"
     n_cycles: 3
     batch_fraction: 0.01
 
@@ -246,7 +246,7 @@ JSON format is also supported, with identical schema to YAML but different synta
       }
     },
     {
-      "strategy": "simulated_annealing",
+      "strategy": "greedy",
       "n_cycles": 3,
       "batch_fraction": 0.01
     }

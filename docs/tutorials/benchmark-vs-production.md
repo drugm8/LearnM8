@@ -352,7 +352,7 @@ benchmark_results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
-        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01)
+        CycleConfig('greedy', n_cycles=1, batch_fraction=0.01)
     ]
 )
 
@@ -366,7 +366,7 @@ production_results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb', n_cycles=8, batch_fraction=0.01),
-        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01)
+        CycleConfig('greedy', n_cycles=1, batch_fraction=0.01)
     ]
 )
 ```
@@ -379,12 +379,12 @@ learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
   --learner ensemble \
   --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*8 simulated_annealing:0.01"
+  --cycles "random:0.02 ucb:0.01*8 greedy:0.01"
 
 # 2. Deploy best strategy in production
 learnm8 run screening_library.csv docking_oracle.py:score \
   --target affinity \
   --learner ensemble \
   --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*8 simulated_annealing:0.01"
+  --cycles "random:0.02 ucb:0.01*8 greedy:0.01"
 ```

@@ -72,7 +72,7 @@ results = run_active_learning(
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
         CycleConfig('greedy', n_cycles=5, batch_fraction=0.01),
-        CycleConfig('simulated_annealing', n_cycles=4, batch_fraction=0.01)
+        CycleConfig('ucb', n_cycles=4, batch_fraction=0.01)
     ]
 )
 ```
@@ -212,8 +212,8 @@ cycles=[('greedy', 0.01)]
 **Exploration (Stochastic)**:
 
 ```python
-# Stochastic optimization-based exploration
-cycles=[('simulated_annealing', 0.01)]
+# Unbiased random sampling — no model bias at all
+cycles=[('random', 0.01)]
 ```
 
 **Balanced (Uncertainty-Based)**:
@@ -232,7 +232,7 @@ Common strategies:
 | `ucb`                 | Balanced     | Yes                  | General-purpose active learning         |
 | `ei`                  | Balanced     | Yes                  | Optimization campaigns                  |
 | `thompson`            | Balanced     | Yes                  | Stochastic exploration                  |
-| `simulated_annealing` | Optimization | No                   | Diversity without uncertainty estimates |
+| `topk`                | Exploitation | No                   | Random draw from the top-scoring slice  |
 
 ### Featurizer (Molecular Representation)
 
@@ -292,7 +292,7 @@ results = run_active_learning(
         ('random', 0.02),    # Cycle 0: Initial random sample (2%)
         ('greedy', 0.01),    # Cycle 1: Greedy selection (1%)
         ('greedy', 0.01),    # Cycle 2: Greedy selection (1%)
-        ('simulated_annealing', 0.01)    # Cycle 3: Simulated annealing exploration (1%)
+        ('ucb', 0.01)        # Cycle 3: Balanced exploration (1%)
     ]
 )
 ```

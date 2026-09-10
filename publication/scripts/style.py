@@ -68,13 +68,8 @@ STRATEGY_COLOR = {
     'thompson': ACCENT_GREEN,
     'pi': ACCENT_ORANGE,
     'entropy': ACCENT_PINK,
-    # Standalone simulated annealing (A-08). Every accent is already taken by the
-    # seven single-acquisition strategies, so this reuses the dark primary; markers
-    # keep strategy identity from depending on colour alone.
-    'simulated_annealing': DARK,
     # Composite schedules (EXP-C), never plotted alongside the standalone set.
     'ucb-greedy': ACCENT_ORANGE,
-    'greedy-sa': ACCENT_PINK,
 }
 
 LABELS = {

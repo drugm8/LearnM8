@@ -350,6 +350,5 @@ results = run_active_learning(
 ## See Also
 
 - [Uncertainty-Based Strategies](uncertainty-based.md) - UCB, EI, PI, Thompson, Entropy
-- [Diversity Methods](diversity.md) - Simulated Annealing
 - [Acquisition Overview](overview.md) - Strategy selection guide
 - [Building Custom Cycles](../../tutorials/building-custom-cycles.md) - Combining multiple strategies

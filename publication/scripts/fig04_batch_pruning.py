@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import style
+from matplotlib.lines import Line2D
 
 from learnm8.visualization.style import style_axes
 
@@ -38,18 +39,53 @@ PRUNE_FAMILIES = [
     'P-15',
 ]
 DELAYED_PRUNE_FAMILIES = ['P-14', 'P-15']
+# One immediate/delayed pair shared by the two line panels (A and C): both encode
+# the same schedule contrast, so a reader should not have to relearn it between
+# them. Both arms are solid — the delayed arm only spans two x positions, and as a
+# dashed segment it read as a stray annotation rather than a second series.
+# Identity is carried by hue and marker shape together, not by line style.
+SCHEDULE_STYLE = {
+    'immediate': (style.PRIMARY, 'o'),
+    'delayed': (style.ACCENT_GREEN, 'D'),
+}
+SCHEDULE_LABELS = {'immediate': 'immediate', 'delayed': 'delayed start (c5)'}
+# The theme's 3.5 pt default disappears on a two-point arm; these panels have at
+# most five glyphs each, so they can afford to be read as points.
+SCHEDULE_MARKERSIZE = 5.0
+# Panel A and C value labels sit inside the data area on their own point, so they
+# run below the 7 pt used for axis-adjacent annotation.
+POINT_LABEL_SIZE = 6.0
 INITIAL_POOL = Path.home() / 'LearnM8_DATA' / 'AmpC_screen_10000K.csv'
 TOP_FRACTION = 0.001
 # In-plot batch-fraction labels, 20% down from the 7 pt used for axis-adjacent
 # annotation: they sit inside the data area and must not compete with the curves.
 FRACTION_LABEL_SIZE = 5.6
+MARKER_CYCLE_STRIDE = 4
+# Row identity. `matched` seeds cycle 0 with one acquisition batch, `fixed`
+# always with 1% of the pool; the ladders are never pooled into one curve.
+DESIGN_TITLES = {
+    'matched': 'seed = one acquisition batch',
+    'fixed': 'seed = 1% of pool',
+}
+# Two stacked ladders at 62 mm each. Taller than the 52 mm used when this was
+# two separate three-panel figures, and two columns instead of three, so each
+# panel gains on both axes while the text on it stays the same size.
+PANEL_H_MM = 62
 
 
 def batch_colors(fractions: list[float]) -> dict[float, str]:
-    """Opaque sequential purple ramp ordered by batch size."""
-    ranks = np.linspace(0.70, 0.98, len(fractions))
+    """Opaque sequential purple ramp ordered by batch size.
+
+    Built over the union of both seed designs' fractions rather than per row:
+    the two ladders share one figure, so a 0.1% batch has to read the same in
+    either of them. Colour is the only series channel here, so the ramp has to
+    stay monotone in batch size for the ordering to survive greyscale.
+    """
+    ordered = sorted(fractions)
+    ranks = np.linspace(0.62, 0.98, len(ordered))
     return {
-        f: style.SEQUENTIAL(r) for f, r in zip(sorted(fractions), ranks, strict=True)
+        fraction: style.SEQUENTIAL(rank)
+        for fraction, rank in zip(ordered, ranks, strict=True)
     }
 
 
@@ -259,38 +295,52 @@ def _same_cycle_rank_records(
     return pl.concat(rows, how='vertical') if rows else pl.DataFrame()
 
 
-def make_batch_figure(df: pl.DataFrame, design: str) -> None:
-    """Write the batch-frequency figure (three panels) for one seed design."""
-    batch = df.filter(pl.col('family').is_in(BATCH_FAMILIES[design]))
-    if batch.is_empty():
-        raise ValueError(f'no batch-ladder runs on disk for design={design!r}')
-    fractions = sorted(batch['batch_fraction'].unique().to_list())
-    colors = batch_colors(fractions)
-    fig, axd = style.mosaic('ABC', panel_h_mm=52)
+def _marker_indices(n_cycles: int) -> list[int]:
+    """Mark every MARKER_CYCLE_STRIDE-th cycle, always including the last.
 
-    ax = axd['A']
+    A fixed marker count per arm gave a 50-cycle 0.1% arm and a 2-cycle 2.5%
+    arm identical glyph density, hiding the one quantity the ladder is about.
+    Marking on a cycle stride instead makes the glyph count the retrain count.
+    """
+    indices = list(range(0, n_cycles, MARKER_CYCLE_STRIDE))
+    if indices[-1] != n_cycles - 1:
+        indices.append(n_cycles - 1)
+    return indices
+
+
+def _draw_ladder(
+    axd: dict,
+    letters: str,
+    batch: pl.DataFrame,
+    colors: dict[float, str],
+    title: str,
+) -> None:
+    """Draw one seed design's two batch-ladder panels into ``letters``."""
+    fractions = sorted(batch['batch_fraction'].unique().to_list())
+    pool_size = int(batch['pool_size'].unique().item())
+
+    ax = axd[letters[0]]
     curves = data.curve(batch, ['batch_fraction'], X, Y)
-    for index, frac in enumerate(fractions):
+    for frac in fractions:
+        color = colors[frac]
         s = curves.filter(pl.col('batch_fraction') == frac)
         ax.plot(
             s[X],
             s['mean'],
-            color=colors[frac],
-            linestyle=style.CURVE_LINESTYLES[index],
-            marker=style.CURVE_MARKERS[index],
-            # Six ladder arms crowd the same corner, so dense 3.5 pt glyphs fuse
-            # into what reads as a thicker stroke than the 1.5 pt used elsewhere.
-            markevery=max(1, s.height // 6),
-            markersize=2.6,
+            color=color,
+            marker='o',
+            markevery=_marker_indices(s.height),
+            markersize=2.4,
             label=f'{frac:g}%',
             linewidth=style.DATA_LINEWIDTH,
         )
-        style.band(ax, s[X], s['lo'], s['hi'], colors[frac], alpha=0.09)
+        style.band(ax, s[X], s['lo'], s['hi'], color, alpha=0.09)
     ax.set(xlabel=style.LABELS[X], ylabel=style.LABELS[Y])
+    ax.set_title(title, loc='left')
     style.compact_axis(ax)
     style.set_compound_axis(
         ax,
-        int(batch['pool_size'].unique().item()),
+        pool_size,
         ticks=curves[X].unique().sort().to_list(),
         max_ticks=5,
     )
@@ -310,93 +360,130 @@ def make_batch_figure(df: pl.DataFrame, design: str) -> None:
         color=style.MUTED,
     )
 
-    retrains = batch.group_by('batch_fraction').agg(
-        pl.col('cycle').max().alias('retrains')
-    )
-    summary = (
-        data.final(batch, ['batch_fraction'], [Y, 'cum_ml_time'])
-        .join(retrains, on='batch_fraction')
-        .sort('retrains')
+    summary = data.final(batch, ['batch_fraction'], [Y, 'cum_ml_time']).sort(
+        'batch_fraction'
     )
 
-    ax = axd['B']
-    ax.errorbar(
-        summary['retrains'],
-        summary[f'{Y}_mean'],
-        yerr=[
-            summary[f'{Y}_mean'] - summary[f'{Y}_lo'],
-            summary[f'{Y}_hi'] - summary[f'{Y}_mean'],
-        ],
-        marker='o',
-        color=style.PRIMARY,
-        elinewidth=0.6,
-    )
-    ax.set(xscale='log', xlabel='number of retrains', ylabel='Top-0.1% recovered (%)')
-
-    ax = axd['C']
+    # Points ascend monotonically to the right, so a label sitting directly on
+    # its own point is unambiguous and needs no leader line. The previous fan to
+    # a shared label column needed one leader per arm, and those five near-
+    # horizontal rules read as data in a panel whose data is five dots.
+    ax = axd[letters[1]]
     points = list(summary.iter_rows(named=True))
-    for row in points:
-        ax.plot(
+    for index, row in enumerate(points):
+        color = colors[row['batch_fraction']]
+        # Min-max over replicates on both axes, matching the band in panel A/C
+        # rather than mixing a range with a confidence interval in one figure.
+        # A single-replicate arm therefore draws a zero-width cross, not a dot.
+        ax.errorbar(
             row['cum_ml_time_mean'],
             row[f'{Y}_mean'],
+            xerr=[
+                [row['cum_ml_time_mean'] - row['cum_ml_time_lo']],
+                [row['cum_ml_time_hi'] - row['cum_ml_time_mean']],
+            ],
+            yerr=[
+                [row[f'{Y}_mean'] - row[f'{Y}_lo']],
+                [row[f'{Y}_hi'] - row[f'{Y}_mean']],
+            ],
             marker='o',
-            color=colors[row['batch_fraction']],
+            markersize=4,
+            color=color,
+            elinewidth=0.6,
+            capsize=1.5,
+            capthick=0.6,
         )
-    x_values = [row['cum_ml_time_mean'] for row in points]
-    y_values = [row[f'{Y}_mean'] for row in points]
-    x_max = max(x_values)
-    y_min, y_max = min(y_values), max(y_values)
-    ax.set_xlim(left=min(x_values) * 0.82, right=x_max * 1.45)
-    ax.set_ylim(y_min - 0.8, y_max + 0.8)
-    label_x = x_max * 1.05
-    label_ys = np.linspace(y_max + 0.4, y_min - 0.4, len(points))
-    for row, label_y in zip(
-        sorted(points, key=lambda item: item[f'{Y}_mean'], reverse=True),
-        label_ys,
-        strict=True,
-    ):
-        color = colors[row['batch_fraction']]
+        # The plateau arms sit within a point of each other in y and roughly a
+        # factor of two apart in x, which is not enough room for same-side
+        # labels; alternating sides doubles the horizontal pitch available.
+        above = index % 2 == 0
         ax.annotate(
             f'{row["batch_fraction"]:g}%',
             (row['cum_ml_time_mean'], row[f'{Y}_mean']),
-            xytext=(label_x, label_y),
-            textcoords='data',
-            ha='left',
-            va='center',
+            textcoords='offset points',
+            xytext=(0, 5 if above else -5),
+            ha='center',
+            va='bottom' if above else 'top',
             fontsize=FRACTION_LABEL_SIZE,
             color=color,
             fontweight='semibold',
-            arrowprops={
-                'arrowstyle': '-',
-                'color': color,
-                'linewidth': 0.7,
-                'shrinkA': 3,
-                'shrinkB': 3,
-            },
         )
     ax.set(
         xscale='log',
         xlabel=style.LABELS['cum_ml_time'],
         ylabel='Top-0.1% recovered (%)',
     )
-    ax.margins(x=0.18, y=0.12)
+    ax.margins(x=0.16, y=0.22)
+
+
+def make_batch_figure(frames: dict[str, pl.DataFrame]) -> None:
+    """Write the batch-frequency figure: one ladder row per cycle-0 seed design.
+
+    The two designs share a figure but never a curve. They hold different runs
+    at 0.2% and 0.1%, so pooling them would average two experiments; stacking
+    them lets a reader see that the ladder's shape survives either seed rule.
+    """
+    ladders = {}
+    for design, df in frames.items():
+        ladder = df.filter(pl.col('family').is_in(BATCH_FAMILIES[design]))
+        if ladder.is_empty():
+            raise ValueError(f'no batch-ladder runs on disk for design={design!r}')
+        ladders[design] = ladder
+
+    colors = batch_colors(
+        sorted(
+            {
+                fraction
+                for ladder in ladders.values()
+                for fraction in ladder['batch_fraction'].unique().to_list()
+            }
+        )
+    )
+    fig, axd = style.mosaic('AB\nCD', panel_h_mm=PANEL_H_MM)
+    for design, letters in (('matched', 'AB'), ('fixed', 'CD')):
+        _draw_ladder(axd, letters, ladders[design], colors, DESIGN_TITLES[design])
 
     style.label_panels(axd)
-    # All arms finish within a few points of 100%, so end labels in panel A
-    # would have to fan far wider than their anchors are apart, and in a 28 mm
-    # panel that detaches every label from its curve. A figure-level key covers
-    # no data, and matches how F2 and F3 identify their series. Panel C keeps
-    # end labels: its points are genuinely separated.
-    handles, labels = axd['A'].get_legend_handles_labels()
-    fig.legend(
-        handles,
-        labels,
+    # All arms finish within a few points of 100%, so end labels in panels A/C
+    # would have to fan far wider than their anchors are apart, which detaches
+    # every label from its curve. A figure-level key covers no data, and matches
+    # how F2 and F3 identify their series. Panels B/D keep end labels: their
+    # points are genuinely separated.
+    #
+    # The key is built from `colors` rather than from one row's handles: neither
+    # row holds every fraction, and only the union names the whole colour ramp.
+    legend = fig.legend(
+        handles=[
+            Line2D(
+                [0],
+                [0],
+                color=color,
+                marker='o',
+                markersize=3.6,
+                linewidth=style.DATA_LINEWIDTH,
+                label=f'{fraction:g}%',
+            )
+            for fraction, color in colors.items()
+        ],
+        # Ascending fractions in one tight row, so the key reads as the sequential
+        # ramp it is. The defaults leave enough air between handle, label and
+        # column for the eight entries to read as eight unrelated series. The
+        # anchor clears panel C's rotated tick block and its axis label, which a
+        # legend seated any higher lands on top of.
         title='batch fraction',
         loc='lower center',
-        bbox_to_anchor=(0.5, -0.16),
-        ncols=len(labels),
+        bbox_to_anchor=(0.5, -0.105),
+        ncols=len(colors),
+        handlelength=1.4,
+        handletextpad=0.45,
+        columnspacing=1.3,
+        borderpad=0.0,
     )
-    style.save(fig, f'fig04_batch{data.design_suffix(design)}')
+    legend.get_title().set_fontsize(7.5)
+    legend.get_title().set_fontweight('semibold')
+    for text in legend.get_texts():
+        text.set_fontsize(7.5)
+    style.save(fig, 'fig04_batch')
 
 
 def make_pruning_figure(df: pl.DataFrame) -> None:
@@ -521,10 +608,7 @@ def make_pruning_figure(df: pl.DataFrame) -> None:
         style_axes(panel)
 
     ax = axd['A']
-    for schedule, marker, linestyle, color, label in (
-        ('immediate', 'o', '-', style.PRIMARY, 'immediate'),
-        ('delayed', 'D', '--', style.DARK, 'delayed start (c5)'),
-    ):
+    for schedule, (color, marker) in SCHEDULE_STYLE.items():
         summary = pruned.filter(pl.col('pruning_schedule') == schedule)
         if summary.is_empty():
             continue
@@ -536,15 +620,41 @@ def make_pruning_figure(df: pl.DataFrame) -> None:
                 summary[f'{Y}_hi'] - summary[f'{Y}_mean'],
             ],
             marker=marker,
-            linestyle=linestyle,
+            markersize=SCHEDULE_MARKERSIZE,
+            linestyle='-',
             color=color,
-            markerfacecolor=style.BACKGROUND if schedule == 'delayed' else color,
+            markerfacecolor=color,
             markeredgecolor=color,
             elinewidth=0.6,
-            label=label,
+            label=SCHEDULE_LABELS[schedule],
         )
     ax.set_xticks(sorted(pruned['prune_fraction'].unique().to_list()))
     ax.set(xlabel='pruning fraction (%)', ylabel='Top-0.1% recovered (%)')
+    # Both arms fall to the right, so the wedge above-right of every point is
+    # clear of its own line. The recovery axis is already a percentage, so the
+    # labels carry no % sign: at 6 pt the extra glyph is what makes the 0% and
+    # 10% labels, only ten x-units apart, run into each other.
+    for schedule, (color, _) in SCHEDULE_STYLE.items():
+        summary = pruned.filter(pl.col('pruning_schedule') == schedule)
+        for row in summary.iter_rows(named=True):
+            ax.annotate(
+                f'{row[f"{Y}_mean"]:.1f}',
+                (row['prune_fraction'], row[f'{Y}_mean']),
+                textcoords='offset points',
+                xytext=(4, 4),
+                ha='left',
+                va='bottom',
+                fontsize=POINT_LABEL_SIZE,
+                color=color,
+                fontweight='semibold',
+            )
+    # Room to the right for the 70% labels and above for the 0% one; the limits
+    # are taken off the error-bar extremes so they track the data.
+    recovery_lo = float(pruned[f'{Y}_lo'].min())
+    recovery_hi = float(pruned[f'{Y}_hi'].max())
+    recovery_span = recovery_hi - recovery_lo
+    ax.set_xlim(-5, 84)
+    ax.set_ylim(recovery_lo - 0.06 * recovery_span, recovery_hi + 0.12 * recovery_span)
     ax.legend(loc='lower left', handlelength=2.2, handletextpad=0.4)
 
     ax = axd['B']
@@ -602,10 +712,7 @@ def make_pruning_figure(df: pl.DataFrame) -> None:
     ax.margins(y=0.15)
 
     ax = axd['C']
-    for schedule, marker, linestyle, color in (
-        ('immediate', 'o', '-', style.DARK),
-        ('delayed', 'D', '--', style.ACCENT_ORANGE),
-    ):
+    for schedule, (color, marker) in SCHEDULE_STYLE.items():
         summary = lost_summary.filter(pl.col('pruning_schedule') == schedule)
         if summary.is_empty():
             continue
@@ -617,53 +724,51 @@ def make_pruning_figure(df: pl.DataFrame) -> None:
                 summary['hi'] - summary['mean'],
             ],
             marker=marker,
-            linestyle=linestyle,
+            markersize=SCHEDULE_MARKERSIZE,
+            linestyle='-',
             color=color,
-            markerfacecolor=style.BACKGROUND if schedule == 'delayed' else color,
+            markerfacecolor=color,
             markeredgecolor=color,
             elinewidth=0.6,
         )
     ax.set(
         xlabel='pruning fraction (%)',
         ylabel='Top-0.1% pruned (n)',
-        ylim=(0, None),
     )
     ax.set_xticks(sorted(lost_summary['prune_fraction'].unique().to_list()))
-    ax.set_ylim(0, max(lost_summary['mean']) * 1.15)
-    ax.set_xlim(-5, 100)
-    label_x = 76.0
-    immediate_lost = lost_summary.filter(pl.col('pruning_schedule') == 'immediate')
-    label_ys = np.linspace(110.0, 980.0, immediate_lost.height)
-    for row, label_y in zip(
-        immediate_lost.iter_rows(named=True), label_ys, strict=True
-    ):
-        ax.annotate(
-            f'{row["mean"]:.0f}\n({row["mean"] / top_k * 100:.2f}%)',
-            (row['prune_fraction'], row['mean']),
-            textcoords='data',
-            xytext=(label_x, label_y),
-            ha='left',
-            va='center',
-            fontsize=7,
-            fontweight='semibold',
-            arrowprops={
-                'arrowstyle': '-',
-                'color': style.MUTED,
-                'linewidth': 0.6,
-            },
+    # Headroom for the two-line label above the 70% immediate point, which is the
+    # tallest thing in the panel once labels sit on their own points.
+    ax.set_ylim(0, max(lost_summary['mean']) * 1.30)
+    ax.set_xlim(-9, 88)
+    # Each value sits above its own point instead of fanning to a shared column:
+    # the fan needed one leader line per point, and those near-horizontal rules
+    # read as data in a panel whose data is two lines. Both curves rise
+    # monotonically, so each is clear above one side of its own points. The two
+    # arms take opposite sides: the immediate line passes above-left of the
+    # delayed points, so those labels go right, and the immediate labels go left
+    # into the space the delayed arm never reaches.
+    for schedule, (color, _) in SCHEDULE_STYLE.items():
+        summary = lost_summary.filter(pl.col('pruning_schedule') == schedule)
+        offset, align = (
+            ((4, 9), 'left') if schedule == 'delayed' else ((-3, 6), 'right')
         )
-    for row in lost_summary.filter(pl.col('pruning_schedule') == 'delayed').iter_rows(
-        named=True
-    ):
-        ax.annotate(
-            f'{row["mean"]:.0f}',
-            (row['prune_fraction'], row['mean']),
-            xytext=(5, -12),
-            textcoords='offset points',
-            fontsize=7,
-            color=style.ACCENT_ORANGE,
-            fontweight='semibold',
-        )
+        for row in summary.iter_rows(named=True):
+            # The 0% control goes unlabelled. Its label would read "0 (0.00%)",
+            # which the axes already say, and at that width it collides with the
+            # 10% label sitting only 43 hits away.
+            if row['mean'] == 0:
+                continue
+            ax.annotate(
+                f'{row["mean"]:.0f}\n({row["mean"] / top_k * 100:.2f}%)',
+                (row['prune_fraction'], row['mean']),
+                textcoords='offset points',
+                xytext=offset,
+                ha=align,
+                va='bottom',
+                fontsize=POINT_LABEL_SIZE,
+                color=color,
+                fontweight='semibold',
+            )
 
     ax = axd['D']
     image = ax.imshow(
@@ -800,12 +905,11 @@ def make_pruning_figure(df: pl.DataFrame) -> None:
 
 def main() -> None:
     style.apply()
-    # One batch figure per seed design, never a pooled one: `fixed` varies only the
-    # acquisition batch off a constant 1% seed, `matched` seeds each arm with its own
-    # batch. Loading both at once would merge two different runs into one 0.2% and
-    # one 0.1% curve, and filtering to either design alone drops the other ladder.
-    for design in data.DESIGNS:
-        make_batch_figure(data.load(design), design)
+    # One row per seed design, each loaded separately and never pooled: `fixed`
+    # varies only the acquisition batch off a constant 1% seed, `matched` seeds
+    # each arm with its own batch. Loading both at once would merge two different
+    # runs into one 0.2% and one 0.1% curve.
+    make_batch_figure({design: data.load(design) for design in data.DESIGNS})
     # The pruning families all sit at a 1.0% batch off a 1.0% seed, so they satisfy
     # both designs and one figure covers them.
     make_pruning_figure(data.load('fixed'))

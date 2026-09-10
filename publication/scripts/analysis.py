@@ -20,14 +20,12 @@ RESULTS_DIR = Path.home() / 'LearnM8_RESULTS_FINAL'
 # Greedy is A-02, not L-01. L-01 was a stand-in while A-02 had no init-matched runs
 # below a 1% batch; the initmatch_v2 wave supplied them, so the acquisition family is
 # used directly and fig03/fig10/fig11 now agree on what "greedy" means.
-# A-08 (simulated annealing) is new in the same wave.
 FAMILY_STRATEGY = {
     'A-01': 'random',
     'A-02': 'greedy',
     'A-03': 'ucb',
     'A-04': 'ei',
     'A-05': 'thompson',
-    'A-08': 'simulated_annealing',
 }
 STRATEGY_ORDER = list(FAMILY_STRATEGY.values())
 EXPECTED_REPLICATES = {1: 42, 2: 142, 3: 242}

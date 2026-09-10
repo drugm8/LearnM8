@@ -16,10 +16,10 @@ from matplotlib.lines import Line2D
 
 Y = 'top_0_1_pct_discovery'
 X = 'compounds_evaluated'
-# A-08 (simulated annealing) is the initmatch_v2 wave; A-02/A-06/A-07 gained their
-# init-matched sub-1% arms in the same wave, which removed the earlier need to source
-# greedy from L-01 as a stand-in. Every strategy is now its own family in both designs.
-FAMILIES = ['A-01', 'A-02', 'A-03', 'A-04', 'A-05', 'A-06', 'A-07', 'A-08']
+# A-02/A-06/A-07 gained their init-matched sub-1% arms in the initmatch_v2 wave,
+# which removed the earlier need to source greedy from L-01 as a stand-in. Every
+# strategy is now its own family in both designs.
+FAMILIES = ['A-01', 'A-02', 'A-03', 'A-04', 'A-05', 'A-06', 'A-07']
 STRATEGIES = [
     'random',
     'greedy',
@@ -28,7 +28,6 @@ STRATEGIES = [
     'thompson',
     'pi',
     'entropy',
-    'simulated_annealing',
 ]
 
 

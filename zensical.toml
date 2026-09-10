@@ -37,7 +37,6 @@ nav = [
       { "Overview" = "components/acquisition/overview.md" },
       { "Basic Strategies" = "components/acquisition/basic.md" },
       { "Uncertainty-Based" = "components/acquisition/uncertainty-based.md" },
-      { "Diversity Methods" = "components/acquisition/diversity.md" },
     ]},
     { "Featurizers" = [
       { "Overview" = "components/featurizers/overview.md" },

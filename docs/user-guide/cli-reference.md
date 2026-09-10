@@ -87,7 +87,7 @@ Only one of these options can be used:
 **Examples:**
 ```bash
 --cycles "random:0.02 greedy:0.01*5"
---cycles "random:0.01 ucb:0.005*8 simulated_annealing:0.01*2"
+--cycles "random:0.01 ucb:0.005*8 greedy:0.01*2"
 --cycles "random:0.02 greedy:0.01 ucb:0.01 greedy:0.01"
 ```
 

@@ -120,7 +120,6 @@ def _get_strategy_color_map(strategies):
         'ei': 'purple',
         'pi': 'green',
         'thompson': 'cyan',
-        'simulated_annealing': 'magenta',
     }
 
     color_map = {}

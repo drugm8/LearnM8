@@ -28,7 +28,6 @@ STRATEGY_LABELS = {
     'ucb': 'UCB',
     'ei': 'EI',
     'thompson': 'Thompson',
-    'simulated_annealing': 'annealing',
 }
 TICK_LABEL_SIZE = 6.5
 

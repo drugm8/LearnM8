@@ -22,9 +22,11 @@ Design (see the feature plan):
   and reduce to a bounded shortlist. ``acq_func.finalize`` yields the batch.
 
 Eligibility is decided by :func:`is_streaming_eligible`; the cycle falls back to
-the legacy path for non-streamable strategies (e.g. simulated_annealing), when
-there is no ``output_dir`` (the parquet is the dataflow medium), or for pruning
-strategies other than ``'score'``.
+the legacy path for non-streamable strategies (every built-in strategy is
+streamable, but a third-party :class:`AcquisitionFunction` subclass that does
+not implement the pointwise tier is not), when there is no ``output_dir`` (the
+parquet is the dataflow medium), or for pruning strategies other than
+``'score'``.
 """
 
 from __future__ import annotations

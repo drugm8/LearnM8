@@ -374,7 +374,7 @@ results = run_active_learning(
         ('greedy', 0.005),
         ('greedy', 0.005),
         ('greedy', 0.005),
-        CycleConfig('simulated_annealing', n_cycles=1, batch_fraction=0.01),
+        CycleConfig('greedy', n_cycles=1, batch_fraction=0.01),
     ],
     output_format='csv',
     output_dir='results/chemprop_fine_tuned'
@@ -457,7 +457,7 @@ cycles:
     n_cycles: 10
     pruning_strategy: score
     pruning_fraction: 0.15
-  - strategy: simulated_annealing
+  - strategy: ucb
     batch_fraction: 0.01
     n_cycles: 4
 

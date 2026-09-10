@@ -117,7 +117,7 @@ results = run_active_learning(
 
 Combine different strategies for sophisticated screening:
 
-### Random → Greedy → Simulated Annealing
+### Random → Greedy → UCB → Greedy
 
 ```python
 results = run_active_learning(
@@ -133,9 +133,9 @@ results = run_active_learning(
         ('greedy', 0.01),
         ('greedy', 0.01),
         ('greedy', 0.01),
-        ('simulated_annealing', 0.01),  # Phase 3: Diversify coverage
-        ('simulated_annealing', 0.01),
-        ('greedy', 0.01),              # Phase 4: Final exploitation
+        ('ucb', 0.01),         # Phase 3: Re-widen coverage
+        ('ucb', 0.01),
+        ('greedy', 0.01),      # Phase 4: Final exploitation
         ('greedy', 0.01)
     ]
 )
@@ -145,7 +145,7 @@ results = run_active_learning(
 
 1. **Random (2%)**: Get unbiased initial training data
 2. **Greedy (5 cycles × 1%)**: Rapidly find top hits
-3. **Diverse (2 cycles × 1%)**: Explore uncovered regions
+3. **UCB (2 cycles × 1%)**: Explore uncertain, uncovered regions
 4. **Greedy (2 cycles × 1%)**: Refine top hits
 
 ### Exploration → Exploitation with UCB
@@ -305,7 +305,7 @@ cycles = [
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4 simulated_annealing:0.01*2"
+  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4 topk:0.01*2"
 ```
 
 **Expanded cycles:**
@@ -313,7 +313,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 1. random: 2%
 2. ucb: 1% (repeated 3 times)
 3. greedy: 0.5% (repeated 4 times)
-4. simulated_annealing: 1% (repeated 2 times)
+4. topk: 1% (repeated 2 times)
 
 **Total: 10 cycles**
 
@@ -333,7 +333,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 
 **Early Exploration:**
 
-- Start with random or simulated_annealing sampling
+- Start with random sampling
 - Build unbiased initial training set
 - Typical: 1-2% of pool
 
@@ -345,7 +345,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 
 **Late Diversification:**
 
-- Optional diversity methods (simulated_annealing)
+- Optional high-`beta` UCB or entropy cycles
 - Cover unexplored regions
 - Typical: 1-2 cycles × 1% of pool
 
@@ -371,7 +371,7 @@ cycles = [
     ('greedy', 0.01),      # 100 compounds
     ('greedy', 0.01),      # 100 compounds
     ('greedy', 0.01),      # 100 compounds
-    ('simulated_annealing', 0.01)  # 100 compounds
+    ('ucb', 0.01)          # 100 compounds
 ]
 
 total_fraction = 0.01 + 0.01 + 0.01 + 0.01 + 0.01 + 0.01

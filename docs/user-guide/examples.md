@@ -161,32 +161,6 @@ results = run_active_learning(
 )
 ```
 
-## Simulated Annealing with Score-Band Neighbors
-
-Use `neighbor_strategy='score_band'` for fast diversity-aware selection without computing pairwise distances.
-
-```python
-from learnm8 import run_active_learning, CycleConfig
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner='rf',
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[
-        CycleConfig('random',            n_cycles=1, batch_fraction=0.02),
-        CycleConfig('simulated_annealing', n_cycles=9, batch_fraction=0.005,
-                    acquisition_params={
-                        'neighbor_strategy': 'score_band',
-                        'band_width': 100,
-                        'initial_temp': 2.0,
-                        'cooling_schedule': 'linear',
-                    }),
-    ],
-)
-```
-
 ## Chemprop Graph Neural Network
 
 Chemprop operates directly on SMILES — no featurizer required. Add a featurizer to enable hybrid graph + descriptor mode.
