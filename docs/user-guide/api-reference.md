@@ -272,7 +272,7 @@ def suggest_next_batch(
 
 ### Returns
 
-`pl.DataFrame` with the batch just written to `batch_dir/batch_cycle_N.csv`, in this column order: `rank`, `ID`, `<target_col>` (null), `SMILES`, then, in rounds that trained a model (not round 0, and not the random fallback after an all-failed batch), `prediction` and `uncertainty` (when computed). `N` is the highest existing batch number plus one, or 0 when the folder has no batch files. Batch files start with a `sep=,` spreadsheet hint line before the header; scripts that read them with pandas or polars should skip the first line.
+`pl.DataFrame` with the batch just written to `batch_dir/batch_cycle_N.csv`, in this column order: `rank`, `ID`, `<target_col>` (null), `SMILES`, then, in rounds that trained a model (not round 0, and not the random fallback after an all-failed batch), `prediction` and `uncertainty` (when computed). `N` is the highest existing batch number plus one, or 0 when the folder has no batch files. Batch files start with a `sep=,` spreadsheet hint line before the header; a spreadsheet may drop it on re-save, so scripts that read them with pandas or polars should skip that line when present.
 
 Value cells in earlier batch files: empty is pending, a finite number is measured, anything else is failed. Pending and failed compounds are never selected again; only measured compounds are used for training. When no compound is measured yet but the newest batch has results, a fresh random batch is drawn that excludes every compound already in a batch file.
 
