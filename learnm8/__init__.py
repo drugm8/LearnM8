@@ -73,6 +73,7 @@ from .learners.sklearn import (
 
 # Torch learners
 from .learners.torch import MCDropoutLearner, MLPLearner
+from .suggest import suggest_next_batch
 
 # GPyTorch learners (optional dependency)
 with contextlib.suppress(ImportError):
@@ -130,5 +131,6 @@ __all__ = [
     'XGBoostLearner',
     'extract_features',
     'run_active_learning',
+    'suggest_next_batch',
     'validate_compound_pool',
 ]

@@ -1,0 +1,111 @@
+"""Tests for suggest_next_batch (lab-in-the-loop one-shot suggestion)."""
+
+from pathlib import Path
+
+import polars as pl
+import pytest
+
+from learnm8 import suggest_next_batch
+from learnm8.core.lab_batches import batch_path
+from learnm8.exceptions import ConfigurationError, ValidationError
+
+pytestmark = pytest.mark.integration
+
+POOL_CSV = Path(__file__).parent.parent / 'data' / 'small_molecules.csv'
+KW = dict(
+    target_col='Activity', learner='rf', featurizer='morgan', batch_size=5, n_jobs=1
+)
+
+
+@pytest.fixture
+def pool():
+    return POOL_CSV
+
+
+@pytest.fixture
+def truth():
+    df = pl.read_csv(POOL_CSV)
+    return dict(zip(df['ID'].to_list(), df['Activity'].to_list(), strict=True))
+
+
+def fill(path, truth, overrides=None):
+    """Rewrite the Activity column of a batch file from truth (+ cell overrides)."""
+    overrides = overrides or {}
+    df = pl.read_csv(path, infer_schema=False)
+    cells = [
+        overrides[i] if i in overrides else str(truth[i]) for i in df['ID'].to_list()
+    ]
+    df.with_columns(pl.Series('Activity', cells)).write_csv(path)
+
+
+def test_cycle0_random_batch(tmp_path, pool):
+    b = suggest_next_batch(pool, tmp_path, **KW)
+    assert (tmp_path / 'batch_cycle_0.csv').exists()
+    assert b.columns == ['rank', 'ID', 'Activity', 'SMILES']
+    assert b['rank'].to_list() == [1, 2, 3, 4, 5] and b['Activity'].null_count() == 5
+
+
+def test_three_round_campaign_disjoint(tmp_path, pool, truth):
+    seen = []
+    for cycle in range(3):
+        b = suggest_next_batch(pool, tmp_path, strategy='ucb', **KW)
+        seen += b['ID'].to_list()
+        fill(batch_path(tmp_path, cycle), truth)
+    assert len(seen) == len(set(seen)) == 15
+    cols = set(pl.read_csv(batch_path(tmp_path, 2)).columns)
+    assert {'prediction', 'uncertainty'} <= cols
+
+
+def test_pending_and_failed_never_reselected(tmp_path, pool, truth):
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    ids = b0['ID'].to_list()
+    fill(batch_path(tmp_path, 0), truth, overrides={ids[0]: '', ids[1]: 'precipitated'})
+    kw = {k: v for k, v in KW.items() if k != 'batch_size'}
+    b1 = suggest_next_batch(pool, tmp_path, batch_size=45, **kw)
+    assert not set(ids) & set(b1['ID'])
+    assert b1.height == 45
+
+
+def test_rerun_before_results_refused(tmp_path, pool):
+    suggest_next_batch(pool, tmp_path, **KW)
+    with pytest.raises(ConfigurationError, match=r'batch_cycle_0\.csv') as exc:
+        suggest_next_batch(pool, tmp_path, **KW)
+    assert 'no results entered yet' in str(exc.value)
+    assert not batch_path(tmp_path, 1).exists()
+
+
+def test_all_failed_cycle0_refused(tmp_path, pool):
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    fill(batch_path(tmp_path, 0), {}, overrides={i: 'failed' for i in b0['ID']})
+    with pytest.raises(ConfigurationError, match='measured'):
+        suggest_next_batch(pool, tmp_path, **KW)
+
+
+def test_unknown_id_raises(tmp_path, pool):
+    batch_path(tmp_path, 0).write_text('rank,ID,Activity,SMILES\n1,NOT_IN_POOL,1.0,C\n')
+    with pytest.raises(ValidationError, match='NOT_IN_POOL'):
+        suggest_next_batch(pool, tmp_path, **KW)
+
+
+def test_deterministic_rerun(tmp_path, pool, truth):
+    suggest_next_batch(pool, tmp_path, **KW)
+    fill(batch_path(tmp_path, 0), truth)
+    first = suggest_next_batch(pool, tmp_path, strategy='thompson', **KW)
+    batch_path(tmp_path, 1).unlink()
+    again = suggest_next_batch(pool, tmp_path, strategy='thompson', **KW)
+    assert first.equals(again)
+
+
+def test_pool_exhausted_refused(tmp_path, pool, truth):
+    kw = {k: v for k, v in KW.items() if k != 'batch_size'}
+    suggest_next_batch(pool, tmp_path, batch_size=50, **kw)
+    fill(batch_path(tmp_path, 0), truth)
+    with pytest.raises(ConfigurationError, match='no selectable compounds'):
+        suggest_next_batch(pool, tmp_path, **KW)
+
+
+def test_feature_learner_without_featurizer_refused(tmp_path, pool):
+    with pytest.raises(ConfigurationError, match='featurizer'):
+        suggest_next_batch(
+            pool, tmp_path, target_col='Activity', learner='rf', featurizer=None
+        )
