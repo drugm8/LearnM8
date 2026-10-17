@@ -3,6 +3,7 @@
 The CSV batch files in a directory are the only state between rounds.
 """
 
+import io
 import logging
 import os
 import re
@@ -26,8 +27,9 @@ _LEDGER_SCHEMA = {
 }
 # A numeric-looking cell: digits with optional sign, '.' and ','.
 _NUMERIC_LOOKING_RE = r'^[+-]?\d[\d.,]*$'
-# Excel's separator hint line, e.g. 'sep=;', optionally after a BOM.
-_SEP_LINE_RE = re.compile(r'^﻿?sep=(.)$', re.IGNORECASE)
+# Spreadsheet separator hint line (e.g. 'sep=,', possibly quoted or padded with
+# separators by other tools). Only used to be skipped; the separator is sniffed.
+_SEP_LINE_RE = re.compile(r'^\s*"?sep=.[,;\t]*"?\s*$', re.IGNORECASE)
 
 
 def batch_path(batch_dir: Path, cycle: int) -> Path:
@@ -48,27 +50,28 @@ def latest_batch_path(batch_dir: Path) -> Path:
     return batch_path(Path(batch_dir), max(cycles))
 
 
+def _decode(raw_bytes: bytes) -> str:
+    """Decode as UTF-8 (BOM allowed), falling back to Windows-1252."""
+    try:
+        return raw_bytes.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return raw_bytes.decode('cp1252', errors='replace')
+
+
 def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
     raw_bytes = path.read_bytes()
     if not raw_bytes.strip():
         raise ValidationError(f'{path.name}: file is empty')
-    first_line = (
-        raw_bytes.split(b'\n', 1)[0].decode('utf-8', errors='replace').lstrip(_BOM)
-    )
-    sep_match = _SEP_LINE_RE.match(first_line.rstrip('\r'))
-    if sep_match:
-        sep = sep_match.group(1)
-        skip_rows = 1
-    else:
-        sep = ';' if first_line.count(';') > first_line.count(',') else ','
-        skip_rows = 0
+    text = _decode(raw_bytes).lstrip(_BOM)
+    lines = text.split('\n')
+    if _SEP_LINE_RE.match(lines[0].rstrip('\r')):
+        text = '\n'.join(lines[1:])
+        lines = lines[1:]
+    header = next((ln for ln in lines if ln.strip()), '')
+    sep = ';' if header.count(';') > header.count(',') else ','
     try:
         df = pl.read_csv(
-            path,
-            separator=sep,
-            infer_schema=False,
-            encoding='utf8-lossy',
-            skip_rows=skip_rows,
+            io.BytesIO(text.encode('utf-8')), separator=sep, infer_schema=False
         )
     except Exception as exc:
         raise ValidationError(f'{path.name}: cannot parse CSV: {exc}') from exc
@@ -80,7 +83,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
         )
 
     # Excel artifacts such as ';;;' rows: drop rows where every field is blank.
-    df = df.with_row_index('_row', offset=2 + skip_rows)
+    df = df.with_row_index('_row', offset=2)
     blank = pl.all_horizontal(
         [
             pl.col(c).str.strip_chars().fill_null('') == ''
@@ -110,7 +113,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
                 )
             ]
             raise ValidationError(
-                f'{path.name}: ambiguous value(s) containing "." in a ";"-separated '
+                f'{path.name}: ambiguous value(s) containing "." in a {sep!r}-separated '
                 f'file (thousands separator?); write numbers without thousands separators: '
                 f'{_truncate_list(cells)}'
             )
@@ -128,7 +131,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
                 )
             ]
             raise ValidationError(
-                f'{path.name}: ambiguous value(s) containing "," in a ","-separated '
+                f'{path.name}: ambiguous value(s) containing "," in a {sep!r}-separated '
                 f'file (thousands separator?); write numbers without thousands separators: '
                 f'{_truncate_list(cells)}'
             )

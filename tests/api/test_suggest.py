@@ -214,7 +214,17 @@ def _zero_pool(tmp_path, ids):
     return pool_csv
 
 
-def test_stripped_leading_zero_id_is_recovered(tmp_path):
+def test_stripped_leading_zero_id_is_recovered(tmp_path, monkeypatch):
+    import learnm8.suggest as suggest_mod
+
+    captured = {}
+    real = suggest_mod.execute_cycle
+
+    def spy(master, *a, **k):
+        captured['master'] = master
+        return real(master, *a, **k)
+
+    monkeypatch.setattr(suggest_mod, 'execute_cycle', spy)
     pool_csv = _zero_pool(tmp_path, ['007', '008', '009', '010', '011', '012'])
     d = tmp_path / 'b'
     d.mkdir()
@@ -223,6 +233,11 @@ def test_stripped_leading_zero_id_is_recovered(tmp_path):
         pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
     )
     assert not {'007', '008'} & set(b['ID'].to_list())
+    labeled = captured['master'].filter(pl.col('status') == 'labeled')
+    assert dict(zip(labeled['ID'], labeled['Activity'], strict=True)) == {
+        '007': 1.5,
+        '008': 2.5,
+    }
 
 
 def test_ambiguous_stripped_id_raises(tmp_path):
@@ -241,7 +256,7 @@ def test_stripped_id_with_different_smiles_raises(tmp_path):
     d = tmp_path / 'b'
     d.mkdir()
     batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,7,1.5,CCCCCC\n')
-    with pytest.raises(ValidationError, match=r'7'):
+    with pytest.raises(ValidationError, match=r'not found.*7 \(batch_cycle_0\.csv\)'):
         suggest_next_batch(
             pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
         )
@@ -256,6 +271,28 @@ def test_recovery_creating_duplicate_raises(tmp_path):
     with pytest.raises(
         ValidationError, match=r'batch_cycle_0\.csv.*batch_cycle_1\.csv'
     ):
+        suggest_next_batch(
+            pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+        )
+
+
+def test_non_digit_id_not_remapped(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['0A12', 'B1', 'C1', 'D1'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,A12,1.5,\n')
+    with pytest.raises(ValidationError, match=r'not found.*A12 \(batch_cycle_0\.csv\)'):
+        suggest_next_batch(
+            pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+        )
+
+
+def test_present_id_with_zero_variant_and_empty_smiles_is_ambiguous(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['7', '0007', '008', '009'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,7,1.5,\n')
+    with pytest.raises(ValidationError, match=r'Ambiguous.*7 \(batch_cycle_0\.csv\)'):
         suggest_next_batch(
             pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
         )

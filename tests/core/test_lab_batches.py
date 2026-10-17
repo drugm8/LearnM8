@@ -205,3 +205,41 @@ def test_write_then_read_with_sep_line(tmp_path):
     batch = pl.DataFrame({'rank': [1], 'ID': ['A'], 'SMILES': ['C']})
     write_batch(batch, tmp_path, 0, 'IC50')
     assert read_batches(tmp_path, 'IC50')['state'].to_list() == ['pending']
+
+
+@pytest.mark.parametrize(
+    'content',
+    [
+        'sep=,,,\nrank,ID,IC50,SMILES\n1,A,1.5,C\n',
+        '"sep=,"\nrank,ID,IC50,SMILES\n1,A,1.5,C\n',
+        'sep=;;;\nrank;ID;IC50;SMILES\n1;A;1,5;C\n',
+        'sep=, \nrank,ID,IC50,SMILES\n1,A,1.5,C\n',
+        'sep=,\nrank;ID;IC50;SMILES\n1;A;1,5;C\n',
+    ],
+)
+def test_tolerant_sep_hint_line(tmp_path, content):
+    (tmp_path / 'batch_cycle_0.csv').write_text(content)
+    led = read_batches(tmp_path, 'IC50')
+    assert led['ID'].to_list() == ['A'] and led['value'].to_list() == [1.5]
+
+
+def test_error_row_numbers_are_spreadsheet_rows(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'sep=,\nrank,ID,IC50,SMILES\n1,A,1.5,C\n2,,2.5,CC\n'
+    )
+    with pytest.raises(ValidationError, match=r'\[3\]'):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_ambiguity_message_names_actual_separator(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text('rank,ID,IC50,SMILES\n1,A,"1,500",C\n')
+    with pytest.raises(ValidationError, match=r"',?'-separated"):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_cp1252_file_is_decoded(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_bytes(
+        'rank;ID;Aktivität;SMILES\r\n1;A;1,5;C\r\n'.encode('cp1252')
+    )
+    led = read_batches(tmp_path, 'Aktivität')
+    assert led['value'].to_list() == [1.5]

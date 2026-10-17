@@ -52,34 +52,59 @@ class _PendingOracle(Oracle):
         return None
 
 
+def _strip_zeros(col: str) -> pl.Expr:
+    return pl.col(col).str.strip_chars_start('0')
+
+
 def _recover_leading_zeros(
     ledger: pl.DataFrame, pool: pl.DataFrame, batch_dir: Path
 ) -> pl.DataFrame:
-    """Remap batch IDs that a spreadsheet stripped of leading zeros.
+    """Remap all-digit batch IDs that a spreadsheet stripped of leading zeros.
 
     A batch ID absent from the pool is remapped to the unique pool ID with the
-    same ``lstrip('0')`` form, provided the batch SMILES is empty or agrees.
+    same zero-stripped form, provided the batch SMILES is empty or agrees. A
+    batch ID present in the pool whose zero-stripped form is shared by another
+    pool ID, with an empty SMILES cell, is ambiguous and raises.
     """
-    pool_ids = set(pool['ID'].to_list())
-    by_stripped: dict[str, list[str]] = {}
-    for pid in pool_ids:
-        by_stripped.setdefault(pid.lstrip('0') or '0', []).append(pid)
-    pool_smiles = dict(zip(pool['ID'].to_list(), pool['SMILES'].to_list(), strict=True))
+    digits = ledger.filter(pl.col('ID').str.contains(r'^[0-9]+$'))
+    if digits.height == 0:
+        return ledger
+    missing = digits.join(pool.select('ID'), on='ID', how='anti')
+    if missing.height == 0 and digits['smiles'].null_count() == 0:
+        return ledger
+
+    wanted = digits.with_columns(_strip_zeros('ID').alias('_s'))
+    cands = (
+        pool.select('ID', 'SMILES')
+        .with_columns(_strip_zeros('ID').alias('_s'))
+        .filter(pl.col('_s').is_in(wanted['_s'].implode()))
+    )
+    by_stripped: dict[str, list[tuple[str, str]]] = {}
+    for pid, psmi, st in zip(cands['ID'], cands['SMILES'], cands['_s'], strict=True):
+        by_stripped.setdefault(st, []).append((pid, psmi))
 
     remaps: dict[tuple[int, str], str] = {}
-    for bid, cycle, smi in zip(
-        ledger['ID'].to_list(),
-        ledger['cycle'].to_list(),
-        ledger['smiles'].to_list(),
-        strict=True,
+    ambiguous: list[str] = []
+    for bid, cycle, smi, st in zip(
+        wanted['ID'], wanted['cycle'], wanted['smiles'], wanted['_s'], strict=True
     ):
-        if bid in pool_ids:
-            continue
-        matches = by_stripped.get(bid.lstrip('0') or '0', [])
-        if len(matches) != 1:
-            continue
-        if smi is None or canonicalize_for_cache(smi) == pool_smiles[matches[0]]:
-            remaps[(cycle, bid)] = matches[0]
+        matches = by_stripped.get(st, [])
+        name = batch_path(batch_dir, cycle).name
+        if any(pid == bid for pid, _ in matches):
+            if len(matches) > 1 and smi is None:
+                ambiguous.append(
+                    f'{bid} ({name}) vs {sorted(pid for pid, _ in matches)}'
+                )
+        elif len(matches) == 1 and (
+            smi is None or canonicalize_for_cache(smi) == matches[0][1]
+        ):
+            remaps[(cycle, bid)] = matches[0][0]
+    if ambiguous:
+        raise ValidationError(
+            f'Ambiguous IDs in batch files: the pool has several IDs that differ '
+            f'only in leading zeros and the SMILES cell is empty: '
+            f'{_truncate_list(ambiguous)}'
+        )
     if not remaps:
         return ledger
 
@@ -101,13 +126,14 @@ def _recover_leading_zeros(
     )
     dup_ids = ledger.filter(pl.col('ID').is_duplicated())['ID'].unique().sort()
     if dup_ids.len():
-        where = [
-            f'{i} ({", ".join(batch_path(batch_dir, c).name for c in ledger.filter(pl.col("ID") == i)["cycle"].sort().to_list())})'
-            for i in dup_ids.to_list()
-        ]
+        where = []
+        for i in dup_ids.to_list():
+            cycles = ledger.filter(pl.col('ID') == i)['cycle'].sort().to_list()
+            files = dict.fromkeys(batch_path(batch_dir, c).name for c in cycles)
+            where.append(f'{i} ({", ".join(files)})')
         raise ValidationError(
-            f'Duplicate IDs across batch files in {batch_dir} after recovering '
-            f'leading zeros: {_truncate_list(where)}'
+            f'Duplicate IDs in batch files after recovering leading zeros: '
+            f'{_truncate_list(where)}'
         )
     return ledger
 
@@ -196,8 +222,8 @@ def suggest_next_batch(
         ]
         raise ValidationError(
             f'Batch file IDs not found in the validated compound pool: '
-            f'{_truncate_list(found)}. Excel may have changed IDs, '
-            f'e.g. dropped leading zeros.'
+            f'{_truncate_list(found)}. Either the ID is not in the pool, a '
+            f'leading-zero match was ambiguous, or its SMILES differ.'
         )
     mismatch = (
         ledger.filter(pl.col('smiles').is_not_null())
