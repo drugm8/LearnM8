@@ -317,7 +317,7 @@ Settings are not stored between calls. Pass the same flags every round.
 
 ### Output
 
-The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, from round 1, `prediction` (plus `uncertainty` when computed). `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified.
+The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, in rounds that trained a model, `prediction` (plus `uncertainty` when computed). Round 0 and the random fallback after an all-failed batch have neither. `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified.
 
 ```
 Wrote 5 compounds to: campaign/batch_cycle_1.csv
@@ -502,7 +502,7 @@ LearnM8 provides clear error messages with suggestions:
 |------|---------|
 | 0 | Success |
 | 1 | Error (file not found, invalid input data, feature extraction or learner failure, etc.) |
-| 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered |
+| 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered. Command-line usage errors reported by argparse (unknown flag, missing argument) also exit with 2 |
 
 ## Best Practices
 

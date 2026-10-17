@@ -44,9 +44,11 @@ What to type in that column:
 
 | What you enter | What it means |
 |----------------|---------------|
-| Nothing (leave it empty) | Not measured yet. The compound is not tested again and not used for learning. |
-| A number, for example `12.3` or `12,3` | Measured. The value is used for learning. |
+| Nothing (leave it empty) | Not measured yet. The compound is not suggested again and not used for learning. You can fill the cell in later, even in an older file. It is used from the next round on. |
+| A number, for example `12,3` (German Excel, semicolon-separated file) or `12.3` (English Excel, comma-separated file) | Measured. The value is used for learning. The decimal mark must match the file: a comma in a semicolon-separated file, a point in a comma-separated file. |
 | Anything else, for example `failed`, `n/a`, `precipitated`, `<0.1` | The measurement failed. The compound is never suggested again and not used for learning. |
+
+If the whole file lands in column A when you open it (common in German-language Excel), do not double-click it. Open Excel, choose Data, then From Text/CSV, set the delimiter to Comma and set the `ID` column to Text, then load it.
 
 Things that are fine:
 
@@ -61,7 +63,7 @@ Things to avoid:
 - Do not change the values in the `ID` column. Excel may drop leading zeros (`007` becomes `7`). If an ID looks different after opening the file, set the column to text first.
 - Do not edit the `SMILES` column. Leaving it empty is fine.
 - Do not delete rows. A deleted row makes that compound available for selection again. Leave the cell empty or write `failed` instead.
-- Do not use thousands separators. Write `1500` or `1500,5`, not `1.500`. A value with a dot in a semicolon-separated file is rejected, because it could be a thousands separator.
+- Do not use thousands separators. Write `1500` or `1500,5` (semicolon file) or `1500.5` (comma file), not `1.500` or `1,500`. A value with a dot in a semicolon-separated file, or with a comma in a comma-separated file, is rejected, because it could be a thousands separator.
 
 ## Round 0 and Later Rounds
 
@@ -79,8 +81,8 @@ Batch file columns:
 | `ID` | Compound identifier from the pool. |
 | `<target>` | Empty. The lab fills this in. |
 | `SMILES` | Canonical SMILES from the pool. |
-| `prediction` | Model prediction for the compound. Rounds 1 and later only. |
-| `uncertainty` | Model uncertainty. Rounds 1 and later, and only when the learner supports it and the strategy needs it (for example `ucb` with `gp`). |
+| `prediction` | Model prediction for the compound. Present in rounds that trained a model, so not in round 0 or in a random fallback round after an all-failed batch. |
+| `uncertainty` | Model uncertainty. Only in rounds that trained a model, and only when the learner supports it and the strategy needs it (for example `ucb` with `rf`). |
 
 ## CLI Walkthrough
 
@@ -152,7 +154,7 @@ Wrote 5 compounds to: campaign/batch_cycle_1.csv
 Next step: fill column Activity and re-run this command.
 ```
 
-The "10 labeled" count in the cycle log includes the 5 compounds just requested, which the cycle treats as labeled for its own bookkeeping. The `ledger:` line is the real count of results read from the folder. `rf` does not provide uncertainty, so the new file has a `prediction` column but no `uncertainty` column:
+The "10 labeled" count in the cycle log includes the 5 compounds just requested, which the cycle treats as labeled for its own bookkeeping. The `ledger:` line is the real count of results read from the folder. `rf` does support uncertainty, but `greedy` does not request it, so it is not computed. The new file has a `prediction` column but no `uncertainty` column:
 
 ```text
 rank,ID,Activity,SMILES,prediction
@@ -187,10 +189,10 @@ The return value is the batch that was just written to `batch_dir/batch_cycle_N.
 
 - **No duplicate plates.** If the newest batch file has no results at all, the call raises `ConfigurationError` (CLI exit code 2). Enter the values first.
 - **Reproducible.** Same inputs and `random_state` give the same batch. Deleting the newest batch file and re-running reproduces it exactly, as long as the older files are unchanged.
-- **Mangled IDs raise an error.** If a batch ID is not in the validated pool (for example Excel dropped leading zeros), the call raises `ValidationError` listing the IDs and files. Duplicate IDs across batch files and a missing target column are also errors that name the file.
+- **Mangled IDs raise an error.** The pool file's IDs are read as text, so leading zeros there are kept. If a batch ID is not in the validated pool (for example Excel dropped leading zeros in the batch file), the call raises `ValidationError` listing the IDs and files. Duplicate IDs across batch files and a missing target column are also errors that name the file.
 - **SMILES are cross-checked.** If a batch row's SMILES cell is non-empty and differs from the pool's canonical SMILES for that ID, the call raises `ValidationError`. This also catches a pool file that was re-sorted when IDs are generated from row position.
 - **Unreadable files raise an error naming the file.** This covers empty files and files that cannot be parsed as CSV. A row with values but no ID is an error. Fully blank rows (such as `;;;`) are ignored.
-- **Ambiguous decimals are rejected.** In a `;`-separated file, a numeric-looking value containing `.` (for example `1.234`) could be a German thousands separator. The call raises `ValidationError` naming the file, ID and cell instead of guessing. Ask the lab for a decimal comma (`12,3`) or plain digits.
+- **Ambiguous decimals are rejected.** In a `;`-separated file, a numeric-looking value containing `.` (for example `1.234`) could be a German thousands separator. In a `,`-separated file, a value containing `,` (for example `1,500`) could be an English one. The call raises `ValidationError` naming the file, ID and cell instead of guessing. Ask the lab for the decimal mark that matches the file (comma in a semicolon file, point in a comma file) or plain digits.
 - **Failed cells are logged.** Every cell treated as failed is listed in a WARNING with its raw text. Check it for Excel date mangling, for example `12. Mrz` where `12.3` was typed.
 - **Settings are not stored.** Use the same `--learner`, `--featurizer`, `--strategy` and related flags every round. Save the command in a script so rounds stay consistent.
 
@@ -199,3 +201,4 @@ The return value is the batch that was just written to `batch_dir/batch_cycle_N.
 - **No pruning.** There is no design-space reduction. Use `run_active_learning()` with a simulated or automated oracle if you need it.
 - **No multi-stage schedules.** Every round uses one strategy, `--strategy`. To change strategy part-way, pass a different `--strategy` for that round.
 - **Censored values count as failed.** A value like `<0.1` or `>10` is text, so the compound is treated as failed. Enter a numeric stand-in (for example the detection limit) if the compound should be used for training.
+- **Replicates.** Enter one value per compound, for example the mean. Keep the individual readings in extra columns. Two rows with the same ID raise a duplicate-ID error.
