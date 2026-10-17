@@ -1,3 +1,5 @@
+import logging
+
 import polars as pl
 import pytest
 
@@ -5,6 +7,20 @@ from learnm8.core.lab_batches import batch_path, next_cycle, read_batches, write
 from learnm8.exceptions import ConfigurationError, ValidationError
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _propagate_learnm8_logs():
+    """Let caplog see ``learnm8`` records regardless of test order.
+
+    ``setup_logging`` sets ``propagate = False`` on the ``learnm8`` logger once
+    any earlier test has called it.
+    """
+    learnm8_logger = logging.getLogger('learnm8')
+    previous = learnm8_logger.propagate
+    learnm8_logger.propagate = True
+    yield
+    learnm8_logger.propagate = previous
 
 
 def test_empty_dir_returns_empty_ledger(tmp_path):
@@ -155,4 +171,13 @@ def test_cross_file_duplicate_names_files(tmp_path):
     with pytest.raises(
         ValidationError, match=r'batch_cycle_0\.csv.*batch_cycle_1\.csv'
     ):
+        read_batches(tmp_path, 'IC50')
+
+
+@pytest.mark.parametrize('cell', ['12,3', '1,500'])
+def test_comma_file_comma_value_is_ambiguous(tmp_path, cell):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        f'rank,ID,IC50,SMILES\n1,A,"{cell}",C\n'
+    )
+    with pytest.raises(ValidationError, match=r"batch_cycle_0\.csv.*'A'.*" + cell):
         read_batches(tmp_path, 'IC50')

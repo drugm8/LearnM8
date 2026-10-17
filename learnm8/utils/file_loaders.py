@@ -18,7 +18,9 @@ def load_compound_file(
     id_column: str | None = None,
     name_column: str | None = None,
     n_jobs: int = -1,
-    progress: bool = True
+    progress: bool = True,
+    *,
+    id_as_text: bool = False,
 ) -> pl.DataFrame:
     """
     Load compounds from CSV, SDF, or SMI files using optimal tool per format.
@@ -35,6 +37,8 @@ def load_compound_file(
         name_column: CSV column name for molecule name (CSV only, default: auto-detect)
         n_jobs: Number of parallel jobs for SDF loading (-1 = auto, default: -1)
         progress: Show progress bar for SDF loading (default: True)
+        id_as_text: Read the CSV ID column as text so leading zeros are kept
+            (CSV only, default: False)
 
     Returns:
         Polars DataFrame with standardized 'ID', 'SMILES', and additional columns
@@ -69,7 +73,9 @@ def load_compound_file(
         return _load_sdf_with_datamol(file_path, id_column, n_jobs, progress)
     elif format_type == 'csv':
         logger.info("Loading CSV file with Polars")
-        return _load_csv_with_polars(file_path, smiles_column, id_column, name_column)
+        return _load_csv_with_polars(
+            file_path, smiles_column, id_column, name_column, id_as_text
+        )
     elif format_type == 'smi':
         logger.info("Loading SMILES file with RDKit")
         return _load_smi_with_rdkit(file_path)
@@ -115,7 +121,8 @@ def _load_csv_with_polars(
     file_path: Path,
     smiles_column: str | None,
     id_column: str | None,
-    name_column: str | None
+    name_column: str | None,
+    id_as_text: bool = False,
 ) -> pl.DataFrame:
     """
     Load CSV/TSV files using Polars for optimal performance.
@@ -125,11 +132,18 @@ def _load_csv_with_polars(
         smiles_column: Custom SMILES column name
         id_column: Custom ID column name
         name_column: Custom name column name
+        id_as_text: Read the ID column as text (keeps leading zeros)
 
     Returns:
         Polars DataFrame with standardized 'ID' and 'SMILES' columns
     """
-    df = pl.read_csv(file_path)
+    overrides = None
+    if id_as_text:
+        header = pl.read_csv(file_path, n_rows=0).columns
+        id_source = id_column if id_column and id_column in header else 'ID'
+        if id_source in header:
+            overrides = {id_source: pl.Utf8}
+    df = pl.read_csv(file_path, schema_overrides=overrides)
 
     if smiles_column and smiles_column in df.columns:
         df = df.rename({smiles_column: 'SMILES'})

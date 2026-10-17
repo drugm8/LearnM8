@@ -21,7 +21,7 @@ from learnm8.core.initialization import (
 from learnm8.core.interfaces import Oracle
 from learnm8.core.lab_batches import batch_path, next_cycle, read_batches, write_batch
 from learnm8.core.resources import validate_device, validate_n_jobs
-from learnm8.core.validation import validate_compound_pool
+from learnm8.core.validation import canonicalize_for_cache, validate_compound_pool
 from learnm8.exceptions import (
     ConfigurationError,
     LearnM8Error,
@@ -91,6 +91,17 @@ def suggest_next_batch(
         get_acquisition_function(strategy)
     except KeyError as exc:
         raise ConfigurationError(str(exc.args[0])) from exc
+    if score_direction not in ('higher', 'lower'):
+        raise ConfigurationError(
+            f"score_direction must be 'higher' or 'lower', got {score_direction!r}"
+        )
+    if acquisition_params is not None and not isinstance(acquisition_params, dict):
+        raise ConfigurationError(
+            f'acquisition_params must be a dict, got {type(acquisition_params).__name__}'
+        )
+    compound_pool = Path(compound_pool)
+    if not compound_pool.exists():
+        raise ConfigurationError(f'Compound pool file not found: {compound_pool}')
     batch_dir = Path(batch_dir)
     work_dir = batch_dir / '.learnm8'
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -100,7 +111,12 @@ def suggest_next_batch(
     configure_host_allocator()
 
     pool = load_compound_file(
-        compound_pool, smiles_column, id_column, n_jobs=n_jobs, progress=False
+        compound_pool,
+        smiles_column,
+        id_column,
+        n_jobs=n_jobs,
+        progress=False,
+        id_as_text=True,
     )
     pool = pool.with_columns(pl.col('ID').cast(pl.Utf8))
     pool = validate_compound_pool(
@@ -124,7 +140,10 @@ def suggest_next_batch(
     mismatch = (
         ledger.filter(pl.col('smiles').is_not_null())
         .join(pool.select('ID', pl.col('SMILES').alias('_pool_smiles')), on='ID')
-        .filter(pl.col('smiles') != pl.col('_pool_smiles'))
+        .filter(
+            pl.col('smiles').map_elements(canonicalize_for_cache, return_dtype=pl.Utf8)
+            != pl.col('_pool_smiles')
+        )
         .sort('cycle', 'ID')
     )
     if mismatch.height:

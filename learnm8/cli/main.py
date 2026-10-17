@@ -833,7 +833,7 @@ def cmd_validate(args: argparse.Namespace):
 
 def cmd_suggest(args: argparse.Namespace) -> None:
     """Handle suggest subcommand: write the next lab batch file."""
-    from learnm8.core.lab_batches import batch_path, next_cycle, read_batches
+    from learnm8.core.lab_batches import latest_batch_path
     from learnm8.suggest import suggest_next_batch
 
     try:
@@ -842,6 +842,13 @@ def cmd_suggest(args: argparse.Namespace) -> None:
         )
     except json.JSONDecodeError as e:
         console.print(f'[red]Invalid --acquisition-params JSON:[/red] {e}')
+        sys.exit(1)
+
+    if not Path(args.compound_pool).exists():
+        console.print(
+            f'[red]Error:[/red] Compound pool file not found: {args.compound_pool}',
+            soft_wrap=True,
+        )
         sys.exit(1)
 
     try:
@@ -862,11 +869,14 @@ def cmd_suggest(args: argparse.Namespace) -> None:
             n_jobs=args.n_jobs,
             device=args.device,
         )
-    except LearnM8Error as e:
+    except ValidationError as e:
+        # Batch-file problems: the 'run learnm8 validate' hint would mislead.
+        console.print(f'[red]Validation error:[/red] {e}')
+        sys.exit(1)
+    except (LearnM8Error, Exception) as e:
         _print_learnm8_error(e)
 
-    cycle = next_cycle(read_batches(args.batch_dir, args.target_col)) - 1
-    path = batch_path(args.batch_dir, cycle)
+    path = latest_batch_path(args.batch_dir)
     console.print(
         f'[green]Wrote {batch.height} compounds to:[/green] {path}', soft_wrap=True
     )

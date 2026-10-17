@@ -156,3 +156,48 @@ def test_feature_learner_without_featurizer_refused(tmp_path, pool):
         suggest_next_batch(
             pool, tmp_path, target_col='Activity', learner='rf', featurizer=None
         )
+
+
+def test_invalid_score_direction_fails_at_cycle0(tmp_path, pool):
+    with pytest.raises(ConfigurationError, match='score_direction'):
+        suggest_next_batch(pool, tmp_path, score_direction='up', **KW)
+    assert not batch_path(tmp_path, 0).exists()
+
+
+def test_non_dict_acquisition_params_rejected(tmp_path, pool):
+    with pytest.raises(ConfigurationError, match='acquisition_params'):
+        suggest_next_batch(pool, tmp_path, acquisition_params=[1, 2], **KW)
+    assert not batch_path(tmp_path, 0).exists()
+
+
+def test_missing_pool_raises_without_creating_work_dir(tmp_path):
+    batch_dir = tmp_path / 'batches'
+    with pytest.raises(ConfigurationError, match='not found'):
+        suggest_next_batch(tmp_path / 'nope.csv', batch_dir, **KW)
+    assert not batch_dir.exists()
+
+
+def test_leading_zero_ids_round_trip(tmp_path):
+    smiles = ['CCO', 'CCN', 'CCC', 'CCCl', 'CCBr', 'CCF', 'CCCC', 'CCCO', 'CCCN']
+    ids = [f'{i:03d}' for i in range(1, 10)]
+    pool_csv = tmp_path / 'pool.csv'
+    pl.DataFrame({'ID': ids, 'SMILES': smiles}).write_csv(pool_csv)
+    b = suggest_next_batch(
+        pool_csv, tmp_path / 'b', 'Activity', 'rf', 'morgan', batch_size=9, n_jobs=1
+    )
+    assert sorted(b['ID'].to_list()) == ids
+    written = pl.read_csv(batch_path(tmp_path / 'b', 0), infer_schema=False)
+    assert sorted(written['ID'].to_list()) == ids
+
+
+def test_noncanonical_batch_smiles_accepted(tmp_path, pool):
+    from rdkit import Chem
+
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    path = batch_path(tmp_path, 0)
+    mol = Chem.MolFromSmiles(b0['SMILES'][0])
+    other = Chem.MolToSmiles(mol, canonical=False, doRandom=True)
+    path.write_text(path.read_text().replace(b0['SMILES'][0], other, 1))
+    fill(path, {i: 1.0 for i in b0['ID']})
+    b1 = suggest_next_batch(pool, tmp_path, **KW)
+    assert b1.height == 5

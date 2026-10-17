@@ -36,6 +36,16 @@ def next_cycle(ledger: pl.DataFrame) -> int:
     return 0 if ledger.height == 0 else int(ledger['cycle'].max()) + 1  # type: ignore[arg-type]
 
 
+def latest_batch_path(batch_dir: Path) -> Path:
+    """Return the highest-numbered ``batch_cycle_N.csv`` in ``batch_dir``."""
+    cycles = [
+        int(m.group(1))
+        for p in Path(batch_dir).iterdir()
+        if (m := _BATCH_FILE_RE.match(p.name))
+    ]
+    return batch_path(Path(batch_dir), max(cycles))
+
+
 def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
     raw_bytes = path.read_bytes()
     if not raw_bytes.strip():
@@ -88,6 +98,24 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
             raise ValidationError(
                 f'{path.name}: ambiguous value(s) containing "." in a ";"-separated '
                 f'file (German thousands separator?); enter decimals with a comma: '
+                f'{_truncate_list(cells)}'
+            )
+    else:
+        ambiguous = df.filter(
+            raw.str.contains(',', literal=True) & raw.str.contains(_NUMERIC_LOOKING_RE)
+        )
+        if ambiguous.height:
+            cells = [
+                f'{i!r}: {v!r}'
+                for i, v in zip(
+                    ambiguous['ID'].str.strip_chars().to_list(),
+                    ambiguous[target_col].to_list(),
+                    strict=True,
+                )
+            ]
+            raise ValidationError(
+                f'{path.name}: ambiguous value(s) containing "," in a ","-separated '
+                f'file (decimal comma?); enter decimals with a point: '
                 f'{_truncate_list(cells)}'
             )
     text = raw.str.replace_all(',', '.', literal=True) if sep == ';' else raw
