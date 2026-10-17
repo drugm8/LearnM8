@@ -281,7 +281,7 @@ Value cells in earlier batch files: empty is pending, a finite number is measure
 | Exception | Condition |
 |-----------|-----------|
 | `ConfigurationError` | The newest batch has no results entered; no selectable compounds remain; `batch_size < 1`; unknown strategy; feature-based learner without a featurizer; target batch file already exists; compound pool file not found; `score_direction` not `higher`/`lower`; `acquisition_params` not a dict |
-| `ValidationError` | Pool fails validation; batch file empty, unparsable or missing `ID`/`<target_col>`; row with a value but no ID; duplicate IDs; batch IDs not in the pool; changed SMILES cell; ambiguous number (a `.` in a `;`-separated file, or a `,` in a `,`-separated file) |
+| `ValidationError` | Pool fails validation; batch file empty, unparsable or missing `ID`/`<target_col>`; row with a value but no ID; duplicate IDs; batch IDs not in the pool; changed SMILES cell; ambiguous number (possible thousands separator) |
 | `LearnerError` | Model training or prediction fails |
 
 ---
