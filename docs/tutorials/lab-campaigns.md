@@ -45,7 +45,7 @@ What to type in that column:
 | What you enter | What it means |
 |----------------|---------------|
 | Nothing (leave it empty) | Not measured yet. The compound is not suggested again and not used for learning. You can fill the cell in later, even in an older file. It is used from the next round on. |
-| A number, for example `12.3` or `12,3` | Measured. The value is used for learning. Type numbers the way your spreadsheet normally shows them. |
+| A number | Measured. The value is used for learning. Type numbers as your spreadsheet normally shows them. |
 | Anything else, for example `failed`, `n/a`, `precipitated`, `<0.1` | The measurement failed. The compound is never suggested again and not used for learning. |
 
 Things that are fine:
@@ -103,7 +103,7 @@ Wrote 5 compounds to: campaign/batch_cycle_0.csv
 Next step: fill column Activity and re-run this command.
 ```
 
-`campaign/batch_cycle_0.csv` (the INFO lines print the full path). The first line, `sep=,`, tells Excel how to split the columns:
+`campaign/batch_cycle_0.csv` (the INFO lines print the full path). The first line, `sep=,`, is a spreadsheet hint; scripts that read the file with pandas or polars should skip it:
 
 ```text
 sep=,
@@ -190,7 +190,7 @@ The return value is the batch that was just written to `batch_dir/batch_cycle_N.
 
 - **No duplicate plates.** If the newest batch file has no results at all, the call raises `ConfigurationError` (CLI exit code 2). Enter the values first.
 - **Reproducible.** Same inputs and `random_state` give the same batch. Deleting the newest batch file and re-running reproduces it exactly, as long as the older files are unchanged.
-- **Spreadsheet re-saves are handled automatically.** Separator, decimal mark and encoding are detected, and leading zeros dropped by a spreadsheet are recovered when the match is unique. Ambiguous numbers raise an error naming the file, ID and cell.
+- **Spreadsheet re-saves are handled automatically.** Separator, decimal mark and encoding (UTF-8 or Windows-1252) are detected, and leading zeros dropped by a spreadsheet are recovered when the match is unique. Ambiguous numbers raise an error naming the file, ID and cell.
 - **Unknown IDs raise an error.** The pool file's IDs are read as text, so leading zeros there are kept. If a batch ID is not in the validated pool and cannot be matched uniquely (and consistently with its SMILES), the call raises `ValidationError` listing the IDs and files. Duplicate IDs across batch files and a missing target column are also errors that name the file.
 - **SMILES are cross-checked.** If a batch row's SMILES cell is non-empty and differs from the pool's canonical SMILES for that ID, the call raises `ValidationError`. This also catches a pool file that was re-sorted when IDs are generated from row position.
 - **Unreadable files raise an error naming the file.** This covers empty files and files that cannot be parsed as CSV. A row with values but no ID is an error. Fully blank rows are ignored.

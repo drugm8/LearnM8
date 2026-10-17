@@ -317,7 +317,7 @@ Settings are not stored between calls. Pass the same flags every round.
 
 ### Output
 
-The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, in rounds that trained a model, `prediction` (plus `uncertainty` when computed). Round 0 and the random fallback after an all-failed batch have neither. `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified.
+The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, in rounds that trained a model, `prediction` (plus `uncertainty` when computed). Round 0 and the random fallback after an all-failed batch have neither. `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified. Batch files start with a `sep=,` spreadsheet hint line before the header; scripts that read them with pandas or polars should skip the first line.
 
 ```
 Wrote 5 compounds to: campaign/batch_cycle_1.csv
