@@ -52,6 +52,66 @@ class _PendingOracle(Oracle):
         return None
 
 
+def _recover_leading_zeros(
+    ledger: pl.DataFrame, pool: pl.DataFrame, batch_dir: Path
+) -> pl.DataFrame:
+    """Remap batch IDs that a spreadsheet stripped of leading zeros.
+
+    A batch ID absent from the pool is remapped to the unique pool ID with the
+    same ``lstrip('0')`` form, provided the batch SMILES is empty or agrees.
+    """
+    pool_ids = set(pool['ID'].to_list())
+    by_stripped: dict[str, list[str]] = {}
+    for pid in pool_ids:
+        by_stripped.setdefault(pid.lstrip('0') or '0', []).append(pid)
+    pool_smiles = dict(zip(pool['ID'].to_list(), pool['SMILES'].to_list(), strict=True))
+
+    remaps: dict[tuple[int, str], str] = {}
+    for bid, cycle, smi in zip(
+        ledger['ID'].to_list(),
+        ledger['cycle'].to_list(),
+        ledger['smiles'].to_list(),
+        strict=True,
+    ):
+        if bid in pool_ids:
+            continue
+        matches = by_stripped.get(bid.lstrip('0') or '0', [])
+        if len(matches) != 1:
+            continue
+        if smi is None or canonicalize_for_cache(smi) == pool_smiles[matches[0]]:
+            remaps[(cycle, bid)] = matches[0]
+    if not remaps:
+        return ledger
+
+    logger.info(
+        'Recovered IDs that lost leading zeros: %s',
+        _truncate_list(
+            [
+                f'{batch_path(batch_dir, c).name}: {old} -> {new}'
+                for (c, old), new in remaps.items()
+            ]
+        ),
+    )
+    ledger = ledger.with_columns(
+        pl.struct('cycle', 'ID')
+        .map_elements(
+            lambda r: remaps.get((r['cycle'], r['ID']), r['ID']), return_dtype=pl.Utf8
+        )
+        .alias('ID')
+    )
+    dup_ids = ledger.filter(pl.col('ID').is_duplicated())['ID'].unique().sort()
+    if dup_ids.len():
+        where = [
+            f'{i} ({", ".join(batch_path(batch_dir, c).name for c in ledger.filter(pl.col("ID") == i)["cycle"].sort().to_list())})'
+            for i in dup_ids.to_list()
+        ]
+        raise ValidationError(
+            f'Duplicate IDs across batch files in {batch_dir} after recovering '
+            f'leading zeros: {_truncate_list(where)}'
+        )
+    return ledger
+
+
 def suggest_next_batch(
     compound_pool: str | Path,
     batch_dir: str | Path,
@@ -123,7 +183,9 @@ def suggest_next_batch(
         pool, n_jobs=n_jobs, progress=False, target_col=None
     ).valid_compounds
 
-    ledger = read_batches(batch_dir, target_col)
+    ledger = _recover_leading_zeros(
+        read_batches(batch_dir, target_col), pool, batch_dir
+    )
     unknown = ledger.filter(~pl.col('ID').is_in(pool['ID'].implode())).sort(
         'cycle', 'ID'
     )

@@ -26,6 +26,8 @@ _LEDGER_SCHEMA = {
 }
 # A numeric-looking cell: digits with optional sign, '.' and ','.
 _NUMERIC_LOOKING_RE = r'^[+-]?\d[\d.,]*$'
+# Excel's separator hint line, e.g. 'sep=;', optionally after a BOM.
+_SEP_LINE_RE = re.compile(r'^﻿?sep=(.)$', re.IGNORECASE)
 
 
 def batch_path(batch_dir: Path, cycle: int) -> Path:
@@ -53,9 +55,21 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
     first_line = (
         raw_bytes.split(b'\n', 1)[0].decode('utf-8', errors='replace').lstrip(_BOM)
     )
-    sep = ';' if first_line.count(';') > first_line.count(',') else ','
+    sep_match = _SEP_LINE_RE.match(first_line.rstrip('\r'))
+    if sep_match:
+        sep = sep_match.group(1)
+        skip_rows = 1
+    else:
+        sep = ';' if first_line.count(';') > first_line.count(',') else ','
+        skip_rows = 0
     try:
-        df = pl.read_csv(path, separator=sep, infer_schema=False, encoding='utf8-lossy')
+        df = pl.read_csv(
+            path,
+            separator=sep,
+            infer_schema=False,
+            encoding='utf8-lossy',
+            skip_rows=skip_rows,
+        )
     except Exception as exc:
         raise ValidationError(f'{path.name}: cannot parse CSV: {exc}') from exc
     df = df.rename({c: c.lstrip(_BOM) for c in df.columns})
@@ -66,7 +80,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
         )
 
     # Excel artifacts such as ';;;' rows: drop rows where every field is blank.
-    df = df.with_row_index('_row', offset=2)
+    df = df.with_row_index('_row', offset=2 + skip_rows)
     blank = pl.all_horizontal(
         [
             pl.col(c).str.strip_chars().fill_null('') == ''
@@ -97,7 +111,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
             ]
             raise ValidationError(
                 f'{path.name}: ambiguous value(s) containing "." in a ";"-separated '
-                f'file (German thousands separator?); enter decimals with a comma: '
+                f'file (thousands separator?); write numbers without thousands separators: '
                 f'{_truncate_list(cells)}'
             )
     else:
@@ -115,7 +129,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
             ]
             raise ValidationError(
                 f'{path.name}: ambiguous value(s) containing "," in a ","-separated '
-                f'file (decimal comma?); enter decimals with a point: '
+                f'file (thousands separator?); write numbers without thousands separators: '
                 f'{_truncate_list(cells)}'
             )
     text = raw.str.replace_all(',', '.', literal=True) if sep == ';' else raw
@@ -213,6 +227,7 @@ def write_batch(
     first = ['rank', 'ID', target_col, 'SMILES']
     out = out.select(first + [c for c in out.columns if c not in first])
     tmp = path.with_name(path.name + '.tmp')
-    out.write_csv(tmp)
+    # 'sep=,' makes Excel split columns correctly in every locale.
+    tmp.write_text('sep=,\n' + out.write_csv(), encoding='utf-8', newline='')
     os.replace(tmp, path)
     return path

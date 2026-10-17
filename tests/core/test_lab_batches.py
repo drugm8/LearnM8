@@ -113,7 +113,8 @@ def test_write_batch_layout_and_no_overwrite(tmp_path):
     )
     p = write_batch(batch, tmp_path, 3, 'IC50')
     assert p == batch_path(tmp_path, 3)
-    assert p.read_text().splitlines()[0] == 'rank,ID,IC50,SMILES,prediction'
+    lines = p.read_text().splitlines()
+    assert lines[:2] == ['sep=,', 'rank,ID,IC50,SMILES,prediction']
     assert read_batches(tmp_path, 'IC50')['state'].to_list() == ['pending', 'pending']
     with pytest.raises(ConfigurationError, match=r'batch_cycle_3\.csv'):
         write_batch(batch, tmp_path, 3, 'IC50')
@@ -181,3 +182,26 @@ def test_comma_file_comma_value_is_ambiguous(tmp_path, cell):
     )
     with pytest.raises(ValidationError, match=r"batch_cycle_0\.csv.*'A'.*" + cell):
         read_batches(tmp_path, 'IC50')
+
+
+def test_sep_line_semicolon_with_decimal_comma_round_trips(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'sep=;\nrank;ID;IC50;SMILES\n1;A;1,5;C\n2;B;;CC\n'
+    )
+    led = read_batches(tmp_path, 'IC50').sort('ID')
+    assert led['value'].to_list() == [1.5, None]
+    assert led['state'].to_list() == ['measured', 'pending']
+
+
+def test_bom_before_sep_line_is_handled(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_bytes(
+        '\ufeffSEP=,\r\nrank,ID,IC50,SMILES\r\n1,A,2.5,C\r\n'.encode('utf-8')
+    )
+    led = read_batches(tmp_path, 'IC50')
+    assert led['ID'].to_list() == ['A'] and led['value'].to_list() == [2.5]
+
+
+def test_write_then_read_with_sep_line(tmp_path):
+    batch = pl.DataFrame({'rank': [1], 'ID': ['A'], 'SMILES': ['C']})
+    write_batch(batch, tmp_path, 0, 'IC50')
+    assert read_batches(tmp_path, 'IC50')['state'].to_list() == ['pending']

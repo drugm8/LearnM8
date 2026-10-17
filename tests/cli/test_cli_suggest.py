@@ -29,7 +29,7 @@ def test_suggest_cli_writes_batch(tmp_path, monkeypatch):
     args = create_parser().parse_args(_argv(tmp_path))
     r = run_cmd_inprocess(cmd_suggest, args, monkeypatch)
     assert r.returncode == 0 and 'batch_cycle_0.csv' in r.stdout
-    assert pl.read_csv(tmp_path / 'batch_cycle_0.csv').height == 4
+    assert pl.read_csv(tmp_path / 'batch_cycle_0.csv', skip_rows=1).height == 4
 
 
 def test_suggest_cli_rerun_exits_2_configuration_error(tmp_path, monkeypatch):

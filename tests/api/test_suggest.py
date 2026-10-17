@@ -31,11 +31,13 @@ def truth():
 def fill(path, truth, overrides=None):
     """Rewrite the Activity column of a batch file from truth (+ cell overrides)."""
     overrides = overrides or {}
-    df = pl.read_csv(path, infer_schema=False)
+    df = pl.read_csv(path, infer_schema=False, skip_rows=1)
     cells = [
         overrides[i] if i in overrides else str(truth[i]) for i in df['ID'].to_list()
     ]
-    df.with_columns(pl.Series('Activity', cells)).write_csv(path)
+    path.write_text(
+        'sep=,\n' + df.with_columns(pl.Series('Activity', cells)).write_csv()
+    )
 
 
 def test_cycle0_random_batch(tmp_path, pool):
@@ -52,7 +54,7 @@ def test_three_round_campaign_disjoint(tmp_path, pool, truth):
         seen += b['ID'].to_list()
         fill(batch_path(tmp_path, cycle), truth)
     assert len(seen) == len(set(seen)) == 15
-    cols = set(pl.read_csv(batch_path(tmp_path, 2)).columns)
+    cols = set(pl.read_csv(batch_path(tmp_path, 2), skip_rows=1).columns)
     assert {'prediction', 'uncertainty'} <= cols
 
 
@@ -100,7 +102,7 @@ def test_newest_all_failed_with_earlier_measured_proceeds(tmp_path, pool, truth)
     assert b2.columns == ['rank', 'ID', 'Activity', 'SMILES', 'prediction']
 
 
-def test_german_resave_end_to_end(tmp_path, pool, truth):
+def test_semicolon_resave_end_to_end(tmp_path, pool, truth):
     b0 = suggest_next_batch(pool, tmp_path, **KW)
     rows = '\r\n'.join(
         f'{r};{i};{str(truth[i]).replace(".", ",")};{s}'
@@ -186,7 +188,9 @@ def test_leading_zero_ids_round_trip(tmp_path):
         pool_csv, tmp_path / 'b', 'Activity', 'rf', 'morgan', batch_size=9, n_jobs=1
     )
     assert sorted(b['ID'].to_list()) == ids
-    written = pl.read_csv(batch_path(tmp_path / 'b', 0), infer_schema=False)
+    written = pl.read_csv(
+        batch_path(tmp_path / 'b', 0), infer_schema=False, skip_rows=1
+    )
     assert sorted(written['ID'].to_list()) == ids
 
 
@@ -201,3 +205,57 @@ def test_noncanonical_batch_smiles_accepted(tmp_path, pool):
     fill(path, {i: 1.0 for i in b0['ID']})
     b1 = suggest_next_batch(pool, tmp_path, **KW)
     assert b1.height == 5
+
+
+def _zero_pool(tmp_path, ids):
+    smiles = ['CCO', 'CCN', 'CCC', 'CCCl', 'CCBr', 'CCF', 'CCCC', 'CCCO', 'CCCN']
+    pool_csv = tmp_path / 'pool.csv'
+    pl.DataFrame({'ID': ids, 'SMILES': smiles[: len(ids)]}).write_csv(pool_csv)
+    return pool_csv
+
+
+def test_stripped_leading_zero_id_is_recovered(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['007', '008', '009', '010', '011', '012'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,7,1.5,CCO\n2,8,2.5,\n')
+    b = suggest_next_batch(
+        pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+    )
+    assert not {'007', '008'} & set(b['ID'].to_list())
+
+
+def test_ambiguous_stripped_id_raises(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['07', '007', '008', '009'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,7,1.5,\n')
+    with pytest.raises(ValidationError, match=r"'?7'? \(batch_cycle_0\.csv\)"):
+        suggest_next_batch(
+            pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+        )
+
+
+def test_stripped_id_with_different_smiles_raises(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['007', '008', '009', '010'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,7,1.5,CCCCCC\n')
+    with pytest.raises(ValidationError, match=r'7'):
+        suggest_next_batch(
+            pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+        )
+
+
+def test_recovery_creating_duplicate_raises(tmp_path):
+    pool_csv = _zero_pool(tmp_path, ['007', '008', '009', '010'])
+    d = tmp_path / 'b'
+    d.mkdir()
+    batch_path(d, 0).write_text('rank,ID,Activity,SMILES\n1,007,1.5,\n')
+    batch_path(d, 1).write_text('rank,ID,Activity,SMILES\n1,7,2.5,\n')
+    with pytest.raises(
+        ValidationError, match=r'batch_cycle_0\.csv.*batch_cycle_1\.csv'
+    ):
+        suggest_next_batch(
+            pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
+        )
