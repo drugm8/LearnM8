@@ -9,6 +9,7 @@ from pathlib import Path
 
 import polars as pl
 
+from learnm8.acquisition import get_acquisition_function
 from learnm8.core.batching import configure_host_allocator
 from learnm8.core.config import CycleConfig
 from learnm8.core.cycle import execute_cycle
@@ -21,7 +22,12 @@ from learnm8.core.interfaces import Oracle
 from learnm8.core.lab_batches import batch_path, next_cycle, read_batches, write_batch
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import validate_compound_pool
-from learnm8.exceptions import ConfigurationError, ValidationError, _truncate_list
+from learnm8.exceptions import (
+    ConfigurationError,
+    LearnM8Error,
+    ValidationError,
+    _truncate_list,
+)
 from learnm8.features import create_featurizer
 from learnm8.features.worker_pool import shutdown_featurization_pool
 from learnm8.utils.file_loaders import load_compound_file
@@ -81,6 +87,10 @@ def suggest_next_batch(
     device = validate_device(device)
     if batch_size < 1:
         raise ConfigurationError(f'batch_size must be >= 1, got {batch_size}')
+    try:
+        get_acquisition_function(strategy)
+    except KeyError as exc:
+        raise ConfigurationError(str(exc.args[0])) from exc
     batch_dir = Path(batch_dir)
     work_dir = batch_dir / '.learnm8'
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -98,14 +108,34 @@ def suggest_next_batch(
     ).valid_compounds
 
     ledger = read_batches(batch_dir, target_col)
-    unknown = (
-        ledger.filter(~pl.col('ID').is_in(pool['ID'].implode()))['ID'].unique().sort()
+    unknown = ledger.filter(~pl.col('ID').is_in(pool['ID'].implode())).sort(
+        'cycle', 'ID'
     )
-    if unknown.len():
+    if unknown.height:
+        found = [
+            f'{i} ({batch_path(batch_dir, c).name})'
+            for i, c in zip(unknown['ID'], unknown['cycle'], strict=True)
+        ]
         raise ValidationError(
             f'Batch file IDs not found in the validated compound pool: '
-            f'{_truncate_list(unknown.to_list())}. Excel may have changed IDs, '
+            f'{_truncate_list(found)}. Excel may have changed IDs, '
             f'e.g. dropped leading zeros.'
+        )
+    mismatch = (
+        ledger.filter(pl.col('smiles').is_not_null())
+        .join(pool.select('ID', pl.col('SMILES').alias('_pool_smiles')), on='ID')
+        .filter(pl.col('smiles') != pl.col('_pool_smiles'))
+        .sort('cycle', 'ID')
+    )
+    if mismatch.height:
+        found = [
+            f'{i} ({batch_path(batch_dir, c).name})'
+            for i, c in zip(mismatch['ID'], mismatch['cycle'], strict=True)
+        ]
+        raise ValidationError(
+            f'SMILES in batch files differ from the compound pool for: '
+            f'{_truncate_list(found)}. Was the pool file re-sorted or changed '
+            f'since the batch was written?'
         )
     cycle = next_cycle(ledger)
 
@@ -117,11 +147,6 @@ def suggest_next_batch(
                 f'{batch_path(batch_dir, newest).name} has no results entered yet; '
                 f'enter the measured values (or delete the file) before suggesting '
                 f'the next batch.'
-            )
-        if (ledger['state'] != 'measured').all():
-            raise ConfigurationError(
-                f'No measured values yet in {batch_dir}; delete '
-                f'{batch_path(batch_dir, 0).name} to draw a new random batch.'
             )
 
     master = initialize_master_dataframe_empty(pool, target_col)
@@ -138,6 +163,7 @@ def suggest_next_batch(
             target_col,
             dict(zip(ids, group['value'].to_list(), strict=True)),
         )
+    n_measured = measured.height
     if master.filter(pl.col('status') == 'unlabeled').height == 0:
         raise ConfigurationError('no selectable compounds remain in the pool')
 
@@ -153,7 +179,8 @@ def suggest_next_batch(
 
     oracle = _PendingOracle()
     try:
-        if cycle == 0:
+        if n_measured == 0:
+            # Nothing to train on yet: random batch (ledger IDs already excluded).
             select_initial_batch(
                 master,
                 oracle,
@@ -198,15 +225,17 @@ def suggest_next_batch(
     finally:
         shutdown_featurization_pool()
 
-    assert oracle.requested is not None
+    if oracle.requested is None:
+        raise LearnM8Error('Selection did not request any compounds from the oracle')
     batch = oracle.requested.with_row_index('rank', offset=1).with_columns(
         pl.col('rank').cast(pl.Int64), pl.col('ID').cast(pl.Utf8)
     )
-    if cycle >= 1:
+    if n_measured > 0:
         batch = batch.join(
             metrics['selected_predictions'].with_columns(pl.col('ID').cast(pl.Utf8)),
             on='ID',
             how='left',
+            maintain_order='left',
         )
     path = write_batch(batch, batch_dir, cycle, target_col)
     counts = ledger['state'].value_counts()

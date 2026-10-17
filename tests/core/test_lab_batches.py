@@ -14,6 +14,8 @@ def test_empty_dir_returns_empty_ledger(tmp_path):
         'cycle': pl.Int64,
         'value': pl.Float64,
         'state': pl.Utf8,
+        'raw': pl.Utf8,
+        'smiles': pl.Utf8,
     }
     assert next_cycle(led) == 0
 
@@ -99,3 +101,58 @@ def test_write_batch_layout_and_no_overwrite(tmp_path):
     assert read_batches(tmp_path, 'IC50')['state'].to_list() == ['pending', 'pending']
     with pytest.raises(ConfigurationError, match=r'batch_cycle_3\.csv'):
         write_batch(batch, tmp_path, 3, 'IC50')
+
+
+def test_semicolon_dot_value_is_ambiguous(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text('rank;ID;IC50;SMILES\n1;A;1.234;C\n')
+    with pytest.raises(ValidationError, match=r"batch_cycle_0\.csv.*'A'.*1\.234"):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_comma_file_dot_is_decimal_and_semicolon_text_with_dot_fails(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text('rank,ID,IC50,SMILES\n1,A,1.234,C\n')
+    (tmp_path / 'batch_cycle_1.csv').write_text('rank;ID;IC50;SMILES\n1;B;12. Mrz;C\n')
+    led = read_batches(tmp_path, 'IC50').sort('ID')
+    assert led['value'].to_list() == [1.234, None]
+    assert led['state'].to_list() == ['measured', 'failed']
+    assert led['raw'].to_list() == ['1.234', '12. Mrz']
+
+
+def test_smiles_cell_kept_empty_is_null(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'rank,ID,IC50,SMILES\n1,A,1.0,CCO\n2,B,2.0,\n'
+    )
+    led = read_batches(tmp_path, 'IC50').sort('ID')
+    assert led['smiles'].to_list() == ['CCO', None]
+
+
+def test_unparseable_and_empty_files_name_the_file(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_bytes(b'')
+    with pytest.raises(ValidationError, match=r'batch_cycle_0\.csv'):
+        read_batches(tmp_path, 'IC50')
+    (tmp_path / 'batch_cycle_0.csv').write_text('rank,ID,IC50\n1,A,1.0,extra,cells\n')
+    with pytest.raises(ValidationError, match=r'batch_cycle_0\.csv'):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_blank_rows_dropped_and_missing_id_raises(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'rank;ID;IC50;SMILES\n1;A;1,5;C\n;;;\n  ; ;  ;\n'
+    )
+    assert read_batches(tmp_path, 'IC50')['ID'].to_list() == ['A']
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'rank,ID,IC50,SMILES\n1,A,1.0,C\n2,,3.0,C\n'
+    )
+    with pytest.raises(ValidationError, match=r'batch_cycle_0\.csv.*\[3\]'):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_cross_file_duplicate_names_files(tmp_path):
+    for c in (0, 1):
+        (tmp_path / f'batch_cycle_{c}.csv').write_text(
+            'rank,ID,IC50,SMILES\n1,A,1.0,C\n'
+        )
+    with pytest.raises(
+        ValidationError, match=r'batch_cycle_0\.csv.*batch_cycle_1\.csv'
+    ):
+        read_batches(tmp_path, 'IC50')

@@ -21,7 +21,11 @@ _LEDGER_SCHEMA = {
     'cycle': pl.Int64,
     'value': pl.Float64,
     'state': pl.Utf8,
+    'raw': pl.Utf8,
+    'smiles': pl.Utf8,
 }
+# A numeric-looking cell: digits with optional sign, '.' and ','.
+_NUMERIC_LOOKING_RE = r'^[+-]?\d[\d.,]*$'
 
 
 def batch_path(batch_dir: Path, cycle: int) -> Path:
@@ -33,14 +37,17 @@ def next_cycle(ledger: pl.DataFrame) -> int:
 
 
 def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
+    raw_bytes = path.read_bytes()
+    if not raw_bytes.strip():
+        raise ValidationError(f'{path.name}: file is empty')
     first_line = (
-        path.read_bytes()
-        .split(b'\n', 1)[0]
-        .decode('utf-8', errors='replace')
-        .lstrip(_BOM)
+        raw_bytes.split(b'\n', 1)[0].decode('utf-8', errors='replace').lstrip(_BOM)
     )
     sep = ';' if first_line.count(';') > first_line.count(',') else ','
-    df = pl.read_csv(path, separator=sep, infer_schema=False, encoding='utf8-lossy')
+    try:
+        df = pl.read_csv(path, separator=sep, infer_schema=False, encoding='utf8-lossy')
+    except Exception as exc:
+        raise ValidationError(f'{path.name}: cannot parse CSV: {exc}') from exc
     df = df.rename({c: c.lstrip(_BOM) for c in df.columns})
     missing = [c for c in ('ID', target_col) if c not in df.columns]
     if missing:
@@ -48,10 +55,49 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
             f'{path.name}: missing required column(s): {", ".join(missing)}'
         )
 
+    # Excel artifacts such as ';;;' rows: drop rows where every field is blank.
+    df = df.with_row_index('_row', offset=2)
+    blank = pl.all_horizontal(
+        [
+            pl.col(c).str.strip_chars().fill_null('') == ''
+            for c in df.columns
+            if c != '_row'
+        ]
+    )
+    df = df.filter(~blank)
+    no_id = df.filter(pl.col('ID').str.strip_chars().fill_null('') == '')
+    if no_id.height:
+        raise ValidationError(
+            f'{path.name}: row(s) {no_id["_row"].to_list()} have values but an empty ID'
+        )
+
     raw = pl.col(target_col).str.strip_chars()
+    if sep == ';':
+        ambiguous = df.filter(
+            raw.str.contains('.', literal=True) & raw.str.contains(_NUMERIC_LOOKING_RE)
+        )
+        if ambiguous.height:
+            cells = [
+                f'{i!r}: {v!r}'
+                for i, v in zip(
+                    ambiguous['ID'].str.strip_chars().to_list(),
+                    ambiguous[target_col].to_list(),
+                    strict=True,
+                )
+            ]
+            raise ValidationError(
+                f'{path.name}: ambiguous value(s) containing "." in a ";"-separated '
+                f'file (German thousands separator?); enter decimals with a comma: '
+                f'{_truncate_list(cells)}'
+            )
     text = raw.str.replace_all(',', '.', literal=True) if sep == ';' else raw
     parsed = text.cast(pl.Float64, strict=False)
     is_pending = raw.is_null() | (raw == '')
+    smiles = (
+        pl.col('SMILES').str.strip_chars()
+        if 'SMILES' in df.columns
+        else pl.lit(None, dtype=pl.Utf8)
+    )
     return df.select(
         pl.col('ID').str.strip_chars().alias('ID'),
         pl.lit(cycle, dtype=pl.Int64).alias('cycle'),
@@ -65,11 +111,17 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
         .then(pl.lit('measured'))
         .otherwise(pl.lit('failed'))
         .alias('state'),
+        raw.alias('raw'),
+        pl.when(smiles == '').then(None).otherwise(smiles).alias('smiles'),
     )
 
 
 def read_batches(batch_dir: Path, target_col: str) -> pl.DataFrame:
-    """Read all ``batch_cycle_N.csv`` files into a ledger (ID, cycle, value, state)."""
+    """Read all ``batch_cycle_N.csv`` files into a ledger.
+
+    Columns: ID, cycle, value, state, raw (stripped target cell text), smiles
+    (stripped batch SMILES cell or null).
+    """
     batch_dir = Path(batch_dir)
     if not batch_dir.is_dir():
         return pl.DataFrame(schema=_LEDGER_SCHEMA)
@@ -94,10 +146,26 @@ def read_batches(batch_dir: Path, target_col: str) -> pl.DataFrame:
     if not frames:
         return pl.DataFrame(schema=_LEDGER_SCHEMA)
     ledger = pl.concat(frames)
-    dups = ledger.filter(pl.col('ID').is_duplicated())['ID'].unique().sort().to_list()
-    if dups:
+    dup_ids = ledger.filter(pl.col('ID').is_duplicated())['ID'].unique().sort()
+    if dup_ids.len():
+        where = [
+            f'{i} ({", ".join(batch_path(batch_dir, c).name for c in ledger.filter(pl.col("ID") == i)["cycle"].sort().to_list())})'
+            for i in dup_ids.to_list()
+        ]
         raise ValidationError(
-            f'Duplicate IDs across batch files in {batch_dir}: {_truncate_list(dups)}'
+            f'Duplicate IDs across batch files in {batch_dir}: {_truncate_list(where)}'
+        )
+    failed = ledger.filter(pl.col('state') == 'failed')
+    if failed.height:
+        logger.warning(
+            'Treating %d value(s) as failed (never reselected): %s',
+            failed.height,
+            _truncate_list(
+                [
+                    f'{i}: {r!r}'
+                    for i, r in zip(failed['ID'], failed['raw'], strict=True)
+                ]
+            ),
         )
     return ledger
 

@@ -74,16 +74,63 @@ def test_rerun_before_results_refused(tmp_path, pool):
     assert not batch_path(tmp_path, 1).exists()
 
 
-def test_all_failed_cycle0_refused(tmp_path, pool):
+def test_all_failed_cycle0_draws_random_batch(tmp_path, pool):
     b0 = suggest_next_batch(pool, tmp_path, **KW)
     fill(batch_path(tmp_path, 0), {}, overrides={i: 'failed' for i in b0['ID']})
-    with pytest.raises(ConfigurationError, match='measured'):
+    b1 = suggest_next_batch(pool, tmp_path, **KW)
+    assert batch_path(tmp_path, 1).exists()
+    assert b1.height == 5 and not set(b0['ID']) & set(b1['ID'])
+    assert b1.columns == ['rank', 'ID', 'Activity', 'SMILES']
+
+
+def test_partial_return_proceeds(tmp_path, pool, truth):
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    fill(batch_path(tmp_path, 0), truth, overrides={b0['ID'][0]: ''})
+    b1 = suggest_next_batch(pool, tmp_path, **KW)
+    assert b1.height == 5 and b0['ID'][0] not in b1['ID'].to_list()
+
+
+def test_newest_all_failed_with_earlier_measured_proceeds(tmp_path, pool, truth):
+    suggest_next_batch(pool, tmp_path, **KW)
+    fill(batch_path(tmp_path, 0), truth)
+    b1 = suggest_next_batch(pool, tmp_path, **KW)
+    fill(batch_path(tmp_path, 1), {}, overrides={i: 'failed' for i in b1['ID']})
+    b2 = suggest_next_batch(pool, tmp_path, **KW)
+    assert b2.height == 5 and not set(b1['ID']) & set(b2['ID'])
+    assert b2.columns == ['rank', 'ID', 'Activity', 'SMILES', 'prediction']
+
+
+def test_german_resave_end_to_end(tmp_path, pool, truth):
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    rows = '\r\n'.join(
+        f'{r};{i};{str(truth[i]).replace(".", ",")};{s}'
+        for r, i, s in zip(b0['rank'], b0['ID'], b0['SMILES'], strict=True)
+    )
+    batch_path(tmp_path, 0).write_bytes(
+        ('\ufeffrank;ID;Activity;SMILES\r\n' + rows + '\r\n').encode('utf-8')
+    )
+    b1 = suggest_next_batch(pool, tmp_path, **KW)
+    assert b1.height == 5 and not set(b0['ID']) & set(b1['ID'])
+
+
+def test_smiles_mismatch_raises(tmp_path, pool):
+    b0 = suggest_next_batch(pool, tmp_path, **KW)
+    path = batch_path(tmp_path, 0)
+    text = path.read_text().replace(b0['SMILES'][0], 'CCO', 1)
+    path.write_text(text)
+    with pytest.raises(ValidationError, match=r'batch_cycle_0\.csv'):
         suggest_next_batch(pool, tmp_path, **KW)
+
+
+def test_unknown_strategy_fails_at_cycle0(tmp_path, pool):
+    with pytest.raises(ConfigurationError, match='nonsense'):
+        suggest_next_batch(pool, tmp_path, strategy='nonsense', **KW)
+    assert not batch_path(tmp_path, 0).exists()
 
 
 def test_unknown_id_raises(tmp_path, pool):
     batch_path(tmp_path, 0).write_text('rank,ID,Activity,SMILES\n1,NOT_IN_POOL,1.0,C\n')
-    with pytest.raises(ValidationError, match='NOT_IN_POOL'):
+    with pytest.raises(ValidationError, match=r'NOT_IN_POOL.*batch_cycle_0\.csv'):
         suggest_next_batch(pool, tmp_path, **KW)
 
 
