@@ -1,6 +1,6 @@
 # CLI Reference
 
-LearnM8 provides a command-line interface for running active learning experiments and validating compounds. The CLI has two subcommands: `run` and `validate`.
+LearnM8 provides a command-line interface for running active learning experiments and validating compounds. The CLI has three subcommands: `run`, `validate` and `suggest`.
 
 ## Getting Help
 
@@ -10,16 +10,18 @@ Access help information at any level:
 learnm8 --help
 learnm8 run --help
 learnm8 validate --help
+learnm8 suggest --help
 ```
 
 ## Command Overview
 
-LearnM8 CLI has two subcommands:
+LearnM8 CLI has three subcommands:
 
 | Subcommand | Purpose | Common Usage |
 |------------|---------|--------------|
 | `run` | Execute active learning experiment | Main workflow for screening |
 | `validate` | Validate compound pool | Pre-flight check before experiments |
+| `suggest` | Write the next batch for a slow lab assay | One round per call, see [Lab Campaigns](../tutorials/lab-campaigns.md) |
 
 ## learnm8 run
 
@@ -281,6 +283,72 @@ learnm8 validate compounds.csv -o validation/
 learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf --n-cycles 10
 ```
 
+## learnm8 suggest
+
+Train on the results entered so far and write the next batch file for a lab assay, then exit. See the [Lab Campaigns tutorial](../tutorials/lab-campaigns.md) for the full workflow.
+
+### Syntax
+
+```bash
+learnm8 suggest COMPOUND_POOL BATCH_DIR --target COLUMN [--learner MODEL] [--featurizer TYPE] [OPTIONS]
+```
+
+### Parameters
+
+| Parameter | Required | Type | Default | Description |
+|-----------|----------|------|---------|-------------|
+| `COMPOUND_POOL` | Yes | file | | Compound file (`.csv`, `.sdf`, `.smi`) with ID and SMILES |
+| `BATCH_DIR` | Yes | directory | | Folder holding `batch_cycle_N.csv` files. Created if missing. New batches are written here |
+| `--target COLUMN` / `--target-column COLUMN` | Yes | string | | Column the lab fills in |
+| `--learner MODEL` | No | choice | `rf` | Machine learning model |
+| `--featurizer TYPE` | No | choice | none | Molecular featurizer. Required unless the learner works on SMILES directly (chemprop, fastprop) |
+| `--batch-size N` | No | integer | 96 | Compounds in the new batch, clipped to the remaining pool |
+| `--strategy NAME` | No | string | `greedy` | Acquisition strategy for rounds 1 and later. Round 0 is always random |
+| `--score-direction DIR` | No | choice | `higher` | `higher` or `lower` |
+| `--acquisition-params JSON` | No | string | none | JSON object of strategy parameters |
+| `--smiles-col NAME` | No | string | auto-detect | SMILES column in the pool |
+| `--id-col NAME` | No | string | auto-detect | ID column in the pool |
+| `--cache-dir PATH` | No | directory | `BATCH_DIR/.learnm8/cache` | Feature cache location |
+| `--n-jobs N` | No | integer | -1 | Parallel CPU jobs. -1 uses all cores |
+| `--device DEVICE` | No | string | `auto` | `auto`, `cpu`, `cuda`, `cuda:N`, `mps` |
+| `--random-state N` | No | integer | 42 | Random seed |
+
+Settings are not stored between calls. Pass the same flags every round.
+
+### Output
+
+The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, from round 1, `prediction` (plus `uncertainty` when computed). `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified.
+
+```
+Wrote 5 compounds to: campaign/batch_cycle_1.csv
+Next step: fill column Activity and re-run this command.
+```
+
+Errors use the standard error path and exit codes (see [Exit Codes](#exit-codes)). For example, re-running before any result is entered exits with code 2:
+
+```
+Configuration error: batch_cycle_0.csv has no results entered yet; enter the
+measured values (or delete the file) before suggesting the next batch.
+```
+
+### Examples
+
+**Round 0 (random batch):**
+```bash
+learnm8 suggest compounds.csv campaign/ --target Activity --featurizer morgan --batch-size 96
+```
+
+**Later rounds (same flags, after the lab has filled in the last file):**
+```bash
+learnm8 suggest compounds.csv campaign/ --target Activity --featurizer morgan --batch-size 96
+```
+
+**Uncertainty-based strategy, lower is better:**
+```bash
+learnm8 suggest compounds.csv campaign/ --target IC50 --featurizer morgan \
+  --learner gp --strategy ucb --score-direction lower
+```
+
 ## Complete Examples
 
 ### Example 1: Simple Benchmark Experiment
@@ -433,7 +501,8 @@ LearnM8 provides clear error messages with suggestions:
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Error (file not found, invalid parameter, etc.) |
+| 1 | Error (file not found, invalid input data, feature extraction or learner failure, etc.) |
+| 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered |
 
 ## Best Practices
 

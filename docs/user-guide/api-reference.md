@@ -225,6 +225,68 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 
 ---
 
+## suggest_next_batch()
+
+One-shot batch suggestion for slow lab assays. Reads the batch files in `batch_dir`, trains on the measured values, writes the next `batch_cycle_N.csv` and returns it. See the [Lab Campaigns tutorial](../tutorials/lab-campaigns.md).
+
+```python
+def suggest_next_batch(
+    compound_pool: str | Path,
+    batch_dir: str | Path,
+    target_col: str,
+    learner: str,
+    featurizer: str | None = None,
+    *,
+    batch_size: int = 96,
+    strategy: str = 'greedy',
+    score_direction: str = 'higher',
+    acquisition_params: dict | None = None,
+    random_state: int = 42,
+    smiles_column: str | None = None,
+    id_column: str | None = None,
+    cache_dir: str | Path | None = None,
+    n_jobs: int = -1,
+    device: str = 'auto',
+) -> pl.DataFrame
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `compound_pool` | `str \| Path` | — | Compound file (`.csv`, `.sdf`, `.smi`) with ID and SMILES. |
+| `batch_dir` | `str \| Path` | — | Folder with `batch_cycle_N.csv` files. Created if missing; `.learnm8/` working data is kept inside it. |
+| `target_col` | `str` | — | Column the lab fills in. |
+| `learner` | `str` | — | Learner name (see `list_available_learners()`). |
+| `featurizer` | `str \| None` | `None` | Featurizer name. Required unless the learner works on SMILES directly. |
+| `batch_size` | `int` | `96` | Compounds in the new batch (>= 1), clipped to the remaining pool. |
+| `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles >= 1. Cycle 0 is always random. |
+| `score_direction` | `str` | `'higher'` | `'higher'` or `'lower'`. |
+| `acquisition_params` | `dict \| None` | `None` | Parameters for the acquisition strategy. |
+| `random_state` | `int` | `42` | Random seed. Same inputs and seed give the same batch. |
+| `smiles_column` | `str \| None` | `None` | SMILES column in the pool (auto-detect). |
+| `id_column` | `str \| None` | `None` | ID column in the pool (auto-detect). |
+| `cache_dir` | `str \| Path \| None` | `None` | Feature cache location. Default `batch_dir/.learnm8/cache`. |
+| `n_jobs` | `int` | `-1` | Parallel workers. `-1` = all CPU cores. |
+| `device` | `str` | `'auto'` | `'auto'`, `'cpu'`, `'cuda'`, `'cuda:N'`, `'mps'`. |
+
+### Returns
+
+`pl.DataFrame` with the batch just written to `batch_dir/batch_cycle_N.csv`, in this column order: `rank`, `ID`, `<target_col>` (null), `SMILES`, then for cycles >= 1 `prediction` and `uncertainty` (when computed). `N` is the highest existing batch number plus one, or 0 when the folder has no batch files.
+
+Value cells in earlier batch files: empty is pending, a finite number is measured, anything else is failed. Pending and failed compounds are never selected again; only measured compounds are used for training. When no compound is measured yet but the newest batch has results, a fresh random batch is drawn that excludes every compound already in a batch file.
+
+### Raises
+
+| Exception | Condition |
+|-----------|-----------|
+| `ConfigurationError` | The newest batch has no results entered; no selectable compounds remain; `batch_size < 1`; unknown strategy; feature-based learner without a featurizer; target batch file already exists |
+| `ValidationError` | Pool fails validation; batch file empty, unparsable or missing `ID`/`<target_col>`; row with a value but no ID; duplicate IDs; batch IDs not in the pool; changed SMILES cell; ambiguous `.` value in a `;`-separated file |
+| `LearnerError` | Model training or prediction fails |
+| `FileNotFoundError` | Input compound file not found |
+
+---
+
 ## validate_compound_pool()
 
 ```python

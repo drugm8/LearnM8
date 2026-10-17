@@ -17,6 +17,7 @@ nav = [
     { "Running Experiments" = "tutorials/running-experiments.md" },
     { "Building Custom Cycles" = "tutorials/building-custom-cycles.md" },
     { "Benchmark vs Production" = "tutorials/benchmark-vs-production.md" },
+    { "Lab Campaigns (Slow Assays)" = "tutorials/lab-campaigns.md" },
     { "Advanced Workflows" = "tutorials/advanced-workflows.md" },
   ]},
   { "User Guide" = [

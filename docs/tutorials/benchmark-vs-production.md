@@ -120,6 +120,8 @@ Production mode uses custom scoring functions for expensive measurements (dockin
 - Custom property prediction
 - Production deployment
 
+For assays that take days to months, where the oracle cannot answer inside one process, see [Lab Campaigns (Slow Assays)](lab-campaigns.md).
+
 ### Using PythonOracle
 
 PythonOracle executes user-defined scoring functions for compound evaluation.

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added — `learnm8 suggest` / `suggest_next_batch()` for slow lab assays
+
+One call reads the `batch_cycle_N.csv` files in a folder, trains on the measured
+values, writes the next batch file and exits. Nothing runs between rounds; the
+folder is the only state. Cycle 0 is a random batch; later cycles reuse
+`execute_cycle`. Empty cells are pending, finite numbers are measured, anything
+else is failed (never reselected). Reading tolerates German-locale Excel
+re-saves (`;`, decimal comma, BOM); a `.`-containing value in a `;` file is
+rejected as ambiguous. New files only: existing batch files are never edited.
+Re-running before any result is entered raises `ConfigurationError` (CLI exit
+code 2). No pruning, multi-stage schedules or censored values. See
+`docs/tutorials/lab-campaigns.md`.
+
 ### Removed — the `simulated_annealing` acquisition strategy (BREAKING)
 
 `SimulatedAnnealingAcquisition` and its registry entry `'simulated_annealing'`
