@@ -24,6 +24,7 @@ from pathlib import Path
 import polars as pl
 import yaml
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.traceback import install
@@ -346,6 +347,95 @@ def create_parser() -> argparse.ArgumentParser:
             "the legacy in-memory path. Stochastic strategies (thompson/random/"
             "topk) draw different (but equivalent) samples under streaming."
         ),
+    )
+
+    suggest_parser = subparsers.add_parser(
+        'suggest',
+        help='Suggest the next batch for a slow, lab-in-the-loop assay',
+    )
+    suggest_parser.add_argument(
+        'compound_pool',
+        type=Path,
+        help='Compound file (CSV/SDF/SMI) with ID and SMILES. Supported: .csv, .sdf, .smi',
+    )
+    suggest_parser.add_argument(
+        'batch_dir',
+        type=Path,
+        help='Directory holding the batch files (batch_cycle_N.csv)',
+    )
+    suggest_parser.add_argument(
+        '--target',
+        '--target-column',
+        dest='target_col',
+        required=True,
+        help='Target property column to fill in the batch files',
+    )
+    suggest_parser.add_argument(
+        '--smiles-col',
+        dest='smiles_col',
+        default=None,
+        help='Column name for SMILES (default: auto-detect)',
+    )
+    suggest_parser.add_argument(
+        '--id-col',
+        dest='id_col',
+        default=None,
+        help='Column name for compound ID (default: auto-detect)',
+    )
+    suggest_parser.add_argument(
+        '--featurizer',
+        default=None,
+        choices=featurizer_choices,
+        help='Featurizer type (2D or 3D molecular representations)',
+    )
+    suggest_parser.add_argument(
+        '--learner',
+        default='rf'
+        if 'rf' in available_learners
+        else (available_learners[0] if available_learners else 'rf'),
+        choices=available_learners if available_learners else ['rf'],
+        help='ML model (default: rf)',
+    )
+    suggest_parser.add_argument(
+        '--score-direction',
+        default='higher',
+        choices=['higher', 'lower'],
+        help='Optimization direction (default: higher)',
+    )
+    suggest_parser.add_argument(
+        '--strategy',
+        type=str,
+        default='greedy',
+        help='Acquisition strategy (default: greedy)',
+    )
+    suggest_parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=96,
+        help='Number of compounds in the suggested batch (default: 96)',
+    )
+    suggest_parser.add_argument(
+        '--acquisition-params', type=str, help='JSON string of parameters'
+    )
+    suggest_parser.add_argument(
+        '--cache-dir',
+        type=Path,
+        help='Cache directory for feature storage (default: batch_dir/.learnm8/cache)',
+    )
+    suggest_parser.add_argument(
+        '--n-jobs',
+        type=int,
+        default=-1,
+        help='Number of parallel CPU jobs. -1 = all cores (default: -1)',
+    )
+    suggest_parser.add_argument(
+        '--device',
+        type=str,
+        default='auto',
+        help='Compute device: auto, cpu, cuda, cuda:N, mps (default: auto)',
+    )
+    suggest_parser.add_argument(
+        '--random-state', type=int, default=42, help='Random seed (default: 42)'
     )
 
     validate_parser = subparsers.add_parser(
@@ -741,6 +831,53 @@ def cmd_validate(args: argparse.Namespace):
         _print_learnm8_error(e)
 
 
+def cmd_suggest(args: argparse.Namespace) -> None:
+    """Handle suggest subcommand: write the next lab batch file."""
+    from learnm8.core.lab_batches import batch_path, next_cycle, read_batches
+    from learnm8.suggest import suggest_next_batch
+
+    try:
+        acquisition_params = (
+            json.loads(args.acquisition_params) if args.acquisition_params else None
+        )
+    except json.JSONDecodeError as e:
+        console.print(f'[red]Invalid --acquisition-params JSON:[/red] {e}')
+        sys.exit(1)
+
+    try:
+        batch = suggest_next_batch(
+            args.compound_pool,
+            args.batch_dir,
+            args.target_col,
+            args.learner,
+            args.featurizer,
+            batch_size=args.batch_size,
+            strategy=args.strategy,
+            score_direction=args.score_direction,
+            acquisition_params=acquisition_params,
+            random_state=args.random_state,
+            smiles_column=args.smiles_col,
+            id_column=args.id_col,
+            cache_dir=args.cache_dir,
+            n_jobs=args.n_jobs,
+            device=args.device,
+        )
+    except LearnM8Error as e:
+        console.print(f'[red]Error:[/red] {escape(str(e))}', soft_wrap=True)
+        sys.exit(1)
+
+    cycle = next_cycle(read_batches(args.batch_dir, args.target_col)) - 1
+    path = batch_path(args.batch_dir, cycle)
+    console.print(
+        f'[green]Wrote {batch.height} compounds to:[/green] {path}', soft_wrap=True
+    )
+    console.print(
+        f'Next step: fill column [bold]{escape(args.target_col)}[/bold] '
+        f'and re-run this command.',
+        soft_wrap=True,
+    )
+
+
 def _suppress_defaults(parser: argparse.ArgumentParser) -> None:
     """Strip every default from a parser and its subparsers, in place."""
     for action in parser._actions:
@@ -778,6 +915,8 @@ def main():
         cmd_run(args, _cli_provided_dests(sys.argv[1:]))
     elif args.command == 'validate':
         cmd_validate(args)
+    elif args.command == 'suggest':
+        cmd_suggest(args)
     else:
         parser.print_help()
         sys.exit(1)
