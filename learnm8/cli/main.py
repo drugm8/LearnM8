@@ -863,8 +863,7 @@ def cmd_suggest(args: argparse.Namespace) -> None:
             device=args.device,
         )
     except LearnM8Error as e:
-        console.print(f'[red]Error:[/red] {escape(str(e))}', soft_wrap=True)
-        sys.exit(1)
+        _print_learnm8_error(e)
 
     cycle = next_cycle(read_batches(args.batch_dir, args.target_col)) - 1
     path = batch_path(args.batch_dir, cycle)

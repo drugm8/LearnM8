@@ -32,8 +32,8 @@ def test_suggest_cli_writes_batch(tmp_path, monkeypatch):
     assert pl.read_csv(tmp_path / 'batch_cycle_0.csv').height == 4
 
 
-def test_suggest_cli_rerun_exits_1(tmp_path, monkeypatch):
+def test_suggest_cli_rerun_exits_2_configuration_error(tmp_path, monkeypatch):
     argv = _argv(tmp_path)
     run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
     r = run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
-    assert r.returncode == 1 and 'no results' in r.stdout.lower()
+    assert r.returncode == 2 and 'no results' in r.stdout.lower()
