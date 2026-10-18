@@ -77,7 +77,6 @@ results = run_active_learning(
 ## 📚 Additional Resources
 
 - **[Documentation](../docs/)**: Full API reference and guides
-- **[Validation](../validation/)**: Internal validation notebooks
 - **[Tests](../tests/oracles/)**: Oracle test suite
 
 ## 🤝 Contributing Examples

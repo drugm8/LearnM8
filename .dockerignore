@@ -1,9 +1,8 @@
 # Whitelist build context.
 #
 # The Dockerfile does `COPY . .`, and Docker does NOT read .gitignore — so
-# without this file the build ships the whole 79 GB working tree (validation/
-# 75 GB, output/ 2.5 GB, .git 702 MB, caches) instead of the ~13 MB of tracked
-# source. Ignore everything, then re-admit only what `pip install -e .` needs.
+# without this file the build ships the whole working tree (local research
+# data, output/, .git, caches) instead of the tracked source. Ignore everything, then re-admit only what `pip install -e .` needs.
 #
 # Adding a new top-level file the build needs? Add a matching `!` line below.
 

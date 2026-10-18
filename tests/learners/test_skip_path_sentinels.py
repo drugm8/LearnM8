@@ -6,8 +6,7 @@ patches the LearnM8 import-boundary symbol used for the uncertainty compute
 and asserts it is NOT called when ``predict(X, compute_uncertainty=False)``.
 
 OOS-1 compliance: structural (mock-based), not timing-based; <100ms per test.
-Mock import paths follow CLAUDE.md "Mock import paths" pitfall — patches
-target the LearnM8 import site, not sklearn-internal symbols.
+Patches target the LearnM8 import site, not sklearn-internal symbols.
 """
 
 from __future__ import annotations

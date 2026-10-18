@@ -24,8 +24,8 @@ def _load_test_data(filename: str) -> pl.DataFrame:
 
     if not data_file.exists():
         raise FileNotFoundError(
-            f'Required test fixture not found: {data_file}\n'
-            'Run: python3 tests/data/generate_fixtures.py'
+            f'Required test fixture not found: {data_file}. '
+            'The CSV fixtures in tests/data/ are tracked; restore them with git.'
         )
 
     try:
