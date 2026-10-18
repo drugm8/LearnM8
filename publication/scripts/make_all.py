@@ -17,8 +17,6 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-# The selection-history calibration figure uses a different evidence stratum.
-EXCLUDED_SCRIPTS = {'fig07_uncertainty_calibration.py'}
 
 # Scripts that render once per cycle-0 seed design. Everything else is rendered
 # once: fig05, fig08 and fig09 restrict to the 1% batch, where the two designs
@@ -36,7 +34,7 @@ def main() -> None:
     if '--rebuild-data' in sys.argv:
         scripts.append('data.py')
     scripts += [
-        *sorted(p.name for p in HERE.glob('fig*.py') if p.name not in EXCLUDED_SCRIPTS),
+        *sorted(p.name for p in HERE.glob('fig*.py')),
         'tables.py',
     ]
 

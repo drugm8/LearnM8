@@ -148,8 +148,7 @@ publication/data/*
 !publication/data/score_distributions.parquet
 # Figure scripts whose status is undecided - moved but deliberately not committed
 publication/scripts/fig06_adaptive_ranking.py
-publication/scripts/fig07_uncertainty_calibration.py
-publication/scripts/fig07_uncertainty_ranking.py
+publication/scripts/fig07_uncertainty.py
 publication/scripts/fig08_topk_heatmap.py
 publication/scripts/fig09_scaffold_coverage.py
 publication/scripts/fig10_top_candidate_diversity.py

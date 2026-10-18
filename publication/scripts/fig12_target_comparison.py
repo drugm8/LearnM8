@@ -101,7 +101,9 @@ def main() -> None:
 
     x_max = max(int(sub[X].max()) for sub in runs.values())
 
-    fig, axd = style.mosaic('AB\nCD', panel_h_mm=58)
+    # One curve per panel, so the panels carry no detail that needs height: at
+    # 58 mm each the four of them were mostly empty plotting area.
+    fig, axd = style.mosaic('AB\nCD', panel_h_mm=46)
     for letter, (code, metric) in PANELS.items():
         ax = axd[letter]
         label, color = TARGETS[code]
@@ -130,7 +132,12 @@ def main() -> None:
             xlabel=style.LABELS[X] if bottom else '',
             ticks=curves[X].to_list(),
             max_ticks=4,
-            rotation=45,
+            # Upright stacked labels rather than a rotated block: four of these
+            # rotated to 45 degrees cost more height than the panels they sit
+            # under, and the fraction is the part a reader compares across
+            # columns, so it should not be the part set on a slant.
+            rotation=0,
+            stacked=True,
         )
 
         if letter in LEFT_COLUMN:

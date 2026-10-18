@@ -121,20 +121,37 @@ def categorical_colors(count: int) -> list[str]:
 
 
 def format_compound_count(value: float) -> str:
-    """Format cumulative compound counts compactly for axis tick labels."""
+    """Format cumulative compound counts compactly for axis tick labels.
+
+    The thousands branch is capped at three significant figures. Bare ``:g``
+    prints whatever the value carries, which is fine for the round budgets a
+    10M pool produces (``10k``, ``250k``) and unreadable for the ones a pool
+    sized off a real library produces: a 96M pool's 1% seed of 96,215 renders
+    as ``96.215k``, six significant figures on an axis tick.
+    """
     if abs(value) >= 1_000_000:
         return f'{value / 1_000_000:.1f}M'
     if abs(value) >= 1_000:
-        return f'{value / 1_000:g}k'
+        return f'{value / 1_000:.3g}k'
     return f'{value:g}'
 
 
 def compound_tick_label(value: float, pool_size: float) -> str:
-    """Show an evaluated count together with its fraction of the pool."""
+    """Show an evaluated count together with its fraction of the pool.
+
+    Sub-1% fractions carry two significant figures rather than one decimal.
+    One decimal cannot represent them: a 0.05% batch's cycle-0 seed of 5,000
+    on a 10M pool rounded to ``5k (0.1%)``, which is the label the 0.1% arm
+    directly above it already carries. At or above 1% the decimal is kept, so
+    a 12.5% tick does not collapse to two significant figures.
+    """
     percentage = value / pool_size * 100
-    percentage_text = (
-        f'{percentage:.0f}%' if percentage.is_integer() else f'{percentage:.1f}%'
-    )
+    if percentage.is_integer():
+        percentage_text = f'{percentage:.0f}%'
+    elif percentage >= 1:
+        percentage_text = f'{percentage:.1f}%'
+    else:
+        percentage_text = f'{percentage:.2g}%'
     return f'{format_compound_count(value)} ({percentage_text})'
 
 
@@ -146,12 +163,19 @@ def set_compound_axis(
     ticks=None,
     max_ticks: int | None = None,
     rotation: float = 45,
+    stacked: bool = False,
 ):
     """Label an absolute screening axis using actual evaluated counts.
 
     When ``ticks`` is omitted, x positions are collected from plotted lines.
     If ``max_ticks`` limits labels, all actual positions remain visible as
     minor ticks and only actual positions are chosen for the labelled majors.
+
+    ``stacked`` puts the pool fraction under the count instead of beside it.
+    A stacked label is then only as wide as its count, which is what lets a
+    row of them stand upright on a panel too narrow for the one-line form -
+    cheaper in height than the rotation that would otherwise be needed, and
+    upright text is easier to read.
     """
     if ticks is None:
         values = []
@@ -167,15 +191,29 @@ def set_compound_axis(
 
     labelled_ticks = actual_ticks
     if max_ticks is not None and actual_ticks.size > max_ticks:
-        indices = np.linspace(0, actual_ticks.size - 1, max_ticks).round().astype(int)
-        labelled_ticks = actual_ticks[np.unique(indices)]
+        # Space the labels evenly along the AXIS, then snap each to the nearest
+        # actual position. Spacing them evenly along the sorted INDEX instead
+        # gives the same answer whenever the plotted arms share one budget and
+        # therefore populate the axis uniformly - which is every case this was
+        # originally written for. When they do not, because the arms ran an
+        # equal cycle count and so ended at different totals, the positions
+        # bunch up in the short arms' range and index spacing puts most of the
+        # labels there. A 96M batch ladder plotted that way put its first two
+        # majors at 96,215 and 673,505 - both inside the first 7% of the axis,
+        # where their rotated labels overlapped.
+        targets = np.linspace(actual_ticks[0], actual_ticks[-1], max_ticks)
+        nearest = np.abs(actual_ticks[:, None] - targets).argmin(axis=0)
+        labelled_ticks = actual_ticks[np.unique(nearest)]
 
     if labelled_ticks.size < actual_ticks.size:
         ax.set_xticks(actual_ticks, minor=True)
         ax.tick_params(axis='x', which='minor', length=2, width=0.6)
+    labels = [compound_tick_label(tick, pool_size) for tick in labelled_ticks]
+    if stacked:
+        labels = [label.replace(' (', '\n(') for label in labels]
     ax.set_xticks(labelled_ticks)
     ax.set_xticklabels(
-        [compound_tick_label(tick, pool_size) for tick in labelled_ticks],
+        labels,
         rotation=rotation,
         ha='right' if rotation else 'center',
     )

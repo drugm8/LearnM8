@@ -62,7 +62,8 @@ TOP_FRACTION = 0.001
 FRACTION_LABEL_SIZE = 5.6
 MARKER_CYCLE_STRIDE = 4
 # Row identity. `matched` seeds cycle 0 with one acquisition batch, `fixed`
-# always with 1% of the pool; the ladders are never pooled into one curve.
+# always with 1% of the pool; the ladders are never pooled into one curve. Both
+# rows are the 10M pool, so the pool goes unnamed here and in the Methods only.
 DESIGN_TITLES = {
     'matched': 'seed = one acquisition batch',
     'fixed': 'seed = 1% of pool',
@@ -308,6 +309,52 @@ def _marker_indices(n_cycles: int) -> list[int]:
     return indices
 
 
+def _pool_percent_ticks(pool_size: int, x_max: float) -> list[float]:
+    """Label the ladder x axis at whole percents of the pool.
+
+    Every arm runs a fixed cycle count, so the union of their cycle boundaries
+    is as many distinct x positions as the longest arm has cycles - 125 on the
+    0.04% one. Labelling actual positions turned that union into a solid comb of
+    minor ticks, and snapped the five majors onto whichever boundaries happened
+    to sit near the fifths of the range, which is how the panel came to be
+    labelled "130k (1.3%)" and "375k (3.8%)". Whole percents of the pool are the
+    unit the budget is set in, fall on the same five positions in both rows, and
+    label without rounding.
+    """
+    step = pool_size / 100
+    return [step * index for index in range(1, int(x_max // step) + 1)]
+
+
+def _label_sides(points: list[dict]) -> list[bool]:
+    """Choose above/below per point: the far side from its nearest neighbour.
+
+    These panels label every point with its batch fraction, and two rungs can
+    sit close enough in x that a label centred on one lands on the other's
+    marker. Putting each label on the side away from the neighbour it might
+    collide with separates any such pair by both offsets plus the gap between
+    them, which no single offset can guarantee.
+
+    This replaces alternating on the index. That did the same job while the
+    ladder had five rungs and the close pairs happened to fall on opposite
+    parities; adding a sixth rung flipped every parity and dropped the 0.5%
+    label onto the 1% marker. Distance is measured in log x because the axis
+    is log.
+    """
+    x = [np.log10(point['cum_ml_time_mean']) for point in points]
+    y = [point[f'{Y}_mean'] for point in points]
+    order = sorted(range(len(points)), key=lambda index: x[index])
+    sides = [True] * len(points)
+    for position, index in enumerate(order):
+        neighbours = (
+            order[max(0, position - 1) : position] + order[position + 1 : position + 2]
+        )
+        if not neighbours:
+            continue
+        nearest = min(neighbours, key=lambda other: abs(x[other] - x[index]))
+        sides[index] = y[index] >= y[nearest]
+    return sides
+
+
 def _draw_ladder(
     axd: dict,
     letters: str,
@@ -338,11 +385,15 @@ def _draw_ladder(
     ax.set(xlabel=style.LABELS[X], ylabel=style.LABELS[Y])
     ax.set_title(title, loc='left')
     style.compact_axis(ax)
+    # Upright stacked labels: five one-line "100k (1%)" labels butt against each
+    # other across a panel this wide, and rotating them to fit costs a
+    # centimetre of height per row and strands the axis label below them.
     style.set_compound_axis(
         ax,
         pool_size,
-        ticks=curves[X].unique().sort().to_list(),
-        max_ticks=5,
+        ticks=_pool_percent_ticks(pool_size, curves[X].max()),
+        rotation=0,
+        stacked=True,
     )
     ax.margins(x=0.05, y=0.10)
 
@@ -370,6 +421,7 @@ def _draw_ladder(
     # horizontal rules read as data in a panel whose data is five dots.
     ax = axd[letters[1]]
     points = list(summary.iter_rows(named=True))
+    label_above = _label_sides(points)
     for index, row in enumerate(points):
         color = colors[row['batch_fraction']]
         # Min-max over replicates on both axes, matching the band in panel A/C
@@ -393,10 +445,7 @@ def _draw_ladder(
             capsize=1.5,
             capthick=0.6,
         )
-        # The plateau arms sit within a point of each other in y and roughly a
-        # factor of two apart in x, which is not enough room for same-side
-        # labels; alternating sides doubles the horizontal pitch available.
-        above = index % 2 == 0
+        above = label_above[index]
         ax.annotate(
             f'{row["batch_fraction"]:g}%',
             (row['cum_ml_time_mean'], row[f'{Y}_mean']),
@@ -414,6 +463,12 @@ def _draw_ladder(
         ylabel='Top-0.1% recovered (%)',
     )
     ax.margins(x=0.16, y=0.22)
+    # A recovered fraction cannot exceed 100%, so the margin must not imply it
+    # can. Panel B spans 81.9-97.7 and 22% of that span puts the axis top at
+    # 101.3, which reads as headroom the metric does not have. A label on a
+    # near-100% point then runs past the frame, unclipped, which reads as a
+    # label rather than as usable headroom.
+    ax.set_ylim(top=min(100.0, ax.get_ylim()[1]))
 
 
 def make_batch_figure(frames: dict[str, pl.DataFrame]) -> None:
