@@ -1,4 +1,4 @@
-"""End-to-end count-fingerprint round-trip tests (T002, spec 017).
+"""End-to-end count-fingerprint round-trip tests.
 
 For each of the four count-capable featurizers (Morgan, MACCS, AtomPair,
 TopologicalTorsion), feed SMILES that produce nonzero counts (≥ 2 for several

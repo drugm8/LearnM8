@@ -1,4 +1,4 @@
-"""Targeted tests for count=True flip behavior (the 017 fix).
+"""Targeted tests for count=True flip behavior.
 
 Verifies that the 7 count-override featurizers correctly switch:
 - storage_dtype when count=True vs count=False

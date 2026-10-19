@@ -1,4 +1,4 @@
-"""Tests for memory-aware featurization batching (feature 025, Item 6).
+"""Tests for memory-aware featurization batching.
 
 Covers:
 - featurization_chunk_size() unit tests (floor / identity / cap regions)

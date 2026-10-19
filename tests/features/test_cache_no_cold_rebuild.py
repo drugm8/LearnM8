@@ -1,6 +1,6 @@
-"""Feature 026 must not invalidate any existing feature cache.
+"""Moving Mol construction worker-side must not invalidate any existing feature cache.
 
-026 changes two things that sit next to the cache key without being part of it:
+The SMILES-direct dispatch changes two things that sit next to the cache key without being part of it:
 where RDKit ``Mol`` objects are built (``SkfpFeaturizer.transform``) and how the
 BLAKE2b digest loop is executed (``_cache_keys_bytes16``). Neither may move a
 key. A cache written before the upgrade must be a 100% hit after it, and the
@@ -8,13 +8,13 @@ values read back must be identical.
 
 The proof runs in two directions:
 
-  - a cache populated through the pre-026 code path is read by the post-026
-    path with ``misses == 0``
+  - a cache populated through the earlier Mol-everywhere code path is read by the
+    current path with ``misses == 0``
   - the digest for a fixed featurizer config is unchanged, whichever dispatch
     path (serial or loky) computed it
 
-Contrast with feature 025 Item 1, which deliberately DID orphan the cache by
-widening the config-hash denylist. 026 makes no such change, so no
+Contrast with the config-hash denylist, which deliberately DID orphan the cache
+when it was widened. The dispatch change makes no such change, so no
 ``_warn_orphaned_cache_once``-style notice is warranted.
 """
 
@@ -37,7 +37,7 @@ CACHE_COUNTER_RE = re.compile(r'cache featurizer=(\S+) hits=(\d+) misses=(\d+)')
 
 @pytest.fixture(scope='module')
 def fixture_smiles() -> list[str]:
-    """Real ZINC molecules (§3.4 red line 1: no synthetic molecular data)."""
+    """Real ZINC molecules (no synthetic molecular data)."""
     path = Path(__file__).parent.parent / 'data' / 'diverse_molecules.csv'
     with path.open() as handle:
         return [row['SMILES'] for row in csv.DictReader(handle)]
@@ -70,12 +70,12 @@ def _counters(caplog: pytest.LogCaptureFixture) -> list[tuple[str, int, int]]:
     return found
 
 
-def _write_cache_the_pre_026_way(
+def _write_cache_the_legacy_way(
     smiles: list[str], featurizer_name: str, cache_dir: Path
 ) -> np.ndarray:
-    """Populate the cache with features built the way 026 replaced.
+    """Populate the cache with features built the way the SMILES-direct dispatch replaced.
 
-    Monkeypatching is not needed: the pre-026 body is exactly
+    Monkeypatching is not needed: the earlier body is exactly
     ``fingerprint.transform(mol_from_smiles.transform(smiles))``, so calling
     that directly and letting the normal cache wrapper store the result
     reproduces a pre-upgrade cache file byte for byte.
@@ -100,7 +100,7 @@ def test_pre_026_cache_is_a_total_hit_after_upgrade(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A cache written the old way yields misses == 0 and identical values."""
-    legacy_features = _write_cache_the_pre_026_way(
+    legacy_features = _write_cache_the_legacy_way(
         fixture_smiles, featurizer_name, tmp_path
     )
 
@@ -114,8 +114,8 @@ def test_pre_026_cache_is_a_total_hit_after_upgrade(
     assert counters, 'expected the cache to log its hit/miss counters'
     name, hits, misses = counters[-1]
     assert misses == 0, (
-        f'{featurizer_name}: {misses} miss(es) against a pre-026 cache — '
-        f'feature 026 must not change any cache key'
+        f'{featurizer_name}: {misses} miss(es) against a legacy cache — '
+        f'the dispatch change must not change any cache key'
     )
     assert hits == len(fixture_smiles)
     assert name == featurizer_name
@@ -147,7 +147,7 @@ def test_cache_keys_are_dispatch_path_independent(
 ) -> None:
     """A cache written with serial hashing is a total hit when read in parallel.
 
-    This is the REQ-7/REQ-8 guarantee at the integration level: the loky path
+    This is the key-stability guarantee at the integration level: the loky path
     must not be able to write keys the serial path cannot find.
     """
     featurizer = create_featurizer('morgan', n_jobs=1)
@@ -166,13 +166,13 @@ def test_cache_keys_are_dispatch_path_independent(
 def test_smiles_consuming_featurizer_cache_also_unchanged(
     fixture_smiles: list[str], tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """REQ-3 featurizers keep their cache too, not just the fast-path ones.
+    """SMILES-consuming featurizers keep their cache too, not just the fast-path ones.
 
     ``lingo`` is used rather than mhfp/secfp: those two abort on one fixture
-    molecule under RDKit 2026.03.2, independently of 026 (see
+    molecule under RDKit 2026.03.2, independently of the dispatch change (see
     ``test_transform_dispatch.RDKIT_STEREO_BUG_SMILES``).
     """
-    legacy = _write_cache_the_pre_026_way(fixture_smiles, 'lingo', tmp_path)
+    legacy = _write_cache_the_legacy_way(fixture_smiles, 'lingo', tmp_path)
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG, logger=cache_module.__name__):
@@ -181,6 +181,6 @@ def test_smiles_consuming_featurizer_cache_also_unchanged(
         )
 
     _, hits, misses = _counters(caplog)[-1]
-    assert misses == 0, 'lingo cache must survive feature 026'
+    assert misses == 0, 'lingo cache must survive the dispatch change'
     assert hits == len(fixture_smiles)
     npt.assert_array_equal(current, legacy)

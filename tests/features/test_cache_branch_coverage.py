@@ -1,4 +1,4 @@
-"""Targeted branch-coverage tests pushing cache.py over the 95% NFR-005 line."""
+"""Targeted branch-coverage tests pushing cache.py over the 95% line."""
 
 from __future__ import annotations
 

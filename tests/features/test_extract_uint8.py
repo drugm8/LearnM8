@@ -1,4 +1,4 @@
-"""``extract_features(..., preferred_dtype='uint8')`` tests (T011, spec 017).
+"""``extract_features(..., preferred_dtype='uint8')`` tests.
 
 Cache hits (and CSR-friendly misses) for binary featurizers should return a
 ``uint8`` matrix when the caller asks for it, skipping the float32 inflation.

@@ -98,7 +98,7 @@ class TestExtractFeaturesAPI:
         assert np.array_equal(features_sequential, features_parallel)
 
     def test_n_jobs_not_in_cache_key(self, small_real_compounds, tmp_path):
-        """n_jobs must not fragment the cache (Item 7).
+        """n_jobs must not fragment the cache.
 
         A core-count change has no effect on feature values, so the second
         call with a different n_jobs must be a 100% cache hit — no new rows.

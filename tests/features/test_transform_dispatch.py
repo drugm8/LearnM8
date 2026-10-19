@@ -1,21 +1,21 @@
-"""Parity and dispatch tests for ``SkfpFeaturizer.transform`` (feature 026).
+"""Parity and dispatch tests for ``SkfpFeaturizer.transform``.
 
-Feature 026 stops materialising RDKit ``Mol`` objects in the calling process
+The dispatch stops materialising RDKit ``Mol`` objects in the calling process
 for every featurizer that can accept SMILES directly, so the fingerprint parses
 worker-side instead. The value contract is absolute: no featurizer's output may
 change for any input.
 
-These tests pin that contract by running the pre-026 path
+These tests pin that contract by running the earlier Mol-everywhere path
 (``fingerprint.transform(mol_from_smiles.transform(smiles))``) alongside the
 new dispatch and comparing:
 
-  - REQ-1: every non-3D, non-SMILES-consuming featurizer is byte-identical and
+  - every non-3D, non-SMILES-consuming featurizer is byte-identical and
     never touches ``mol_from_smiles``
-  - REQ-3: ``lingo`` / ``mhfp`` / ``secfp`` keep the ``Mol`` round-trip, so
+  - ``lingo`` / ``mhfp`` / ``secfp`` keep the ``Mol`` round-trip, so
     non-canonical input still canonicalises
-  - REQ-4: the large-input warning fires exactly once, and only above threshold
+  - the large-input warning fires exactly once, and only above threshold
 
-The 3D path (REQ-2) is covered by ``tests/features/skfp_3d/``.
+The 3D path is covered by ``tests/features/skfp_3d/``.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from learnm8.features.base import (
     _reset_smiles_consuming_warning,
 )
 
-# Registry names whose skfp class reads the SMILES text itself (REQ-3).
+# Registry names whose skfp class reads the SMILES text itself.
 SMILES_CONSUMING_NAMES: tuple[str, ...] = ('lingo', 'mhfp', 'secfp')
 
 
@@ -61,15 +61,15 @@ def _takes_fast_path(name: str) -> bool:
     return not create_featurizer(name, n_jobs=1).requires_3d()
 
 
-# Every registry featurizer that reaches the REQ-1 branch. Sorted for stable ids.
+# Every registry featurizer that reaches the fast-path branch. Sorted for stable ids.
 FAST_PATH_NAMES: tuple[str, ...] = tuple(
     sorted(name for name in FEATURIZER_REGISTRY if _takes_fast_path(name))
 )
 
 # RDKit 2026.03.2 aborts with a Pre-condition Violation ("bad bond stereo",
 # Canon.cpp:362, dblBond->getStereo() > Bond::STEREOANY) while canonicalising
-# this fixture molecule. It is NOT a feature-026 regression: map4, mhfp and
-# secfp raise identically on the pre-026 Mol path and the post-026 SMILES path,
+# this fixture molecule. It is NOT a regression of the SMILES-direct dispatch: map4, mhfp and
+# secfp raise identically on the earlier Mol path and the current SMILES path,
 # because all three route through MHFPEncoder/MolToSmiles canonicalisation.
 # Verified by transforming the molecule alone through both paths on this and on
 # a clean checkout. Excluded from those three featurizers' parity sweeps only —
@@ -80,7 +80,7 @@ RDKIT_STEREO_BUG_FEATURIZERS: frozenset[str] = frozenset({'map4', 'mhfp', 'secfp
 
 
 def _load_fixture() -> list[str]:
-    """Real ZINC molecules — §3.4 red line 1 forbids synthetic molecular data."""
+    """Real ZINC molecules; synthetic molecular data is not used."""
     path = Path(__file__).parent.parent / 'data' / 'diverse_molecules.csv'
     with path.open() as handle:
         return [row['SMILES'] for row in csv.DictReader(handle)]
@@ -99,7 +99,7 @@ def _smiles_for(name: str, smiles: list[str]) -> list[str]:
 
 
 def _legacy_transform(featurizer: SkfpFeaturizer, smiles: list[str]) -> np.ndarray:
-    """Reproduce the pre-026 transform body: always Mol-ify, then fingerprint.
+    """Reproduce the earlier transform body: always Mol-ify, then fingerprint.
 
     Mirrors the dtype narrowing the real ``transform`` applies so the comparison
     is against the value users actually received, not the raw skfp output.
@@ -118,7 +118,7 @@ def _assert_matches(new: np.ndarray, legacy: np.ndarray, name: str) -> None:
         # Descriptor featurizers legitimately emit NaN; treat NaN as matching
         # NaN in the same cell, which np.allclose does under equal_nan.
         assert np.allclose(new, legacy, equal_nan=True), (
-            f'{name}: float features diverged from the pre-026 path'
+            f'{name}: float features diverged from the earlier path'
         )
     else:
         npt.assert_array_equal(
@@ -127,14 +127,14 @@ def _assert_matches(new: np.ndarray, legacy: np.ndarray, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-1: fast-path parity
+# Fast-path parity
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize('name', FAST_PATH_NAMES)
 def test_fast_path_matches_pre_026_output(name: str, fixture_smiles: list[str]) -> None:
-    """REQ-1: passing SMILES through changes no feature value."""
+    """Passing SMILES through changes no feature value."""
     featurizer = create_featurizer(name, n_jobs=1)
     smiles = _smiles_for(name, fixture_smiles)
 
@@ -148,7 +148,7 @@ def test_fast_path_matches_pre_026_output(name: str, fixture_smiles: list[str]) 
 def test_fast_path_never_builds_mols_in_parent(
     name: str, fixture_smiles: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """REQ-1: the whole point — no parent-heap Mol list.
+    """The whole point — no parent-heap Mol list.
 
     Parity alone cannot prove this: passing Mols would give identical values.
     Detonating ``mol_from_smiles.transform`` is what pins the memory win.
@@ -195,7 +195,7 @@ def test_autocorr_is_swept_despite_being_registered_3d() -> None:
     """Regression pin for the registry/runtime mismatch the sweep uncovered.
 
     ``autocorr`` is in FEATURIZERS_3D but its skfp instance reports
-    ``requires_conformers=False``, so it reaches the REQ-1 fast path. A sweep
+    ``requires_conformers=False``, so it reaches the fast path. A sweep
     built from FEATURIZERS_2D would not have covered it.
     """
     assert 'autocorr' in FEATURIZERS_3D
@@ -207,7 +207,7 @@ def test_autocorr_is_swept_despite_being_registered_3d() -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize('name', sorted(RDKIT_STEREO_BUG_FEATURIZERS))
 def test_rdkit_stereo_bug_is_path_independent(name: str) -> None:
-    """The excluded molecule fails on BOTH paths — proving it is not a 026 bug.
+    """The excluded molecule fails on BOTH paths — proving it is not a dispatch bug.
 
     If a future RDKit fixes ``Canon.cpp`` this test starts failing, which is the
     signal to delete :data:`RDKIT_STEREO_BUG_SMILES` and restore full coverage.
@@ -252,7 +252,7 @@ def test_rdkit_2d_descriptors_takes_the_fast_path() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-3: SMILES-consuming fingerprints keep the Mol round-trip
+# SMILES-consuming fingerprints keep the Mol round-trip
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ def test_smiles_consuming_are_denylisted(name: str) -> None:
 def test_smiles_consuming_matches_pre_026_output(
     name: str, fixture_smiles: list[str]
 ) -> None:
-    """REQ-3: these still go through Mol, so they are trivially unchanged."""
+    """These still go through Mol, so they are trivially unchanged."""
     featurizer = create_featurizer(name, n_jobs=1)
     smiles = _smiles_for(name, fixture_smiles)
 
@@ -280,7 +280,7 @@ def test_smiles_consuming_matches_pre_026_output(
 @pytest.mark.unit
 @pytest.mark.parametrize('name', SMILES_CONSUMING_NAMES)
 def test_smiles_consuming_still_canonicalises(name: str) -> None:
-    """REQ-3 acceptance: 'OCC' and 'CCO' are the same molecule, same vector.
+    """'OCC' and 'CCO' are the same molecule, same vector.
 
     This is the test that would fail if these three were moved to the fast
     path — skfp's ensure_smiles canonicalises Mol input via MolToSmiles, and
@@ -300,7 +300,7 @@ def test_smiles_consuming_still_canonicalises(name: str) -> None:
 @pytest.mark.unit
 @pytest.mark.parametrize('name', SMILES_CONSUMING_NAMES)
 def test_smiles_consuming_uses_mol_round_trip(name: str) -> None:
-    """REQ-3: prove the round-trip is actually taken, not incidentally equal."""
+    """Prove the round-trip is actually taken, not incidentally equal."""
     featurizer = create_featurizer(name, n_jobs=1)
     calls: list[int] = []
     real_transform = featurizer.mol_from_smiles.transform
@@ -316,7 +316,7 @@ def test_smiles_consuming_uses_mol_round_trip(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-4: one-shot large-input warning
+# One-shot large-input warning
 # ---------------------------------------------------------------------------
 
 
@@ -358,7 +358,7 @@ def low_warn_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
 def test_warning_fires_once_above_threshold(
     low_warn_threshold: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """REQ-4: fires on the first large call and never again."""
+    """Fires on the first large call and never again."""
     featurizer = create_featurizer('lingo', n_jobs=1)
     smiles = ['CCO'] * (low_warn_threshold + 1)
 
@@ -381,7 +381,7 @@ def test_warning_fires_once_above_threshold(
 def test_warning_never_fires_below_threshold(
     low_warn_threshold: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """REQ-4: small calls stay silent."""
+    """Small calls stay silent."""
     featurizer = create_featurizer('lingo', n_jobs=1)
 
     with caplog.at_level(logging.WARNING, logger=base_module.__name__):
@@ -396,7 +396,7 @@ def test_warning_never_fires_below_threshold(
 def test_warning_fires_exactly_at_threshold(
     low_warn_threshold: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """REQ-4 says 'at least SMILES_CONSUMING_WARN_ROWS' — the boundary is inclusive."""
+    """The threshold is 'at least SMILES_CONSUMING_WARN_ROWS', so the boundary is inclusive."""
     featurizer = create_featurizer('lingo', n_jobs=1)
 
     with caplog.at_level(logging.WARNING, logger=base_module.__name__):
@@ -426,7 +426,7 @@ def test_warning_does_not_fire_for_fast_path_featurizers(
 def test_reset_hook_rearms_the_warning(
     low_warn_threshold: int, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """REQ-4: the guard is resettable by the private test hook."""
+    """The guard is resettable by the private test hook."""
     featurizer = create_featurizer('lingo', n_jobs=1)
     smiles = ['CCO'] * (low_warn_threshold + 1)
 
@@ -448,13 +448,13 @@ def test_production_threshold_is_one_million() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REQ-2: the 3D guard is reachable through the new branch
+# The 3D guard is reachable through the new branch
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 def test_3d_without_conformers_still_raises() -> None:
-    """REQ-2: the disabled-conformer error survives the dispatch rewrite."""
+    """The disabled-conformer error survives the dispatch rewrite."""
     featurizer = create_featurizer('whim', n_jobs=1, auto_generate_conformers=False)
     assert featurizer.conformer_gen is None
 
@@ -463,13 +463,12 @@ def test_3d_without_conformers_still_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Guard rails on SkfpFeaturizer paths the 026 dispatch sits between
+# Guard rails on SkfpFeaturizer paths the dispatch sits between
 # ---------------------------------------------------------------------------
-# These cover pre-026 behaviour that had no test, and that the constitution's
-# >=85% module gate for features/base.py requires. They are included here
+# These cover earlier behaviour that had no test. They are included here
 # because the dispatch rewrite runs immediately after the length guard and
 # immediately before the dimension lookup, so a regression in either would
-# surface as a 026 failure.
+# surface as a dispatch failure.
 
 
 @pytest.mark.unit
@@ -477,11 +476,11 @@ def test_3d_without_conformers_still_raises() -> None:
 def test_unparseable_smiles_still_raises_feature_extraction_error(name: str) -> None:
     """Both dispatch paths surface invalid SMILES as FeatureExtractionError.
 
-    Found while running the T018 measurement over the Enamine REAL library,
+    Found while measuring over the Enamine REAL library,
     which contains chemically invalid entries such as the bad-valence SMILES
     below. The all-valid ``diverse_molecules`` fixture never exercised this.
 
-    The two paths reach the failure differently — the pre-026 path builds a
+    The two paths reach the failure differently — the earlier path builds a
     ``None`` Mol and skfp rejects the NoneType, while the fast path fails
     inside skfp's own parse — but both raise ``TypeError`` internally and
     ``transform`` wraps either into ``FeatureExtractionError``. The public

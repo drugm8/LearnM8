@@ -1,4 +1,4 @@
-"""Interface contract tests for ``Featurizer.get_storage_dtype()`` (T004, FR-001/FR-014/FR-015)."""
+"""Interface contract tests for ``Featurizer.get_storage_dtype()``."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ BINARY_FEATURIZER_NAMES = {
     'e3fp',
 }
 
-# 016: mqns moves out of CONTINUOUS into UINT8 (raw uint8 storage; observed max 26 ≤ 255).
+# mqns moves out of CONTINUOUS into UINT8 (raw uint8 storage; observed max 26 ≤ 255).
 # pharmacophore + physiochemical move out of CONTINUOUS into SPARSE_BINARY (CSR storage; ≤2% density).
 CONTINUOUS_FEATURIZER_NAMES = {
     'mordred',

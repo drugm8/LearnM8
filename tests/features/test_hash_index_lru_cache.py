@@ -1,8 +1,8 @@
-"""Tests for the process-level /hash_index LRU cache (Feature 020 T027/T028).
+"""Tests for the process-level /hash_index LRU cache.
 
 Covers:
-- T027: Core LRU functionality (FR-005, FR-006, FR-007, SC-002).
-- T028: write_epoch invalidation (review ShouldFix #6).
+- Core LRU functionality.
+- write_epoch invalidation.
 
 The LRU cap is the module-level constant ``DEFAULT_HASH_INDEX_LRU_MAX``;
 tests that need a smaller cap to exercise eviction monkeypatch the constant
@@ -72,7 +72,7 @@ def _write_minimal_v3_cache(path: Path, n_rows: int = 3) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T027: core LRU functionality
+# Core LRU functionality
 # ---------------------------------------------------------------------------
 
 
@@ -185,7 +185,7 @@ def test_strong_ref_survives_caller_scope(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_load_hash_index_uses_cache(tmp_path: Path) -> None:
-    """SC-002 acceptance: second `_load_hash_index` returns the cached strong ref."""
+    """Second `_load_hash_index` returns the cached strong ref."""
     cache_path = tmp_path / 'features_morgan_2048_packed_uint8.h5'
     _write_minimal_v3_cache(cache_path)
 
@@ -232,7 +232,7 @@ def test_thread_safety(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T028: write_epoch invalidation
+# write_epoch invalidation
 # ---------------------------------------------------------------------------
 
 

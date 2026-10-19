@@ -1,4 +1,4 @@
-"""Round-trip tests for v3 cache: cold→write→read→unpack matches cold output (T017, SC-006)."""
+"""Round-trip tests for v3 cache: cold→write→read→unpack matches cold output."""
 
 from __future__ import annotations
 
@@ -98,9 +98,9 @@ def test_single_smiles_roundtrip(tmp_path: Path):
 
 @pytest.mark.unit
 def test_equivalent_smiles_dedup_in_cache(tmp_path: Path):
-    """Equivalent SMILES share one cache row when routed through validation (Item 5).
+    """Equivalent SMILES share one cache row when routed through validation.
 
-    After feature 025 Item 5, raw extract_features() does NOT canonicalize SMILES
+    Raw extract_features() does NOT canonicalize SMILES
     internally — so calling it with 'CCO' then 'OCC' directly would create 2 rows.
     Equivalence collapses to a single cache entry only when SMILES are first
     canonicalized via validate_compound_pool (or canonicalize_for_cache directly).

@@ -1,4 +1,4 @@
-"""Corruption detection: each invariant violation raises FeatureExtractionError (T024)."""
+"""Corruption detection: each invariant violation raises FeatureExtractionError."""
 
 from __future__ import annotations
 
@@ -116,7 +116,7 @@ def test_truncated_file_fails_fast(populated_cache: Path):
 
 @pytest.mark.unit
 def test_no_silent_fallback_on_corruption(populated_cache: Path):
-    """FR-011: corrupt cache must NEVER silently re-fingerprint."""
+    """Corrupt cache must NEVER silently re-fingerprint."""
     _break_invariant_4_dtype_mismatch(populated_cache)
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)

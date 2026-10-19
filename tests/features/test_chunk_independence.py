@@ -1,4 +1,4 @@
-"""Tests for REQ-19: feature-matrix invariance across n_jobs, chunk size, and cache paths.
+"""Tests for feature-matrix invariance across n_jobs, chunk size, and cache paths.
 
 Covers three featurizer classes:
   - 'morgan'           — binary fingerprint (packed_uint8 storage)
@@ -228,7 +228,7 @@ class TestChunkSizeInvariance:
     def test_estate_chunk_1_vs_64(self):
         assert _float_close(self._estate_at_bs(1), self._estate_at_bs(64))
 
-    # -- usr (3D; T001 found chunk-independent — assert chunk-independence) ---
+    # -- usr (3D; found chunk-independent — assert chunk-independence) ---
 
     def test_usr_chunk_none_vs_1(self):
         base = self._usr_at_bs(None)

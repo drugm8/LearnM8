@@ -1,4 +1,4 @@
-"""Round-trip + bounds-check tests for the v2 ``uint8`` raw-storage path (016, T008/T020)."""
+"""Round-trip + bounds-check tests for the v2 ``uint8`` raw-storage path."""
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ def test_uint8_boundary_255_succeeds(tmp_path: Path):
 @pytest.mark.slow
 @pytest.mark.molecular
 def test_uint8_100k_warm_read_under_half_second(tmp_path: Path):
-    """T020: 100k-mqns warm-read of all rows in <0.5 s on one CPU thread."""
+    """100k-mqns warm-read of all rows in <0.5 s on one CPU thread."""
     rng = np.random.default_rng(42)
     n_unique = 5000
     dim = 42

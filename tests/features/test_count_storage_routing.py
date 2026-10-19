@@ -1,9 +1,9 @@
-"""Storage routing tests for count-capable fingerprints (T001, spec 017).
+"""Storage routing tests for count-capable fingerprints.
 
 Verifies that the four count-capable scikit-fingerprints wrappers expose
 ``feature_type='continuous'`` and the correct ``get_storage_dtype()`` when
 ``count=True``. ``count=False`` (default) MUST remain ``'binary'``/'packed_uint8'`
-for backwards compatibility (REQ-4).
+for backwards compatibility.
 """
 
 from __future__ import annotations

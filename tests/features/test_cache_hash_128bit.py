@@ -1,4 +1,4 @@
-"""Unit tests for ``_cache_keys_bytes16`` (T025, FR-001, FR-002).
+"""Unit tests for ``_cache_keys_bytes16``.
 
 Verifies the 128-bit BLAKE2b cache-key API:
   - dtype is ``|S16`` (16 raw bytes per row)
@@ -9,11 +9,11 @@ Verifies the 128-bit BLAKE2b cache-key API:
   - empty input returns an empty ``S16`` array
   - the suffix-hoisting micro-optimisation matches the naive concat recipe
 
-Feature 026 additions:
-  - REQ-8: digests are byte-identical to the pre-026 recipe
+Legacy-recipe and parallel-path checks:
+  - digests are byte-identical to the original recipe
     ``f'{s}_{name}_{config_hash}'.encode()``, pinned against hardcoded
     reference digests (see :data:`LEGACY_REFERENCE_DIGESTS`)
-  - REQ-7: the serial and loky-parallel paths return identical arrays,
+  - the serial and loky-parallel paths return identical arrays,
     including across slice boundaries
 """
 
@@ -118,7 +118,7 @@ def test_empty_input_returns_empty_s16_array(morgan: SkfpFeaturizer) -> None:
 def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
     """Verify the digest equals the naive recipe on the verbatim SMILES input.
 
-    After feature 025 Item 5, _cache_keys_bytes16 keys SMILES verbatim — there
+    _cache_keys_bytes16 keys SMILES verbatim — there
     is no internal canonicalization step.  The expected digest is therefore
     computed over the raw input string (not the RDKit-canonical form).
     """
@@ -144,7 +144,7 @@ def test_suffix_hoisting_matches_naive_concat(morgan: SkfpFeaturizer) -> None:
 def test_equivalent_smiles_share_cache_key(morgan: SkfpFeaturizer) -> None:
     """Equivalent SMILES share a cache key after canonicalization via canonicalize_for_cache.
 
-    After feature 025 Item 5, _cache_keys_bytes16 does NOT canonicalize SMILES
+    _cache_keys_bytes16 does NOT canonicalize SMILES
     internally.  Equivalence is established by first passing SMILES through
     canonicalize_for_cache (which replicates what validate_compound_pool does),
     then computing keys on the resulting canonical strings.
@@ -189,7 +189,7 @@ def test_invalid_smiles_uses_raw_string_fallback(morgan: SkfpFeaturizer) -> None
 
 
 # ---------------------------------------------------------------------------
-# Feature 026: REQ-8 legacy-recipe pin
+# Legacy-recipe pin
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ class _FrozenFeaturizer:
     makes :data:`LEGACY_REFERENCE_DIGESTS` stable forever — a real featurizer's
     ``get_config_hash()`` would shift on any scikit-fingerprints release that
     adds a ``get_params()`` key, which would break this test for a reason that
-    has nothing to do with REQ-8's byte recipe.
+    has nothing to do with the byte recipe.
     """
 
     def __init__(self, name: str = 'morgan', config_hash: str = '0123456789abcdef'):
@@ -221,7 +221,7 @@ def _frozen(**kwargs) -> Featurizer:
 
 
 # Real ZINC SMILES from tests/data/diverse_molecules.csv (rows 1-6), digested
-# with the PRE-026 recipe f'{s}_morgan_0123456789abcdef'.encode() under
+# with the original recipe f'{s}_morgan_0123456789abcdef'.encode() under
 # blake2b(digest_size=16). Any change to the key recipe breaks these — that is
 # the point: a broken digest silently orphans every cache in existence.
 LEGACY_REFERENCE_DIGESTS: list[tuple[str, str]] = [
@@ -254,7 +254,7 @@ LEGACY_REFERENCE_DIGESTS: list[tuple[str, str]] = [
 
 @pytest.mark.unit
 def test_reference_smiles_are_present_in_the_real_fixture() -> None:
-    """The REQ-8 pin uses real molecules, not invented strings (§3.4 red line 1)."""
+    """The legacy-recipe pin uses real molecules, not invented strings."""
     fixture = Path(__file__).parent.parent / 'data' / 'diverse_molecules.csv'
     with fixture.open() as handle:
         fixture_smiles = {row['SMILES'] for row in csv.DictReader(handle)}
@@ -264,7 +264,7 @@ def test_reference_smiles_are_present_in_the_real_fixture() -> None:
 
 @pytest.mark.unit
 def test_digests_match_hardcoded_legacy_recipe() -> None:
-    """REQ-8: every digest equals the pre-026 f-string recipe, byte for byte."""
+    """Every digest equals the original f-string recipe, byte for byte."""
     featurizer = _frozen()
     smiles = [s for s, _ in LEGACY_REFERENCE_DIGESTS]
     expected = np.array(
@@ -276,7 +276,7 @@ def test_digests_match_hardcoded_legacy_recipe() -> None:
 
 @pytest.mark.unit
 def test_digests_match_legacy_recipe_under_parallel_kwarg() -> None:
-    """REQ-8 holds on the parallel path too, not just the serial default."""
+    """The legacy-recipe pin holds on the parallel path too, not just the serial default."""
     featurizer = _frozen()
     smiles = [s for s, _ in LEGACY_REFERENCE_DIGESTS]
     expected = np.array(
@@ -297,12 +297,12 @@ def test_config_hash_is_folded_into_the_suffix_not_the_smiles() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Feature 026: REQ-7 serial / parallel path equivalence
+# Serial / parallel path equivalence
 # ---------------------------------------------------------------------------
 
 
 def _fixture_smiles() -> list[str]:
-    """Real SMILES from the diverse_molecules fixture (§3.4: no synthetic data)."""
+    """Real SMILES from the diverse_molecules fixture (no synthetic data)."""
     fixture = Path(__file__).parent.parent / 'data' / 'diverse_molecules.csv'
     with fixture.open() as handle:
         return [row['SMILES'] for row in csv.DictReader(handle)]
@@ -332,7 +332,7 @@ def low_parallel_threshold(monkeypatch: pytest.MonkeyPatch) -> int:
 
 @pytest.mark.unit
 def test_serial_and_parallel_paths_agree(low_parallel_threshold: int) -> None:
-    """REQ-7: both dispatch paths return byte-identical arrays."""
+    """Both dispatch paths return byte-identical arrays."""
     featurizer = _frozen()
     # 250 rows over 4 workers => ceil(250/4) == 63 => slices of 63/63/63/61,
     # so the final slice is short and every boundary is unaligned.
@@ -347,7 +347,7 @@ def test_serial_and_parallel_paths_agree(low_parallel_threshold: int) -> None:
 
 @pytest.mark.unit
 def test_parallel_path_preserves_input_order(low_parallel_threshold: int) -> None:
-    """REQ-7: concatenation is in input order, not completion order.
+    """Concatenation is in input order, not completion order.
 
     Checked element-wise against a per-row reference rather than against the
     serial path, so a systematic reordering that happened to affect both
@@ -412,12 +412,12 @@ def test_parallel_dispatch_actually_happens(
     _cache_keys_bytes16(_repeat_to(_fixture_smiles(), 250), _frozen(), n_jobs=4)
 
     assert calls, 'expected joblib.Parallel dispatch above the threshold'
-    assert calls[0] == 'loky', f'REQ-9 requires the loky backend, got {calls[0]!r}'
+    assert calls[0] == 'loky', f'the loky backend is required, got {calls[0]!r}'
 
 
 @pytest.mark.unit
 def test_below_threshold_stays_serial(monkeypatch: pytest.MonkeyPatch) -> None:
-    """REQ-7: small calls never pay loky dispatch overhead."""
+    """Small calls never pay loky dispatch overhead."""
     import joblib
 
     def _explode(*args, **kwargs):
@@ -436,7 +436,7 @@ def test_below_threshold_stays_serial(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_single_worker_stays_serial(
     low_parallel_threshold: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """REQ-7: effective_n_jobs(n_jobs) == 1 takes the serial loop even above N."""
+    """effective_n_jobs(n_jobs) == 1 takes the serial loop even above N."""
     import joblib
 
     def _explode(*args, **kwargs):
@@ -453,13 +453,13 @@ def test_single_worker_stays_serial(
 
 @pytest.mark.unit
 def test_parallel_threshold_is_at_the_measured_break_even() -> None:
-    """Pin PARALLEL_HASH_MIN_ROWS to the T019 cold-pool break-even.
+    """Pin PARALLEL_HASH_MIN_ROWS to the cold-pool break-even.
 
     Loky pool spin-up is a fixed ~8.7 s and the pool is cold on essentially
     every real call (``shutdown_featurization_pool`` runs once per cycle, and
     hashing precedes featurization in the ``cache_features`` wrapper). Below
     ~40M rows the dispatch costs more than the hashing it parallelises — at
-    the originally-specified 200_000 it was measured 94x SLOWER than serial.
+    the originally planned 200_000 it was measured 94x SLOWER than serial.
     Lowering this constant without re-measuring reintroduces that regression.
     """
     assert cache_module.PARALLEL_HASH_MIN_ROWS == 40_000_000
@@ -467,7 +467,7 @@ def test_parallel_threshold_is_at_the_measured_break_even() -> None:
 
 @pytest.mark.unit
 def test_hash_smiles_slice_is_module_level_and_picklable() -> None:
-    """REQ-9: the worker must be picklable for loky to ship it."""
+    """The worker must be picklable for loky to ship it."""
     import pickle
 
     assert _hash_smiles_slice.__module__ == 'learnm8.features.cache'
@@ -479,11 +479,11 @@ def test_hash_smiles_slice_is_module_level_and_picklable() -> None:
 def test_wrapper_forwards_n_jobs_without_consuming_it(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """REQ-10: cache_features reads n_jobs with .get, so the wrapped fn still sees it.
+    """cache_features reads n_jobs with .get, so the wrapped fn still sees it.
 
     A ``.pop`` here would silently drop the caller's ``n_jobs`` on the floor
-    and serialise the actual featurization — the exact opposite of 026's
-    intent, and invisible to every correctness test.
+    and serialise the actual featurization — the exact opposite of the
+    parallelism intent, and invisible to every correctness test.
     """
     seen_key_n_jobs: list[int] = []
     seen_inner_kwargs: list[dict] = []
@@ -511,7 +511,7 @@ def test_wrapper_forwards_n_jobs_without_consuming_it(
 
 @pytest.mark.unit
 def test_hash_smiles_slice_matches_the_legacy_recipe() -> None:
-    """The worker itself produces legacy-identical digests (REQ-8)."""
+    """The worker itself produces legacy-identical digests."""
     suffix = b'_morgan_0123456789abcdef'
     smiles = [s for s, _ in LEGACY_REFERENCE_DIGESTS]
     expected = np.array(

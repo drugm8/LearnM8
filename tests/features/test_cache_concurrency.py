@@ -1,4 +1,4 @@
-"""Concurrency tests: writer lock contention + shared reader semantics (T028, FR-009)."""
+"""Concurrency tests: writer lock contention + shared reader semantics."""
 
 from __future__ import annotations
 

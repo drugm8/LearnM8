@@ -1,7 +1,7 @@
-"""Tests for learnm8.features.worker_pool (feature 025, Item 4 — T010).
+"""Tests for learnm8.features.worker_pool.
 
 Covers:
-  1. No-op when reusable_executor._executor is None (safe no-op, REQ-10).
+  1. No-op when reusable_executor._executor is None (safe no-op).
   2. Best-effort on failure: RuntimeError is swallowed, WARNING logged.
   3. Teardown called exactly once per cycle across a multi-cycle run, even
      when predict_with_batching spans multiple prediction batches per cycle.
@@ -25,7 +25,7 @@ from learnm8.features.worker_pool import shutdown_featurization_pool
 
 @pytest.mark.unit
 def test_noop_when_executor_is_none(monkeypatch):
-    """REQ-10: function returns immediately (no error) when _executor is None."""
+    """Function returns immediately (no error) when _executor is None."""
     from joblib.externals.loky import reusable_executor
 
     monkeypatch.setattr(reusable_executor, '_executor', None)

@@ -1,4 +1,4 @@
-"""Round-trip + density-violation tests for the v2 ``csr_uint16`` sparse path (016, T013/T021/T022)."""
+"""Round-trip + density-violation tests for the v2 ``csr_uint16`` sparse path."""
 
 from __future__ import annotations
 
@@ -204,7 +204,7 @@ def test_csr_back_compat_dense_v2_file_reads_unchanged(tmp_path: Path):
 @pytest.mark.slow
 @pytest.mark.molecular
 def test_csr_100k_pharmacophore_cache_size_under_200mb(tmp_path: Path):
-    """T021: 100k-pharmacophore CSR cache file ≤200 MB on disk."""
+    """100k-pharmacophore CSR cache file ≤200 MB on disk."""
     n_rows = 100_000
     dim = 39972
     density = 0.007
@@ -230,12 +230,12 @@ def test_csr_100k_pharmacophore_cache_size_under_200mb(tmp_path: Path):
 @pytest.mark.slow
 @pytest.mark.molecular
 def test_csr_100k_pharmacophore_warm_read_under_two_seconds(tmp_path: Path):
-    """T022: 100k-pharmacophore warm-read in <2 s on one CPU thread (spec target).
+    """100k-pharmacophore warm-read in <2 s on one CPU thread.
 
     Bottleneck on commodity hardware (e.g. WSL2 dev): the public API materializes a
     ``(100_000, 39972) float32`` matrix = 16 GB; allocation + scatter dominates the
     runtime budget irrespective of the cache-layer optimization (batched-row gather
-    is in place). The 2 s gate is met on the spec's reference workstation; on
+    is in place). The 2 s target is met on a reference workstation; on
     constrained environments we instead check warm read is meaningfully faster
     than cold (validates the cache path is doing useful work).
     """
@@ -264,6 +264,6 @@ def test_csr_100k_pharmacophore_warm_read_under_two_seconds(tmp_path: Path):
     if warm_elapsed >= 2.0:
         assert warm_elapsed < 0.6 * cold_elapsed, (
             f'100k pharmacophore warm read took {warm_elapsed:.3f}s '
-            f'(spec target <2s; commodity-hardware fallback gate: <0.6 * cold '
+            f'(target <2s; commodity-hardware fallback gate: <0.6 * cold '
             f'= {0.6 * cold_elapsed:.3f}s; cold={cold_elapsed:.3f}s)'
         )

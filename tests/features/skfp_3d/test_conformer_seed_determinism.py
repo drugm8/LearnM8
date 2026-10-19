@@ -1,18 +1,15 @@
-"""Tests for SkfpFeaturizer.random_state plumbing (Feature 020 / T034-T039).
+"""Tests for SkfpFeaturizer.random_state plumbing.
 
-Covers FR-010 through FR-013 and SC-004 from
-specs/020-cache-integrity/spec.md (User Story 4).
-
-After the §1.6 factory collapse, the 9 individual 3D wrapper classes are gone;
+The 3D featurizers have no per-class wrappers;
 all featurizers are constructed via :func:`learnm8.features.create_featurizer`.
 
 Test coverage:
-    T034 - byte-identical features with fixed seed (FR-010, FR-011, SC-004)
-    T035 - different seeds produce different features (FR-011, SC-004)
-    T036 - default and explicit seeds recorded in get_config (FR-010, FR-012)
-    T037 - 2D featurizers do NOT include random_state (FR-012)
-    T038 - GETAWAY positive cache-key disambiguation tests
-    T039 - scikit-fingerprints<1.18.0 fallback warning (FR-013)
+    - byte-identical features with fixed seed
+    - different seeds produce different features
+    - default and explicit seeds recorded in get_config
+    - 2D featurizers do NOT include random_state
+    - GETAWAY positive cache-key disambiguation tests
+    - scikit-fingerprints<1.18.0 fallback warning
 """
 
 from __future__ import annotations
@@ -49,7 +46,7 @@ def test_default_3d_random_state_constant() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T034: byte-identical features with fixed seed (FR-010, FR-011, SC-004)
+# Byte-identical features with fixed seed
 # ---------------------------------------------------------------------------
 
 
@@ -70,7 +67,8 @@ _BYTE_IDENTICAL_NAMES: list[str] = [
 def test_byte_identical_with_fixed_seed(name: str) -> None:
     """Two instances with the same random_state produce byte-identical output.
 
-    GETAWAY is excluded (rdkit#7264 non-determinism, see T038).
+    GETAWAY is excluded (rdkit#7264 non-determinism,
+    see the GETAWAY cache-key tests below).
     autocorr is excluded (pre-existing use_3D=False bug; treated as
     2D-equivalent for this test).
     """
@@ -84,7 +82,7 @@ def test_byte_identical_with_fixed_seed(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# T035: different seeds produce different features (FR-011, SC-004)
+# Different seeds produce different features
 # ---------------------------------------------------------------------------
 
 
@@ -110,7 +108,7 @@ def test_different_seed_different_features() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T036: default and explicit seeds recorded in get_config (FR-010, FR-012)
+# Default and explicit seeds recorded in get_config
 # ---------------------------------------------------------------------------
 
 
@@ -139,7 +137,7 @@ def test_explicit_seed_is_recorded_in_config() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T037: 2D featurizers do NOT include random_state (FR-012)
+# 2D featurizers do NOT include random_state
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +165,7 @@ def test_2d_featurizer_config_does_not_include_random_state(
 
 
 # ---------------------------------------------------------------------------
-# T038: GETAWAY positive tests (cache-key disambiguation despite non-determinism)
+# GETAWAY positive tests (cache-key disambiguation despite non-determinism)
 # ---------------------------------------------------------------------------
 
 
@@ -204,7 +202,7 @@ def test_getaway_byte_identical_skipped() -> None:
 
 
 # ---------------------------------------------------------------------------
-# T039: scikit-fingerprints<1.18.0 fallback (FR-013)
+# scikit-fingerprints<1.18.0 fallback
 # ---------------------------------------------------------------------------
 
 

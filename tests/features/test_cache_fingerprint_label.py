@@ -1,4 +1,4 @@
-"""Test fingerprint_used label extension with storage dtype suffix (T032, FR-013)."""
+"""Test fingerprint_used label extension with storage dtype suffix."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def test_no_featurizer_label_is_default_with_dtype_suffix():
 
 @pytest.mark.unit
 def test_mqns_label_has_uint8_suffix():
-    """016: mqns featurizer emits the raw uint8 dtype token."""
+    """mqns featurizer emits the raw uint8 dtype token."""
     from learnm8.evaluation.metrics.similarity import _get_or_build_fps
     from learnm8.features import create_featurizer
 
@@ -52,7 +52,7 @@ def test_mqns_label_has_uint8_suffix():
 
 @pytest.mark.unit
 def test_pharmacophore_label_has_csruint16_suffix():
-    """016: pharmacophore featurizer emits the csruint16 dtype token."""
+    """pharmacophore featurizer emits the csruint16 dtype token."""
     from learnm8.evaluation.metrics.similarity import _get_or_build_fps
     from learnm8.features import create_featurizer
 
@@ -64,7 +64,7 @@ def test_pharmacophore_label_has_csruint16_suffix():
 
 @pytest.mark.unit
 def test_physiochemical_label_has_csruint16_suffix():
-    """016: physiochemical featurizer emits the csruint16 dtype token."""
+    """physiochemical featurizer emits the csruint16 dtype token."""
     from learnm8.evaluation.metrics.similarity import _get_or_build_fps
     from learnm8.features import create_featurizer
 

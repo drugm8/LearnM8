@@ -1,9 +1,9 @@
-"""Tests for feature 025 Item 5: canonicalize-once-at-validation.
+"""Tests for canonicalize-once-at-validation.
 
 Covers:
 - validate_compound_pool writes RDKit-canonical SMILES into valid_compounds
 - canonicalize_for_cache is byte-identical to the legacy _canonicalize_smiles
-  recipe (REQ-14b golden-key test)
+  recipe (golden-key test)
 - raw extract_features() produces 2 hash_index rows for non-canonical equivalent
   SMILES (the accepted edge case: no in-cache dedup without prior canonicalization)
 - Feature values are unchanged by canonicalization (molecule identity preserved)
@@ -72,7 +72,7 @@ def test_invalid_compounds_keep_raw_smiles() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: Golden-key — canonicalize_for_cache == legacy recipe (REQ-14b)
+# Test 2: Golden-key — canonicalize_for_cache == legacy recipe
 # ---------------------------------------------------------------------------
 
 
@@ -109,7 +109,7 @@ def test_canonicalize_for_cache_matches_legacy_recipe() -> None:
 def test_cache_keys_identical_legacy_vs_new(tmp_path: Path) -> None:
     """_cache_keys_bytes16 on canonical SMILES is byte-equal to the legacy-canonical keys.
 
-    REQ-14b: Item 5 triggers no cold rebuild — keys are byte-identical because
+    Canonicalizing at validation triggers no cold rebuild — keys are byte-identical because
     canonicalize_for_cache reproduces the deleted _canonicalize_smiles recipe.
     """
     feat = create_featurizer('morgan', n_jobs=1)
@@ -135,7 +135,7 @@ def test_cache_keys_identical_legacy_vs_new(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Raw extract_features produces 2 rows (REQ-14b accepted edge case)
+# Test 3: Raw extract_features produces 2 rows (accepted edge case)
 # ---------------------------------------------------------------------------
 
 
@@ -143,7 +143,7 @@ def test_cache_keys_identical_legacy_vs_new(tmp_path: Path) -> None:
 def test_raw_extract_features_no_dedup(tmp_path: Path) -> None:
     """Raw (non-canonical) equivalent SMILES create 2 separate hash_index rows.
 
-    After Item 5 there is no in-cache canonicalization.  Callers must canonicalize
+    There is no in-cache canonicalization.  Callers must canonicalize
     before extract_features; extract_features with verbatim non-equivalent strings
     produces one row each.
     """

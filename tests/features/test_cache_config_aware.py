@@ -92,7 +92,7 @@ class TestConfigurationAwareCaching:
         assert any('usr' in name.lower() for name in cache_names)
 
     def test_3d_optimize_force_field_default_is_mmff94(self):
-        """3D featurizers default to MMFF94 conformer optimization (Item 18)."""
+        """3D featurizers default to MMFF94 conformer optimization."""
         usr = create_featurizer('usr')
         assert usr.conformer_params.get('optimize_force_field') == 'MMFF94'
 
@@ -329,29 +329,29 @@ class TestCacheEdgeCases:
 
 @pytest.mark.integration
 class TestCacheHashDenylist:
-    """Tests for the _CACHE_IRRELEVANT_PARAMS denylist (feature 025, Item 1)."""
+    """Tests for the _CACHE_IRRELEVANT_PARAMS denylist."""
 
-    # REQ-1: n_jobs must not affect the config hash.
+    # n_jobs must not affect the config hash.
     def test_hash_identical_n_jobs_differs(self):
         f1 = create_featurizer('morgan', n_jobs=1)
         f8 = create_featurizer('morgan', n_jobs=8)
         assert f1.get_config_hash() == f8.get_config_hash()
 
-    # REQ-1: verbose must not affect the config hash.
+    # verbose must not affect the config hash.
     def test_hash_identical_verbose_differs(self):
         f1 = create_featurizer('morgan', n_jobs=1)
         f2 = create_featurizer('morgan', n_jobs=1)
         f2.fingerprint.set_params(verbose=5)
         assert f1.get_config_hash() == f2.get_config_hash()
 
-    # REQ-1: batch_size must not affect the config hash.
+    # batch_size must not affect the config hash.
     def test_hash_identical_batch_size_differs(self):
         f1 = create_featurizer('morgan', n_jobs=1)
         f2 = create_featurizer('morgan', n_jobs=1)
         f2.fingerprint.set_params(batch_size=999)
         assert f1.get_config_hash() == f2.get_config_hash()
 
-    # REQ-2: feature-determining params MUST change the hash.
+    # Feature-determining params MUST change the hash.
     def test_hash_distinct_radius(self):
         f2 = create_featurizer('morgan', radius=2)
         f3 = create_featurizer('ecfp6')  # radius=3
@@ -367,7 +367,7 @@ class TestCacheHashDenylist:
         f_count = create_featurizer('morgan', count=True)
         assert f_binary.get_config_hash() != f_count.get_config_hash()
 
-    # REQ-3: random_state for 3D featurizers IS part of the config.
+    # random_state for 3D featurizers IS part of the config.
     def test_3d_random_state_in_config(self):
         usr = create_featurizer('usr', n_jobs=1)
         assert 'random_state' in usr.get_config()
@@ -392,7 +392,7 @@ class TestCacheHashDenylist:
         baseline = create_featurizer('morgan', n_jobs=1)
         assert featurizer.get_config_hash() != baseline.get_config_hash()
 
-    # REQ-2: behavioral cache hit when only n_jobs differs.
+    # Behavioral cache hit when only n_jobs differs.
     def test_behavioral_cache_hit_n_jobs_differs(self, small_real_compounds, tmp_path):
         import h5py
 
@@ -416,7 +416,7 @@ class TestCacheHashDenylist:
 
         assert row_count_after == row_count_before
 
-    # REQ-4: one-shot orphaned-cache WARNING per process.
+    # One-shot orphaned-cache WARNING per process.
     def test_orphan_cache_warning_emitted_once(self, caplog):
         _reset_orphan_cache_warning()
         featurizer = create_featurizer('morgan', n_jobs=1)

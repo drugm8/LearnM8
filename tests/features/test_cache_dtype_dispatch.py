@@ -1,4 +1,4 @@
-"""Dispatch tests: binary featurizers cache packed→float32 transparently (T019)."""
+"""Dispatch tests: binary featurizers cache packed→float32 transparently."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def test_continuous_featurizer_float32_storage(tmp_path: Path, name: str):
 
 @pytest.mark.unit
 def test_mqns_uses_uint8_storage(tmp_path: Path):
-    """016: mqns opts into raw uint8 storage (small-int counts, max ~26)."""
+    """mqns opts into raw uint8 storage (small-int counts, max ~26)."""
     feat = create_featurizer('mqns', n_jobs=1)
     out = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert out.dtype == np.float32
