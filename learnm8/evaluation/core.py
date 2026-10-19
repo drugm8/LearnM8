@@ -8,11 +8,13 @@ import logging
 import threading
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from weakref import finalize
 
 import numpy as np
 import polars as pl
+
+from ..exceptions import ConfigurationError
 
 # Import specialized metric functions from modular metrics package
 from .metrics.diagnostics import (
@@ -20,6 +22,7 @@ from .metrics.diagnostics import (
     compute_selected_percentile,
 )
 from .metrics.enrichment import (
+    ScoreDirection,
     calculate_batch_enrichment_factor,
     calculate_batch_hit_rate,
     calculate_batch_score_improvement_ratio,
@@ -105,8 +108,8 @@ def _get_gt_stats(
 
 def evaluate_cycle(
     cycle: int,
-    predictions: np.ndarray,
-    ground_truth: np.ndarray,
+    predictions: np.ndarray | None,
+    ground_truth: np.ndarray | None,
     labeled_data: pl.DataFrame,
     selected_compounds: pl.DataFrame,
     target_col: str,
@@ -159,7 +162,7 @@ def evaluate_cycle(
     Returns:
             Dictionary containing all calculated metrics
     """
-    metrics = {}
+    metrics: dict[str, Any] = {}
 
     # Basic cycle info
     metrics['cycle'] = cycle
@@ -280,7 +283,7 @@ def evaluate_cycle(
                         cumulative_selected_ids,
                         ground_truth_data,
                         target_col,
-                        score_direction=score_direction,
+                        score_direction=cast(ScoreDirection, score_direction),
                     )
                 )
             except ValueError as exc:
@@ -295,7 +298,7 @@ def evaluate_cycle(
                         selected_compounds,
                         ground_truth_data,
                         target_col,
-                        score_direction=score_direction,
+                        score_direction=cast(ScoreDirection, score_direction),
                     )
                 )
             except ValueError as exc:
@@ -340,6 +343,11 @@ def evaluate_cycle(
                 unlabeled_predictions_df is not None
                 and len(unlabeled_predictions_df) > 0
             ):
+                if ground_truth_data is None:
+                    raise ConfigurationError(
+                        "oracle_type='benchmark' requires ground_truth_data to "
+                        'compute unlabeled ranking metrics.'
+                    )
                 # Pre-join once for target_col (overlap + correlation) and once for Activity (EF).
                 # Kept separate to avoid duplicate column error when target_col == 'Activity'.
                 merged_target = unlabeled_predictions_df.join(

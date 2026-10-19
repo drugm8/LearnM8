@@ -1,6 +1,7 @@
 import logging
 import warnings
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 from chemprop import data, models, nn
@@ -148,10 +149,10 @@ class ChempropLearner(Learner):
         self.val_fraction = val_fraction
 
         self.model = None
-        self.trainer = None
+        self.trainer: Any = None
         self.is_trained = False
-        self.training_feature_dim = None
-        self.x_d_dim = None
+        self.training_feature_dim: int | None = None
+        self.x_d_dim: int | None = None
 
         # Fine-tuning configuration
         self.enable_fine_tuning = enable_fine_tuning
@@ -227,9 +228,7 @@ class ChempropLearner(Learner):
         )
 
         n_samples = len(targets)
-        use_descriptors = features is not None
-
-        if use_descriptors:
+        if features is not None:
             self.training_feature_dim = features.shape[1]
             self.x_d_dim = features.shape[1]
             logger.debug(
@@ -261,7 +260,7 @@ class ChempropLearner(Learner):
             val_smiles = [smiles[i] for i in val_idx]
             val_targets = targets[val_idx]
 
-            if use_descriptors:
+            if features is not None:
                 train_features = features[train_idx]
                 val_features = features[val_idx]
                 train_data = self._create_dataset_with_descriptors(
@@ -300,7 +299,7 @@ class ChempropLearner(Learner):
                     f'for validation split (need >= {min_samples_for_split}). '
                     'Training without early stopping.'
                 )
-            if use_descriptors:
+            if features is not None:
                 train_data = self._create_dataset_with_descriptors(
                     smiles, targets, features
                 )
@@ -360,7 +359,7 @@ class ChempropLearner(Learner):
             self.model = self._create_model()
 
         # Configure callbacks
-        callbacks = []
+        callbacks: list[Any] = []
         if self.early_stopping and val_loader is not None:
             from lightning.pytorch.callbacks import EarlyStopping
 
@@ -386,7 +385,7 @@ class ChempropLearner(Learner):
             max_epochs=self.max_epochs,
             accelerator=self.accelerator,
             devices=self._lightning_devices,
-            precision=self.precision,
+            precision=cast(Any, self.precision),
             enable_progress_bar=enable_verbose,
             enable_model_summary=False,
             logger=False,
@@ -411,7 +410,7 @@ class ChempropLearner(Learner):
         self.is_trained = True
 
         # Save checkpoint if fine-tuning enabled
-        if self.enable_fine_tuning:
+        if self.enable_fine_tuning and self.checkpoint_dir is not None:
             self.cycle_counter += 1
             next_checkpoint_path = (
                 self.checkpoint_dir / f'cycle_{self.cycle_counter}.ckpt'
@@ -602,6 +601,10 @@ class ChempropLearner(Learner):
             logger.warning(f"Unknown aggregation '{self.aggregation}', using mean")
             agg = nn.MeanAggregation()
 
+        if self.x_d_dim is None:
+            raise LearnerError(
+                'x_d_dim is not set; _create_model() must be called during training.'
+            )
         ffn_input_dim = self.message_hidden_dim + self.x_d_dim
 
         ffn = nn.RegressionFFN(
@@ -671,7 +674,7 @@ class ChempropLearner(Learner):
         predict_trainer = pl.Trainer(
             accelerator=self.accelerator,
             devices=self._lightning_devices,
-            precision=self.precision,
+            precision=cast(Any, self.precision),
             enable_progress_bar=False,
             enable_model_summary=False,
             logger=False,
@@ -681,10 +684,9 @@ class ChempropLearner(Learner):
             f'Starting Chemprop prediction on {len(smiles)} samples '
             f'(batch_size={self.predict_batch_size}, precision={self.precision})'
         )
-        predictions = predict_trainer.predict(self.model, test_loader)
+        batches = predict_trainer.predict(self.model, test_loader)
         logger.debug('Chemprop prediction completed, processing results')
-        predictions = torch.cat(predictions, dim=0)
-        predictions = predictions.cpu().numpy().flatten()
+        predictions = torch.cat(cast(list, batches), dim=0).cpu().numpy().flatten()
 
         self._cleanup_gpu_memory('after prediction')
         logger.debug(f'Chemprop prediction finalized: {len(predictions)} predictions')

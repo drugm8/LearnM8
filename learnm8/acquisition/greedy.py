@@ -5,6 +5,7 @@ with the highest model predictions.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -22,7 +23,7 @@ class GreedyAcquisition(AcquisitionFunction):
     baseline for comparison with more sophisticated acquisition functions.
     """
 
-    def __init__(self, score_direction: str = 'higher', **kwargs):
+    def __init__(self, score_direction: str = 'higher', **kwargs: Any) -> None:
         """Initialize greedy acquisition function.
 
         Args:

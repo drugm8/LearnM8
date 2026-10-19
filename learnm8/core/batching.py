@@ -20,8 +20,9 @@ import os
 import platform
 import sys
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import polars as pl
@@ -336,7 +337,7 @@ def featurization_chunk_size(input_len: int, n_jobs: int = 1) -> int:
     return max(FEATURIZATION_CHUNK_FLOOR, min(per_worker, FEATURIZATION_CHUNK_CAP))
 
 
-def _chunk_dataframe(df: pl.DataFrame, chunk_size: int):
+def _chunk_dataframe(df: pl.DataFrame, chunk_size: int) -> Iterator[pl.DataFrame]:
     """Yield DataFrame chunks for batch processing."""
     for i in range(0, len(df), chunk_size):
         yield df[i : i + chunk_size]
@@ -380,7 +381,9 @@ def _predict_chunk(
         else:
             chunk_features = None
         preds, uncerts = learner.predict(
-            features=chunk_features,
+            features=cast(
+                np.ndarray, chunk_features
+            ),  # None for SMILES-native learners
             smiles=chunk_smiles,
             compute_uncertainty=compute_uncertainty,
         )

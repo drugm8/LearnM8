@@ -1,6 +1,7 @@
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -85,7 +86,7 @@ def load_csv_data(output_dir: str) -> dict:
     """
     output_path = Path(output_dir)
 
-    data = {}
+    data: dict[str, Any] = {}
 
     compounds_file = output_path / 'compounds_final'
     data['compounds'] = _read_results_file(compounds_file)
@@ -110,7 +111,7 @@ def load_csv_data(output_dir: str) -> dict:
     return data
 
 
-def _get_strategy_color_map(strategies):
+def _get_strategy_color_map(strategies: Any) -> dict[str, Any]:
     """Create a color map for acquisition strategies."""
     strategy_colors = {
         'random': 'yellow',
@@ -123,7 +124,7 @@ def _get_strategy_color_map(strategies):
     }
 
     color_map = {}
-    fallback_colors = plt.cm.tab10(np.linspace(0, 1, 10))
+    fallback_colors = plt.get_cmap('tab10')(np.linspace(0, 1, 10))
     fallback_idx = 0
 
     for strategy in strategies:
@@ -280,7 +281,7 @@ def create_dashboard_animation_from_csv(
     ax4.set_ylabel('Metric Value')
 
     # Panel A scatter/histogram setup
-    scatter1 = None
+    scatter1: Any = None
     strategy_scatters: dict = {}
     if has_uncertainty:
         scatter1 = ax1.scatter([], [], c=[], cmap='viridis', alpha=0.6, s=20)
@@ -364,7 +365,7 @@ def create_dashboard_animation_from_csv(
     metric_text = None
     regression_line = None
 
-    def init():
+    def init() -> Any:
         if scatter1 is not None:
             scatter1.set_offsets(np.empty((0, 2)))
             scatter1.set_array(np.array([]))
@@ -401,7 +402,7 @@ def create_dashboard_animation_from_csv(
         )
         return tuple(artists)
 
-    def update(cycle_idx):
+    def update(cycle_idx: int) -> Any:
         nonlocal metric_text, regression_line
 
         cycle_num, parquet_path = parquets[cycle_idx]
@@ -509,7 +510,7 @@ def create_dashboard_animation_from_csv(
         cycles = np.arange(n_rows)
 
         # Helper to safely extract metric column
-        def get_metric_values(col_name, default_value=0.0):
+        def get_metric_values(col_name: str, default_value: float = 0.0) -> Any:
             if col_name in metrics_df.columns:
                 return metrics_df.head(n_rows).get_column(col_name).to_numpy()
             return np.full(n_rows, default_value)
@@ -746,7 +747,7 @@ def create_static_dashboard(
     ((ax1, ax2), (ax3, ax4)) = axes
 
     # Panel A
-    if has_unc:
+    if has_unc and stacked_unc is not None:
         ax1.set_title('Uncertainty vs Prediction')
         ax1.set_xlabel('Predicted Activity')
         ax1.set_ylabel('Uncertainty')
@@ -777,7 +778,7 @@ def create_static_dashboard(
     else:
         pct_explored = list(range(n_rows))
 
-    def _get(name, default=0.0):
+    def _get(name: str, default: float = 0.0) -> Any:
         if name in metrics_df.columns:
             return metrics_df.get_column(name).to_numpy()
         return np.full(n_rows, default)
@@ -1011,6 +1012,7 @@ def _save_animation(
 ) -> None:
     from pathlib import Path
 
+    writer: Any
     try:
         if format == 'mp4':
             try:

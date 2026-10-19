@@ -13,6 +13,13 @@ def _write_oracle_file(tmp_path, content, filename='oracle.py'):
 
 @pytest.mark.unit
 class TestPythonOracleInit:
+    def test_non_py_suffix_raises_oracle_error(self, tmp_path):
+        f = _write_oracle_file(
+            tmp_path, 'def oracle(compound_ids):\n    return None\n', 'oracle.txt'
+        )
+        with pytest.raises(OracleError, match='not a loadable Python module'):
+            PythonOracle(module_path=str(f))
+
     def test_init_with_module_path(self, tmp_path):
         f = _write_oracle_file(
             tmp_path,

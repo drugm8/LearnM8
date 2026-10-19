@@ -1,9 +1,12 @@
 """Fastprop ensemble learner for deep learning on molecular features."""
 
+from typing import Any
+
 import numpy as np
 
 from learnm8.exceptions import LearnerError
 
+from ...core.interfaces import Learner
 from ..torch.fastprop_learner import FastpropLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -28,8 +31,8 @@ class FastpropEnsemble(EnsembleLearner):
         random_state: int = 42,
         device: str = 'auto',
         enable_aggressive_gc: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Fastprop ensemble.
 
         Args:
@@ -54,7 +57,7 @@ class FastpropEnsemble(EnsembleLearner):
         """
         random_states = _derive_random_states(random_state, 3, override=random_states)
 
-        learners = []
+        learners: list[Learner] = []
         for rs in random_states:
             fastprop = FastpropLearner(
                 fnn_layers=fnn_layers,
@@ -94,7 +97,12 @@ class FastpropEnsemble(EnsembleLearner):
         self.device = device
         self.enable_aggressive_gc = enable_aggressive_gc
 
-    def train(self, features, targets):
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train ensemble with feature matrix.
 
         Args:
@@ -117,7 +125,13 @@ class FastpropEnsemble(EnsembleLearner):
 
         self._cleanup_gpu_memory('after ensemble training')
 
-    def predict(self, features, smiles=None, *, compute_uncertainty=True):
+    def predict(
+        self,
+        features: np.ndarray,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with feature matrix.
 
         Args:

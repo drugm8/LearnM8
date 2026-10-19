@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Final
+from typing import Any, Final, cast
 
 import numpy as np
 import polars as pl
@@ -40,8 +40,8 @@ def _entropy_scores(uncertainties: np.ndarray, entropy_type: str) -> np.ndarray:
     """
     log_sigma = np.log(clamp_sigma(uncertainties))
     if entropy_type == 'uncertainty':
-        return _HALF_LOG_2_PI_E + log_sigma
-    return _HALF_LOG_2_PI_E + 2.0 * log_sigma
+        return cast(np.ndarray, _HALF_LOG_2_PI_E + log_sigma)
+    return cast(np.ndarray, _HALF_LOG_2_PI_E + 2.0 * log_sigma)
 
 
 class EntropyAcquisition(AcquisitionFunction):
@@ -61,7 +61,7 @@ class EntropyAcquisition(AcquisitionFunction):
     and model parameters), see future spec.
     """
 
-    def __init__(self, entropy_type: str = 'uncertainty', **kwargs):
+    def __init__(self, entropy_type: str = 'uncertainty', **kwargs: Any) -> None:
         """Initialize Entropy acquisition function.
 
         Args:

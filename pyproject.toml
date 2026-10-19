@@ -61,6 +61,7 @@ test = [
     "pytest-xdist>=3.5.0",
     "hypothesis>=6.0.0",
     "psutil>=5.9.0",
+    "types-PyYAML",
 ]
 gpu-gp = [
     "gpytorch>=1.11",
@@ -116,6 +117,27 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
+
+# Third-party libraries that ship no stubs / py.typed marker.
+[[tool.mypy.overrides]]
+module = [
+    "chemprop.*",
+    "cuml.*",
+    "cupy.*",
+    "cupyx.*",
+    "datamol.*",
+    "fastprop.*",
+    "gauche.*",
+    "gpytorch.*",
+    "h5py.*",
+    "joblib.*",
+    "psutil.*",
+    "pyarrow.*",
+    "scipy.*",
+    "skfp.*",
+    "sklearn.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

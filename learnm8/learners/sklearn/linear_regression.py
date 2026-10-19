@@ -6,6 +6,7 @@ for molecular property prediction tasks.
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
 from scipy.linalg.lapack import dtrtri
@@ -32,8 +33,8 @@ class LinearRegressionLearner(SklearnLearner):
         fit_intercept: bool = True,
         n_jobs: int = -1,
         random_state: int = 42,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Linear/Ridge Regression learner.
 
         Args:
@@ -73,7 +74,12 @@ class LinearRegressionLearner(SklearnLearner):
         """Return True — LR provides leverage-based uncertainty estimates."""
         return True
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train linear model and compute Gram matrix Cholesky factorization.
 
         After fitting the model via the base class, computes and stores:

@@ -5,6 +5,7 @@ for molecular property prediction tasks.
 """
 
 import logging
+from typing import Any
 
 import torch.nn as nn
 
@@ -28,8 +29,8 @@ class MLPLearner(TorchLearner):
         activation: str = 'relu',
         dropout_rate: float = 0.2,
         batch_norm: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize MLP learner.
 
         Args:
@@ -63,7 +64,7 @@ class MLPLearner(TorchLearner):
         Returns:
             PyTorch MLP model
         """
-        layers = []
+        layers: list[nn.Module] = []
         prev_size = input_size
 
         # Hidden layers

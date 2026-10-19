@@ -8,7 +8,7 @@ import pytest
 import torch
 from pytorch_lightning.callbacks import EarlyStopping
 
-from learnm8.exceptions import ConfigurationError
+from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.features.extraction import extract_features
 from learnm8.learners.torch.fastprop_learner import FastpropLearner
 
@@ -87,6 +87,30 @@ class TestFastpropLearnerUnit:
             scale_spy.assert_not_called()
 
         assert predictions.shape[0] == 5
+
+    @pytest.mark.parametrize('trainer_output', [None, []])
+    def test_predict_raises_learner_error_when_trainer_returns_nothing(
+        self, trainer_output
+    ):
+        learner = FastpropLearner(fnn_layers=1, hidden_size=64)
+        learner.is_trained = True
+        learner.model = MagicMock()
+        learner.feature_means = torch.zeros(10)
+        learner.feature_vars = torch.ones(10)
+        learner.target_means = torch.zeros(1)
+        learner.target_vars = torch.ones(1)
+
+        mock_trainer = MagicMock()
+        mock_trainer.predict.return_value = trainer_output
+
+        with (
+            patch(
+                'learnm8.learners.torch.fastprop_learner.Trainer',
+                return_value=mock_trainer,
+            ),
+            pytest.raises(LearnerError, match='returned no predictions'),
+        ):
+            learner.predict(np.random.randn(5, 10).astype(np.float32))
 
 
 @pytest.mark.slow

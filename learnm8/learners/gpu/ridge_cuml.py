@@ -7,6 +7,7 @@ uncertainty computation. Falls back to CPU scipy for leverage when GPU OOM.
 import logging
 import time
 import warnings
+from typing import Any
 
 import numpy as np
 from scipy.linalg.lapack import dtrtri
@@ -48,7 +49,7 @@ class RidgeCumlLearner(Learner):
         solver: str = 'eig',
         random_state: int = 42,
         remove_zero_variance: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize RidgeCumlLearner.
 
@@ -77,14 +78,14 @@ class RidgeCumlLearner(Learner):
         self.random_state = random_state
         self.remove_zero_variance = remove_zero_variance
 
-        self._model = None
-        self._feature_scaler = None
-        self._L_inv_cpu = None
-        self._leverage_A_gpu = None
+        self._model: Any = None
+        self._feature_scaler: Any = None
+        self._L_inv_cpu: Any = None
+        self._leverage_A_gpu: Any = None
         self._sigma_hat_sq = None
         self.is_trained = False
-        self._valid_feature_mask = None
-        self._feature_imputer = None
+        self._valid_feature_mask: np.ndarray | None = None
+        self._feature_imputer: Any = None
         self._feature_type = 'binary'
 
     def train(

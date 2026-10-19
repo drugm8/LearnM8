@@ -35,7 +35,7 @@ import logging
 import math
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import polars as pl
@@ -227,7 +227,7 @@ def _pass2_select(
     pf = pq.ParquetFile(str(parquet_path))
     offset = 0
     for rb in pf.iter_batches(batch_size=SCORING_CHUNK, columns=cols):
-        chunk = pl.from_arrow(rb)
+        chunk = cast(pl.DataFrame, pl.from_arrow(rb))
         n = chunk.height
         preds = chunk['prediction'].to_numpy()
         uncs = chunk['uncertainty'].to_numpy() if with_uncertainty else None
@@ -353,7 +353,8 @@ def execute_streaming_selection(
 
     # Batch size matches the legacy formula (clipped to the post-prune pool).
     batch_size = min(
-        max(1, math.ceil(original_pool_size * config.batch_fraction)), eligible
+        max(1, math.ceil(original_pool_size * cast(float, config.batch_fraction))),
+        eligible,
     )
 
     # PASS 2: score + reduce to the batch; collect pruned IDs for the master update.

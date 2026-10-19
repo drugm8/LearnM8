@@ -8,6 +8,7 @@ It does not change data, statistical calculations, or plot-specific geometry.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -156,15 +157,15 @@ def compound_tick_label(value: float, pool_size: float) -> str:
 
 
 def set_compound_axis(
-    ax,
+    ax: Any,
     pool_size: float,
     *,
     xlabel: str = 'Evaluated compounds',
-    ticks=None,
+    ticks: Any = None,
     max_ticks: int | None = None,
     rotation: float = 45,
     stacked: bool = False,
-):
+) -> Any:
     """Label an absolute screening axis using actual evaluated counts.
 
     When ``ticks`` is omitted, x positions are collected from plotted lines.
@@ -178,7 +179,7 @@ def set_compound_axis(
     upright text is easier to read.
     """
     if ticks is None:
-        values = []
+        values: list[float] = []
         for line in ax.get_lines():
             values.extend(np.asarray(line.get_xdata(), dtype=float).ravel())
         ticks = values or ax.get_xticks()
@@ -224,7 +225,7 @@ def set_compound_axis(
     return ax
 
 
-def style_axes(ax, *, grid_axis: str = 'y') -> None:
+def style_axes(ax: Any, *, grid_axis: str = 'y') -> None:
     """Apply shared axis, grid, and spine treatment to one axes object."""
     ax.set_facecolor(BACKGROUND)
     ax.set_axisbelow(True)
@@ -254,7 +255,7 @@ def style_axes(ax, *, grid_axis: str = 'y') -> None:
     ax.yaxis.label.set_fontweight('semibold')
 
 
-def style_figure(fig) -> None:
+def style_figure(fig: Any) -> None:
     """Apply shared axis treatment to all non-colorbar axes in a figure."""
     for ax in fig.axes:
         if getattr(ax, '_colorbar', None) is not None:
@@ -262,7 +263,7 @@ def style_figure(fig) -> None:
         style_axes(ax)
 
 
-def style_heatmap(ax) -> None:
+def style_heatmap(ax: Any) -> None:
     """Apply the shared heatmap treatment without Cartesian grid overlays."""
     ax.set_facecolor(BACKGROUND)
     ax.grid(False)
@@ -282,7 +283,7 @@ def mosaic(
     layout: str,
     panel_h_mm: float = 48,
     width: float = DOUBLE_COL,
-):
+) -> tuple[Any, Any]:
     """Build a constrained panel grid from a compact mosaic string."""
     rows = layout.strip().splitlines()
     fig, axes = plt.subplot_mosaic(
@@ -311,7 +312,7 @@ def label_panels(axes: dict) -> None:
         )
 
 
-def compact_axis(ax, axis: str = 'x') -> None:
+def compact_axis(ax: Any, axis: str = 'x') -> None:
     """Format large counts as compact ``k``/``M`` labels."""
     fmt = FuncFormatter(
         lambda value, _: (
@@ -325,19 +326,19 @@ def compact_axis(ax, axis: str = 'x') -> None:
     (ax.xaxis if axis == 'x' else ax.yaxis).set_major_formatter(fmt)
 
 
-def band(ax, x, lo, hi, color: str, *, alpha: float = 0.12) -> None:
+def band(ax: Any, x: Any, lo: Any, hi: Any, color: str, *, alpha: float = 0.12) -> None:
     """Draw a low-alpha interval band without an edge."""
     ax.fill_between(x, lo, hi, color=color, alpha=alpha, linewidth=0, zorder=1)
 
 
-def text_color(color) -> str:
+def text_color(color: Any) -> str:
     """Return high-contrast annotation ink for a Matplotlib color."""
     rgb = np.asarray(to_rgb(color))
     luminance = float(np.dot(rgb, [0.2126, 0.7152, 0.0722]))
     return BACKGROUND if luminance < 0.48 else INK
 
 
-def save_figure(fig, output_path: Path, *, dpi: int = OUTPUT_DPI) -> None:
+def save_figure(fig: Any, output_path: Path, *, dpi: int = OUTPUT_DPI) -> None:
     """Save one figure using the shared raster resolution and close it."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(

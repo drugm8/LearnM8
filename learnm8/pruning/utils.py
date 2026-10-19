@@ -5,7 +5,10 @@ pruning strategy.
 """
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .score_based import ScoreBasedPruner
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,9 @@ def validate_pruning_parameters(
     return len(errors) == 0, errors
 
 
-def create_pruning_strategy(strategy_name: str, parameters: dict[str, Any]):
+def create_pruning_strategy(
+    strategy_name: str, parameters: dict[str, Any]
+) -> 'ScoreBasedPruner':
     """Factory function to create the score-based pruning strategy.
 
     Args:

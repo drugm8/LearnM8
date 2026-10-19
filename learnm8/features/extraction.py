@@ -154,7 +154,7 @@ def extract_features(
                     f'Available featurizers: {all_featurizers}. '
                     f"Run 'learnm8 list featurizers' to see all options."
                 )
-            featurizer_obj = create_featurizer(featurizer, n_jobs=1)
+            featurizer_obj: Featurizer = create_featurizer(featurizer, n_jobs=1)
         else:
             featurizer_obj = featurizer
         dim = featurizer_obj.get_dimension()

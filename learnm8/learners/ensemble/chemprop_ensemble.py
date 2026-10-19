@@ -1,11 +1,13 @@
 """Chemprop ensemble learner for message-passing neural networks."""
 
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 
 from learnm8.exceptions import LearnerError
 
+from ...core.interfaces import Learner
 from ..torch.chemprop_learner import ChempropLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -64,8 +66,8 @@ class ChempropEnsemble(EnsembleLearner):
         enable_fine_tuning: bool = False,
         checkpoint_dir: Path | None = None,
         enable_aggressive_gc: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Chemprop ensemble.
 
         Args:
@@ -105,14 +107,14 @@ class ChempropEnsemble(EnsembleLearner):
             raise ValueError('checkpoint_dir is required when enable_fine_tuning=True')
 
         # Setup checkpoint subdirectories for ensemble members
-        if enable_fine_tuning:
+        if enable_fine_tuning and checkpoint_dir is not None:
             checkpoint_dir = Path(checkpoint_dir)
 
-        learners = []
+        learners: list[Learner] = []
         for i, rs in enumerate(random_states):
             # Each ensemble member gets its own checkpoint subdirectory
             member_checkpoint_dir = None
-            if enable_fine_tuning:
+            if enable_fine_tuning and checkpoint_dir is not None:
                 member_checkpoint_dir = checkpoint_dir / f'member_{i}'
 
             chemprop = ChempropLearner(
@@ -176,7 +178,12 @@ class ChempropEnsemble(EnsembleLearner):
         self.checkpoint_dir = Path(checkpoint_dir) if checkpoint_dir else None
         self.enable_aggressive_gc = enable_aggressive_gc
 
-    def train(self, features, targets, smiles=None):
+    def train(
+        self,
+        features: np.ndarray | None,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train ensemble with SMILES strings.
 
         Args:
@@ -198,13 +205,22 @@ class ChempropEnsemble(EnsembleLearner):
 
         # Train each learner with SMILES
         for learner in self.learners:
-            learner.train(features=features, targets=targets, smiles=smiles)
+            # Members are ChempropLearners, which accept features=None.
+            learner.train(
+                features=cast(np.ndarray, features), targets=targets, smiles=smiles
+            )
 
         self.is_trained = True
 
         self._cleanup_gpu_memory('after ensemble training')
 
-    def predict(self, features, smiles=None, *, compute_uncertainty=True):
+    def predict(
+        self,
+        features: np.ndarray | None,
+        smiles: list[str] | None = None,
+        *,
+        compute_uncertainty: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict with SMILES strings.
 
         Args:
@@ -228,7 +244,7 @@ class ChempropEnsemble(EnsembleLearner):
         predictions_list = []
         for learner in self.learners:
             pred, _ = learner.predict(
-                features=features,
+                features=cast(np.ndarray, features),
                 smiles=smiles,
                 compute_uncertainty=compute_uncertainty,
             )

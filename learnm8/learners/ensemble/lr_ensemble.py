@@ -1,5 +1,8 @@
 """Linear Regression ensemble learner for LearnM8 framework."""
 
+from typing import Any
+
+from ...core.interfaces import Learner
 from ..sklearn.linear_regression import LinearRegressionLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -13,8 +16,8 @@ class LREnsemble(EnsembleLearner):
         random_states: list[int] | None = None,
         random_state: int = 42,
         device: str = 'cpu',
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize LR ensemble.
 
         Args:
@@ -35,7 +38,7 @@ class LREnsemble(EnsembleLearner):
             random_state, len(regularization_strengths), override=random_states
         )
 
-        learners = []
+        learners: list[Learner] = []
         if device == 'cuda':
             from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
 

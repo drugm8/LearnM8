@@ -1,5 +1,7 @@
 import logging
+from collections.abc import Iterable
 from pathlib import Path
+from typing import cast
 
 import datamol as dm
 import polars as pl
@@ -261,7 +263,7 @@ def _load_smi_with_rdkit(file_path: Path) -> pl.DataFrame:
 
             record = {'ID': mol_id, 'SMILES': smiles}
 
-            for prop_name in mol.GetPropNames():
+            for prop_name in cast(Iterable[str], mol.GetPropNames()):
                 if prop_name not in ['SMILES', '_Name']:
                     record[prop_name] = mol.GetProp(prop_name)
 

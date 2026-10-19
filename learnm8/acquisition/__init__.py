@@ -34,7 +34,7 @@ __all__ = [
 ]
 
 # Registry of acquisition functions for CLI and programmatic access
-ACQUISITION_REGISTRY = {
+ACQUISITION_REGISTRY: dict[str, type[AcquisitionFunction]] = {
     # Basic methods
     'greedy': GreedyAcquisition,
     'random': RandomAcquisition,
@@ -48,7 +48,7 @@ ACQUISITION_REGISTRY = {
 }
 
 
-def get_acquisition_function(name: str):
+def get_acquisition_function(name: str) -> type[AcquisitionFunction]:
     """Get acquisition function class by name.
 
     Args:

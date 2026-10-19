@@ -1,5 +1,7 @@
 """Mixed ensemble learner for LearnM8 framework."""
 
+from typing import Any
+
 from ..sklearn.linear_regression import LinearRegressionLearner
 from ..sklearn.random_forest import RandomForestLearner
 from ..sklearn.xgboost_learner import XGBoostLearner
@@ -9,7 +11,9 @@ from .ensemble import EnsembleLearner, _derive_random_states
 class MixedEnsemble(EnsembleLearner):
     """Mixed ensemble with RF, Linear Regression, and XGBoost learners."""
 
-    def __init__(self, random_state: int = 42, device: str = 'cpu', **kwargs):
+    def __init__(
+        self, random_state: int = 42, device: str = 'cpu', **kwargs: Any
+    ) -> None:
         """Initialize mixed ensemble.
 
         Args:

@@ -10,10 +10,12 @@ with Python's standard :mod:`warnings` filter system.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 MAX_LIST_ITEMS = 10
 
 
-def _truncate_list(items, max_items: int = MAX_LIST_ITEMS) -> str:
+def _truncate_list(items: Iterable[object], max_items: int = MAX_LIST_ITEMS) -> str:
     items = list(items)
     if len(items) <= max_items:
         return ', '.join(str(i) for i in items)

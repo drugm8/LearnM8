@@ -2,6 +2,7 @@
 
 import logging
 import warnings
+from typing import Any
 
 from learnm8.exceptions import ConfigurationError, LearnM8Warning
 
@@ -12,7 +13,7 @@ LARGE_FEATURE_PER_MOL_BYTES = 1024
 
 
 def check_large_feature_guard(
-    featurizer,
+    featurizer: Any,
     pool_size: int,
     large_features_ack: bool,
 ) -> None:
@@ -55,7 +56,7 @@ def check_large_feature_guard(
     )
 
 
-def _probe_dimension(featurizer) -> int | None:
+def _probe_dimension(featurizer: Any) -> int | None:
     try:
         dim = featurizer.get_dimension()
         if isinstance(dim, int) and dim > 0:
@@ -66,7 +67,7 @@ def _probe_dimension(featurizer) -> int | None:
     try:
         result = featurizer.transform(['CC'])
         if hasattr(result, 'shape') and len(result.shape) >= 2:
-            return result.shape[1]
+            return int(result.shape[1])
     except Exception:
         pass
 

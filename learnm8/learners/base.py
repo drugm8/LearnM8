@@ -288,15 +288,20 @@ class SklearnLearner(Learner):
         self.remove_zero_variance = remove_zero_variance
         self.scale_features = scale_features
         self.is_trained = False
-        self._valid_feature_mask = None
+        self._valid_feature_mask: np.ndarray | None = None
         self._feature_type = 'binary'
-        self._feature_imputer = None
-        self._feature_scaler = None
+        self._feature_imputer: Any = None
+        self._feature_scaler: Any = None
 
         if hasattr(self.model, 'random_state'):
             self.model.random_state = random_state
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train sklearn model on feature matrix.
 
         Args:
@@ -494,15 +499,15 @@ class TorchLearner(Learner):
         self.random_state = random_state
         self.remove_zero_variance = remove_zero_variance
 
-        self.model = None
-        self.optimizer = None
-        self.scaler = None
+        self.model: Any = None
+        self.optimizer: Any = None
+        self.scaler: Any = None
         self.is_trained = False
-        self.training_history = []
-        self._valid_feature_mask = None
+        self.training_history: list[Any] = []
+        self._valid_feature_mask: np.ndarray | None = None
         self._feature_type = 'binary'
-        self._feature_imputer = None
-        self._target_scaler = None
+        self._feature_imputer: Any = None
+        self._target_scaler: Any = None
 
         torch.manual_seed(random_state)
         if torch.cuda.is_available():
@@ -588,7 +593,7 @@ class TorchLearner(Learner):
 
             outputs = self.model(X_tensor).squeeze()
             criterion = nn.MSELoss()
-            val_loss = criterion(outputs, y_tensor).item()
+            val_loss: float = criterion(outputs, y_tensor).item()
 
         return val_loss
 
@@ -628,7 +633,12 @@ class TorchLearner(Learner):
 
         return X[train_indices], X[val_indices], y[train_indices], y[val_indices]
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train PyTorch model on feature matrix.
 
         Args:

@@ -85,6 +85,27 @@ class TestEvaluateCore:
         assert 'ground_truth_ef_0_5' in result
         assert 'ground_truth_ef_1_0' in result
 
+    def test_benchmark_mode_without_ground_truth_raises_configuration_error(
+        self, diverse_real_compounds
+    ):
+        from learnm8.exceptions import ConfigurationError
+
+        labeled_data = diverse_real_compounds.clone()
+        with pytest.raises(ConfigurationError, match='requires ground_truth_data'):
+            evaluate_cycle(
+                cycle=1,
+                predictions=np.asarray(labeled_data['Activity'].to_list()),
+                ground_truth=labeled_data['Activity'].to_list(),
+                labeled_data=labeled_data,
+                selected_compounds=labeled_data.head(5),
+                target_col='Activity',
+                oracle_type='benchmark',
+                pool_df=labeled_data.with_columns(
+                    pl.col('Activity').alias('prediction')
+                ),
+                cumulative_selected_ids=set(labeled_data['ID'].head(5).to_list()),
+            )
+
     def test_evaluate_cycle_with_uncertainty(self, compounds_with_uncertainty):
         """Test evaluation with uncertainty estimates."""
         compounds = compounds_with_uncertainty.clone()

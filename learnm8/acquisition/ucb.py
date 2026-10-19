@@ -5,6 +5,7 @@ and exploration using uncertainty estimates.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -40,7 +41,7 @@ class UCBAcquisition(AcquisitionFunction):
     prediction + beta * uncertainty.
     """
 
-    def __init__(self, beta: float = 2.0, **kwargs):
+    def __init__(self, beta: float = 2.0, **kwargs: Any) -> None:
         """Initialize UCB acquisition function.
 
         Args:

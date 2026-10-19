@@ -1,7 +1,9 @@
 """Random Forest ensemble learner for LearnM8 framework."""
 
 import warnings
+from typing import Any
 
+from ...core.interfaces import Learner
 from ..sklearn.random_forest import RandomForestLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -14,8 +16,8 @@ class RFEnsemble(EnsembleLearner):
         n_estimators: int = 100,
         random_states: list[int] | None = None,
         random_state: int = 42,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize RF ensemble.
 
         Args:
@@ -38,7 +40,7 @@ class RFEnsemble(EnsembleLearner):
             stacklevel=2,
         )
 
-        learners = []
+        learners: list[Learner] = []
         for rs in random_states:
             rf = RandomForestLearner(n_estimators=n_estimators, random_state=rs)
             learners.append(rf)

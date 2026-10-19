@@ -55,7 +55,7 @@ class CycleConfig:
     pruning_params: dict | None = None
     acquisition_params: dict | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate that batch_fraction is provided."""
         if self.batch_fraction is None:
             raise ValueError(
@@ -228,6 +228,8 @@ def parse_cycle_schedule(
             # Pruning is a run-level knob (the CLI exposes it only as a top-level
             # flag), so fall back to the top-level values whenever a block does
             # not set its own. An explicit per-block strategy always wins.
+            block_pruning_strategy: str | None
+            block_pruning_params: dict | None
             if config.pruning_strategy is not None:
                 block_pruning_strategy = config.pruning_strategy
                 block_pruning_params = config.pruning_params
@@ -238,6 +240,7 @@ def parse_cycle_schedule(
             # Same story for acquisition parameters: the CLI exposes them only
             # as a top-level flag (--acquisition-params), so a block without
             # its own value inherits them. An explicit per-block dict wins.
+            block_acquisition_params: dict | None
             if config.acquisition_params is not None:
                 block_acquisition_params = config.acquisition_params
             else:

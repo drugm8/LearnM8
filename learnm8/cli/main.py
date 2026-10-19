@@ -20,6 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 import yaml
@@ -122,10 +123,10 @@ def load_config_file(config_path: Path) -> dict:
     try:
         if suffix in ['.yaml', '.yml']:
             with open(config_path) as f:
-                return yaml.safe_load(f)
+                return cast(dict, yaml.safe_load(f))
         elif suffix == '.json':
             with open(config_path) as f:
-                return json.load(f)
+                return cast(dict, json.load(f))
         else:
             raise ValueError(
                 f'Unsupported config format: {suffix}. Use .yaml, .yml, or .json'
@@ -531,7 +532,7 @@ def _build_run_kwargs(
     )
 
 
-def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None):
+def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None) -> None:
     """Handle run subcommand.
 
     Args:
@@ -735,7 +736,7 @@ def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None):
         _print_learnm8_error(e)
 
 
-def cmd_validate(args: argparse.Namespace):
+def cmd_validate(args: argparse.Namespace) -> None:
     """Handle validate subcommand.
 
     Args:
@@ -908,7 +909,7 @@ def _cli_provided_dests(argv: list[str]) -> set[str]:
     return set(vars(parser.parse_args(argv)))
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     configure_learnm8_logging(console_type='rich', level='INFO')
 

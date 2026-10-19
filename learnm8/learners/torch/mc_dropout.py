@@ -5,6 +5,7 @@ in molecular property prediction tasks.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import torch
@@ -37,8 +38,8 @@ class MCDropoutLearner(TorchLearner):
         activation: str = 'relu',
         batch_norm: bool = False,
         predict_batch_size: int | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Monte Carlo Dropout learner.
 
         Args:
@@ -75,7 +76,7 @@ class MCDropoutLearner(TorchLearner):
         Returns:
             PyTorch MLP model with dropout
         """
-        layers = []
+        layers: list[nn.Module] = []
         prev_size = input_size
 
         # Hidden layers with dropout for uncertainty
@@ -329,7 +330,7 @@ class MCDropoutLearner(TorchLearner):
                 self,
                 n_samples,
                 n_features,
-                device=self.device,
+                device=self.device,  # type: ignore[arg-type]  # torch.device, not str: always raises -> fallback below (see A10 report)
                 memory_safety_factor=0.5,
             )
         except Exception:

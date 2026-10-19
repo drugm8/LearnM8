@@ -1257,7 +1257,9 @@ def from_storage_uint8(
     )
 
 
-def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
+def cache_features(
+    default_cache_dir: Path,
+) -> Callable[[Callable[..., np.ndarray]], Callable[..., np.ndarray]]:
     """Decorator factory: bit-packed HDF5 cache around a featurizer call.
 
     The wrapped function MUST accept ``(smiles_list, featurizer, *args, **kwargs)``

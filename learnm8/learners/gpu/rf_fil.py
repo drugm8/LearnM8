@@ -8,6 +8,7 @@ import logging
 import shutil
 import tempfile
 import time
+from typing import Any
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -60,7 +61,7 @@ class RfFilLearner(SklearnLearner):
         max_features: str = 'sqrt',
         random_state: int = 42,
         n_jobs: int = -1,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         model = RandomForestRegressor(
             n_estimators=n_estimators,
@@ -74,7 +75,7 @@ class RfFilLearner(SklearnLearner):
         super().__init__(model, random_state=random_state, **kwargs)
         self.device = 'cuda'
         self.n_estimators = n_estimators
-        self._fil_model = None
+        self._fil_model: Any = None
 
     def get_name(self) -> str:
         return 'rf_fil'
@@ -92,7 +93,12 @@ class RfFilLearner(SklearnLearner):
     def supports_uncertainty(self) -> bool:
         return True
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train the sklearn RF (float32) then convert to FIL.
 
         Args:

@@ -9,7 +9,7 @@ import logging
 import math
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import polars as pl
@@ -124,7 +124,7 @@ def calculate_initialization_metrics(
     Returns:
         Dictionary with cycle 0 metrics matching structure of execute_cycle() metrics
     """
-    metrics = {}
+    metrics: dict[str, Any] = {}
 
     # Basic cycle info
     metrics['cycle'] = 0
@@ -253,7 +253,7 @@ def select_initial_batch(
     target_col: str,
     strategy: str,
     batch_fraction: float,
-    featurizer: str,
+    featurizer: str | None,
     cache_dir: Path,
     original_pool_size: int,
     random_state: int = 42,
@@ -498,10 +498,10 @@ def validate_master_dataframe(master_df: 'pl.DataFrame') -> bool:
                 f'Status column has incorrect categories {current_categories}, expected {VALID_STATUSES}'
             )
     elif master_df['status'].dtype == pl.Enum:
-        current_categories = master_df['status'].dtype.categories
-        if set(current_categories) != set(VALID_STATUSES):
+        enum_categories = cast(pl.Enum, master_df['status'].dtype).categories
+        if set(enum_categories) != set(VALID_STATUSES):
             logger.warning(
-                f'Status column has incorrect enum categories {current_categories}, expected {VALID_STATUSES}'
+                f'Status column has incorrect enum categories {enum_categories}, expected {VALID_STATUSES}'
             )
     elif master_df['status'].dtype not in [pl.Categorical, pl.Utf8]:
         raise ValueError(

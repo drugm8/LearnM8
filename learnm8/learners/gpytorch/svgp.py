@@ -1,6 +1,7 @@
 import gc
 import logging
 import warnings
+from typing import Any
 
 import numpy as np
 import torch
@@ -81,11 +82,11 @@ class SVGPLearner(Learner):
         self.predict_chunk_size = predict_chunk_size
 
         self.is_trained = False
-        self._model = None
-        self._likelihood = None
+        self._model: Any = None
+        self._likelihood: Any = None
         self._valid_feature_mask: np.ndarray | None = None
-        self._feature_imputer = None
-        self._feature_scaler = None
+        self._feature_imputer: Any = None
+        self._feature_scaler: Any = None
         self._target_mean: float = 0.0
         self._target_std: float = 1.0
         self._kernel_name: str = ''
@@ -96,7 +97,7 @@ class SVGPLearner(Learner):
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(random_state)
 
-    def _resolve_kernel(self, features: np.ndarray):
+    def _resolve_kernel(self, features: np.ndarray) -> tuple[Any, str]:
         import gpytorch
 
         is_binary = self._feature_type == 'binary'
@@ -126,11 +127,11 @@ class SVGPLearner(Learner):
 
         raise ConfigurationError(f'Unknown kernel: {kernel_spec!r}')
 
-    def _make_model(self, inducing_points, covar_module):
+    def _make_model(self, inducing_points: Any, covar_module: Any) -> Any:
         import gpytorch
 
         class SVGPModel(gpytorch.models.ApproximateGP):
-            def __init__(self, inducing_points, covar_module):
+            def __init__(self, inducing_points: Any, covar_module: Any) -> None:
                 variational_distribution = (
                     gpytorch.variational.CholeskyVariationalDistribution(
                         inducing_points.size(0)
@@ -146,7 +147,7 @@ class SVGPLearner(Learner):
                 self.mean_module = gpytorch.means.ConstantMean()
                 self.covar_module = covar_module
 
-            def forward(self, x):
+            def forward(self, x: Any) -> Any:
                 mean_x = self.mean_module(x)
                 covar_x = self.covar_module(x)
                 return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
@@ -157,9 +158,9 @@ class SVGPLearner(Learner):
         self,
         train_x: torch.Tensor,
         train_y: torch.Tensor,
-        covar_module,
+        covar_module: Any,
         target_device: torch.device,
-    ):
+    ) -> tuple[Any, Any]:
         import gpytorch
         from torch.utils.data import DataLoader, TensorDataset
 

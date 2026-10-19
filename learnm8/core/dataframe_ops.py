@@ -16,6 +16,7 @@ Performance characteristics:
 """
 
 import logging
+from collections.abc import Iterator
 
 import polars as pl
 
@@ -256,7 +257,7 @@ def iter_status_chunks(
     status: str,
     chunk_size: int,
     columns: tuple[str, ...] = ('ID', 'SMILES'),
-):
+) -> Iterator[tuple[int, pl.DataFrame]]:
     """Yield ``(global_offset, chunk_df)`` over rows with the given status.
 
     Streaming pass 1 uses this instead of materializing a full

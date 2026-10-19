@@ -4,6 +4,7 @@ This module provides the random acquisition strategy for baseline comparisons.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -21,7 +22,7 @@ class RandomAcquisition(AcquisitionFunction):
     sophisticated acquisition strategies.
     """
 
-    def __init__(self, random_state: int = 42, **kwargs):
+    def __init__(self, random_state: int = 42, **kwargs: Any) -> None:
         """Initialize random acquisition function.
 
         Args:

@@ -33,7 +33,7 @@ import math
 import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import polars as pl
@@ -57,6 +57,9 @@ from learnm8.utils.numerical import (
     assert_no_inf_uncertainty,
     assert_no_nan,
 )
+
+if TYPE_CHECKING:
+    from learnm8.acquisition.base import AcquisitionFunction
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +277,7 @@ def execute_cycle(
         # Feature 023 D5 / FR-009: drop the uncertainty column from the
         # empty-cycle fallback schema when the cycle opted out of uncertainty.
         # Polars consumers downstream column-gate on `'uncertainty' in df.columns`.
-        empty_schema: dict[str, pl.PolarsDataType] = {
+        empty_schema: dict[str, type[pl.DataType]] = {
             'ID': pl.Utf8,
             'prediction': pl.Float64,
         }
@@ -596,7 +599,7 @@ def _calculate_cycle_metrics(
     Returns:
         Dictionary with comprehensive cycle metrics
     """
-    metrics = {}
+    metrics: dict[str, Any] = {}
 
     # Basic cycle info
     metrics['cycle'] = cycle
@@ -938,7 +941,7 @@ def _build_acquisition_function(
     cycle_idx: int | None = None,
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
-):
+) -> 'AcquisitionFunction':
     """Construct (but do not call) an acquisition function instance.
 
     Hoisted from _select_compounds per feature 023 D6 so the cycle can
@@ -1004,7 +1007,7 @@ def _select_compounds(
     cycle_idx: int | None = None,
     featurizer_obj: Any = None,
     cache_dir: Path | None = None,
-    acq_func: Any = None,
+    acq_func: 'AcquisitionFunction | None' = None,
 ) -> pl.DataFrame:
     """
     Apply acquisition strategy to select compounds.
@@ -1116,7 +1119,7 @@ def _train_learner(
     Returns:
         (training_time, train_feature_time)
     """
-    learner._feature_type = feature_type
+    cast(Any, learner)._feature_type = feature_type
 
     # Extract features and train learner.
     # Feature-extraction time is tracked separately from learner-side
@@ -1150,7 +1153,9 @@ def _train_learner(
                 )
 
             learner.train(
-                features=training_features,
+                features=cast(
+                    np.ndarray, training_features
+                ),  # None for SMILES-native learners
                 targets=training_targets,
                 smiles=training_smiles,
             )
@@ -1313,7 +1318,7 @@ def _select_and_measure(
 
     # Step 9: Calculate Batch Size from Fraction
     batch_size = min(
-        max(1, math.ceil(original_pool_size * config.batch_fraction)),
+        max(1, math.ceil(original_pool_size * cast(float, config.batch_fraction))),
         len(selection_pool),
     )
 

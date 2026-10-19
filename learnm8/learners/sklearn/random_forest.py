@@ -6,6 +6,7 @@ for molecular property prediction tasks.
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -35,8 +36,8 @@ class RandomForestLearner(SklearnLearner):
         max_features: str = 'sqrt',
         random_state: int = 42,
         n_jobs: int = -1,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Random Forest learner.
 
         Args:

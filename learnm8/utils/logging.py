@@ -122,6 +122,7 @@ def configure_learnm8_logging(
         else:
             use_rich = False
 
+        console_handler: logging.Handler
         if use_rich:
             console = Console()
             console_handler = RichHandler(

@@ -6,6 +6,7 @@ for molecular property prediction tasks.
 
 import gc
 import logging
+from typing import Any
 
 import numpy as np
 import xgboost as xgb
@@ -39,8 +40,8 @@ class XGBoostLearner(SklearnLearner):
         n_jobs: int = -1,
         device: str = 'cpu',
         enable_aggressive_gc: bool = True,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize XGBoost learner.
 
         Args:
@@ -113,7 +114,12 @@ class XGBoostLearner(SklearnLearner):
             device=self.device,
         )
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train XGBoost model, with optional GC and CUDA error handling.
 
         Args:

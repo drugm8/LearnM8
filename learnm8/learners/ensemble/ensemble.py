@@ -7,6 +7,7 @@ through model diversity.
 
 import logging
 import time
+from typing import cast
 
 import numpy as np
 
@@ -79,7 +80,7 @@ class EnsembleLearner(Learner):
         self.learners = learners
         self.aggregation_method = aggregation_method
         self.uncertainty_method = uncertainty_method
-        self.weights = weights
+        self.weights: np.ndarray | None = None
         self.enable_parallel_training = enable_parallel_training
         self.is_trained = False
 
@@ -124,7 +125,12 @@ class EnsembleLearner(Learner):
                 f'Found invalid types: {invalid_types}.'
             )
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train all ensemble learners on feature matrix.
 
         Args:
@@ -286,19 +292,22 @@ class EnsembleLearner(Learner):
                 # Weighted average
                 valid_weights = self.weights[: len(predictions_array)]
                 valid_weights = valid_weights / valid_weights.sum()  # Renormalize
-                return np.average(predictions_array, axis=0, weights=valid_weights)
+                return cast(
+                    np.ndarray,
+                    np.average(predictions_array, axis=0, weights=valid_weights),
+                )
             else:
                 # Simple average
-                return np.mean(predictions_array, axis=0)
+                return cast(np.ndarray, np.mean(predictions_array, axis=0))
 
         elif self.aggregation_method == 'median':
-            return np.median(predictions_array, axis=0)
+            return cast(np.ndarray, np.median(predictions_array, axis=0))
 
         else:
             logger.warning(
                 f"Unknown aggregation method '{self.aggregation_method}', using mean"
             )
-            return np.mean(predictions_array, axis=0)
+            return cast(np.ndarray, np.mean(predictions_array, axis=0))
 
     def _calculate_uncertainty(self, predictions_array: np.ndarray) -> np.ndarray:
         """Calculate uncertainty from ensemble variance.
@@ -319,23 +328,25 @@ class EnsembleLearner(Learner):
             # would use ddof=1; for small K (e.g. 3) that scales sigma up by
             # sqrt(K/(K-1)) ~ 1.22, which only matters for sigma-nonlinear
             # acquisition (EI/PI), not for rank-based ones (greedy/UCB/topk).
-            return np.std(predictions_array, axis=0)
+            return cast(np.ndarray, np.std(predictions_array, axis=0))
 
         elif self.uncertainty_method == 'mad':
             # Median absolute deviation (more robust to outliers)
             median_pred = np.median(predictions_array, axis=0)
-            return np.median(np.abs(predictions_array - median_pred), axis=0)
+            return cast(
+                np.ndarray, np.median(np.abs(predictions_array - median_pred), axis=0)
+            )
 
         elif self.uncertainty_method == 'quantile':
             # Interquartile range as uncertainty measure
             q75, q25 = np.percentile(predictions_array, [75, 25], axis=0)
-            return (q75 - q25) / 2.0  # Half of IQR
+            return cast(np.ndarray, (q75 - q25) / 2.0)  # Half of IQR
 
         else:
             logger.warning(
                 f"Unknown uncertainty method '{self.uncertainty_method}', using std"
             )
-            return np.std(predictions_array, axis=0)
+            return cast(np.ndarray, np.std(predictions_array, axis=0))
 
     def supports_uncertainty(self) -> bool:
         """Return True since ensemble provides uncertainty through model diversity."""

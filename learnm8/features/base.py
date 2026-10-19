@@ -7,7 +7,7 @@ for 3D fingerprints, and parameter management.
 
 import logging
 import warnings
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from skfp.preprocessing import ConformerGenerator, MolFromSmilesTransformer
@@ -170,7 +170,7 @@ class SkfpFeaturizer(Featurizer):
 
     def __init__(
         self,
-        fingerprint_instance,
+        fingerprint_instance: Any,
         auto_generate_conformers: bool = True,
         conformer_params: dict[str, Any] | None = None,
         n_jobs: int = -1,
@@ -218,7 +218,7 @@ class SkfpFeaturizer(Featurizer):
         self.conformer_params = conformer_params or {}
         self.n_jobs = n_jobs
         self.verbose = verbose
-        self.random_state = int(random_state)
+        self.random_state: int | None = int(random_state)
         self._storage_dtype = storage_dtype
         self._feature_type = feature_type
         self._fingerprint_name = fingerprint_name
@@ -409,19 +409,19 @@ class SkfpFeaturizer(Featurizer):
             - n_features (descriptor-based fingerprints)
         """
         if hasattr(self.fingerprint, 'n_features_out'):
-            return self.fingerprint.n_features_out
+            return cast(int, self.fingerprint.n_features_out)
         elif hasattr(self.fingerprint, 'n_features_out_'):
-            return self.fingerprint.n_features_out_
+            return cast(int, self.fingerprint.n_features_out_)
         elif hasattr(self.fingerprint, 'fp_size'):
-            return self.fingerprint.fp_size
+            return cast(int, self.fingerprint.fp_size)
         elif hasattr(self.fingerprint, 'n_features'):
-            return self.fingerprint.n_features
+            return cast(int, self.fingerprint.n_features)
         else:
             params = self.fingerprint.get_params()
             if 'fp_size' in params:
-                return params['fp_size']
+                return cast(int, params['fp_size'])
             elif 'n_features' in params:
-                return params['n_features']
+                return cast(int, params['n_features'])
             else:
                 raise AttributeError(
                     f'Cannot determine feature dimension for {self.get_name()}. '

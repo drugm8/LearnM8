@@ -1,5 +1,8 @@
 """Decision Tree ensemble learner for LearnM8 framework."""
 
+from typing import Any
+
+from ...core.interfaces import Learner
 from ..sklearn.decision_tree import DecisionTreeLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -12,8 +15,8 @@ class DTEnsemble(EnsembleLearner):
         max_depths: list[int] | None = None,
         random_states: list[int] | None = None,
         random_state: int = 42,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize DT ensemble.
 
         Args:
@@ -31,7 +34,7 @@ class DTEnsemble(EnsembleLearner):
             random_state, len(max_depths), override=random_states
         )
 
-        learners = []
+        learners: list[Learner] = []
         for depth, rs in zip(max_depths, random_states, strict=True):
             dt = DecisionTreeLearner(max_depth=depth, random_state=rs)
             learners.append(dt)

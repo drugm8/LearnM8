@@ -6,6 +6,7 @@ following the new architecture design with clean interfaces and dependency injec
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -30,7 +31,7 @@ class AcquisitionFunction(ABC):
         **kwargs: Additional parameters for specific acquisition methods
     """
 
-    def __init__(self, score_direction: str = 'higher', **kwargs):
+    def __init__(self, score_direction: str = 'higher', **kwargs: Any) -> None:
         """Initialize acquisition function.
 
         Args:
@@ -226,7 +227,7 @@ class AcquisitionFunction(ABC):
             unc_col = compounds.get_column('uncertainty')
             # FR-005 ext (Should-Fix #7): defence-in-depth secondary guard.
             if unc_col.is_null().any() or unc_col.is_nan().any():
-                nan_count = unc_col.is_null().sum() + unc_col.is_nan().sum()
+                nan_count = int(unc_col.is_null().sum()) + int(unc_col.is_nan().sum())
                 raise LearnerError(
                     f'[secondary-guard] Uncertainties contain {nan_count} NaN/null values '
                     f'out of {len(compounds)} compounds. cycle.py upstream guard should '

@@ -5,6 +5,7 @@ from the posterior predictive distribution.
 """
 
 import logging
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -24,7 +25,7 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
     stochastic exploration strategy.
     """
 
-    def __init__(self, random_state: int = 42, **kwargs):
+    def __init__(self, random_state: int = 42, **kwargs: Any) -> None:
         """Initialize Thompson Sampling acquisition function.
 
         Args:
@@ -109,7 +110,7 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         samples = np.asarray(predictions, dtype=np.float64) + (
             np.asarray(uncertainties, dtype=np.float64) * z
         )
-        return samples if self.maximize else -samples
+        return cast(np.ndarray, samples if self.maximize else -samples)
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""

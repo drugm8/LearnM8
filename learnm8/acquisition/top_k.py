@@ -4,6 +4,7 @@ This module provides the Top-K acquisition strategy which selects based on rank 
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -25,8 +26,8 @@ class TopKAcquisition(AcquisitionFunction):
         k_fraction: float = 0.1,
         score_direction: str = 'higher',
         random_state: int = 42,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Top-K acquisition function.
 
         Args:

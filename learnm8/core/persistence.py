@@ -25,7 +25,7 @@ import shutil
 import warnings
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 import numpy as np
 import polars as pl
@@ -38,7 +38,7 @@ from .validation import ValidationResult
 logger = logging.getLogger(__name__)
 
 PARQUET_ROW_THRESHOLD = 1_000_000
-PARQUET_COMPRESSION = 'zstd'
+PARQUET_COMPRESSION: Final = 'zstd'
 PARQUET_COMPRESSION_LEVEL = 3
 
 
@@ -127,7 +127,7 @@ def _write_metadata_json(path: Path, data: dict[str, str]) -> None:
 
 
 def _apply_parquet_schema(df: pl.DataFrame) -> pl.DataFrame:
-    KNOWN_DTYPES: dict[str, pl.PolarsDataType] = {
+    KNOWN_DTYPES: dict[str, type[pl.DataType]] = {
         'ID': pl.Utf8,
         'SMILES': pl.Utf8,
         'status': pl.Utf8,
@@ -233,10 +233,10 @@ class CyclePredictionsWriter:
         self._compression_level = compression_level
         self.path: Path | None = None
         self._tmp_path: Path | None = None
-        self._writer = None  # pa.parquet.ParquetWriter
-        self._pa = None
-        self._pq = None
-        self._schema = None
+        self._writer: Any = None  # pa.parquet.ParquetWriter
+        self._pa: Any = None
+        self._pq: Any = None
+        self._schema: Any = None
         # Row-aligned buffer (lists of arrow-convertible arrays).
         self._buf_ids: list = []
         self._buf_pred: list = []
@@ -323,7 +323,7 @@ class CyclePredictionsWriter:
         while self._buffered >= self.row_group_size:
             self._flush_one_group(self.row_group_size)
 
-    def _concat_buffer(self):
+    def _concat_buffer(self) -> tuple[Any, np.ndarray, Any]:
         pa = self._pa
         ids = pa.concat_arrays(
             [
@@ -395,7 +395,7 @@ class CyclePredictionsWriter:
         if self._tmp_path is not None:
             self._tmp_path.unlink(missing_ok=True)
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         if exc_type is not None:
             self.abort()
             return
@@ -487,8 +487,7 @@ def _organize_columns(df: pl.DataFrame, column_groups: list[list[str]]) -> pl.Da
             if col in df.columns:
                 ordered_columns.append(col)
 
-    remaining = set(df.columns) - set(ordered_columns)
-    remaining = sorted(remaining)
+    remaining = sorted(set(df.columns) - set(ordered_columns))
     ordered_columns.extend(remaining)
 
     return df.select(ordered_columns)
@@ -690,7 +689,7 @@ def save_results(
         # disable_molecular_similarity=True). Without this, an all-null
         # column would be inferred as Null dtype and break downstream
         # readers that expect Float64.
-        schema_overrides: dict[str, pl.PolarsDataType] = {
+        schema_overrides: dict[str, type[pl.DataType]] = {
             key: pl.Float64 for key in DIVERSITY_KEYS
         }
         if any('fingerprint_used' in cm for cm in sanitized_metrics):

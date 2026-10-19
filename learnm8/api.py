@@ -53,7 +53,7 @@ import time
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import datamol as dm  # type: ignore[import-untyped]
 import polars as pl
@@ -177,7 +177,7 @@ LEARNER_DISPLAY_NAMES = {
 }
 
 
-def list_available_learners():
+def list_available_learners() -> list[str]:
     """Return list of available learner shortcuts.
 
     Returns only learners whose imports succeeded.
@@ -267,10 +267,10 @@ def _create_learner(
 
     # Standard learner instantiation
     try:
-        sig = inspect.signature(learner_class.__init__)
+        sig = inspect.signature(learner_class)
         params = sig.parameters
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
 
         if 'n_jobs' in params:
             kwargs['n_jobs'] = n_jobs
@@ -286,7 +286,7 @@ def _create_learner(
             logger.debug(
                 f'Creating {learner_class.__name__} with random_state={random_state}'
             )
-            return learner_class(random_state=random_state, **kwargs)
+            return cast(Learner, learner_class(random_state=random_state, **kwargs))
 
         elif 'random_states' in params:
             from learnm8.learners.ensemble.ensemble import _derive_random_states
@@ -296,13 +296,13 @@ def _create_learner(
                 f'Creating {learner_class.__name__} with random_states={random_states} '
                 f'(legacy path; class lacks `random_state` parameter)'
             )
-            return learner_class(random_states=random_states, **kwargs)
+            return cast(Learner, learner_class(random_states=random_states, **kwargs))
 
         else:
             logger.debug(
                 f'Creating {learner_class.__name__} without random state parameter'
             )
-            return learner_class(**kwargs)
+            return cast(Learner, learner_class(**kwargs))
 
     except (ValueError, TypeError, ImportError, RuntimeError) as e:
         raise ConfigurationError(
@@ -478,7 +478,7 @@ def _initialize_active_learning(
         oracle=oracle,
         target_col=target_col,
         strategy=init_config.strategy,
-        batch_fraction=init_config.batch_fraction,
+        batch_fraction=cast(float, init_config.batch_fraction),
         featurizer=featurizer_obj.get_name() if featurizer_obj else None,
         cache_dir=cache_dir,
         original_pool_size=original_pool_size,
@@ -527,7 +527,7 @@ def _execute_loop(
     cache_dir: Path,
     original_pool_size: int,
     score_direction: str,
-    oracle_type: str,
+    oracle_type: Literal['run', 'benchmark'],
     original_pool: pl.DataFrame | None,
     memory_safety_factor: float,
     run_cache: RunCache,
@@ -681,9 +681,9 @@ def _calculate_aggregate_metrics(
     if not all_metrics:
         return {}
 
-    agg = {}
+    agg: dict[str, Any] = {}
 
-    avg_score_values = [
+    avg_score_values: list[Any] = [
         m.get('avg_score_selected')
         for m in all_metrics
         if m.get('avg_score_selected') is not None
@@ -692,7 +692,7 @@ def _calculate_aggregate_metrics(
         agg['avg_selection_quality'] = float(np.mean(avg_score_values))
         agg['std_selection_quality'] = float(np.std(avg_score_values))
 
-    best_values = [
+    best_values: list[Any] = [
         m.get('best_so_far') for m in all_metrics if m.get('best_so_far') is not None
     ]
     if best_values:
@@ -708,7 +708,7 @@ def _calculate_aggregate_metrics(
         agg['best_compound_found_cycle'] = best_cycle
 
     if oracle_type == 'benchmark':
-        top10_disc_values = [
+        top10_disc_values: list[Any] = [
             m.get('top_10_discovery')
             for m in all_metrics
             if m.get('top_10_discovery') is not None
@@ -717,7 +717,7 @@ def _calculate_aggregate_metrics(
             agg['final_top_10_discovery'] = top10_disc_values[-1]
             agg['avg_top_10_discovery'] = float(np.mean(top10_disc_values))
 
-        top100_disc_values = [
+        top100_disc_values: list[Any] = [
             m.get('top_100_discovery')
             for m in all_metrics
             if m.get('top_100_discovery') is not None
@@ -726,7 +726,7 @@ def _calculate_aggregate_metrics(
             agg['final_top_100_discovery'] = top100_disc_values[-1]
             agg['avg_top_100_discovery'] = float(np.mean(top100_disc_values))
 
-        cumulative_ef_values = [
+        cumulative_ef_values: list[Any] = [
             m.get('cumulative_ef')
             for m in all_metrics
             if m.get('cumulative_ef') is not None
@@ -735,7 +735,7 @@ def _calculate_aggregate_metrics(
             agg['final_cumulative_ef'] = cumulative_ef_values[-1]
             agg['avg_cumulative_ef'] = float(np.mean(cumulative_ef_values))
 
-        batch_improvement_values = [
+        batch_improvement_values: list[Any] = [
             m.get('batch_score_improvement_ratio')
             for m in all_metrics
             if m.get('batch_score_improvement_ratio') is not None
@@ -745,7 +745,7 @@ def _calculate_aggregate_metrics(
                 np.mean(batch_improvement_values)
             )
 
-        unlabeled_spearman_values = [
+        unlabeled_spearman_values: list[Any] = [
             m.get('unlabeled_spearman_correlation')
             for m in all_metrics
             if m.get('unlabeled_spearman_correlation') is not None
@@ -754,7 +754,7 @@ def _calculate_aggregate_metrics(
             agg['final_unlabeled_spearman'] = unlabeled_spearman_values[-1]
             agg['avg_unlabeled_spearman'] = float(np.mean(unlabeled_spearman_values))
 
-        unlabeled_top100_values = [
+        unlabeled_top100_values: list[Any] = [
             m.get('unlabeled_top_100_overlap')
             for m in all_metrics
             if m.get('unlabeled_top_100_overlap') is not None
@@ -765,7 +765,7 @@ def _calculate_aggregate_metrics(
                 np.mean(unlabeled_top100_values)
             )
 
-        unlabeled_ef_values = [
+        unlabeled_ef_values: list[Any] = [
             m.get('unlabeled_ef_1_0')
             for m in all_metrics
             if m.get('unlabeled_ef_1_0') is not None
@@ -1209,7 +1209,7 @@ def run_active_learning(
                 )
 
         # Convert string featurizer to instance if needed
-        featurizer_obj = None
+        featurizer_obj: Featurizer | None = None
         if featurizer is not None:
             if isinstance(featurizer, str):
                 from learnm8.features import FEATURIZER_REGISTRY
@@ -1242,7 +1242,11 @@ def run_active_learning(
                     f'Using provided featurizer instance: {featurizer_obj.get_name()}'
                 )
 
-        feature_type = featurizer_obj.feature_type if featurizer_obj else 'binary'
+        feature_type = (
+            getattr(featurizer_obj, 'feature_type', 'binary')
+            if featurizer_obj
+            else 'binary'
+        )
 
         from learnm8.features.guard import check_large_feature_guard
 
@@ -1383,7 +1387,7 @@ def run_active_learning(
 
         total_cycles = len(cycle_schedule)
         total_compounds_to_label = sum(
-            int(original_pool_size * c.batch_fraction) * c.n_cycles
+            int(original_pool_size * cast(float, c.batch_fraction)) * c.n_cycles
             for c in cycle_schedule
         )
         logger.info(

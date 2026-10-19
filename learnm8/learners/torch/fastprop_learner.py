@@ -8,6 +8,7 @@ featurizer-agnostic architecture, accepting any pre-computed feature matrix.
 import logging
 import time
 import warnings
+from typing import Any, cast
 
 import numpy as np
 import torch
@@ -99,7 +100,7 @@ class FastpropLearner(Learner):
         self.enable_aggressive_gc = enable_aggressive_gc
 
         self.model = None
-        self.trainer = None
+        self.trainer: Any = None
         self.is_trained = False
 
         self.feature_means = None
@@ -139,7 +140,12 @@ class FastpropLearner(Learner):
 
         return precision
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         """Train Fastprop model using PyTorch Lightning.
 
         Args:
@@ -193,7 +199,7 @@ class FastpropLearner(Learner):
                     use_val = True
 
             val_dataloader = None
-            callbacks = []
+            callbacks: list[Any] = []
 
             if use_val:
                 indices = list(range(n_samples))
@@ -269,7 +275,7 @@ class FastpropLearner(Learner):
 
             self.trainer = Trainer(
                 max_epochs=self.max_epochs,
-                precision=self.precision,
+                precision=cast(Any, self.precision),
                 enable_progress_bar=enable_verbose,
                 enable_model_summary=False,
                 callbacks=callbacks,
@@ -358,7 +364,7 @@ class FastpropLearner(Learner):
             )
 
             predict_trainer = Trainer(
-                precision=self.precision,
+                precision=cast(Any, self.precision),
                 accelerator='auto',
                 devices=1,
                 enable_progress_bar=False,
@@ -370,9 +376,14 @@ class FastpropLearner(Learner):
                 f'Starting {self.get_name()} prediction on {len(features)} samples '
                 f'(batch_size={self.predict_batch_size}, precision={self.precision})'
             )
-            predictions = predict_trainer.predict(self.model, predict_dataloader)
+            batches = predict_trainer.predict(self.model, predict_dataloader)
+            if not batches:
+                raise LearnerError(
+                    f'{self.get_name()} trainer returned no predictions '
+                    f'for {len(features)} samples.'
+                )
             logger.debug(f'{self.get_name()} prediction completed, processing results')
-            predictions = torch.cat(predictions).cpu().numpy().squeeze()
+            predictions = torch.cat(cast(list, batches)).cpu().numpy().squeeze()
 
             if predictions.ndim == 0:
                 predictions = np.array([predictions.item()])

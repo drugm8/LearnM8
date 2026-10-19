@@ -6,6 +6,7 @@ for molecular property prediction tasks.
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
@@ -31,8 +32,8 @@ class DecisionTreeLearner(SklearnLearner):
         min_samples_leaf: int = 5,
         max_features: str | None = None,
         random_state: int = 42,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Decision Tree learner.
 
         Args:
@@ -69,7 +70,7 @@ class DecisionTreeLearner(SklearnLearner):
         """Return True if uncertainty is available (requires squared_error criterion)."""
         if not self.is_trained:
             return True
-        return self.model.criterion == 'squared_error'
+        return bool(self.model.criterion == 'squared_error')
 
     def predict(
         self,

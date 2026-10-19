@@ -33,7 +33,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn, cast
 
 import numpy as np
 import polars as pl
@@ -90,7 +90,7 @@ _RENAMED_SYMBOLS: dict[str, str] = {
 }
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> NoReturn:
     if name in _RENAMED_SYMBOLS:
         raise AttributeError(_RENAMED_SYMBOLS[name])
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
@@ -363,7 +363,10 @@ def _scaffold_for_smiles(smi: str) -> str | None:
         largest = chooser.choose(mol)
         if largest is None:
             return None
-        return MurckoScaffold.MurckoScaffoldSmiles(mol=largest, includeChirality=False)
+        return cast(
+            str | None,
+            MurckoScaffold.MurckoScaffoldSmiles(mol=largest, includeChirality=False),
+        )
     except Exception:  # pragma: no cover - defensive
         return None
 
@@ -391,6 +394,7 @@ def _scaffold_diversity_index(
     unique: set[str] = set()
     valid_count = 0
     for smi in smiles_list:
+        scaffold: str | None
         if smi in scaffold_cache:
             scaffold = scaffold_cache[smi]
         else:
@@ -420,6 +424,7 @@ def _compute_batch_scaffolds(
     out: set[str] = set()
     valid_count = 0
     for smi in smiles_list:
+        scaffold: str | None
         if smi in scaffold_cache:
             scaffold = scaffold_cache[smi]
         else:

@@ -135,8 +135,8 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
                 f'file (thousands separator?); write numbers without thousands separators: '
                 f'{_truncate_list(cells)}'
             )
-    text = raw.str.replace_all(',', '.', literal=True) if sep == ';' else raw
-    parsed = text.cast(pl.Float64, strict=False)
+    text_expr = raw.str.replace_all(',', '.', literal=True) if sep == ';' else raw
+    parsed = text_expr.cast(pl.Float64, strict=False)
     is_pending = raw.is_null() | (raw == '')
     smiles = (
         pl.col('SMILES').str.strip_chars()

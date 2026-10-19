@@ -5,6 +5,7 @@ quantification for molecular property prediction tasks.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -36,8 +37,8 @@ class GaussianProcessLearner(SklearnLearner):
         normalize_y: bool = True,
         random_state: int = 42,
         max_train_size: int = 5000,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         if kernel is None:
             kernel = 'auto'
 
@@ -111,7 +112,12 @@ class GaussianProcessLearner(SklearnLearner):
 
         return C(1.0, (1e-4, 1e7)) * RBF(1.0, (1e-4, 1e7))
 
-    def train(self, features: np.ndarray, targets: np.ndarray) -> None:
+    def train(
+        self,
+        features: np.ndarray,
+        targets: np.ndarray,
+        smiles: list[str] | None = None,
+    ) -> None:
         self._n_train = features.shape[0] if features.ndim == 2 else len(features)
         n_samples = self._n_train
 

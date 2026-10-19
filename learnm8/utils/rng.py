@@ -27,6 +27,8 @@ Contract / determinism notes:
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 from scipy.special import ndtri
 
@@ -121,4 +123,4 @@ def chunk_normal(seed_components: tuple[int, ...], start: int, n: int) -> np.nda
     if n == 0:
         return u
     np.maximum(u, _UNIFORM_FLOOR, out=u)
-    return ndtri(u)
+    return cast(np.ndarray, ndtri(u))

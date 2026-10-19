@@ -5,6 +5,7 @@ the expected improvement over the current best observed value.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -56,8 +57,8 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
         minimize: bool | None = None,
         score_direction: str = 'higher',
         current_best: float | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize Expected Improvement acquisition function.
 
         Args:

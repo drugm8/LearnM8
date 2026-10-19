@@ -5,6 +5,7 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
 
 import polars as pl
 
@@ -22,8 +23,8 @@ class PythonOracle(Oracle):
         module_path: str | None = None,
         oracle_path: str | None = None,
         function_name: str | None = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Initialize the Python oracle.
 
@@ -54,10 +55,16 @@ class PythonOracle(Oracle):
         # Load the oracle function
         self.oracle_function = self._load_oracle_function(function_name)
 
-    def _load_oracle_function(self, function_name: str | None = None) -> Callable:
+    def _load_oracle_function(
+        self, function_name: str | None = None
+    ) -> Callable[..., Any]:
         """Load oracle function from Python file."""
         # Load module from file
         spec = importlib.util.spec_from_file_location('oracle_module', self.oracle_path)
+        if spec is None or spec.loader is None:
+            raise OracleError(
+                f'{self.oracle_path} is not a loadable Python module; use a .py file.'
+            )
         oracle_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(oracle_module)
 
@@ -119,7 +126,7 @@ class PythonOracle(Oracle):
                 f'The function should accept a list of compound ID strings and return a DataFrame.'
             )
 
-        return oracle_function
+        return cast(Callable[..., Any], oracle_function)
 
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """

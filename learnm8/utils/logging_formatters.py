@@ -10,7 +10,7 @@ All functions return formatted strings suitable for logging at INFO level.
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import polars as pl
 
@@ -46,17 +46,16 @@ def format_cycle_schedule(cycle_num: int, config: 'CycleConfig', pool_size: int)
         >>> format_cycle_schedule(1, config, 10000)
         'Cycles 1-5: UCB acquisition (50 compounds per cycle, 0.5% batch size), 30% pruned per cycle'
     """
-    batch_size = int(pool_size * config.batch_fraction)
+    batch_fraction = cast(float, config.batch_fraction)  # validated in __post_init__
+    batch_size = int(pool_size * batch_fraction)
 
     if config.n_cycles == 1:
         msg = f'Cycle {cycle_num}: {config.strategy.upper()} acquisition '
-        msg += (
-            f'({batch_size} compounds, {config.batch_fraction * 100:.1f}% batch size)'
-        )
+        msg += f'({batch_size} compounds, {batch_fraction * 100:.1f}% batch size)'
     else:
         end_cycle = cycle_num + config.n_cycles - 1
         msg = f'Cycles {cycle_num}-{end_cycle}: {config.strategy.upper()} acquisition '
-        msg += f'({batch_size} compounds per cycle, {config.batch_fraction * 100:.1f}% batch size)'
+        msg += f'({batch_size} compounds per cycle, {batch_fraction * 100:.1f}% batch size)'
 
     if config.pruning_strategy:
         prune_frac = (

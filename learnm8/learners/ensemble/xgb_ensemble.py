@@ -1,5 +1,8 @@
 """XGBoost ensemble learner for LearnM8 framework."""
 
+from typing import Any
+
+from ...core.interfaces import Learner
 from ..sklearn.xgboost_learner import XGBoostLearner
 from .ensemble import EnsembleLearner, _derive_random_states
 
@@ -13,8 +16,8 @@ class XGBEnsemble(EnsembleLearner):
         random_states: list[int] | None = None,
         random_state: int = 42,
         device: str = 'cpu',
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initialize XGB ensemble.
 
         Args:
@@ -36,7 +39,7 @@ class XGBEnsemble(EnsembleLearner):
 
         resolved_device = 'cpu' if device == 'auto' else device
 
-        learners = []
+        learners: list[Learner] = []
         for lr, rs in zip(learning_rates, random_states):  # noqa: B905
             xgb = XGBoostLearner(
                 learning_rate=lr,

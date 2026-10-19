@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import polars as pl
@@ -103,7 +103,7 @@ def calculate_enrichment_factor(
     # Calculate enrichment factor
     ef = (n_total * n_actives_selected) / (n_actives_total * n_selected)
 
-    return round(ef, 3)
+    return cast(float, round(ef, 3))
 
 
 def calculate_top_k_overlap(
@@ -287,7 +287,7 @@ def calculate_multiple_enrichment_factors(
     """
     percentiles = [5.0, 1.0, 0.5, 0.1]
 
-    results = {}
+    results: dict[str, float | None] = {}
     for p in percentiles:
         try:
             ef_value = calculate_enrichment_factor(scores, labels, p, score_direction)
@@ -348,7 +348,7 @@ def calculate_ground_truth_enrichment_factors(
     # Calculate enrichment factors at fixed percentiles
     percentiles = [5.0, 1.0, 0.5, 0.1]
 
-    results = {}
+    results: dict[str, float | None] = {}
     for p in percentiles:
         try:
             ef_value = calculate_enrichment_factor(scores, labels, p, score_direction)
@@ -424,7 +424,7 @@ def calculate_multiple_top_k_discovery_rates(
 
 def calculate_cumulative_enrichment_factor(
     selected_ids: set, ground_truth_df: pl.DataFrame, activity_column: str = 'Activity'
-) -> float:
+) -> float | None:
     """
     Calculate enrichment factor of all selections vs random.
 
@@ -472,7 +472,7 @@ def calculate_cumulative_enrichment_factor(
 
 def calculate_batch_hit_rate(
     newly_selected_df: pl.DataFrame, activity_column: str = 'Activity'
-) -> float:
+) -> float | None:
     """
     Calculate hit rate for current batch.
 
@@ -505,7 +505,7 @@ def calculate_batch_enrichment_factor(
     newly_selected_df: pl.DataFrame,
     ground_truth_df: pl.DataFrame,
     activity_column: str = 'Activity',
-) -> float:
+) -> float | None:
     """
     Calculate enrichment factor for this cycle's batch.
 
@@ -811,7 +811,7 @@ def calculate_unlabeled_ranking_correlation(
     ground_truth_df: pl.DataFrame,
     target_column: str,
     merged_target: pl.DataFrame | None = None,
-) -> float:
+) -> float | None:
     """
     Calculate Spearman correlation on UNLABELED compounds only.
 
