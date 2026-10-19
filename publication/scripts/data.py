@@ -121,7 +121,7 @@ def build(results_dir: Path = RESULTS_DIR, out: Path = TIDY) -> pl.DataFrame:
             .rename({'strategy': 'cycle_strategy'})
             .with_columns(run_id=pl.lit(run_id))
         )
-    # Column sets differ between waves (pre-026 runs lack selection_path), so
+    # Column sets differ between waves (older runs lack selection_path), so
     # concatenate diagonally and let absent columns become nulls.
     metrics = pl.concat(frames, how='diagonal_relaxed')
 
