@@ -260,7 +260,8 @@ def _bulk_tanimoto_for_pairs(
 
     Uses ``rdkit.DataStructs.BulkTanimotoSimilarity`` per query fingerprint
     (the queries here are deduplicated by the left index so we issue the
-    minimum number of bulk calls).
+    minimum number of bulk calls). A pair whose two fingerprints both have
+    zero on-bits has similarity 1.0, independent of the RDKit version.
     """
     if not pairs:
         return np.empty(0, dtype=np.float64)
@@ -273,6 +274,10 @@ def _bulk_tanimoto_for_pairs(
         sims = DataStructs.BulkTanimotoSimilarity(fps[i], right_fps)
         for (idx, _), sim in zip(entries, sims, strict=True):
             out[idx] = sim
+        if fps[i].GetNumOnBits() == 0:
+            for idx, j in entries:
+                if fps[j].GetNumOnBits() == 0:
+                    out[idx] = 1.0
     return out
 
 
