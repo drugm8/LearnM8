@@ -393,7 +393,7 @@ def _predict_chunk(
             raise ValueError(
                 f'featurizer is required for {learner.get_name()} because it is a '
                 f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
-                f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
+                f"SMILES-native learners like 'chemprop' and 'chemprop_ensemble' can run without "
                 f'a featurizer (featurizer=None).'
             )
         t0 = time.perf_counter()

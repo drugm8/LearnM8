@@ -21,7 +21,7 @@ from learnm8 import (
 ```python
 def run_active_learning(
     compound_pool: str | Path | pl.DataFrame,
-    oracle: str | Path | Oracle,
+    oracle: str | Path | Oracle | None,
     learner: str | Learner,
     target_col: str,
     featurizer: str | Featurizer | None = None,
@@ -48,6 +48,8 @@ def run_active_learning(
     output_format: Literal['auto', 'csv', 'parquet'] = 'auto',
     disable_molecular_similarity: bool | Iterable[str] = False,
     force_uncertainty: bool = False,
+    skip_validation: bool = False,
+    streaming: Literal['auto', 'always', 'never'] = 'auto',
 ) -> dict[str, Any]
 ```
 
@@ -125,6 +127,8 @@ def run_active_learning(
 | `acquisition_params` | `dict \| None` | `None` | Extra acquisition parameters passed to the strategy constructor. E.g. `{'beta': 2.0}` for UCB, `{'xi': 0.05}` for EI/PI, `{'k_fraction': 0.05}` for Top-K. |
 | `disable_molecular_similarity` | `bool \| Iterable[str]` | `False` | Disable diversity metric computation. `True` skips all. Pass a list of metric names to skip selectively. |
 | `force_uncertainty` | `bool` | `False` | Force uncertainty computation every cycle even when the active strategy does not require it. Cannot disable uncertainty — only forces it on. |
+| `skip_validation` | `bool` | `False` | Skip SMILES validation, duplicate-ID checks and target-column dtype checks; all compounds are treated as valid. Use when the dataset was already checked (for example with `learnm8 validate`). Oracle-vs-pool reconciliation still runs. CLI: `--skip-validation`. |
+| `streaming` | `'auto' \| 'always' \| 'never'` | `'auto'` | Memory-efficient two-pass predict-then-select path for large pools. A cycle is eligible when the acquisition strategy is streamable (every built-in strategy is) and `pruning_strategy` is `None` or `'score'`; `run_active_learning` always writes to an output directory, which the streaming path needs. `'auto'` uses it when eligible and falls back to the in-memory path otherwise; `'always'` raises `ConfigurationError` if a cycle is not eligible; `'never'` forces the in-memory path. Stochastic strategies (`thompson`, `random`, `topk`) draw different but equivalent samples under streaming. CLI: `--streaming`. |
 
 ### Returns
 
@@ -138,7 +142,7 @@ def run_active_learning(
 | `validation_result` | `ValidationResult` | Compound validation outcome. |
 | `output_dir` | `Path` | Path to the output directory. |
 | `saved_files` | `dict[str, Path]` | Paths to all saved output files. |
-| `prediction_files` | `dict[str, Path]` | Paths to per-cycle prediction files (`prediction_cycle_N.parquet`). |
+| `prediction_files` | `list[Path]` | Paths to per-cycle prediction files (`prediction_cycle_N.parquet`). |
 | `labeled_count` | `int` | Number of labeled compounds at experiment end. |
 | `unlabeled_count` | `int` | Number of unlabeled compounds at experiment end. |
 
@@ -197,12 +201,12 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `mean_tanimoto_similarity_sampled` | `float` | Sampled mean pairwise Tanimoto (batch) |
-| `scaffold_diversity_index` | `float` | Scaffold diversity index (batch) |
-| `shannon_entropy_diversity` | `float` | Shannon entropy diversity (batch) |
-| `mean_tanimoto_similarity_sampled_cumulative` | `float` | Same metrics computed cumulatively |
-| `scaffold_diversity_index_cumulative` | `float` | — |
-| `shannon_entropy_diversity_cumulative` | `float` | — |
+| `mean_tanimoto_similarity_sampled_batch` | `float \| None` | Mean pairwise Tanimoto similarity from adaptive pair sampling, newly selected batch |
+| `mean_tanimoto_similarity_sampled_cumulative` | `float \| None` | Same, all compounds selected so far |
+| `scaffold_diversity_index_batch` | `float \| None` | Unique Bemis-Murcko scaffolds divided by valid compounds, newly selected batch |
+| `scaffold_diversity_index_cumulative` | `float \| None` | Same, all compounds selected so far |
+| `bit_position_uniformity_entropy_batch` | `float \| None` | Entropy (bits) of the normalised bit-position activation distribution, newly selected batch. Higher means fingerprint bits are activated more uniformly |
+| `bit_position_uniformity_entropy_cumulative` | `float \| None` | Same, all compounds selected so far |
 | `fingerprint_used` | `str` | Featurizer used for diversity computation |
 
 > Diversity metrics depend on the featurizer. Comparing across runs with different featurizers is invalid. Verify consistency via `fingerprint_used`.
@@ -339,7 +343,7 @@ def extract_features(
 | `smiles_list` | `list[str]` | — | SMILES strings to featurize. |
 | `featurizer` | `str \| Featurizer` | — | Featurizer shortcut string or instance. See [Available Featurizers](../components/featurizers/available-featurizers.md). |
 | `cache_dir` | `Path \| None` | `None` | HDF5 cache directory. Defaults to `.cache` in CWD. |
-| `n_jobs` | `int` | `-1` | Parallel workers. Auto-scales: sequential <100 SMILES, all cores 100–10K, capped at 32 above 10K. |
+| `n_jobs` | `int` | `-1` | Parallel workers. `-1` = all CPU cores, `1` = sequential. The value is passed through unchanged. |
 | `show_progress` | `bool` | `False` | Show tqdm progress bar. |
 | `preferred_dtype` | `str` | `'float32'` | Hint to the cache layer for output dtype. Tree learners pass `'uint8'` to skip the float32 inflation step for binary fingerprints (~4× working-set reduction on Morgan 2048-bit). |
 

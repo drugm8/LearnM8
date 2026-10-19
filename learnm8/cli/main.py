@@ -314,7 +314,7 @@ def create_parser() -> argparse.ArgumentParser:
         '--allow-large-features',
         action='store_true',
         default=False,
-        help='Bypass the large-feature guard that blocks descriptor-based featurizers on pools >1M compounds',
+        help='Bypass the large-feature guard that blocks descriptor-based featurizers on pools >10M compounds',
     )
     advanced_group.add_argument(
         '--force-uncertainty',

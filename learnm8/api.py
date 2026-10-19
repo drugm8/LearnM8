@@ -242,7 +242,7 @@ def _create_learner(
             f"Unknown learner '{learner_str}'. "
             f'Available learners: {available}. '
             f'Uncertainty-capable: gp, mc_dropout, *_ensemble. '
-            f'SMILES-native (no featurizer needed): chemprop, fastprop.'
+            f'SMILES-native (no featurizer needed): chemprop, chemprop_ensemble.'
         )
 
     learner_class = LEARNER_REGISTRY[learner_str]
@@ -1205,7 +1205,7 @@ def run_active_learning(
                     f'{learner.get_name()} requires a featurizer because it is a feature-based '
                     f"learner. Specify featurizer parameter (e.g., featurizer='morgan'). "
                     f'Valid options: {featurizer_options}. '
-                    f'Learners that work without a featurizer: chemprop, fastprop.'
+                    f'Learners that work without a featurizer: chemprop, chemprop_ensemble.'
                 )
 
         # Convert string featurizer to instance if needed

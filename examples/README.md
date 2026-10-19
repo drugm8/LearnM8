@@ -44,7 +44,7 @@ See [oracles/README.md](oracles/README.md) for complete oracle documentation.
 # Install LearnM8
 conda env create -f environment.yml
 conda activate learnm8
-pip install -e .
+pip install --no-deps -e .
 
 # Launch Jupyter
 jupyter notebook examples/notebooks/01_quickstart.ipynb

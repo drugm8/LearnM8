@@ -7,7 +7,7 @@ Get up and running with LearnM8 in a few minutes.
 ```bash
 conda env create -f environment.yml
 conda activate learnm8
-pip install -e .
+pip install --no-deps -e .
 ```
 
 ## Your First Experiment

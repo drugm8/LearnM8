@@ -1032,7 +1032,7 @@ def _select_compounds(
             actually vary across cycles; ``None`` falls back to direct use of
             ``random_state``.
         featurizer_obj: Optional Featurizer instance for acquisition functions
-            that need feature-space neighbors (e.g., SA with knn_features).
+            that need feature-space neighbors (none of the built-in strategies do).
         cache_dir: Directory for feature caching.
 
     Returns:
@@ -1165,7 +1165,7 @@ def _train_learner(
                 raise ValueError(
                     f'featurizer is required for {learner.get_name()} because it is a '
                     f"feature-based learner. Specify a featurizer (e.g., featurizer='morgan'). "
-                    f"SMILES-native learners like 'chemprop' and 'fastprop' can run without "
+                    f"SMILES-native learners like 'chemprop' and 'chemprop_ensemble' can run without "
                     f'a featurizer (featurizer=None).'
                 )
 

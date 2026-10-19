@@ -8,7 +8,7 @@ Step-by-step tutorials for learning LearnM8.
 ```bash
 conda env create -f ../../environment.yml
 conda activate learnm8
-pip install -e ../..
+pip install --no-deps -e ../..
 ```
 
 ### Jupyter Setup

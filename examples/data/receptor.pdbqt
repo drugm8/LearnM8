@@ -1,4 +1,4 @@
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  C   LYS B  44      24.187  28.418  84.382  0.00  0.00    +0.232 C 
@@ -29,7 +29,7 @@ ATOM     25  CG2 ILE B  46      23.282  35.107  87.778  0.00  0.00    +0.010 C
 ATOM     26  CG1 ILE B  46      24.597  33.401  89.126  0.00  0.00    +0.002 C 
 ATOM     27  CD1 ILE B  46      25.949  34.024  89.449  0.00  0.00    +0.004 C 
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CB  ASN B 119      25.798  36.804  82.334  0.00  0.00    +0.123 C 
@@ -44,7 +44,7 @@ ATOM      9  H   ASN B 119      26.856  37.870  79.961  0.00  0.00    +0.141 HD
 ATOM     10  C   ASN B 119      28.264  36.361  81.898  0.00  0.00    +0.218 C 
 ATOM     11  O   ASN B 119      28.835  35.938  82.922  0.00  0.00    -0.287 OA
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  THR B 124      38.743  29.642  85.628  0.00  0.00    +0.187 C 
@@ -114,7 +114,7 @@ ATOM     64  CG2 THR B 124      37.557  31.610  86.761  0.00  0.00    +0.040 C
 ATOM     65  OG1 THR B 124      39.969  31.549  86.538  0.00  0.00    -0.390 OA
 ATOM     66  HG1 THR B 124      40.640  31.792  85.838  0.00  0.00    +0.210 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CB  HIS B 135      45.034  31.909  82.465  0.00  0.00    +0.083 C 
@@ -130,7 +130,7 @@ ATOM     10  H   HIS B 135      47.080  32.199  80.868  0.00  0.00    +0.141 HD
 ATOM     11  C   HIS B 135      44.666  34.139  81.368  0.00  0.00    +0.218 C 
 ATOM     12  O   HIS B 135      43.504  34.505  81.306  0.00  0.00    -0.287 OA
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CB  ASN B 143      36.067  38.266  81.598  0.00  0.00    +0.123 C 
@@ -145,7 +145,7 @@ ATOM      9  H   ASN B 143      37.135  37.632  79.337  0.00  0.00    +0.141 HD
 ATOM     10  C   ASN B 143      35.242  39.993  80.050  0.00  0.00    +0.218 C 
 ATOM     11  O   ASN B 143      34.417  40.583  80.716  0.00  0.00    -0.287 OA
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  LYS B 174      35.703  46.204  93.440  0.00  0.00    +0.159 C 
@@ -258,7 +258,7 @@ ATOM    107  HZ1 LYS B 174      31.417  50.378  90.877  0.00  0.00    -0.090 HD
 ATOM    108  HZ2 LYS B 174      32.405  50.704  92.135  0.00  0.00    -0.090 HD
 ATOM    109  HZ3 LYS B 174      33.028  50.157  90.728  0.00  0.00    -0.090 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  TYR B 183      39.617  37.168  86.806  0.00  0.00    +0.163 C 
@@ -290,7 +290,7 @@ ATOM     26  CZ  TYR B 183      34.858  36.411  88.780  0.00  0.00    +0.117 A
 ATOM     27  OH  TYR B 183      33.548  36.445  89.174  0.00  0.00    -0.507 OA
 ATOM     28  HH  TYR B 183      33.300  36.859  90.050  0.00  0.00    +0.292 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  LYS B 187      36.197  42.545  86.375  0.00  0.00    +0.147 C 
@@ -315,7 +315,7 @@ ATOM     19  HZ1 LYS B 187      31.753  38.028  85.357  0.00  0.00    -0.090 HD
 ATOM     20  HZ2 LYS B 187      31.562  39.645  85.482  0.00  0.00    -0.090 HD
 ATOM     21  HZ3 LYS B 187      32.568  39.026  84.354  0.00  0.00    -0.090 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  GLU B 221      27.737  24.409  90.569  0.00  0.00    +0.159 C 
@@ -446,7 +446,7 @@ ATOM    125  CD  GLU B 221      25.310  21.694  89.155  0.00  0.00    +0.356 C
 ATOM    126  OE1 GLU B 221      24.083  21.446  89.209  0.00  0.00    -0.246 OA
 ATOM    127  OE2 GLU B 221      26.110  21.056  88.432  0.00  0.00    -0.246 OA
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  C   HIS B 232      34.260  30.330 103.670  0.00  0.00    +0.234 C 
@@ -506,7 +506,7 @@ ATOM     54  CE1 HIS B 232      37.618  25.602 103.850  0.00  0.00    +0.196 A
 ATOM     55  NE2 HIS B 232      38.637  26.312 104.323  0.00  0.00    -0.351 N 
 ATOM     56  HE2 HIS B 232      39.593  26.024 104.369  0.00  0.00    +0.166 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  TYR B 258      24.210  41.371  96.170  0.00  0.00    +0.159 C 
@@ -533,7 +533,7 @@ ATOM     21  CZ  TYR B 258      21.288  37.228  96.535  0.00  0.00    +0.117 A
 ATOM     22  OH  TYR B 258      20.656  36.109  97.021  0.00  0.00    -0.507 OA
 ATOM     23  HH  TYR B 258      19.791  36.198  97.514  0.00  0.00    +0.292 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  THR B 264      29.588  43.554 102.753  0.00  0.00    +0.171 C 
@@ -546,7 +546,7 @@ ATOM      7  CG2 THR B 264      29.745  42.534 100.467  0.00  0.00    +0.040 C
 ATOM      8  OG1 THR B 264      30.487  41.380 102.451  0.00  0.00    -0.390 OA
 ATOM      9  HG1 THR B 264      30.469  40.528 101.927  0.00  0.00    +0.210 HD
 TER
-REMARK  Name = /home/alacournola/DEKOIS_2.0x/11betahsd1/11betahsd1_p_protoss_pocket.pdb
+REMARK  Name = 11betahsd1_p_protoss_pocket.pdb
 REMARK                            x       y       z     vdW  Elec       q    Type
 REMARK                         _______ _______ _______ _____ _____    ______ ____
 ATOM      1  CA  ILE B 268      30.918  47.964  99.478  0.00  0.00    +0.146 C 

@@ -149,17 +149,9 @@ Speedup: 100x
 
 #### SMILES Hash-Based Keys
 
-Each SMILES string is hashed (MD5) to create a unique cache key:
+Each SMILES string is combined with the featurizer name and a hash of its configuration, then hashed with BLAKE2b to a 128-bit (16-byte) cache key. The SMILES is used as given; LearnM8 canonicalizes the compound pool once during validation.
 
-```python
-import hashlib
-
-smiles = "CCO"
-cache_key = hashlib.md5(smiles.encode('utf-8')).hexdigest()
-# cache_key: "f89cbecc5e46dc5a4b84bb94d75c4bbd"
-```
-
-Features are stored in HDF5 with these hash keys, enabling:
+Features are stored in HDF5 and looked up by these keys, enabling:
 
 - **Deduplication:** Same SMILES always maps to same features
 - **Partial loading:** Only uncached molecules are computed
@@ -182,15 +174,16 @@ delete it, or point `cache_dir` elsewhere, to rebuild. Concurrent runs wait up
 to 3600 s for the cache lock; override with the `LEARNM8_LOCK_TIMEOUT_S`
 environment variable.
 
-Each HDF5 file contains a `features` group with datasets keyed by SMILES hash:
+Each HDF5 file (schema version 3) holds one 2-D `features` dataset with one row per molecule, plus two side datasets: `hash_index` (the 128-bit digests, sorted) and `row_index` (the row of `features` for each digest). Binary fingerprints are bit-packed, and data is compressed with Blosc-LZ4. Sparse count fingerprints are stored as CSR arrays instead of a dense `features` dataset.
 
 ```
-morgan_features.h5
-└── features/
-    ├── f89cbecc5e46dc5a4b84bb94d75c4bbd  # "CCO"
-    ├── a3d5e19... # Another SMILES
-    └── ...
+features_morgan_2048_packed_uint8.h5
+├── features     # one row per molecule
+├── hash_index   # sorted 128-bit digests
+└── row_index    # digest -> row in features
 ```
+
+Access is serialized with `fcntl` file locks, so the cache supports one machine and a local filesystem only. Network filesystems such as NFS, Lustre and GlusterFS are not supported.
 
 ### Cache Directory Management
 

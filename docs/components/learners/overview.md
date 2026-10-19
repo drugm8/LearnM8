@@ -163,7 +163,7 @@ training or memory becomes the bottleneck rather than the oracle.
 | Uncertainty Quality | `gp`, `chemprop_ensemble`, `mc_dropout` | Principled uncertainty quantification |
 | Interpretability | `dt`, `lr` | Simple, explainable models |
 | State-of-the-art Performance | `chemprop_ensemble` | MPNN ensemble optimized for molecules |
-| No Featurizer | `chemprop`, `chemprop_ensemble`, `fastprop`, `fastprop_ensemble` | Work directly with SMILES |
+| No Featurizer | `chemprop`, `chemprop_ensemble` | Work directly with SMILES |
 | Robustness | `mixed_ensemble`, `rf_ensemble` | Multiple models reduce overfitting risk |
 
 ### Featurizer Compatibility

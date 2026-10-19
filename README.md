@@ -282,7 +282,7 @@ See the [extending framework guide](https://github.com/drugm8/LearnM8/blob/main/
 
 ## 📄 License
 
-LearnM8 is developed for molecular screening and active learning research.
+LearnM8 is released under the MIT License. See the [LICENSE](https://github.com/drugm8/LearnM8/blob/main/LICENSE) file.
 
 ## 📚 Citation
 

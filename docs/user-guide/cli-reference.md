@@ -50,8 +50,8 @@ learnm8 run COMPOUND_POOL [ORACLE] --target COLUMN --featurizer TYPE --learner M
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `--target COLUMN` | string | Target property column name in CSV |
-| `--featurizer TYPE` | choice | Molecular featurizer. Required unless using chemprop or fastprop (see Available Featurizers for the full list of 39 options) |
+| `--target COLUMN` / `--target-column COLUMN` | string | Target property column name in CSV |
+| `--featurizer TYPE` | choice | Molecular featurizer. Required unless using chemprop or chemprop_ensemble (see Available Featurizers for the full list of 39 options) |
 
 **Featurizer Choices:** See [Available Featurizers](../components/featurizers/available-featurizers.md) for the full list of 39 options. Common choices: `morgan`, `maccs`, `ecfp6`, `descriptors`, `morgan_feat`.
 
@@ -61,13 +61,16 @@ learnm8 run COMPOUND_POOL [ORACLE] --target COLUMN --featurizer TYPE --learner M
 |-----------|------|---------|-------------|
 | `--learner MODEL` | choice | `rf` | Machine learning model (see learner choices) |
 | `--score-direction DIR` | choice | `higher` | Optimization direction: `higher` or `lower` |
+| `--smiles-col NAME` | string | auto-detect | SMILES column in the pool |
+| `--id-col NAME` | string | auto-detect | ID column in the pool |
 
 **Learner Choices** (availability depends on installed dependencies):
 
-- Scikit-learn: `rf`, `gp`, `xgb`, `dt`, `lr`
+- Scikit-learn and XGBoost: `rf`, `gp`, `xgb`, `dt`, `lr`
 - PyTorch: `mlp`, `mc_dropout`, `fastprop`
-- Graph Neural Networks: `chemprop`, `chemprop_ensemble`
-- Ensembles: `mixed_ensemble`, `rf_ensemble`, `xgb_ensemble`, etc.
+- Graph neural networks: `chemprop`, `chemprop_ensemble`
+- GPU (GPyTorch, RAPIDS cuML): `gpu_gp`, `svgp`, `rf_fil`, `ridge_cuml`
+- Ensembles: `mixed_ensemble`, `rf_ensemble`, `lr_ensemble`, `xgb_ensemble`, `dt_ensemble`, `fastprop_ensemble`, `chemprop_ensemble`
 
 Use `from learnm8.api import list_available_learners; list_available_learners()` (Python) to see all available learners in your environment.
 
@@ -133,7 +136,7 @@ learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--pruning-fraction F` | float | None | Fraction of pool to prune each cycle (0.0-0.9) |
-| `--pruning-strategy NAME` | string | `score` | Pruning strategy |
+| `--pruning-strategy NAME` | string | `score` when `--pruning-fraction` is set | Pruning strategy |
 
 **Pruning Strategy:**
 
@@ -142,7 +145,6 @@ learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
 **Pruning Parameters:**
 
 - `pruning_fraction` (float, 0.0-0.9): Fraction of pool to prune each cycle
-- `pruning_threshold` (float, optional): Absolute score threshold for pruning (alternative to fraction)
 
 **Example:**
 ```bash
@@ -201,8 +203,10 @@ output_dir/
 | `--device DEVICE` | string | `auto` | Compute device: `auto`, `cpu`, `cuda`, `cuda:N`, `mps` |
 | `--memory-safety-factor F` | float | 0.7 | Fraction of available memory to use for prediction batching |
 | `--output-format FORMAT` | choice | `auto` | Output format: `auto`, `csv`, `parquet`. Auto selects parquet for >1M rows |
-| `--allow-large-features` | flag | False | Bypass the large-feature guard that blocks descriptor featurizers on pools >1M compounds |
+| `--allow-large-features` | flag | False | Bypass the large-feature guard that blocks descriptor featurizers on pools >10M compounds |
 | `--force-uncertainty` | flag | False | Force uncertainty computation every cycle, even for greedy/random/topk. Useful for diagnostics |
+| `--skip-validation` | flag | False | Skip SMILES validation, duplicate-ID checks and target-type checks. Use when the dataset was already checked (for example with `learnm8 validate`). Oracle-pool reconciliation is still performed |
+| `--streaming MODE` | choice | `auto` | Memory-efficient streaming predict-then-select path for large pools: `auto`, `always`, `never`. `auto` uses it when a cycle is eligible (streamable strategy, which every built-in strategy is, and pruning none or `score`) and falls back to the in-memory path otherwise. `always` fails if a cycle is ineligible. `never` forces the in-memory path. Stochastic strategies (`thompson`, `random`, `topk`) draw different but equivalent samples under streaming |
 
 **Mode auto-detection (not overridable via CLI):**
 
@@ -216,7 +220,7 @@ Validate compound pool using datamol SMILES validation before running experiment
 ### Syntax
 
 ```bash
-learnm8 validate COMPOUND_POOL [-o OUTPUT_DIR]
+learnm8 validate COMPOUND_POOL [OPTIONS]
 ```
 
 ### Parameters
@@ -224,6 +228,9 @@ learnm8 validate COMPOUND_POOL [-o OUTPUT_DIR]
 | Parameter | Required | Type | Description |
 |-----------|----------|------|-------------|
 | `COMPOUND_POOL` | Yes | file | CSV file with compounds (must have ID and SMILES columns) |
+| `--smiles-col NAME` | No | string | SMILES column (default: auto-detect) |
+| `--id-col NAME` | No | string | ID column (default: auto-detect) |
+| `--n-jobs N` | No | integer | Parallel CPU jobs. -1 uses all cores (default: -1) |
 | `-o PATH` / `--output PATH` | No | directory | Output directory for validation report |
 
 ### Validation Process
@@ -301,7 +308,7 @@ learnm8 suggest COMPOUND_POOL BATCH_DIR --target COLUMN [--learner MODEL] [--fea
 | `BATCH_DIR` | Yes | directory | | Folder holding `batch_cycle_N.csv` files. Created if missing. New batches are written here |
 | `--target COLUMN` / `--target-column COLUMN` | Yes | string | | Column the lab fills in |
 | `--learner MODEL` | No | choice | `rf` | Machine learning model |
-| `--featurizer TYPE` | No | choice | none | Molecular featurizer. Required unless the learner works on SMILES directly (chemprop, fastprop) |
+| `--featurizer TYPE` | No | choice | none | Molecular featurizer. Required unless the learner works on SMILES directly (chemprop, chemprop_ensemble) |
 | `--batch-size N` | No | integer | 96 | Compounds in the new batch, clipped to the remaining pool |
 | `--strategy NAME` | No | string | `greedy` | Acquisition strategy for rounds 1 and later. Round 0 is always random |
 | `--score-direction DIR` | No | choice | `higher` | `higher` or `lower` |
@@ -397,7 +404,7 @@ learnm8 run large_library.csv oracle.py:score \
   --learner rf_ensemble \
   --cycles "random:0.01 greedy:0.005*19" \
   --pruning-fraction 0.3 \
-  --pruning-strategy score_based \
+  --pruning-strategy score \
   -o large_screen/
 ```
 
@@ -430,7 +437,6 @@ learnm8 run compounds.csv --target Activity \
 
 ```bash
 learnm8 run compounds.csv --target Activity \
-  --featurizer morgan \
   --learner chemprop \
   --n-cycles 10 \
   -o chemprop_results/
@@ -438,7 +444,7 @@ learnm8 run compounds.csv --target Activity \
 
 **What this does:**
 
-- Chemprop works directly with SMILES; the featurizer argument is required by the CLI but ignored by Chemprop unless running in hybrid mode (see `--learner chemprop --featurizer descriptors`)
+- Chemprop works directly with SMILES, so no featurizer is needed. Adding `--featurizer descriptors` (or another featurizer) switches it to hybrid mode, where the features are used as extra descriptors alongside the graph
 - Graph neural network for state-of-the-art predictions
 
 ### Example 6: Configuration File Workflow

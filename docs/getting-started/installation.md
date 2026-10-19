@@ -30,10 +30,12 @@ This creates a new Conda environment named `learnm8` with all core dependencies.
 Install LearnM8 in editable mode:
 
 ```bash
-pip install -e .
+pip install --no-deps -e .
 ```
 
-The `-e` flag installs in development/editable mode, allowing you to modify the source code if needed.
+The `-e` flag installs in development/editable mode, allowing you to modify the source code if needed. The `--no-deps` flag is needed because the Conda environment already provides every dependency; without it, pip may try to replace Conda-managed packages.
+
+To install from PyPI instead of a source checkout, run `pip install learnm8`. This pulls PyTorch and the other dependencies from PyPI. The GPU learners (GPyTorch, RAPIDS cuML) need the Conda environment.
 
 ### Step 3: Verify Installation
 
@@ -43,7 +45,7 @@ Test that LearnM8 is correctly installed:
 learnm8 --help
 ```
 
-You should see the main help message with available subcommands (`run`, `validate`).
+You should see the main help message with available subcommands (`run`, `validate`, `suggest`).
 
 ## Optional Dependencies
 
@@ -230,7 +232,7 @@ To update to the latest version:
 ```bash
 cd /path/to/LearnM8
 git pull
-pip install -e .
+pip install --no-deps -e .
 ```
 
 If dependencies have changed, recreate the Conda environment:
@@ -239,7 +241,7 @@ If dependencies have changed, recreate the Conda environment:
 conda env remove -n learnm8
 conda env create -f environment.yml
 conda activate learnm8
-pip install -e .
+pip install --no-deps -e .
 ```
 
 ## Next Steps

@@ -2,6 +2,8 @@
 
 This directory contains example oracle implementations that demonstrate how to create custom scoring functions for active learning in molecular screening.
 
+These oracles are used from a repository checkout (run Python from the repository root). They are not part of the installed package, so `pip install learnm8` does not provide `examples.oracles`.
+
 ## Available Oracles
 
 ### 1. SimilarityOracle (2D Fingerprint-Based)
@@ -18,7 +20,7 @@ Calculates molecular similarity to a reference compound using various 2D fingerp
 
 ```python
 import polars as pl
-from learnm8.oracles.examples import SimilarityOracle
+from examples.oracles import SimilarityOracle
 
 # Create oracle with Morgan fingerprints
 oracle = SimilarityOracle(
@@ -60,7 +62,7 @@ Calculates pharmacophore similarity using RDKit's Gobbi 2D pharmacophore fingerp
 **Example Usage:**
 
 ```python
-from learnm8.oracles.examples import Pharmacophore2DOracle
+from examples.oracles import Pharmacophore2DOracle
 
 # Create oracle with 2D pharmacophore fingerprints
 oracle = Pharmacophore2DOracle(
@@ -100,7 +102,7 @@ pip install cdpkit
 **Example Usage:**
 
 ```python
-from learnm8.oracles.examples import CDPKitPharmacophoreOracle
+from examples.oracles import CDPKitPharmacophoreOracle
 
 # Create oracle with 3D pharmacophore alignment
 oracle = CDPKitPharmacophoreOracle(
@@ -150,7 +152,7 @@ conda install -c conda-forge vina meeko
 **Example Usage:**
 
 ```python
-from learnm8.oracles.examples import VinaOracle
+from examples.oracles import VinaOracle
 
 # Create docking oracle
 oracle = VinaOracle(
@@ -198,7 +200,7 @@ print(results)
 
 ```python
 from learnm8 import run_active_learning
-from learnm8.oracles.examples import SimilarityOracle
+from examples.oracles import SimilarityOracle
 import polars as pl
 
 # Load compound library
@@ -229,7 +231,7 @@ results = run_active_learning(
 ### Combining Multiple Oracles
 
 ```python
-from learnm8.oracles.examples import SimilarityOracle, Pharmacophore2DOracle
+from examples.oracles import SimilarityOracle, Pharmacophore2DOracle
 import polars as pl
 
 # Create multiple oracles
@@ -345,7 +347,7 @@ pytest tests/oracles/test_example_oracles.py -v
 pytest tests/oracles/test_example_oracles.py::TestSimilarityOracle -v
 
 # Run with coverage
-pytest tests/oracles/ --cov=learnm8.oracles.examples --cov-report=html
+pytest tests/oracles/ --cov=examples.oracles --cov-report=html
 ```
 
 ---
@@ -356,7 +358,7 @@ pytest tests/oracles/ --cov=learnm8.oracles.examples --cov-report=html
 
 ```python
 # Check which oracles are available
-from learnm8.oracles.examples import (
+from examples.oracles import (
     SimilarityOracle,        # Always available (RDKit only)
     Pharmacophore2DOracle,   # Always available (RDKit only)
     CDPKitPharmacophoreOracle,  # Requires: pip install cdpkit

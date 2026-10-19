@@ -19,7 +19,7 @@ The framework addresses a fundamental challenge in computational chemistry: how 
 
 **Rich acquisition strategies**
 
-- 9 strategies: basic, uncertainty-based and optimization-based — see [Acquisition](components/acquisition/overview.md)
+- 8 strategies: basic and uncertainty-based — see [Acquisition](components/acquisition/overview.md)
 - Uncertainty computation is skipped automatically when the active strategy does not need it
 
 **Flexible featurization**
@@ -130,7 +130,7 @@ results = run_active_learning(
 **Components**
 
 - **[Learners](components/learners/overview.md)**: All 21 models, with a decision matrix by dataset size and use case
-- **[Acquisition Functions](components/acquisition/overview.md)**: All 9 strategies and when to reach for each
+- **[Acquisition Functions](components/acquisition/overview.md)**: All 8 strategies and when to reach for each
 - **[Featurizers](components/featurizers/available-featurizers.md)**: All 39 featurizers with storage formats and dimensions
 - **[Oracles](components/oracles/overview.md)**: Benchmark and production measurement sources
 
