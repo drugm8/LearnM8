@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import h5py
 import numpy as np
 import pytest
 
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import FeatureExtractionError, PersistenceError
 from learnm8.features import create_featurizer
 from learnm8.features.cache import _HASH_INDEX_CACHE
 from learnm8.features.extraction import extract_features
@@ -19,7 +20,7 @@ def populated_cache(tmp_path: Path) -> Path:
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO', 'CCC', 'CCN'], feat, cache_dir=tmp_path)
     _HASH_INDEX_CACHE.clear()
-    return tmp_path / 'features_morgan_packed_uint8.h5'
+    return tmp_path / 'features_morgan_2048_packed_uint8.h5'
 
 
 def _break_invariant_1_length_mismatch(cache_file: Path) -> None:
@@ -105,9 +106,12 @@ def test_truncated_file_fails_fast(populated_cache: Path):
     with open(populated_cache, 'r+b') as f:
         f.truncate(file_size // 2)
 
+    before = hashlib.sha256(populated_cache.read_bytes()).hexdigest()
+
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
-    with pytest.raises(FeatureExtractionError):
+    with pytest.raises(PersistenceError):
         extract_features(['CCO', 'XXXNEW'], feat, cache_dir=populated_cache.parent)
+    assert hashlib.sha256(populated_cache.read_bytes()).hexdigest() == before
 
 
 @pytest.mark.unit

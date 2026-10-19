@@ -157,7 +157,7 @@ class TestCacheWithDifferentParameters:
     """Test caching with various parameter combinations."""
 
     def test_cache_fp_size_variations(self, small_real_compounds, tmp_path):
-        """Different fp_size = different bit_count = stale cache file gets replaced."""
+        """Different fp_size = different bit_count = separate cache files."""
         import h5py
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
@@ -175,12 +175,12 @@ class TestCacheWithDifferentParameters:
         assert feat_2048.shape[1] == 2048
         assert feat_4096.shape[1] == 4096
 
-        # Stale cache replaced; active file reflects latest bit_count.
-        active = tmp_path / 'features_morgan_packed_uint8.h5'
-        assert active.exists()
-
-        with h5py.File(active, 'r') as h5f:
-            assert int(h5f.attrs['bit_count']) == 4096
+        # Dimension is part of the filename: both files coexist.
+        for dim in (2048, 4096):
+            path = tmp_path / f'features_morgan_{dim}_packed_uint8.h5'
+            assert path.exists()
+            with h5py.File(path, 'r') as h5f:
+                assert int(h5f.attrs['bit_count']) == dim
 
     def test_cache_3d_conformer_params(self, small_real_compounds, tmp_path):
         """Different USR conformer params share file with distinct 128-bit hash keys."""
@@ -216,7 +216,7 @@ class TestCacheFileStructure:
 
     def test_cache_file_naming_convention(self, small_real_compounds, tmp_path):
         """Cache files follow naming convention
-        (features_<featurizer_name>_<storage_dtype>.h5)."""
+        (features_<featurizer_name>_<dim>_<storage_dtype>.h5)."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
         featurizer = create_featurizer('morgan', radius=2, fp_size=2048)
 
@@ -226,8 +226,11 @@ class TestCacheFileStructure:
         assert len(cache_files) == 1
 
         cache_file = cache_files[0]
-        # Format: features_<featurizer_name>_<storage_dtype>.h5
-        assert cache_file.name == f'features_morgan_{featurizer.get_storage_dtype()}.h5'
+        # Format: features_<featurizer_name>_<dim>_<storage_dtype>.h5
+        assert (
+            cache_file.name
+            == f'features_morgan_2048_{featurizer.get_storage_dtype()}.h5'
+        )
 
     def test_multiple_featurizers_separate_files(self, small_real_compounds, tmp_path):
         """Same-name featurizer configs with same bit_count share file; different
@@ -244,7 +247,7 @@ class TestCacheFileStructure:
 
         cache_files = list(tmp_path.glob('*.h5'))
         assert len(cache_files) == 1
-        assert cache_files[0].name == 'features_morgan_packed_uint8.h5'
+        assert cache_files[0].name == 'features_morgan_2048_packed_uint8.h5'
 
         # Different featurizer type creates separate file
         extract_features(smiles, create_featurizer('maccs'), tmp_path, n_jobs=1)
@@ -252,8 +255,8 @@ class TestCacheFileStructure:
         assert len(cache_files) == 2
         file_names = {f.name for f in cache_files}
         assert file_names == {
-            'features_morgan_packed_uint8.h5',
-            'features_maccs_packed_uint8.h5',
+            'features_morgan_2048_packed_uint8.h5',
+            'features_maccs_166_packed_uint8.h5',
         }
 
 
@@ -399,7 +402,7 @@ class TestCacheHashDenylist:
             smiles, create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path
         )
 
-        cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
+        cache_file = tmp_path / 'features_morgan_2048_packed_uint8.h5'
         assert cache_file.exists()
         with h5py.File(cache_file, 'r') as h5f:
             row_count_before = len(h5f['hash_index'][:])

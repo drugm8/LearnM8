@@ -49,6 +49,7 @@ from learnm8.core.interfaces import Featurizer
 from learnm8.exceptions import (
     ConfigurationError,
     FeatureExtractionError,
+    PersistenceError,
 )
 
 logger = logging.getLogger(__name__)
@@ -149,8 +150,10 @@ H5_FANCY_INDEX_CHUNK = 1000
 # parallel path can never be slower than the serial one it replaces.
 PARALLEL_HASH_MIN_ROWS: int = 40_000_000
 
-# Default lock timeout (FR-009); env-overridable.
-LOCK_TIMEOUT_S: float = float(os.environ.get('LEARNM8_LOCK_TIMEOUT_S', '5.0'))
+# Default lock timeout (FR-009); env-overridable via LEARNM8_LOCK_TIMEOUT_S.
+# One hour: at 100M scale a first writer can hold the lock for a long time,
+# and a short wait made concurrent runs fail spuriously.
+LOCK_TIMEOUT_S: float = float(os.environ.get('LEARNM8_LOCK_TIMEOUT_S', '3600.0'))
 
 # Blosc-LZ4-5 + byte-shuffle (microbench winner; see research/blosc-microbenchmark.md).
 _BLOSC_KWARGS = hdf5plugin.Blosc(
@@ -709,28 +712,36 @@ def _open_or_create_h5(cache_path: Path, featurizer: Featurizer) -> h5py.File:
     storage_dtype = _normalize_storage_dtype(featurizer.get_storage_dtype())
     expected_dim = int(featurizer.get_dimension())
 
-    def _recreate() -> h5py.File:
-        with contextlib.suppress(OSError):
-            os.remove(str(cache_path))
+    def _incompatible(found: str) -> PersistenceError:
+        return PersistenceError(
+            f'Feature cache file {cache_path} is incompatible: {found}. '
+            f'The file was left untouched. Move or delete it (or point '
+            f'cache_dir elsewhere) to rebuild the cache.'
+        )
+
+    if not cache_path.exists():
         _create_fresh_v3(cache_path, featurizer, storage_dtype)
         return _h5_open(cache_path, 'a')
 
-    if not cache_path.exists():
-        return _recreate()
-
     try:
         f = _h5_open(cache_path, 'a')
-        sv = f.attrs.get(ATTR_SCHEMA_VERSION, None)
-        if sv is None or int(sv) != SCHEMA_VERSION:
-            f.close()
-            return _recreate()
-        bc = f.attrs.get(ATTR_BIT_COUNT, None)
-        if bc is None or int(bc) != expected_dim:
-            f.close()
-            return _recreate()
-        return f
-    except OSError:
-        return _recreate()
+    except OSError as e:
+        raise _incompatible(f'it could not be opened as HDF5 ({e})') from e
+    sv = f.attrs.get(ATTR_SCHEMA_VERSION, None)
+    if sv is None or int(sv) != SCHEMA_VERSION:
+        f.close()
+        raise _incompatible(
+            f'found schema_version={None if sv is None else int(sv)}, '
+            f'expected {SCHEMA_VERSION}'
+        )
+    bc = f.attrs.get(ATTR_BIT_COUNT, None)
+    if bc is None or int(bc) != expected_dim:
+        f.close()
+        raise _incompatible(
+            f'found bit_count={None if bc is None else int(bc)}, '
+            f'expected {expected_dim}'
+        )
+    return f
 
 
 # ---------------------------------------------------------------------------
@@ -1279,7 +1290,9 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                 return np.empty((0, dim), dtype=out_np_dtype)
 
             cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = cache_dir / f'features_{featurizer_name}_{storage_dtype}.h5'
+            cache_path = (
+                cache_dir / f'features_{featurizer_name}_{dim}_{storage_dtype}.h5'
+            )
 
             # REQ-10: read n_jobs with .get, not .pop — the wrapped function
             # still needs it. Above PARALLEL_HASH_MIN_ROWS this fans the digest
@@ -1300,13 +1313,26 @@ def cache_features(default_cache_dir: Path) -> Callable[..., Any]:
                     t_lock = time.perf_counter()
                     try:
                         f_ro = _h5_open(cache_path, 'r')
-                    except OSError:
-                        f_ro = None
+                    except OSError as e:
+                        raise PersistenceError(
+                            f'Feature cache file {cache_path} could not be '
+                            f'opened as HDF5 ({e}). The file was left '
+                            f'untouched. Move or delete it (or point '
+                            f'cache_dir elsewhere) to rebuild the cache.'
+                        ) from e
                     if f_ro is not None:
                         try:
                             sv = f_ro.attrs.get(ATTR_SCHEMA_VERSION, None)
                             if sv is None or int(sv) != SCHEMA_VERSION:
-                                pass
+                                raise PersistenceError(
+                                    f'Feature cache file {cache_path} is '
+                                    f'incompatible: found schema_version='
+                                    f'{None if sv is None else int(sv)}, '
+                                    f'expected {SCHEMA_VERSION}. The file was '
+                                    f'left untouched. Move or delete it (or '
+                                    f'point cache_dir elsewhere) to rebuild '
+                                    f'the cache.'
+                                )
                             else:
                                 _validate_cache_integrity(f_ro, featurizer, cache_path)
                                 t_open = time.perf_counter()

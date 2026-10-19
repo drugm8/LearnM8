@@ -169,12 +169,18 @@ Features are stored in HDF5 with these hash keys, enabling:
 
 ```
 .cache/
-├── morgan_features.h5         # Morgan fingerprints
-├── maccs_features.h5          # MACCS keys
-├── ecfp6_features.h5          # ECFP6 fingerprints
-├── morgan_feat_features.h5    # Morgan feature fingerprints
-└── descriptors_features.h5    # Mordred descriptors
+├── features_morgan_2048_packed_uint8.h5   # Morgan fingerprints (2048 bits)
+├── features_morgan_1024_packed_uint8.h5   # Morgan fingerprints (1024 bits)
+└── features_maccs_166_packed_uint8.h5     # MACCS keys
 ```
+
+Files are named `features_{featurizer}_{dimension}_{storage_dtype}.h5`, so the
+same featurizer with different dimensions never shares a file. A cache file
+that is corrupt or incompatible (wrong schema version or feature dimension)
+raises `PersistenceError` and is never modified, renamed or deleted; move or
+delete it, or point `cache_dir` elsewhere, to rebuild. Concurrent runs wait up
+to 3600 s for the cache lock; override with the `LEARNM8_LOCK_TIMEOUT_S`
+environment variable.
 
 Each HDF5 file contains a `features` group with datasets keyed by SMILES hash:
 
@@ -248,7 +254,7 @@ Cache invalidation is **automatic** and handled by SMILES hashing:
 
 **Manual cache clearing:**
 ```bash
-rm -rf .cache/morgan_features.h5  # Clear Morgan cache
+rm .cache/features_morgan_2048_packed_uint8.h5  # Clear Morgan cache
 rm -rf .cache/*                    # Clear all caches
 ```
 

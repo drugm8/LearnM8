@@ -33,7 +33,9 @@ def test_continuous_featurizer_float32_storage(tmp_path: Path, name: str):
 
     assert out.dtype == np.float32
 
-    cache_file = tmp_path / f'features_{feat.get_name()}_{feat.get_storage_dtype()}.h5'
+    cache_file = tmp_path / (
+        f'features_{feat.get_name()}_{feat.get_dimension()}_{feat.get_storage_dtype()}.h5'
+    )
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'float32'
         assert f['features'].dtype == np.float32
@@ -46,7 +48,7 @@ def test_mqns_uses_uint8_storage(tmp_path: Path):
     out = extract_features(['CCO'], feat, cache_dir=tmp_path)
     assert out.dtype == np.float32
 
-    cache_file = tmp_path / 'features_mqns_uint8.h5'
+    cache_file = tmp_path / 'features_mqns_42_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         assert str(f.attrs['storage_dtype']) == 'uint8'
         assert f['features'].dtype == np.uint8
@@ -76,13 +78,13 @@ def test_packed_storage_uses_correct_packed_width(tmp_path: Path):
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     extract_features(['CCO'], feat, cache_dir=tmp_path)
 
-    cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
+    cache_file = tmp_path / 'features_morgan_2048_packed_uint8.h5'
     with h5py.File(cache_file, 'r') as f:
         assert f['features'].shape[1] == 256
 
     feat_maccs = create_featurizer('maccs', n_jobs=1)
     extract_features(['CCO'], feat_maccs, cache_dir=tmp_path)
-    cache_file_maccs = tmp_path / 'features_maccs_packed_uint8.h5'
+    cache_file_maccs = tmp_path / 'features_maccs_166_packed_uint8.h5'
     bit_count = feat_maccs.get_dimension()
     expected_width = (bit_count + 7) // 8
     with h5py.File(cache_file_maccs, 'r') as f:
