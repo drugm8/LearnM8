@@ -185,6 +185,10 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'storage_dtype': 'packed_uint8',
             'feature_type': 'binary',
             'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
             'description': 'PubChem CACTVS fingerprints (881 structural keys)',
         },
         'klekota_roth': {
@@ -193,6 +197,10 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'storage_dtype': 'packed_uint8',
             'feature_type': 'binary',
             'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
             'description': 'Klekota-Roth substructure fingerprints (4860-bit)',
         },
         'laggner': {
@@ -201,6 +209,10 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'storage_dtype': 'packed_uint8',
             'feature_type': 'binary',
             'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
             'description': 'Laggner substructure fingerprints (307-bit)',
         },
         # ── Topological ────────────────────────────────────────────────────
@@ -210,6 +222,10 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'storage_dtype': 'packed_uint8',
             'feature_type': 'binary',
             'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
             'description': 'Avalon fingerprints (512-bit)',
         },
         'atom_pair': {
@@ -249,6 +265,10 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'storage_dtype': 'packed_uint8',
             'feature_type': 'binary',
             'requires_conformers': False,
+            'count_override': {
+                'storage_dtype': 'csr_uint16',
+                'feature_type': 'continuous',
+            },
             'description': 'RDKit topological fingerprints (2048-bit)',
         },
         'pattern': {
