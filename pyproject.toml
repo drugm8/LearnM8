@@ -1,19 +1,28 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "learnm8"
 version = "1.0.0"
-description = "Active Learning for Molecular Screening - Modern Architecture with Polars"
+description = "Active learning framework for large-scale molecular screening"
+readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Antoine Lacour"},
+    {name = "Maximilian Bähr"},
+    {name = "Andrea Volkamer"},
+]
+keywords = ["active learning", "molecular screening", "cheminformatics", "drug discovery", "machine learning"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -73,8 +82,15 @@ gpu = [
 [project.scripts]
 learnm8 = "learnm8.cli.main:main"
 
-[tool.setuptools]
-packages = {find = {}}
+[project.urls]
+Homepage = "https://github.com/drugm8/LearnM8"
+Documentation = "https://drugm8.github.io/LearnM8/"
+Repository = "https://github.com/drugm8/LearnM8"
+Issues = "https://github.com/drugm8/LearnM8/issues"
+Changelog = "https://github.com/drugm8/LearnM8/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["learnm8*"]
 
 [tool.ruff]
 line-length = 88

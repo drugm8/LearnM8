@@ -1,15 +1,15 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="media/learnm8_white_full.png">
-    <img alt="LearnM8" src="media/learnm8_dark_full.png" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/drugm8/LearnM8/main/media/learnm8_white_full.png">
+    <img alt="LearnM8" src="https://raw.githubusercontent.com/drugm8/LearnM8/main/media/learnm8_dark_full.png" width="420">
   </picture>
   <br><br>
   <strong>Active Learning Framework for Molecular Screening</strong>
   <br><br>
 
 [![Documentation](https://img.shields.io/badge/docs-drugm8.github.io%2FLearnM8-blue.svg)](https://drugm8.github.io/LearnM8/)
-[![Python 3.11.9](https://img.shields.io/badge/python-3.11.9-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python >=3.11](https://img.shields.io/badge/python-%3E%3D3.11-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/drugm8/LearnM8/blob/main/LICENSE)
 
 </div>
 
@@ -21,7 +21,7 @@ Built on a pure functional architecture, LearnM8 provides explicit cycle control
 
 ## 🏗️ Architecture
 
-![LearnM8 architecture](media/fig01_architecture.svg)
+![LearnM8 architecture](https://raw.githubusercontent.com/drugm8/LearnM8/main/media/fig01_architecture.svg)
 
 A run is a loop: featurize the pool once into an HDF5 cache, train a learner on
 what is labeled, predict over what is not, let an acquisition strategy pick the
@@ -43,10 +43,18 @@ no model; cycles 1–N are the active learning proper.
 
 ### Installation
 
+From PyPI:
+
+```bash
+pip install learnm8
+```
+
+For GPU learners (GPyTorch, RAPIDS cuML) or development, use the conda environment. It supplies every dependency, so install the package itself with `--no-deps` to keep pip from replacing conda-managed packages:
+
 ```bash
 conda env create -f environment.yml
 conda activate learnm8
-pip install -e .
+pip install --no-deps -e .
 ```
 
 ### Your First Experiment
@@ -97,21 +105,21 @@ learnm8 run compounds.csv --target Activity --learner chemprop \
 
 Learn LearnM8 through hands-on examples:
 
-**Notebooks:** ([examples/notebooks/](examples/notebooks/))
+**Notebooks:** ([examples/notebooks/](https://github.com/drugm8/LearnM8/tree/main/examples/notebooks))
 
-- [Quickstart](examples/notebooks/01_quickstart.ipynb) (10 min): First active learning experiment (benchmark mode)
-- [Custom Oracles](examples/notebooks/02_custom_oracles.ipynb) (15 min): Custom oracles in production (run mode)
-- [Advanced Configuration](examples/notebooks/03_advanced_configuration.ipynb) (15 min): Custom learners and multi-stage workflows
-- [Production Screening](examples/notebooks/04_production_screening.ipynb) (20 min): Real-world deployment
+- [Quickstart](https://github.com/drugm8/LearnM8/blob/main/examples/notebooks/01_quickstart.ipynb) (10 min): First active learning experiment (benchmark mode)
+- [Custom Oracles](https://github.com/drugm8/LearnM8/blob/main/examples/notebooks/02_custom_oracles.ipynb) (15 min): Custom oracles in production (run mode)
+- [Advanced Configuration](https://github.com/drugm8/LearnM8/blob/main/examples/notebooks/03_advanced_configuration.ipynb) (15 min): Custom learners and multi-stage workflows
+- [Production Screening](https://github.com/drugm8/LearnM8/blob/main/examples/notebooks/04_production_screening.ipynb) (20 min): Real-world deployment
 
-**Example Oracles:** ([examples/oracles/](examples/oracles/))
+**Example Oracles:** ([examples/oracles/](https://github.com/drugm8/LearnM8/tree/main/examples/oracles))
 
 - `SimilarityOracle`: 2D fingerprint-based similarity
 - `Pharmacophore2DOracle`: Functional group pattern matching
 - `CDPKitPharmacophoreOracle`: 3D pharmacophore alignment (requires CDPKit)
 - `VinaOracle`: Molecular docking (requires Vina)
 
-See [examples/README.md](examples/README.md) for complete guide.
+See [examples/README.md](https://github.com/drugm8/LearnM8/blob/main/examples/README.md) for complete guide.
 
 ## 📊 Components Overview
 
@@ -178,7 +186,7 @@ Uncertainty computation is automatically skipped when the active strategy does n
 | **2D Descriptors**     | 10    | mordred/descriptors, rdkit_2d_descriptors, estate, ghose_crippen, mqns, vsa, bcut2d, physiochemical, pharmacophore, functional_groups |
 | **3D** (conformer)     | 9     | whim, usr, usrcat, e3fp, getaway, morse, rdf, autocorr, electroshape                                                                  |
 
-See the [documentation](docs/) for complete details on all components.
+See the [documentation](https://github.com/drugm8/LearnM8/tree/main/docs) for complete details on all components.
 
 ## ⚡ CUDA Acceleration
 
@@ -255,10 +263,10 @@ GPU learners include automatic OOM recovery — training falls back to CPU when 
 
 ## 🔗 Links
 
-- **Documentation:** [docs/](docs/index.md)
-- **Tutorials:** [Running Experiments](docs/tutorials/running-experiments.md) | [Custom Cycles](docs/tutorials/building-custom-cycles.md) | [Advanced Workflows](docs/tutorials/advanced-workflows.md)
-- **Customization:** [Custom Learners](docs/customization/custom-learners.md) | [Custom Acquisition](docs/customization/custom-acquisition.md)
-- **Examples:** See [docs/tutorials/](docs/tutorials/) for comprehensive examples
+- **Documentation:** [docs/](https://github.com/drugm8/LearnM8/blob/main/docs/index.md)
+- **Tutorials:** [Running Experiments](https://github.com/drugm8/LearnM8/blob/main/docs/tutorials/running-experiments.md) | [Custom Cycles](https://github.com/drugm8/LearnM8/blob/main/docs/tutorials/building-custom-cycles.md) | [Advanced Workflows](https://github.com/drugm8/LearnM8/blob/main/docs/tutorials/advanced-workflows.md)
+- **Customization:** [Custom Learners](https://github.com/drugm8/LearnM8/blob/main/docs/customization/custom-learners.md) | [Custom Acquisition](https://github.com/drugm8/LearnM8/blob/main/docs/customization/custom-acquisition.md)
+- **Examples:** See [docs/tutorials/](https://github.com/drugm8/LearnM8/tree/main/docs/tutorials) for comprehensive examples
 
 ## 🤝 Contributing
 
@@ -270,7 +278,7 @@ Contributions are welcome! LearnM8 follows a functional architecture with modula
 4. Add comprehensive tests with real molecular data
 5. Update documentation for new features
 
-See the [extending framework guide](docs/customization/extending-framework.md) for details on adding new components.
+See the [extending framework guide](https://github.com/drugm8/LearnM8/blob/main/docs/customization/extending-framework.md) for details on adding new components.
 
 ## 📄 License
 
