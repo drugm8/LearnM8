@@ -37,8 +37,8 @@ Two consequences inside the library:
   `simulated_annealing` entry; unknown strategies already fall back to `tab10`.
 
 Removed alongside it: the `docs/components/acquisition/diversity.md` page (it
-documented only this strategy), `validation/acquisition_strategies/scripts/validate_simulated_annealing.py`,
-and the A-08 family from the publication benchmark table and figures.
+documented only this strategy) and the simulated-annealing runs from the
+publication benchmark table and figures.
 
 ### Fixed — silently dropped user parameters (`acquisition_params` and the config-file path)
 
@@ -48,7 +48,7 @@ parameter and then used only the per-block value in its `cycles is not None`
 branch — the branch the CLI always takes — so runs completed normally, reported
 success, and used the acquisition defaults. A UCB `beta` sweep produced
 byte-identical trajectories at every cycle. Fixed by mirroring the top-level
-pruning fallback added in `851d572`: a block without its own
+pruning fallback: a block without its own
 `acquisition_params` inherits the top-level dict, an explicit per-block dict
 still wins.
 
@@ -174,9 +174,93 @@ Migration: use `rf_ensemble` (three Random Forest members, uncertainty from
 member spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
 `EnsembleLearner([...])` instance for custom members.
 
+### Added — `failed` status for compounds the oracle cannot measure
+
+A Python (run-mode) oracle can now fail on individual compounds. If it omits a
+selected compound, or returns null, NaN, infinity or a non-numeric value for it,
+that compound gets the new status `failed`. It keeps its row, its
+`selected_cycle` and `labeled_cycle` are set to the selecting cycle, and its
+target stays null. It is excluded from training and never selected again, and
+the run no longer aborts with `OracleError: Oracle did not return measurements
+...`. Cycle metrics gain `n_failed` (0 when none), the aggregates gain
+`total_failed`, and a warning is logged for every cycle with failures. If the
+whole initial batch fails, `run_active_learning` raises `OracleError` before
+any model is trained. `VALID_STATUSES` now has a fourth value, `failed`, which
+also appears in `compounds_final`; the master DataFrame still has 7 columns.
+See `docs/components/oracles/custom-oracles.md`.
+
+### Changed — `CSVOracle` raises for IDs missing from its ground truth
+
+`CSVOracle.measure` used to log a warning and return a partial result when a
+requested ID was absent from the oracle CSV. It now raises `OracleError`
+(listing up to five IDs), so benchmark mode stays strict: every compound in the
+pool must have a ground-truth value. Null target values still raise
+`ValueError`.
+
+### Changed (BREAKING) — feature cache file names and safety
+
+- Cache files are now named `features_{featurizer}_{dim}_{storage_dtype}.h5`.
+  The same featurizer at two sizes (for example Morgan 2048 and 1024 bits) no
+  longer shares, and overwrites, one file. Caches under the old name are not
+  found and rebuild once. To keep a large cache, rename it by hand to the new
+  name.
+- The cache never deletes, renames or overwrites an existing file. A corrupt
+  file, a wrong schema version or a wrong feature dimension raises
+  `PersistenceError` and leaves the file untouched; move or delete it, or use
+  another `cache_dir`, to rebuild. Before, such a file was silently deleted and
+  rebuilt.
+- The default cache lock timeout is 3600 s instead of 5 s, so concurrent runs
+  no longer fail while a first writer builds a large cache. Override it with
+  `LEARNM8_LOCK_TIMEOUT_S`.
+
+### Changed — `Learner.train` overrides accept `smiles`
+
+Every built-in `train` override now accepts the optional `smiles` argument of
+`Learner.train` (and ignores it unless the learner uses SMILES), so all learners
+share one signature.
+
+### Changed — packaging and dependencies
+
+- Version 1.0.0, read from the package metadata (`learnm8.__version__`).
+- The runtime dependencies PyTorch, Lightning, XGBoost, scikit-fingerprints,
+  Chemprop, fastprop and mordredcommunity are now declared. A plain
+  `pip install learnm8` previously failed at import because they were missing.
+- The wheel contains only the `learnm8` package. `tests`, `examples` and
+  `publication` were being installed as top-level packages. The example oracles
+  are used from a repository checkout (`from examples.oracles import ...`).
+- PyPI metadata added: readme, MIT license expression, authors, project URLs,
+  classifiers. Inside the conda environment install the package with
+  `pip install --no-deps -e .`.
+- `mypy learnm8/` passes with no ignored modules, and the code is formatted
+  with `ruff format`.
+
+### Fixed
+
+- **Ensemble learners now forward `feature_type` to their members.** Members
+  stayed on the binary NaN path for continuous featurizers (descriptors, count
+  fingerprints) instead of using median imputation.
+- **`count=True` for `pubchem`, `klekota_roth`, `laggner`, `avalon` and
+  `rdkit`.** Counts were truncated to bits by `np.packbits`. They are now stored
+  as CSR uint16 and treated as continuous. Existing `count=True` caches for these
+  featurizers are not reused.
+- **Tanimoto similarity of two all-zero fingerprints is defined as 1.0.** It was
+  implicit RDKit behaviour, and RDKit 2026.03 changed it to 0.0, so the
+  diversity metric would have differed between RDKit versions for compounds with
+  empty fingerprints.
+- **`PythonOracle` given a path that is not a loadable `.py` module** raises
+  `OracleError` instead of an `AttributeError`.
+- **`FastpropLearner.predict`** raises `LearnerError` when the trainer returns no
+  predictions, instead of failing inside `torch.cat`.
+- **`evaluate_cycle`** raises `ConfigurationError` when benchmark ranking
+  metrics are requested without ground truth, instead of an `AttributeError`.
+- **Documentation** corrected against the code: 8 acquisition strategies, the
+  real diversity metric keys (`bit_position_uniformity_entropy_*`), the
+  `skip_validation` and `streaming` parameters, the missing CLI flags, and the
+  cache design.
+
 ## [0.11.0] — 2026-05-13
 
-### Added — Acquisition-Aware Uncertainty Computation (feature 023)
+### Added — Acquisition-Aware Uncertainty Computation
 
 - `Learner.predict()` gains a keyword-only ``compute_uncertainty: bool = True``
   argument. The active-learning cycle resolves
@@ -194,8 +278,8 @@ member spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
 - 8 skip-eligible learners: CPU ``gp``, ``rf``, ``dt``, ``lr`` and
   GPU/gpytorch siblings ``rf_fil``, ``ridge_cuml``, ``gpu_gp``, ``svgp``.
   RF unifies its mean source across both branches for bit-identity under
-  the force_uncertainty toggle (D9). Ensembles cascade the flag to members
-  AND short-circuit their outer std-reduction (D10 — saves ~4 GB at
+  the force_uncertainty toggle. Ensembles cascade the flag to members
+  AND short-circuit their outer std-reduction (saves ~4 GB at
   100M × N-member scale).
 - ``mc_dropout`` stays uniform-contract: continues to run N stochastic
   forward passes when ``compute_uncertainty=False`` (skipping them would
