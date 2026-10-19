@@ -14,7 +14,9 @@ Key features:
 
 """
 
-__version__ = '1.0.0'
+import importlib.metadata
+
+__version__ = importlib.metadata.version('learnm8')
 
 import contextlib
 

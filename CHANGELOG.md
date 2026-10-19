@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.0.0] — 2026-10-19
 
 ### Added — `learnm8 suggest` / `suggest_next_batch()` for slow lab assays
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "learnm8"
-version = "0.11.0"
+version = "1.0.0"
 description = "Active Learning for Molecular Screening - Modern Architecture with Polars"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -34,6 +34,15 @@ dependencies = [
     "pyyaml>=5.0.0",
     "datamol>=0.12.0",
     "matplotlib>=3.5.0",
+    # Imported at load time by the learners and featurizers; floors match environment.yml.
+    "torch>=2.4",
+    "lightning>=2.0",
+    "pytorch-lightning>=2.0",
+    "xgboost>=2.0",
+    "scikit-fingerprints>=2.0.0",
+    "chemprop>=2.2",
+    "fastprop>=1.2",
+    "mordredcommunity>=2.0.0",
 ]
 
 [project.optional-dependencies]
