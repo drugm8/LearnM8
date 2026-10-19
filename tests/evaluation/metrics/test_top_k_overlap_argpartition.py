@@ -1,10 +1,10 @@
-"""Spec 022 US3 / FR-005 / SC-003: top-K overlap uses argpartition not full sort.
+"""Top-K overlap uses argpartition not full sort.
 
 Verifies that ``calculate_multiple_top_k_overlaps`` produces bit-identical
 values to the prior ``pl.DataFrame.sort`` path, and exhibits O(N) scaling
 rather than O(N log N).
 
-Per spec SC-003, the absolute wall-clock gate at 10M was prone to CI flakes;
+The absolute wall-clock gate at 10M was prone to CI flakes;
 we use a scaling-relative assertion (``time(10M) / time(1M) < 15``) which is
 robust to runner load.
 """
@@ -66,7 +66,7 @@ def test_top_k_overlap_perfect_correlation_yields_100() -> None:
 
 @pytest.mark.slow
 def test_top_k_overlap_scales_linearly_not_loglinear() -> None:
-    """Spec SC-003: time(10M) / time(1M) < 15.
+    """time(10M) / time(1M) < 15.
 
     True O(N) is ~10×; an O(N log N) full-sort would scale at ~23×. The
     threshold of 15 catches a regression to full-sort while tolerating CI

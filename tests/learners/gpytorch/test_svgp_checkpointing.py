@@ -1,4 +1,4 @@
-"""Tests for SVGPLearner checkpoint save/restore (T007)."""
+"""Tests for SVGPLearner checkpoint save/restore."""
 
 import numpy as np
 import pytest

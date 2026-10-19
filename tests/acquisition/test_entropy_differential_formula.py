@@ -1,7 +1,4 @@
-"""Tests for EntropyAcquisition canonical differential entropy (feature 019).
-
-Covers FR-007, FR-008, FR-009 (US4) from spec 019.
-"""
+"""Tests for EntropyAcquisition canonical differential entropy."""
 
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """Test that NaN predictions/uncertainties cause LearnerError immediately
-from the cycle.py guard (FR-005, US2).
+from the cycle.py guard.
 """
 
 from __future__ import annotations

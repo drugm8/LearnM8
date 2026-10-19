@@ -1,4 +1,4 @@
-"""BUGFIX3 — top-level ``acquisition_params`` must change what a run selects.
+"""Top-level ``acquisition_params`` must change what a run selects.
 
 ``parse_cycle_schedule`` dropped the top-level ``acquisition_params`` whenever
 an explicit ``cycles=[...]`` list was passed, which is the branch the CLI

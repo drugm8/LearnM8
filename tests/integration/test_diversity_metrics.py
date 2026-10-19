@@ -1,4 +1,4 @@
-"""Integration tests for the diversity-metrics overhaul (feature 013).
+"""Integration tests for the diversity-metrics overhaul.
 
 End-to-end exercise of ``run_active_learning`` to verify:
 - All six DIVERSITY_KEYS plus ``fingerprint_used`` land in cycle_metrics.csv

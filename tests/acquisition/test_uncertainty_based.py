@@ -103,7 +103,7 @@ class TestUncertaintyBasedIntegration:
         # Test with NaN uncertainty
         compounds = compounds.with_columns(pl.lit(float('nan')).alias('uncertainty'))
 
-        # Feature 019: NaN at acquisition layer hits the secondary-guard
+        # NaN at acquisition layer hits the secondary-guard
         # LearnerError; canonical fail-fast lives in cycle.py.
         from learnm8.exceptions import LearnerError
 

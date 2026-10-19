@@ -1,6 +1,6 @@
-"""Stable-sort regression for `_safe_select_top_k` full-sort branch (feature 019).
+"""Stable-sort regression for `_safe_select_top_k` full-sort branch.
 
-Should-Fix #8 from review-report.md: when `actual_n_select >= n` the function
+When `actual_n_select >= n` the function
 takes the `np.argsort(scores)` branch. Without `kind='stable'`, tied float32
 scores produce non-deterministic orderings even though EI/PI/Entropy now
 produce deterministic scores upstream. Source-side fix is in

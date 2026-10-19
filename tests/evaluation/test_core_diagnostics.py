@@ -1,4 +1,4 @@
-"""Integration tests for diagnostic-metric wiring in evaluate_cycle (014).
+"""Integration tests for diagnostic-metric wiring in evaluate_cycle.
 
 Verifies that:
 - evaluate_cycle emits all three new keys (selected_percentile,
@@ -222,7 +222,7 @@ class TestEvaluateCycleNoRegression:
 
 @pytest.mark.unit
 class TestUncertaintyAwareMetrics:
-    """Feature 023 FR-011: cycle metrics dict keeps uncertainty_* keys present
+    """Cycle metrics dict keeps uncertainty_* keys present
     with None values when uncertainty was skipped."""
 
     def test_diagnostic_uq_metrics_return_none_when_uncertainty_is_none(self):
@@ -246,11 +246,11 @@ class TestUncertaintyAwareMetrics:
             ground_truth_data=None,
             pool_df=pool,
             cumulative_selected_ids=set(sel['ID'].to_list()),
-            uncertainties=None,  # << feature 023 contract: skip-path
+            uncertainties=None,  # << skip-path contract
         )
 
         # Schema-honest: uncertainty_mean / uncertainty_std keys must be
-        # present (no fabricated nulls) but None-valued (FR-011).
+        # present (no fabricated nulls) but None-valued.
         assert 'uncertainty_mean' in result
         assert 'uncertainty_std' in result
         assert result['uncertainty_mean'] is None

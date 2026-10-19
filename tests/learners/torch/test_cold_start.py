@@ -1,4 +1,4 @@
-"""T014 - TorchLearner cold-start model recreation tests.
+"""TorchLearner cold-start model recreation tests.
 
 Tests verify that each call to train() creates a fresh model with new random
 weights, regardless of whether input dimensions changed. Written before
@@ -25,10 +25,10 @@ def _state_dict_checksum(model: torch.nn.Module) -> str:
 
 @pytest.mark.unit
 class TestTorchLearnerColdStart:
-    """FR-004, FR-005: Cold-start model recreation between AL cycles."""
+    """Cold-start model recreation between AL cycles."""
 
     def test_model_parameters_differ_between_consecutive_train_calls(self):
-        """FR-004: Each train() produces fresh weights; consecutive trains differ."""
+        """Each train() produces fresh weights; consecutive trains differ."""
         rng = np.random.RandomState(42)
         X = rng.randn(50, 20).astype(np.float32)
         y = rng.randn(50).astype(np.float32)
@@ -54,7 +54,7 @@ class TestTorchLearnerColdStart:
         )
 
     def test_model_recreated_when_input_dimensions_unchanged(self):
-        """FR-004: Model is recreated even when input_dim stays the same."""
+        """Model is recreated even when input_dim stays the same."""
         rng = np.random.RandomState(10)
         X = rng.randn(50, 20).astype(np.float32)
         y = rng.randn(50).astype(np.float32)
@@ -77,7 +77,7 @@ class TestTorchLearnerColdStart:
         )
 
     def test_three_cycle_parameter_checksums_all_differ(self):
-        """SC-003: Three consecutive train() calls each produce distinct parameter states."""
+        """Three consecutive train() calls each produce distinct parameter states."""
         rng = np.random.RandomState(7)
 
         learner = MLPLearner(
@@ -100,7 +100,7 @@ class TestTorchLearnerColdStart:
         )
 
     def test_optimizer_recreated_each_cycle(self):
-        """FR-004: Optimizer object is recreated on each train() call."""
+        """Optimizer object is recreated on each train() call."""
         rng = np.random.RandomState(99)
         X = rng.randn(50, 20).astype(np.float32)
         y = rng.randn(50).astype(np.float32)

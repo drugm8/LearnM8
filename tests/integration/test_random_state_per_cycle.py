@@ -1,4 +1,4 @@
-"""Spec 021 / US2 / FR-004/FR-005 — random_state plumbed through the cycle.
+"""``random_state`` plumbed through the cycle.
 
 Two ``run_active_learning(random_state=42, ...)`` invocations with the
 ``random`` acquisition strategy must produce bit-identical per-cycle selected
@@ -98,5 +98,5 @@ def test_per_cycle_selections_differ_across_cycles_within_one_run(tmp_path):
     c1, c2 = acquisition_cycles[0], acquisition_cycles[1]
     assert sel[c1] != sel[c2], (
         f'Cycle {c1} and {c2} produced identical selection sets — per-cycle '
-        f'seed derivation is not active (FR-005 regression).'
+        f'seed derivation is not active.'
     )

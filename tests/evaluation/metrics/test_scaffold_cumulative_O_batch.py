@@ -1,4 +1,4 @@
-"""Spec 022 US1 / FR-001 / FR-002: cumulative-scaffold O(batch) timing.
+"""Cumulative-scaffold O(batch) timing.
 
 Verifies that the cumulative scaffold-diversity metric does NOT scale with
 cycle index — the per-cycle cost must depend only on batch size, not on the
@@ -98,7 +98,7 @@ def test_scaffold_cumulative_per_cycle_time_constant() -> None:
     # the median). True constant-time path shows slope close to zero
     # regardless of sign — noise can scatter either way.
     assert abs(slope) < 0.005 * median, (
-        f'Spec SC-001 regression: cumulative scaffold time slope {slope:.4f} ms/cycle '
+        f'Regression: cumulative scaffold time slope {slope:.4f} ms/cycle '
         f'vs median {median:.3f} ms suggests linear growth in cycle index. '
         f'times[50:100] min={float(warm.min()):.3f} max={float(warm.max()):.3f}'
     )

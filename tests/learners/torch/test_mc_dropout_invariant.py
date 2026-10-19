@@ -1,4 +1,4 @@
-"""Feature 023 D4: MCDropoutLearner stays uniform-contract — it still runs
+"""MCDropoutLearner stays uniform-contract — it still runs
 the full N stochastic forward passes when ``compute_uncertainty=False``;
 only the uncertainty return is suppressed.
 
@@ -56,11 +56,11 @@ def test_mc_dropout_runs_n_stochastic_passes_even_when_compute_uncertainty_false
     # Skip path: sigmas suppressed.
     assert sigmas is None
 
-    # But N stochastic forward passes still ran (D4). With one chunk, we
+    # But N stochastic forward passes still ran. With one chunk, we
     # expect exactly n_dropout_samples calls — not 1 (single deterministic).
     # We assert "at least 2" as a safety margin in case of internal padding.
     assert call_count['n'] >= 2, (
         f'mc_dropout collapsed to a single deterministic forward pass '
-        f'(n_calls={call_count["n"]}). D4 requires the N stochastic passes '
-        f'to still execute — mean semantics must not change.'
+        f'(n_calls={call_count["n"]}). The N stochastic passes '
+        f'must still execute — mean semantics must not change.'
     )

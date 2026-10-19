@@ -68,7 +68,7 @@ class TestAcquisitionBaseValidation:
             DummyAcquisition().validate_input(duplicated, n_select=2)
 
     def test_validate_input_rejects_nan_uncertainty_values(self, small_real_compounds):
-        # Feature 019 FR-005: cycle.py is the canonical NaN-fail-fast path.
+        # cycle.py is the canonical NaN-fail-fast path.
         # The validate_input branch is now defence-in-depth (LearnerError with
         # [secondary-guard] prefix) so it survives `python -O`.
         from learnm8.exceptions import LearnerError
@@ -303,7 +303,7 @@ class TestValidateUncertaintyInputs:
             validate_uncertainty_inputs(compounds)
 
     def test_validate_uncertainty_inputs_skips_nan_checks(self, small_real_compounds):
-        # Feature 019: NaN guards are upstream (cycle.py FR-005) and at the
+        # NaN guards are upstream (cycle.py) and at the
         # secondary-guard `validate_input` layer; validate_uncertainty_inputs
         # no longer re-checks for NaN to avoid duplicate hot-path scans.
         compounds = _pool_with_predictions_and_uncertainty(

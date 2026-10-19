@@ -1,7 +1,4 @@
-"""Tests for compute_prediction_entropy scale-invariance and units (feature 019).
-
-Covers FR-006 and SC-003 from spec 019.
-"""
+"""Tests for compute_prediction_entropy scale-invariance and units."""
 
 from __future__ import annotations
 

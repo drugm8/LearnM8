@@ -1,6 +1,6 @@
-"""Tests for stable sort in ScoreBasedPruner (feature 019).
+"""Tests for stable sort in ScoreBasedPruner.
 
-Covers FR-015 (US8). Determinism + tie-break on input order.
+Determinism + tie-break on input order.
 """
 
 from __future__ import annotations

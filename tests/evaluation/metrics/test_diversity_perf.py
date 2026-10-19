@@ -1,9 +1,9 @@
-"""Performance tests for the diversity-metrics overhaul (feature 013).
+"""Performance tests for the diversity-metrics overhaul.
 
 Marked ``slow`` to skip from default pytest invocations. Validates the
 < 1 s per-cycle wall-clock budget at multiple cumulative-set sizes so we
 catch regressions that would silently break the 100M-compound scaling
-claim (FR-018, SC-002).
+claim.
 
 The perf budget is per-cycle wall-clock for ALL six metrics on a single
 CPU thread, with no GPU.
@@ -92,7 +92,7 @@ def test_diversity_under_one_second(cumulative_size):
     )
     elapsed = time.perf_counter() - start
 
-    # Spec budget is < 1.0 s. Allow a small headroom factor for shared CI.
+    # Budget is < 1.0 s. Allow a small headroom factor for shared CI.
     assert elapsed < 1.0, (
         f'Diversity perf regressed at cumulative_size={cumulative_size}: '
         f'{elapsed:.3f}s >= 1.0s'

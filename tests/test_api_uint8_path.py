@@ -1,4 +1,4 @@
-"""End-to-end ``run_active_learning`` dtype routing test (T022, spec 017).
+"""End-to-end ``run_active_learning`` dtype routing test.
 
 Captures the dtype that arrives at ``Learner.train`` via monkeypatch:
 - ``rf`` + ``morgan`` (binary) → uint8 features arrive at the learner.

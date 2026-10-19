@@ -1,13 +1,12 @@
-"""Spec 022 FR-008/FR-009/FR-010: end-to-end Float32 prediction-dtype flow.
+"""End-to-end Float32 prediction-dtype flow.
 
-Merged from the originally-planned per-FR files into one cohesive dtype-flow
-story per Testing C3. Covers:
+One cohesive dtype-flow story covering:
 
-- ``predict_with_batching`` returns ``np.float32`` (FR-008).
-- ``write_cycle_predictions`` writes Float32 parquet schema (FR-009).
-- ``read_cycle_predictions`` accepts both Float32 and Float64 (FR-009).
+- ``predict_with_batching`` returns ``np.float32``.
+- ``write_cycle_predictions`` writes Float32 parquet schema.
+- ``read_cycle_predictions`` accepts both Float32 and Float64.
 - Old Float64 fixtures load via the back-compat loader.
-- Float64 reductions in ``_calculate_cycle_metrics`` preserve precision (FR-010).
+- Float64 reductions in ``_calculate_cycle_metrics`` preserve precision.
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ def _df_float64(n: int = 100) -> pl.DataFrame:
 
 
 def test_writer_produces_float32_schema(tmp_path: Path) -> None:
-    """FR-009: written parquet has Float32 prediction + uncertainty columns."""
+    """Written parquet has Float32 prediction + uncertainty columns."""
     df = _df_float64(50)
     path = write_cycle_predictions(df, tmp_path, cycle=1)
     assert path is not None
@@ -77,7 +76,7 @@ def test_loader_reads_float32_native(tmp_path: Path) -> None:
 
 
 def test_loader_downcasts_old_float64(old_float64_predictions_parquet: Path) -> None:
-    """FR-009 back-compat: loader transparently downcasts old Float64 fixtures."""
+    """Back-compat: loader transparently downcasts old Float64 fixtures."""
     loaded = read_cycle_predictions(old_float64_predictions_parquet)
     assert loaded.schema['prediction'] == pl.Float32
     assert loaded.schema['uncertainty_at_selection'] == pl.Float32
@@ -88,7 +87,7 @@ def test_loader_downcasts_old_float64(old_float64_predictions_parquet: Path) -> 
 
 
 def test_predict_with_batching_returns_float32() -> None:
-    """FR-008: predict_with_batching casts predictions + uncertainties to float32.
+    """predict_with_batching casts predictions + uncertainties to float32.
 
     We test the cast site directly using the array semantics, since spinning
     up a real learner+chunk pipeline is heavy. The contract is "single
@@ -103,7 +102,7 @@ def test_predict_with_batching_returns_float32() -> None:
 
 
 def test_float64_accumulator_dtype_recovers_exact_sum() -> None:
-    """FR-010: ``np.nanmean(arr_f32, dtype=np.float64)`` reduces in float64.
+    """``np.nanmean(arr_f32, dtype=np.float64)`` reduces in float64.
 
     Constructs a 10M float32 vector where the naive non-pairwise float32
     sum loses >1e-3 absolute precision. We compare the float64-accumulator
@@ -121,5 +120,5 @@ def test_float64_accumulator_dtype_recovers_exact_sum() -> None:
     actual = float(np.nanmean(values_f32, dtype=np.float64))
     assert actual == expected_f64, (
         f'nanmean(arr_f32, dtype=float64) returned {actual}, expected {expected_f64}. '
-        f'FR-010 contract requires the float64 accumulator path.'
+        f'The contract requires the float64 accumulator path.'
     )

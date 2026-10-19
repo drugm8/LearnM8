@@ -1,4 +1,4 @@
-"""Spec 022 SC-004 / FR-006: ≥4× speedup for inline EI/PI over scipy.stats.norm.
+"""≥4× speedup for inline EI/PI over scipy.stats.norm.
 
 Marked ``@pytest.mark.slow`` — only run on dedicated benchmark runners.
 Set ``LEARNM8_BENCHMARK=1`` to enforce the 4× target; otherwise the test is
@@ -28,7 +28,7 @@ pytestmark = [
 def _inline_ei(
     mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0
 ) -> np.ndarray:
-    """Spec 022 inline EI form — same as the production acquisition function."""
+    """Inline EI form — same as the production acquisition function."""
     improvement = mu - f_best - xi
     sigma_safe = np.where(sigma > 0, sigma, 1.0)
     z = improvement / sigma_safe
@@ -42,7 +42,7 @@ def _inline_ei(
 def _legacy_ei(
     mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0
 ) -> np.ndarray:
-    """The pre-022 EI form via scipy.stats.norm."""
+    """The earlier EI form via scipy.stats.norm."""
     improvement = mu - f_best - xi
     with np.errstate(divide='ignore', invalid='ignore'):
         z = improvement / sigma
@@ -74,6 +74,6 @@ def test_inline_ei_at_least_4x_faster_than_norm_scipy() -> None:
 
     speedup = t_legacy / max(t_inline, 1e-9)
     assert speedup >= 4.0, (
-        f'Spec SC-004: inline EI speedup is {speedup:.2f}× (legacy {t_legacy:.3f}s, '
+        f'Inline EI speedup is {speedup:.2f}× (legacy {t_legacy:.3f}s, '
         f'inline {t_inline:.3f}s). Expected ≥ 4×.'
     )

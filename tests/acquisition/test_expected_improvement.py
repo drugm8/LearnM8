@@ -105,7 +105,7 @@ class TestExpectedImprovementAcquisition:
         assert result.get_column('prediction')[0] == 20.0
 
     def test_ei_no_nan_intermediates_when_sigma_zero(self, small_real_compounds):
-        """Spec 022 FR-006: σ=0 must NOT produce NaN intermediates.
+        """σ=0 must NOT produce NaN intermediates.
 
         The σ-guard via ``np.where(sigma > 0, ...)`` ensures division by zero
         never propagates into the EI output.
@@ -121,7 +121,7 @@ class TestExpectedImprovementAcquisition:
         assert not np.isnan(scores).any(), f'NaN in EI scores: {scores}'
 
     def test_ei_symmetric_clipping_at_extreme_z(self, small_real_compounds):
-        """Spec 022 FR-007: z clipped to ±37 must not produce NaN or inf.
+        """z clipped to ±37 must not produce NaN or inf.
 
         Extreme μ-f_best ratios where z would naturally exceed ±100 still
         produce finite EI under symmetric clipping.

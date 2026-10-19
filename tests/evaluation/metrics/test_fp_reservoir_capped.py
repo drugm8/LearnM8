@@ -1,11 +1,11 @@
-"""Spec 022 US2 / FR-003 / FR-004: cumulative-fingerprint reservoir cap.
+"""Cumulative-fingerprint reservoir cap.
 
 Verifies that ``_reservoir_extend`` maintains the Vitter Algorithm R
 invariants:
 
 - Buffer length capped at ``K_RESERVOIR`` after every call.
 - Determinism: identical (seed, cycle) produces identical reservoir contents.
-- Global-counter correctness (Pitfall #1 regression): per-batch counter would
+- Global-counter correctness (regression): per-batch counter would
   bias batch-3 toward 100% survival; global counter yields ~33% survival.
 - Deterministic golden-snapshot (replaces flaky KS-test in fast CI).
 - Provenance suffix activates only when ``cumulative_seen_count > K``.
@@ -98,7 +98,7 @@ def test_reservoir_determinism_seed42() -> None:
 
 
 def test_reservoir_uses_global_not_per_batch_counter(small_k: int) -> None:
-    """Spec 022 Pitfall #1 regression.
+    """Regression: the reservoir uses a global stream counter.
 
     Stream 3 batches x 5_000 fingerprints with K=10_000. With a correct
     GLOBAL stream counter, expected batch-3 survivors ~= 5_000 * 10_000 /

@@ -1,4 +1,4 @@
-"""Spec 022 SC-005: Float32 prediction storage preserves AL trajectory.
+"""Float32 prediction storage preserves AL trajectory.
 
 The test runs short AL pipelines twice — once with the production Float32
 storage path and once with the legacy Float64 storage path — and asserts
@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.slow, pytest.mark.molecular]
 
 
 @pytest.mark.skip(
-    reason='Spec 022 SC-005: full AL trajectory invariance test deferred to '
+    reason='Full AL trajectory invariance test deferred to '
     'dedicated benchmark runner (requires real learner + 5-cycle pipeline). '
     'The dtype-flow + writer schema tests in test_prediction_dtype_flow.py '
     'cover the per-component contract; this test is the end-to-end gate.'
@@ -26,18 +26,18 @@ pytestmark = [pytest.mark.slow, pytest.mark.molecular]
 def test_float32_al_trajectory_diverges_at_most_5pct() -> None:
     """5-cycle AL with Float32 vs Float64 storage; selected IDs diverge ≤ 5%."""
     # Implementation requires a real learner + featurizer; left as a marker
-    # for the benchmark runner. The dtype-flow contract tests (T040, T041,
-    # T044) cover the storage path correctness; this test is the end-to-end
+    # for the benchmark runner. The dtype-flow contract tests
+    # cover the storage path correctness; this test is the end-to-end
     # invariance check that's expensive to run in CI.
     raise NotImplementedError('See test docstring.')
 
 
 def test_float32_storage_preserves_top_k_set_under_quantization() -> None:
-    """A surrogate for SC-005: Float32 quantization preserves top-K set.
+    """A surrogate for the AL trajectory test: Float32 quantization preserves top-K set.
 
     Uses a synthetic 100k float64 prediction array. After casting to float32
     and back, the top-1% and top-5% sets should be identical (or differ
-    by ≤5% per spec acceptance) to the original Float64 top-K sets.
+    by ≤5%) to the original Float64 top-K sets.
     Validates that float32 quantization is innocuous for AL ranking.
     """
     n = 100_000
@@ -50,7 +50,7 @@ def test_float32_storage_preserves_top_k_set_under_quantization() -> None:
         top_k_64 = set(np.argsort(-preds_64, kind='stable')[:k].tolist())
         top_k_32 = set(np.argsort(-preds_32, kind='stable')[:k].tolist())
         overlap = len(top_k_64 & top_k_32) / k
-        # Spec acceptance: diverge by ≤ 5% (overlap ≥ 95%).
+        # Diverge by ≤ 5% (overlap ≥ 95%).
         assert overlap >= 0.95, (
             f'Top-{k_pct * 100:.0f}% overlap between Float32 and Float64 is '
             f'{overlap * 100:.1f}%, expected ≥ 95%. Float32 quantization is '

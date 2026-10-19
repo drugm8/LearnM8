@@ -1,4 +1,4 @@
-"""T006 - TorchLearner best-model checkpoint save/restore tests.
+"""TorchLearner best-model checkpoint save/restore tests.
 
 Tests verify that after training, model weights correspond to the epoch with
 lowest validation loss (not the last epoch). Written before implementation per TDD.
@@ -34,7 +34,7 @@ def _compute_val_loss(
     return criterion(preds, torch.FloatTensor(targets).to(device)).item()
 
 
-# Spec 021 / FR-001 changed _split_validation from np.random.seed to
+# _split_validation was changed from np.random.seed to
 # np.random.default_rng. The val subset is no longer guaranteed to give a
 # val_loss directly comparable with full-data loss, so post-training loss is
 # bounded by the range of observed history values rather than equality.
@@ -51,7 +51,7 @@ def _assert_loss_in_history_range(
 
 @pytest.mark.unit
 class TestTorchLearnerCheckpointing:
-    """FR-001, FR-002, FR-003: Best-model checkpoint save and restore."""
+    """Best-model checkpoint save and restore."""
 
     def test_best_epoch_weights_restored_after_early_stopping(self):
         """Given early stopping triggers after best epoch, model weights match best epoch."""
@@ -103,7 +103,7 @@ class TestTorchLearnerCheckpointing:
             )
 
     def test_first_epoch_checkpoint_saved_unconditionally(self):
-        """FR-003: First epoch state_dict is always saved even if val_loss never improves."""
+        """First epoch state_dict is always saved even if val_loss never improves."""
         rng = np.random.RandomState(1)
         X = rng.randn(15, 20).astype(np.float32)
         y = np.zeros(15, dtype=np.float32)
@@ -124,7 +124,7 @@ class TestTorchLearnerCheckpointing:
         assert len(history) >= 1
 
     def test_best_checkpoint_restored_when_no_early_stopping(self):
-        """FR-002: When training runs all max_epochs, best-epoch weights are still restored."""
+        """When training runs all max_epochs, best-epoch weights are still restored."""
         rng = np.random.RandomState(7)
         X = rng.randn(50, 20).astype(np.float32)
         y = rng.randn(50).astype(np.float32)
@@ -150,7 +150,7 @@ class TestTorchLearnerCheckpointing:
         )
 
     def test_model_weights_match_best_validation_loss_epoch(self):
-        """SC-002: Final model weights correspond to epoch with lowest val_loss."""
+        """Final model weights correspond to epoch with lowest val_loss."""
         rng = np.random.RandomState(3)
         n = 20
         X = rng.randn(n, 20).astype(np.float32)

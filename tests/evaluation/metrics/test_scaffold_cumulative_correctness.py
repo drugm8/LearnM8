@@ -1,4 +1,4 @@
-"""Spec 022 US1 / FR-001 / FR-002: incremental cumulative-scaffold correctness.
+"""Incremental cumulative-scaffold correctness.
 
 Verifies the incremental ``cumulative_unique_scaffolds`` accumulator produces
 bit-identical values to a one-shot batch computation over the union of all
@@ -23,8 +23,8 @@ pytestmark = pytest.mark.integration
 def _smiles_for(idx: int) -> str:
     """Produce a strictly-unique parseable SMILES per index.
 
-    Active learning never selects the same compound twice; the spec's
-    acceptance scenario ("incremental == one-shot") only holds for a
+    Active learning never selects the same compound twice; the
+    expected behaviour ("incremental == one-shot") only holds for a
     deduplicated cumulative set. Three-dim encoding keeps chain lengths
     short while producing 1024 unique parseable SMILES.
     """

@@ -1,4 +1,4 @@
-"""Tests for the LearnM8 exception hierarchy (ERR-001)."""
+"""Tests for the LearnM8 exception hierarchy."""
 
 import warnings
 

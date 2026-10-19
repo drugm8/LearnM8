@@ -1,8 +1,8 @@
-"""Unit tests for the diagnostic metrics added in feature 014.
+"""Unit tests for the diagnostic metrics added to the evaluation module.
 
 Covers `compute_selected_percentile` and `compute_prediction_entropy`.
 
-Edge cases asserted (REQ-1..REQ-4 in specs/014-diagnostic-metrics/spec.md):
+Edge cases asserted:
 - benchmark-mode happy path with known expected values
 - score_direction='lower' inverts the percentile
 - empty / missing inputs return None silently (mode-neutral)
@@ -112,7 +112,7 @@ class TestPredictionEntropy:
     """Unit tests for compute_prediction_entropy."""
 
     def test_uniform_predictions_high_entropy(self):
-        # Feature 019: units changed bits → nats. Uniform predictions → entropy ≈ log(n_bins) (nats).
+        # Units changed bits → nats. Uniform predictions → entropy ≈ log(n_bins) (nats).
         rng = np.random.default_rng(0)
         pool = pl.DataFrame(
             {

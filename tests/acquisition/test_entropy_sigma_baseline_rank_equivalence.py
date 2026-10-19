@@ -1,6 +1,6 @@
 """Tests that EntropyAcquisition is rank-equivalent to a σ-descending baseline.
 
-Covers SC-002 from spec 019. NOT rank-equivalent to UCB(β=0).
+NOT rank-equivalent to UCB(β=0).
 """
 
 from __future__ import annotations

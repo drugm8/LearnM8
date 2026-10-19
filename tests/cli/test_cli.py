@@ -615,7 +615,7 @@ class TestRunSubcommand:
     def test_force_uncertainty_flag_forwarding(
         self, minimal_compounds, tmp_path, monkeypatch
     ):
-        """FR-014: --force-uncertainty must be forwarded to run_active_learning()."""
+        """--force-uncertainty must be forwarded to run_active_learning()."""
         import learnm8.cli.main as cli_main_mod
         from learnm8.cli.main import cmd_run
 
@@ -646,14 +646,13 @@ class TestRunSubcommand:
         run_cmd_inprocess(cmd_run, args, monkeypatch)
 
         assert captured.get('force_uncertainty') is True, (
-            'cmd_run did not forward --force-uncertainty to '
-            'run_active_learning() (FR-014).'
+            'cmd_run did not forward --force-uncertainty to run_active_learning().'
         )
 
     def test_force_uncertainty_default_false(
         self, minimal_compounds, tmp_path, monkeypatch
     ):
-        """Default for --force-uncertainty must be False (FR-013)."""
+        """Default for --force-uncertainty must be False."""
         import learnm8.cli.main as cli_main_mod
         from learnm8.cli.main import cmd_run
 
@@ -1273,7 +1272,7 @@ class TestConfigOnlyRun:
 
 @pytest.mark.unit
 class TestConfigFileParameterPlumbing:
-    """BUGFIX3 audit: config-file values must reach run_active_learning().
+    """Config-file values must reach run_active_learning().
 
     Three silent drops on the --config path: `pruning_params` was never added
     to the run kwargs at all, config keys documented under their API name

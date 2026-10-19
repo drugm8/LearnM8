@@ -1,4 +1,4 @@
-"""Feature 023 FR-018 / D8: pin the no-shim contract.
+"""Pin the no-shim contract.
 
 Third-party ``Learner`` subclasses with the OLD signature (no
 ``compute_uncertainty`` kwarg) must break with a natural ``TypeError`` on
@@ -85,6 +85,6 @@ def test_old_style_subclass_raises_typeerror_on_first_predict(
     full_msg = ' '.join(error_chain) + ' ' + str(exc_info.value)
     assert 'compute_uncertainty' in full_msg, (
         f'TypeError did not mention compute_uncertainty. Full chain: '
-        f'{full_msg!r}. Feature 023 FR-018: error must surface the missing '
+        f'{full_msg!r}. Error must surface the missing '
         f'kwarg so users can find the CHANGELOG migration guide.'
     )

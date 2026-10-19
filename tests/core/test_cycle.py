@@ -418,7 +418,7 @@ class TestExecuteCycle:
     def test_empty_cycle_schema_drops_uncertainty_column(
         self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
     ):
-        """Feature 023 FR-009 / D5: the empty-cycle fallback predictions schema
+        """The empty-cycle fallback predictions schema
         must drop the uncertainty column when compute_uncertainty resolves to
         False (greedy acquisition + no force).
         """
@@ -457,7 +457,7 @@ class TestExecuteCycle:
         if empty is not None and len(empty) == 0:
             assert 'uncertainty' not in empty.columns, (
                 'Empty-cycle predictions schema must drop uncertainty column '
-                'when compute_uncertainty=False (FR-009 / D5).'
+                'when compute_uncertainty=False.'
             )
 
 
@@ -765,7 +765,7 @@ class TestEdgeCaseHandling:
 @pytest.mark.integration
 class TestNarrowExceptPaths:
     """Regression tests for the 4 narrow-except branches preserved by the
-    execute_cycle decomposition refactor (REQ-2). Each test forces a specific
+    execute_cycle decomposition refactor. Each test forces a specific
     typed exception inside one of the 8 try/except blocks in cycle.py and
     asserts it propagates (or is logged) exactly as pre-refactor code does.
     """
@@ -960,7 +960,7 @@ class TestNarrowExceptPaths:
 
         # The patched evaluate_cycle was reached (raised ColumnNotFoundError).
         assert mocked_eval.called
-        # Execution continued past the eval-wrap try/except (REQ-2 behaviour).
+        # Execution continued past the eval-wrap try/except.
         assert metrics['cycle'] == 1
         assert 'training_time' in metrics
         assert 'evaluation_time' in metrics
@@ -972,7 +972,7 @@ class TestNarrowExceptPaths:
 
 @pytest.mark.unit
 class TestBuildSelectionOrderLookup:
-    """build_selection_order_lookup: strict id->order map (Item 14)."""
+    """build_selection_order_lookup: strict id->order map."""
 
     def test_maps_ids_to_their_index(self):
         lookup = build_selection_order_lookup(['C3', 'C1', 'C2'])

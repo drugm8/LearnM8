@@ -12,8 +12,8 @@ import pytest
 def old_float64_predictions_parquet(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Generate a small Float64-schema prediction parquet at session start.
 
-    Spec 022 backward-compat fixture: simulates a parquet written by
-    pre-022 runs. Used by the loader-back-compat tests in
+    Backward-compat fixture: simulates a parquet written by
+    runs from older versions. Used by the loader-back-compat tests in
     ``test_prediction_dtype_flow.py``. Reproducible across polars versions;
     self-healing on schema changes (regenerated on each test session).
     """

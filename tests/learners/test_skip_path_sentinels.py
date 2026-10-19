@@ -1,11 +1,11 @@
-"""Structural skip-path sentinel tests (feature 023, D11).
+"""Structural skip-path sentinel tests.
 
 Catches sklearn-#31374-style DRY-refactor regressions where the expensive
 uncertainty path is silently re-introduced above the conditional. Each test
 patches the LearnM8 import-boundary symbol used for the uncertainty compute
 and asserts it is NOT called when ``predict(X, compute_uncertainty=False)``.
 
-OOS-1 compliance: structural (mock-based), not timing-based; <100ms per test.
+Structural (mock-based), not timing-based; <100ms per test.
 Patches target the LearnM8 import site, not sklearn-internal symbols.
 """
 
@@ -61,8 +61,8 @@ def test_gp_skip_does_not_call_predict_with_return_std_true():
 
 def test_rf_skip_does_not_call_np_std():
     """RandomForest: when compute_uncertainty=False, the ``np.std``
-    reduction over the per-tree stack must NOT execute. The plan calls
-    out two unconditional wins: ``(n_trees, n_samples)`` allocation
+    reduction over the per-tree stack must NOT execute. There are
+    two unconditional wins: ``(n_trees, n_samples)`` allocation
     elision AND the ``np.std`` removal — the latter is the structural
     sentinel here because it cannot fire on the skip path. (sklearn's
     joblib-parallel still invokes each tree internally inside

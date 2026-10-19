@@ -1,10 +1,10 @@
-"""Spec 022 D2 regression: ``scipy.special.ndtr`` ≡ ``scipy.stats.norm.cdf``.
+"""Regression: ``scipy.special.ndtr`` ≡ ``scipy.stats.norm.cdf``.
 
 If scipy ever refactors ``norm_gen._cdf`` to no longer alias
 ``special.ndtr``, this test goes red, alerting us before the inline path
 silently diverges from the legacy path.
 
-Also covers the spec FR-007 σ=0 guard + z-clipping edge behaviour.
+Also covers the σ=0 guard + z-clipping edge behaviour.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def test_ndtr_matches_norm_cdf_within_range() -> None:
 
 
 def test_inline_phi_clipped_at_37_does_not_underflow() -> None:
-    """Spec FR-007: clipping z to [-37, 37] before exp(-z²/2) keeps φ finite.
+    """Clipping z to [-37, 37] before exp(-z²/2) keeps φ finite.
 
     At |z|=50, exp(-z²/2) would underflow to 0 in float64; with clipping at
     |z|=37, exp(-z²/2) ≈ 6×10⁻⁳⁰⁰ — finite (sub-normal) but non-zero.

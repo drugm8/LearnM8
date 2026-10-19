@@ -1,4 +1,4 @@
-"""Spec 021 / US1 / acceptance checklist — grep guard.
+"""Grep guard against process-global numpy seeding.
 
 Walks ``learnm8/`` and asserts zero occurrences of ``np.random.seed(`` outside
 explicitly allowed locations. This guard prevents regressions in any

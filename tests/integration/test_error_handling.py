@@ -101,7 +101,7 @@ class TestDataValidationErrors:
         acq = GreedyAcquisition()
 
         # Should handle NaN values gracefully or raise appropriate error.
-        # 019 US2 secondary guard raises LearnerError on direct .select() with NaN.
+        # Secondary guard raises LearnerError on direct .select() with NaN.
         try:
             selected = acq.select(compounds, n_select=3)
 

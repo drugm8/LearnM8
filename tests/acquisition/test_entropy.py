@@ -25,7 +25,7 @@ class TestEntropyAcquisition:
     def test_entropy_selects_highest_uncertainty_when_entropy_type_is_uncertainty(
         self, small_real_compounds
     ):
-        # Feature 019: scores are now differential entropy in nats, not raw σ.
+        # Scores are now differential entropy in nats, not raw σ.
         # Selection rank still matches σ-descending baseline.
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(5).clone(),
@@ -46,7 +46,7 @@ class TestEntropyAcquisition:
     def test_entropy_selects_highest_variance_when_entropy_type_is_variance(
         self, small_real_compounds
     ):
-        # Feature 019: 'variance' branch returns 0.5·log(2πe·σ⁴) = log(2πe) + 2·log(σ).
+        # 'variance' branch returns 0.5·log(2πe·σ⁴) = log(2πe) + 2·log(σ).
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(5).clone(),
             [0.1, 0.2, 0.3, 0.4, 0.5],
@@ -91,7 +91,7 @@ class TestEntropyAcquisition:
         assert first.get_column('ID').to_list() == second.get_column('ID').to_list()
 
     def test_entropy_handles_identical_uncertainty_values(self, small_real_compounds):
-        # Feature 019: scores are differential entropy (nats); identical σ → identical entropy.
+        # Scores are differential entropy (nats); identical σ → identical entropy.
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(5).clone(),
             [0.1, 0.2, 0.3, 0.4, 0.5],

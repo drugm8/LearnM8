@@ -1,4 +1,4 @@
-"""Regression tests for BUGFIX4: fastprop prediction must not fork worker processes.
+"""Regression tests: fastprop prediction must not fork worker processes.
 
 `FastpropLearner.predict` builds its `fastpropDataLoader` with `num_workers=0`,
 but PyTorch Lightning unconditionally re-instantiates the prediction dataloader
@@ -158,5 +158,5 @@ class TestFastpropPredictDoesNotFork:
 
         assert forked == [], (
             f'FastpropLearner.predict forked {len(forked)} child process(es) '
-            'from a multi-threaded parent (BUGFIX4 deadlock).'
+            'from a multi-threaded parent.'
         )

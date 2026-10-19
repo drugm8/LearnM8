@@ -126,7 +126,7 @@ class TestGreedyAcquisition:
             [0.1, 0.2, np.nan, 0.4, 0.5],
         )
 
-        # Feature 019: defence-in-depth secondary guard at acquisition layer.
+        # Defence-in-depth secondary guard at acquisition layer.
         from learnm8.exceptions import LearnerError
 
         with pytest.raises(

@@ -108,7 +108,7 @@ class TestPreprocessFeatures:
         assert mask[1]
 
     def test_continuous_nan_imputed_with_median(self):
-        """T045: Continuous features use SimpleImputer with median strategy."""
+        """Continuous features use SimpleImputer with median strategy."""
         features = np.array([[1.0, np.nan, 3.0], [4.0, 5.0, np.nan], [7.0, 8.0, 9.0]])
         result, _, imputer = _preprocess_features(
             features,
@@ -151,7 +151,7 @@ class TestPreprocessFeatures:
         assert result[0, 0] == pytest.approx(3.0)
 
     def test_binary_nan_triggers_warning(self, caplog):
-        """T046: Binary features with NaN trigger a warning."""
+        """Binary features with NaN trigger a warning."""
         import logging
 
         with caplog.at_level(logging.WARNING, logger='learnm8.learners.base'):

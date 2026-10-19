@@ -1,4 +1,4 @@
-"""Tests for the redesigned diversity-metrics module (feature 013).
+"""Tests for the redesigned diversity-metrics module.
 
 Covers the public ``compute_diversity_metrics`` API plus the private
 primitives. Replaces ``test_similarity.py``.
@@ -284,7 +284,7 @@ class TestComputeDiversityMetricsPublic:
         assert result['fingerprint_used'] == 'morgan_2_2048_float32'
 
     def test_cycle_zero_batch_equals_cumulative(self, run_cache):
-        # FR-004a: at cycle 0 the cumulative set IS the batch, so the two
+        # At cycle 0 the cumulative set IS the batch, so the two
         # halves of every metric pair must coincide exactly.
         df = _df_with_smiles(SMILES_DRUGLIKE[:6])
         result = compute_diversity_metrics(

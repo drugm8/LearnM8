@@ -1,4 +1,4 @@
-"""``Learner.preferred_feature_dtype()`` contract tests (T009, spec 017).
+"""``Learner.preferred_feature_dtype()`` contract tests.
 
 Tree learners route to ``'uint8'`` when their bound features are binary;
 all non-tree learners (GP, MLP, MCDropout, Chemprop, Fastprop, GPyTorch,
@@ -73,7 +73,7 @@ def test_torch_learners_always_float32():
 
 @pytest.mark.unit
 def test_default_interface_returns_float32():
-    """Custom Learner subclasses inherit the float32 default (REQ-14)."""
+    """Custom Learner subclasses inherit the float32 default."""
     import numpy as np
 
     from learnm8.core.interfaces import Learner

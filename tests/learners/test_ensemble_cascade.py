@@ -1,9 +1,9 @@
-"""Feature 023 SC-004 cascade tests for ensembles.
+"""Cascade tests for ensembles.
 
-Per FR-006 the ensemble must thread ``compute_uncertainty`` directly to
+The ensemble must thread ``compute_uncertainty`` directly to
 each member's ``predict`` call (3 explicit member-loop sites — `ensemble.py`,
-`chemprop_ensemble.py`, `fastprop_ensemble.py`). Per FR-005 (post-review D10)
-the outer std-reduction must short-circuit when ``compute_uncertainty=False``.
+`chemprop_ensemble.py`, `fastprop_ensemble.py`). The
+outer std-reduction must short-circuit when ``compute_uncertainty=False``.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _members_called_with_compute_uncertainty(ensemble, X, *, value):
 
 
 def test_ensemble_base_cascade_threads_flag(tiny_data):
-    """FR-006: EnsembleLearner must thread compute_uncertainty to each member."""
+    """EnsembleLearner must thread compute_uncertainty to each member."""
     from learnm8.learners.ensemble.ensemble import EnsembleLearner
     from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
@@ -76,13 +76,13 @@ def test_ensemble_base_cascade_threads_flag(tiny_data):
     ensemble.train(X, y)
 
     preds, sigmas = _members_called_with_compute_uncertainty(ensemble, X, value=False)
-    assert sigmas is None, 'outer ensemble must skip std-reduction (D10)'
+    assert sigmas is None, 'outer ensemble must skip std-reduction'
     assert preds is not None and len(preds) == len(X)
 
 
 @pytest.mark.slow
 def test_chemprop_ensemble_cascade_threads_flag(tiny_data):  # pragma: no cover
-    """FR-006: ChempropEnsemble must thread compute_uncertainty to each member."""
+    """ChempropEnsemble must thread compute_uncertainty to each member."""
     pytest.importorskip('chemprop')
     from learnm8.learners.ensemble.chemprop_ensemble import ChempropEnsemble
 
@@ -127,7 +127,7 @@ def test_chemprop_ensemble_cascade_threads_flag(tiny_data):  # pragma: no cover
 
 @pytest.mark.slow
 def test_fastprop_ensemble_cascade_threads_flag(tiny_data):  # pragma: no cover
-    """FR-006: FastpropEnsemble must thread compute_uncertainty to each member."""
+    """FastpropEnsemble must thread compute_uncertainty to each member."""
     pytest.importorskip('fastprop')
     from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
 
@@ -140,12 +140,12 @@ def test_fastprop_ensemble_cascade_threads_flag(tiny_data):  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------
-# Outer std-skip (FR-005 / D10)
+# Outer std-skip
 # ---------------------------------------------------------------------------
 
 
 def test_ensemble_outer_std_skip_does_not_invoke_calculate_uncertainty(tiny_data):
-    """FR-005 / D10: outer std-reduction must short-circuit (skip
+    """Outer std-reduction must short-circuit (skip
     _calculate_uncertainty) when compute_uncertainty=False."""
     from learnm8.learners.ensemble.ensemble import EnsembleLearner
     from learnm8.learners.sklearn.random_forest import RandomForestLearner
@@ -167,17 +167,17 @@ def test_ensemble_outer_std_skip_does_not_invoke_calculate_uncertainty(tiny_data
     assert sigmas is None
     assert mock_calc.call_count == 0, (
         f'Outer ensemble std-reduction ran when compute_uncertainty=False '
-        f'(called {mock_calc.call_count}x). FR-005 / D10 violated.'
+        f'(called {mock_calc.call_count}x). Outer std-reduction must be skipped.'
     )
 
 
 # ---------------------------------------------------------------------------
-# Cascade is inherited correctly by simple ensemble subclasses (T043 spec)
+# Cascade is inherited correctly by simple ensemble subclasses
 # ---------------------------------------------------------------------------
 
 
 def test_rf_ensemble_inherits_cascade(tiny_data):
-    """T043 verification: rf_ensemble inherits EnsembleLearner.predict cascade."""
+    """rf_ensemble inherits EnsembleLearner.predict cascade."""
     from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 
     X, y = tiny_data

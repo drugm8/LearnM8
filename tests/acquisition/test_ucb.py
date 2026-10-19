@@ -116,7 +116,7 @@ class TestUCBAcquisition:
             [0.1, np.nan, 0.3, 0.4, 0.5],
         )
 
-        # Feature 019: NaN at acquisition layer hits the defence-in-depth
+        # NaN at acquisition layer hits the defence-in-depth
         # secondary guard (LearnerError); cycle.py is the canonical fail-fast.
         from learnm8.exceptions import LearnerError
 
@@ -126,7 +126,7 @@ class TestUCBAcquisition:
             UCBAcquisition().select(compounds, n_select=2)
 
     def test_ucb_rejects_inf_uncertainty_values(self, small_real_compounds):
-        # Item 9: UCB must reject ±inf σ like EI/PI/Entropy, not propagate ±inf.
+        # UCB must reject ±inf σ like EI/PI/Entropy, not propagate ±inf.
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(5).clone(),
             [0.1, 0.2, 0.3, 0.4, 0.5],

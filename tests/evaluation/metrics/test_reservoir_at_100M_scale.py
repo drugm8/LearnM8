@@ -1,4 +1,4 @@
-"""Spec 022 SC-002 / FR-003: full-scale reservoir RAM check.
+"""Full-scale reservoir RAM check.
 
 This test exercises the cumulative-FP reservoir at production scale.
 It is gated on ``slow + molecular`` markers because the molecular fixture

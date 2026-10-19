@@ -48,7 +48,7 @@ class MockLearner(Learner):
     ) -> tuple:
         """Mock prediction implementation with featurizer-agnostic interface.
 
-        Feature 023: accepts ``compute_uncertainty`` keyword-only argument and
+        Accepts ``compute_uncertainty`` keyword-only argument and
         honours it by returning None for the second tuple element when False.
         """
         if self._fail_prediction:

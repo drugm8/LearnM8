@@ -1,4 +1,4 @@
-"""Numeric equivalence test: tree learners on uint8 vs float32 features (T010).
+"""Numeric equivalence test: tree learners on uint8 vs float32 features.
 
 A 1k-compound deterministic Morgan matrix passed to the same RF/XGB/DT
 configuration MUST produce identical predictions whether the input dtype is

@@ -1,4 +1,4 @@
-"""Test-time signature audit of LEARNER_REGISTRY (feature 023, D2).
+"""Test-time signature audit of LEARNER_REGISTRY.
 
 Catches the case where a registered learner accepts ``compute_uncertainty``
 via ``**kwargs`` (silently ignoring it) — the audit asserts the keyword-only
@@ -22,7 +22,7 @@ from learnm8.core.interfaces import Learner
 def test_every_registered_learner_accepts_compute_uncertainty(name):
     """Every learner class registered in LEARNER_REGISTRY must declare an
     explicit ``compute_uncertainty`` keyword-only parameter with default
-    ``True`` on its ``predict`` method (FR-001)."""
+    ``True`` on its ``predict`` method."""
     cls = LEARNER_REGISTRY[name]
     sig = inspect.signature(cls.predict)
     params = sig.parameters

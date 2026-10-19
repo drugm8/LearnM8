@@ -1,4 +1,4 @@
-"""Spec 022 D2 regression test: ``_derive_rng`` frozen-output stability.
+"""Regression test: ``_derive_rng`` frozen-output stability.
 
 Numpy's ``default_rng([seed, cycle])`` seed-array semantics are stable since
 numpy 1.25 per NEP-19. This test asserts the exact integers
@@ -8,7 +8,7 @@ implementation (NEP-19 forbids this without a major version bump, but defense
 in depth) this test trips before reservoir contents silently shift.
 
 Reference values captured 2026-05-10 with numpy 1.26.4 in the
-``learnm8`` conda env. Per plan.md fallback option, ``numpy>=1.25`` (not
+``learnm8`` conda env. ``numpy>=1.25`` (not
 strictly ``>=2.0``) satisfies the NEP-19 determinism contract — the
 captured values are stable across the 1.25–2.x range.
 """
@@ -81,7 +81,7 @@ NEP19_FROZEN_SEEDNONE_CYCLE0 = (
 def test_derive_rng_seed42_produces_frozen_sequence(
     cycle: int, expected: tuple[int, ...]
 ) -> None:
-    """Sanity-check NEP-19 stability for the spec 022 reservoir RNG.
+    """Sanity-check NEP-19 stability for the reservoir RNG.
 
     If this fails: numpy ``default_rng([seed, cycle])`` output drifted, which
     means reservoir contents are no longer reproducible across numpy versions.

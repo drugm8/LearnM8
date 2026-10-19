@@ -1,4 +1,4 @@
-"""``_preprocess_features`` uint8 input path (T012, spec 017).
+"""``_preprocess_features`` uint8 input path.
 
 When the caller hands in a ``uint8`` binary matrix, ``_preprocess_features``
 MUST: (1) skip ``np.isnan``/``np.nan_to_num`` (uint8 cannot represent NaN),

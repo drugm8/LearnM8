@@ -254,7 +254,7 @@ class TestGaussianProcessLearner:
 @pytest.mark.slow
 @pytest.mark.unit
 class TestKernelAutoDetection:
-    """Tests for kernel auto-detection and explicit selection (T006)."""
+    """Tests for kernel auto-detection and explicit selection."""
 
     def test_auto_kernel_binary_selects_tanimoto(self):
         learner = GaussianProcessLearner(kernel='auto', random_state=42)
@@ -350,7 +350,7 @@ class TestKernelAutoDetection:
 @pytest.mark.slow
 @pytest.mark.unit
 class TestAlphaConfiguration:
-    """Tests for alpha configuration passthrough (T007)."""
+    """Tests for alpha configuration passthrough."""
 
     def test_alpha_value_is_passed_to_underlying_model(self):
         learner = GaussianProcessLearner(alpha=0.05, random_state=42)
@@ -364,7 +364,7 @@ class TestAlphaConfiguration:
 @pytest.mark.slow
 @pytest.mark.unit
 class TestSizeGuard:
-    """Tests for training set size guards (T008)."""
+    """Tests for training set size guards."""
 
     def test_training_above_warning_threshold_logs_warning(self, caplog):
         learner = GaussianProcessLearner(max_train_size=50, random_state=42)
@@ -425,7 +425,7 @@ class TestSizeGuard:
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestScientificValidation:
-    """Scientific validation tests (T009)."""
+    """Scientific validation tests."""
 
     @pytest.fixture
     def compounds_25(self, small_real_compounds):

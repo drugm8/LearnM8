@@ -1,4 +1,4 @@
-"""T020 - TorchLearner target normalization tests.
+"""TorchLearner target normalization tests.
 
 Tests verify that MLP and MC Dropout learners standardize training targets
 before the training loop and inverse-transform predictions to the original
@@ -13,10 +13,10 @@ from learnm8.learners.torch.mlp import MLPLearner
 
 @pytest.mark.unit
 class TestTorchLearnerTargetNormalization:
-    """FR-006, FR-007, FR-008, FR-009: Target normalization for TorchLearner."""
+    """Target normalization for TorchLearner."""
 
     def test_target_scaler_fitted_after_train(self):
-        """FR-006: _target_scaler is a fitted StandardScaler after train()."""
+        """_target_scaler is a fitted StandardScaler after train()."""
         rng = np.random.RandomState(42)
         X = rng.randn(50, 20).astype(np.float32)
         y = (rng.randn(50) * 500 + 3000).astype(np.float32)
@@ -40,7 +40,7 @@ class TestTorchLearnerTargetNormalization:
         )
 
     def test_target_scaler_captures_correct_statistics(self):
-        """FR-006: _target_scaler.mean_ and scale_ match the training target distribution."""
+        """_target_scaler.mean_ and scale_ match the training target distribution."""
         rng = np.random.RandomState(42)
         X = rng.randn(50, 20).astype(np.float32)
         target_mean = 3000.0
@@ -70,7 +70,7 @@ class TestTorchLearnerTargetNormalization:
         )
 
     def test_predictions_inverse_transformed_to_original_scale(self):
-        """FR-007, SC-004: Predictions are in original target scale, not normalized scale."""
+        """Predictions are in original target scale, not normalized scale."""
         rng = np.random.RandomState(42)
         X = rng.randn(50, 20).astype(np.float32)
         target_mean = 3000.0
@@ -103,7 +103,7 @@ class TestTorchLearnerTargetNormalization:
         )
 
     def test_zero_variance_targets_skip_normalization(self):
-        """FR-009: Zero-variance targets must not trigger division-by-zero in scaler."""
+        """Zero-variance targets must not trigger division-by-zero in scaler."""
         rng = np.random.RandomState(42)
         X = rng.randn(50, 20).astype(np.float32)
         y = np.full(50, 2.5, dtype=np.float32)

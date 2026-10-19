@@ -1,4 +1,4 @@
-"""Spec 021 / US1 / FR-001 — no global numpy RNG mutations in TorchLearner.
+"""No global numpy RNG mutations in TorchLearner.
 
 Verifies that ``TorchLearner._split_validation`` does not call
 ``np.random.seed(...)`` (which mutates the process-global RNG state) and that

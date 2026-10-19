@@ -1,4 +1,4 @@
-"""Spec 021 / US1 / FR-002 — ChempropLearner._create_model uses local RNG."""
+"""ChempropLearner._create_model uses local RNG."""
 
 import numpy as np
 import pytest

@@ -1,4 +1,4 @@
-"""Tests for GPU ensemble member selection (T021)."""
+"""Tests for GPU ensemble member selection."""
 
 from unittest.mock import MagicMock, patch
 

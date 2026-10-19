@@ -1,4 +1,4 @@
-"""Feature 023 FR-012: ``assert_no_inf_uncertainty`` must short-circuit on None.
+"""``assert_no_inf_uncertainty`` must short-circuit on None.
 
 When the cycle resolves ``compute_uncertainty=False`` and the learner returns
 None for the uncertainty array, the guard at ``cycle.py:263`` is gated on
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_assert_no_inf_uncertainty_short_circuits_on_none():
-    """Calling the guard with None must be a no-op (feature 023 FR-012)."""
+    """Calling the guard with None must be a no-op."""
     # No exception raised.
     assert_no_inf_uncertainty(None, ['a', 'b', 'c'])  # type: ignore[arg-type]
 

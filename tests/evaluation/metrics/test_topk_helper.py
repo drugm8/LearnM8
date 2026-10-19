@@ -1,4 +1,4 @@
-"""Spec 022 US3 / FR-005: ``top_k_indices`` private helper coverage."""
+"""``top_k_indices`` private helper coverage."""
 
 from __future__ import annotations
 

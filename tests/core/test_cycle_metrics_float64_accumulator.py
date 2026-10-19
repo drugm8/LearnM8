@@ -1,4 +1,4 @@
-"""Spec 022 FR-010 / SC-006: cycle-metric accumulators use float64.
+"""Cycle-metric accumulators use float64.
 
 Verifies that ``_calculate_cycle_metrics`` reports prediction statistics
 computed with a float64 accumulator, even when inputs are float32 — so
@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 def test_nanmean_with_float64_dtype_matches_float64_reference() -> None:
     """``np.nanmean(arr_f32, dtype=np.float64)`` returns the float64 sum / N.
 
-    This is the spec FR-010 contract: cycle-aggregate metrics use the
+    This is the contract: cycle-aggregate metrics use the
     float64-accumulator path so float32 storage does NOT bleed into
     float32 reductions.
     """
@@ -37,7 +37,7 @@ def test_nanmean_with_float64_dtype_matches_float64_reference() -> None:
         f'nanmean(arr_f32, dtype=float64) {via_float64} != reference {reference}'
     )
     # The default path may match (numpy uses pairwise sum which is stable
-    # on uniform random data), but the FR-010 contract is on the API used.
+    # on uniform random data), but the contract is on the API used.
 
 
 def test_nanstd_with_float64_dtype_no_precision_loss() -> None:
@@ -77,5 +77,5 @@ def test_cycle_py_has_dtype_float64_in_calculate_metrics() -> None:
         if 'dtype=np.float64' not in full_match.group():
             pytest.fail(
                 f'np.{m} call missing dtype=np.float64: {full_match.group()}. '
-                f'Spec FR-010 requires float64 accumulators in cycle-metric reductions.'
+                f'Cycle-metric reductions must use float64 accumulators.'
             )

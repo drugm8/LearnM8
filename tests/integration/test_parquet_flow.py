@@ -1,6 +1,6 @@
 """End-to-end test of the parquet prediction persistence flow.
 
-Verifies all spec.md success criteria (SC-001..SC-008) in a single
+Verifies the persistence behaviour in a single
 3-cycle ``run_active_learning`` invocation:
 
 - Master DF has exactly 7 base + target = 8 columns regardless of cycle count.
@@ -55,7 +55,7 @@ def parquet_flow_results(
 
 
 def test_master_df_is_narrow_constant_width(parquet_flow_results):
-    """SC-001 / FR-002: master DataFrame has 8 columns (7 base + target), no prediction_cycle_*."""
+    """Master DataFrame has 8 columns (7 base + target), no prediction_cycle_*."""
     results, _ = parquet_flow_results
     df: pl.DataFrame = results['compounds_df']
     cols = set(df.columns)
@@ -67,7 +67,7 @@ def test_master_df_is_narrow_constant_width(parquet_flow_results):
 
 
 def test_prediction_files_returned(parquet_flow_results):
-    """FR-009: results['prediction_files'] is a list[Path] of written parquets."""
+    """results['prediction_files'] is a list[Path] of written parquets."""
     results, output_dir = parquet_flow_results
     paths = results['prediction_files']
     assert isinstance(paths, list)
@@ -80,7 +80,7 @@ def test_prediction_files_returned(parquet_flow_results):
 
 
 def test_parquet_schema_and_compression(parquet_flow_results):
-    """SC-004 / FR-001: each parquet has [ID: Utf8, prediction: Float64, uncertainty: Float64|null] zstd."""
+    """Each parquet has [ID: Utf8, prediction: Float64, uncertainty: Float64|null] zstd."""
     import pyarrow.parquet as pq
 
     results, _ = parquet_flow_results
@@ -97,7 +97,7 @@ def test_parquet_schema_and_compression(parquet_flow_results):
 
 
 def test_compounds_final_csv_is_narrow(parquet_flow_results):
-    """FR-007 / US2-AC1: compounds_final.csv has 8 columns only."""
+    """compounds_final.csv has 8 columns only."""
     _, output_dir = parquet_flow_results
     csv_path = output_dir / 'compounds_final.csv'
     assert csv_path.exists()
@@ -107,7 +107,7 @@ def test_compounds_final_csv_is_narrow(parquet_flow_results):
 
 
 def test_selection_history_built_from_cycle_metrics(parquet_flow_results):
-    """FR-008 / SC-005: selection_history.csv has prediction_at_selection from cycle-time capture."""
+    """selection_history.csv has prediction_at_selection from cycle-time capture."""
     _, output_dir = parquet_flow_results
     sh_path = output_dir / 'selection_history.csv'
     assert sh_path.exists()
@@ -122,7 +122,7 @@ def test_selection_history_built_from_cycle_metrics(parquet_flow_results):
 
 
 def test_results_dict_has_new_keys(parquet_flow_results):
-    """FR-010: results has labeled_count/unlabeled_count/prediction_files; no labeled_data/unlabeled_data."""
+    """Results has labeled_count/unlabeled_count/prediction_files; no labeled_data/unlabeled_data."""
     results, _ = parquet_flow_results
     assert 'prediction_files' in results
     assert 'labeled_count' in results and isinstance(results['labeled_count'], int)
@@ -132,7 +132,7 @@ def test_results_dict_has_new_keys(parquet_flow_results):
 
 
 def test_centralized_path_helper_matches_written_files(parquet_flow_results):
-    """FR-001b: written parquet paths match prediction_parquet_path() naming convention."""
+    """Written parquet paths match prediction_parquet_path() naming convention."""
     results, output_dir = parquet_flow_results
     for p in results['prediction_files']:
         # Extract cycle number from filename and verify canonical path matches.
@@ -141,7 +141,7 @@ def test_centralized_path_helper_matches_written_files(parquet_flow_results):
 
 
 def test_parquet_contains_only_unlabeled_predictions_in_run_mode(parquet_flow_results):
-    """US1-AC3: in run mode, parquet contains predictions for unlabeled compounds (or all in benchmark)."""
+    """In run mode, parquet contains predictions for unlabeled compounds (or all in benchmark)."""
     results, _ = parquet_flow_results
     df: pl.DataFrame = results['compounds_df']
     all_ids = set(df['ID'].to_list())

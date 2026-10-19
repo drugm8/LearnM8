@@ -1,4 +1,4 @@
-"""Spec 021 / US4 / FR-009 — CSVOracle deduplicates duplicate IDs at load."""
+"""CSVOracle deduplicates duplicate IDs at load."""
 
 from __future__ import annotations
 

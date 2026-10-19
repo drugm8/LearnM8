@@ -235,7 +235,7 @@ class TestRandomForestLearner:
 
 @pytest.mark.unit
 class TestComputeUncertaintyToggle:
-    """Feature 023 D9: the toggle must not perturb the mean predictions."""
+    """The toggle must not perturb the mean predictions."""
 
     def test_mean_is_bit_identical_across_the_toggle(self):
         """Both branches must return the ``model.predict()`` mean.

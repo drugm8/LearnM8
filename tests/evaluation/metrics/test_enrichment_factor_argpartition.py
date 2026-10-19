@@ -1,4 +1,4 @@
-"""Spec 022 US3 / FR-005: unlabeled EF uses argpartition not full sort."""
+"""Unlabeled EF uses argpartition not full sort."""
 
 from __future__ import annotations
 

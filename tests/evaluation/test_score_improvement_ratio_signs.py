@@ -1,6 +1,6 @@
-"""Tests for sign-aware score_improvement_ratio (feature 019).
+"""Tests for sign-aware score_improvement_ratio.
 
-Covers FR-012, FR-013 (US6, SC-006). Replaces the legacy abs()-trick metric.
+Replaces the legacy abs()-trick metric.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def test_score_improvement_pop_mean_zero_returns_signed_inf() -> None:
 def test_score_improvement_pop_mean_zero_zero_selection_returns_zero() -> None:
     from learnm8.evaluation.metrics.enrichment import calculate_score_improvement_ratio
 
-    # Feature 019: neutral baseline is 0.0 ("no improvement"), not 1.0.
+    # Neutral baseline is 0.0 ("no improvement"), not 1.0.
     ids = ['A', 'B']
     pop = _gt(ids, [-1.0, 1.0])  # pop_mean = 0
     selected = {'A', 'B'}
@@ -171,7 +171,7 @@ def test_batch_score_improvement_parallels_cumulative() -> None:
 
 
 def test_old_function_names_removed() -> None:
-    """Confirm the legacy abs()-trick functions were removed (no aliases per FR-012)."""
+    """Confirm the legacy abs()-trick functions were removed (no aliases)."""
     enrichment = pytest.importorskip('learnm8.evaluation.metrics.enrichment')
     legacy_higher = 'calculate_' + 'average_score_ratio'
     legacy_batch = 'calculate_batch_' + 'average_score_ratio'

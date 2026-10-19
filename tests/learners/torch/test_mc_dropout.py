@@ -198,7 +198,7 @@ class TestMCDropoutLearner:
             learner.train(features, single_compound['Activity'].to_numpy())
 
     def test_uncertainty_consistency(self, learner, tmp_path):
-        """Repeated predict() on the same input is reproducible (Item 6).
+        """Repeated predict() on the same input is reproducible.
 
         The dropout RNG is snapshotted/restored around predict and reseeded per
         chunk, so two consecutive predict() calls return identical mean and

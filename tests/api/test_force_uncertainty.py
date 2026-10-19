@@ -1,6 +1,6 @@
-"""Force-uncertainty override (feature 023, FR-013/FR-014/FR-016) tests.
+"""Force-uncertainty override tests.
 
-Three scenarios per FR-016:
+Three scenarios:
 
 1. ``force_uncertainty=True`` with a non-UQ acquisition (greedy) produces
    uncertainty in the parquet AND in cycle metrics.
@@ -51,7 +51,7 @@ def _run(
 def test_force_uncertainty_true_computes_even_with_greedy(
     sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
 ):
-    """FR-013/FR-016 OR-precedence: force_uncertainty=True wins over greedy."""
+    """OR-precedence: force_uncertainty=True wins over greedy."""
     results = _run(
         sample_compounds,
         mock_oracle,
@@ -80,7 +80,7 @@ def test_force_uncertainty_true_computes_even_with_greedy(
 def test_force_uncertainty_with_unsupported_learner_silent_noop(
     sample_compounds, mock_learner, mock_oracle, tmp_path
 ):
-    """FR-016 / FR-020: silent no-op when learner does not support uncertainty.
+    """Silent no-op when learner does not support uncertainty.
 
     ``mock_learner`` (no uncertainty) plus ``force_uncertainty=True`` must
     still complete cleanly with ``has_uncertainty=False`` and no fabricated
@@ -114,7 +114,7 @@ def test_force_uncertainty_with_unsupported_learner_silent_noop(
 def test_force_uncertainty_with_uncertainty_required_no_double_compute(
     sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
 ):
-    """FR-016 idempotence: force_uncertainty=True under UCB matches False.
+    """Idempotence: force_uncertainty=True under UCB matches False.
 
     Both branches must compute identically (no double compute) — verified by
     column equality of the uncertainty column.

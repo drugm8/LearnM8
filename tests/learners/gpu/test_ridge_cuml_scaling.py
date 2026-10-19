@@ -1,4 +1,4 @@
-"""Tests for RidgeCumlLearner feature scaling (T031)."""
+"""Tests for RidgeCumlLearner feature scaling."""
 
 import numpy as np
 import pytest

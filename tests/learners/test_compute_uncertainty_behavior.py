@@ -1,4 +1,4 @@
-"""Cross-learner behavioral test for compute_uncertainty=False (feature 023).
+"""Cross-learner behavioral test for compute_uncertainty=False.
 
 Complements ``tests/core/test_learner_registry_signatures.py``: signature
 audit alone cannot catch a learner that accepts ``compute_uncertainty`` via
@@ -56,7 +56,7 @@ def tiny_data():
 @pytest.mark.parametrize('learner_name', sorted(LEARNER_REGISTRY.keys()))
 def test_compute_uncertainty_false_returns_none(learner_name, tiny_data, request):
     """For every registered learner, ``predict(X, compute_uncertainty=False)``
-    must return ``(mean, None)`` (FR-005, FR-006).
+    must return ``(mean, None)``.
     """
     if learner_name in _SMILES_LEARNERS:
         pytest.skip('Requires SMILES; covered by integration tests.')
@@ -107,5 +107,5 @@ def test_compute_uncertainty_false_returns_none(learner_name, tiny_data, request
     assert sigmas is None, (
         f'{learner_name}.predict(compute_uncertainty=False) returned non-None '
         f'uncertainty (len={len(sigmas) if sigmas is not None else 0}); '
-        f'feature 023 requires None when uncertainty is opted out.'
+        f'a learner must return None when uncertainty is opted out.'
     )

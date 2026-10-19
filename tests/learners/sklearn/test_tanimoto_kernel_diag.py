@@ -1,7 +1,4 @@
-"""Tests for TanimotoKernel.diag AND __call__ identity for zero vectors (feature 019).
-
-Covers FR-014 (US7) from spec 019.
-"""
+"""Tests for TanimotoKernel.diag AND __call__ identity for zero vectors."""
 
 from __future__ import annotations
 

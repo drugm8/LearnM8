@@ -1,4 +1,4 @@
-"""Tests for GPyTorchGPLearner feature scaling (T029)."""
+"""Tests for GPyTorchGPLearner feature scaling."""
 
 import numpy as np
 import pytest

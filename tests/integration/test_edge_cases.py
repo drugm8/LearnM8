@@ -86,7 +86,7 @@ class TestAcquisitionEdgeCases:
 
         acq = GreedyAcquisition()
 
-        # 019 US2: defense-in-depth secondary guard raises LearnerError.
+        # Defense-in-depth secondary guard raises LearnerError.
         # Canonical NaN guard is upstream in cycle.py; direct .select() hits this fallback.
         with pytest.raises(LearnerError, match='Predictions contain NaN values'):
             acq.select(compounds, n_select=5)

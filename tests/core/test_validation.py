@@ -319,7 +319,7 @@ class TestValidateCompoundPool:
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestValidateTargetDtype:
-    """Target-column dtype validation (Item 5)."""
+    """Target-column dtype validation."""
 
     def _pool(self, target):
         return pl.DataFrame(

@@ -1,4 +1,4 @@
-"""Spec 021 / US3 / FR-006/FR-007/FR-008 — unified ensemble seed scheme.
+"""Unified ensemble seed scheme.
 
 Every ensemble class must derive member seeds from a single ``random_state``
 using the offsets ``(0, 81, 314)`` (extending naturally for n_members > 3).
@@ -34,7 +34,7 @@ def test_direct_construction_uses_unified_offsets(
     instance = cls(random_state=42)
     assert instance.random_states == [42, 123, 356], (
         f'{class_name}(random_state=42).random_states == {instance.random_states}, '
-        f'expected [42, 123, 356] per spec FR-006 (offsets 0, 81, 314)'
+        f'expected [42, 123, 356] (offsets 0, 81, 314)'
     )
 
 

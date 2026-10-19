@@ -1,4 +1,4 @@
-"""Tests for SVGPLearner feature scaling (T030)."""
+"""Tests for SVGPLearner feature scaling."""
 
 import numpy as np
 import pytest

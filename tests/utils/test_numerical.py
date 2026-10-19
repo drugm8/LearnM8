@@ -1,4 +1,4 @@
-"""Tests for learnm8.utils.numerical (feature 019).
+"""Tests for learnm8.utils.numerical.
 
 Covers SIGMA_FLOOR, clamp_sigma, assert_no_nan, assert_no_inf_uncertainty
 per contracts/sigma_clamp_helper.md.
