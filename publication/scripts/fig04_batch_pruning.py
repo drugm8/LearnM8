@@ -8,6 +8,7 @@ lost, because it may still be selected later.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import data
@@ -967,6 +968,15 @@ def main() -> None:
     make_batch_figure({design: data.load(design) for design in data.DESIGNS})
     # The pruning families all sit at a 1.0% batch off a 1.0% seed, so they satisfy
     # both designs and one figure covers them.
+    # Needs the raw starting pool, which is deposited on Zenodo rather than tracked.
+    # The batch figure above is already written; skip only this panel.
+    if not INITIAL_POOL.exists():
+        print(
+            f'fig04 pruning panel skipped: raw data {INITIAL_POOL} not found '
+            '(deposited on Zenodo, see publication/README.md)',
+            file=sys.stderr,
+        )
+        sys.exit(style.EXIT_RAW_DATA_MISSING)
     make_pruning_figure(data.load('fixed'))
 
 

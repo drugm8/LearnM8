@@ -9,9 +9,11 @@ Build it once:   python publication/scripts/data.py
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import polars as pl
+import style
 
 RESULTS_DIR = Path.home() / 'LearnM8_RESULTS_FINAL'
 ARCHIVE_DIR = RESULTS_DIR / '_archive'
@@ -255,4 +257,11 @@ def check_fingerprint(df: pl.DataFrame, context: str) -> None:
 
 
 if __name__ == '__main__':
+    if not RESULTS_DIR.is_dir():
+        print(
+            f'data.py skipped: raw data {RESULTS_DIR} not found '
+            '(deposited on Zenodo, see publication/README.md)',
+            file=sys.stderr,
+        )
+        sys.exit(style.EXIT_RAW_DATA_MISSING)
     build()

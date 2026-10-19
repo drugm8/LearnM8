@@ -2,9 +2,13 @@
 
 Everything needed to regenerate the figures and tables in the LearnM8 application
 note. Most of them rebuild from this repository alone, because the benchmark runs
-have been reduced to one tidy table (`data/benchmark_tidy.parquet`, 578 KB) that is
-tracked here. Two figures additionally need the raw run archive or the scored
-docking pools; both are called out below.
+have been reduced to one tidy table (`data/benchmark_tidy.parquet`, about 650 KB)
+that is tracked here. Two tiers follow from that:
+
+- **Rebuilds from this repository alone:** Figures 2, 3, 5, 12 and S1, Figure 4's
+  batch panel, and the tables.
+- **Needs the Zenodo raw data:** Figure 4's pruning panel (the scored AmpC pool),
+  Figure 11 (the run archive), and `--rebuild-data`. Each is called out below.
 
 <!-- TODO: Zenodo DOI - replace both placeholders below once the deposition is minted. -->
 
@@ -17,11 +21,12 @@ docking pools; both are called out below.
 ```bash
 conda env create -f ../environment.yml
 conda activate learnm8
-pip install -e ..
+pip install --no-deps -e ..
 ```
 
 The scripts import `learnm8` itself (for scaffold and similarity helpers), so the
-editable install is required, not optional.
+editable install is required, not optional. `--no-deps` is correct because the
+conda environment already provides every dependency.
 
 ## Rebuilding everything
 
@@ -35,8 +40,18 @@ directory is tracked — they are outputs, and the repository ships the code tha
 produces them rather than the products.
 
 `make_all.py` globs `fig*.py` from `scripts/`, so a fresh clone renders exactly the
-tracked figure scripts. Figure scripts whose status is still undecided are present
-in the working tree of the authors but gitignored, and simply do not appear.
+tracked figure scripts. Scripts that are gitignored or untracked in an author's
+working tree are not part of the published record, and a fresh clone does not have them.
+
+A script whose raw data is absent prints one line to stderr naming the missing path
+and exits with code 3 (`EXIT_RAW_DATA_MISSING` in `style.py`). `make_all.py` reports
+those scripts as `SKIPPED (raw data not available)`, carries on with the rest, and
+prints a built / skipped / failed summary. It exits 0 when only skips occurred, so
+a fresh clone without the Zenodo data finishes cleanly; code 3 is internal to the
+scripts and is never `make_all.py`'s own exit status. Any other non-zero return
+code is a failure: the remaining scripts still run, and `make_all.py` exits 1 and
+lists the failed scripts. Figure 4 still writes its batch panel when only the
+pruning panel is skipped.
 
 ## What each script produces
 

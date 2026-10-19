@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import analysis
@@ -104,6 +105,13 @@ def _plot_overlap_panel(
 
 
 def main() -> None:
+    if not analysis.RESULTS_DIR.is_dir():
+        print(
+            f'fig11 skipped: raw data {analysis.RESULTS_DIR} not found '
+            '(deposited on Zenodo, see publication/README.md)',
+            file=sys.stderr,
+        )
+        sys.exit(style.EXIT_RAW_DATA_MISSING)
     style.apply()
     overlap = analysis.build_overlap_table()
     TABLE_PATH.parent.mkdir(parents=True, exist_ok=True)

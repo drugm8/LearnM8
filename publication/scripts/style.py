@@ -11,6 +11,10 @@ from matplotlib.patches import Rectangle
 
 from learnm8.visualization import style as _style
 
+# Exit code a script uses when its raw input (deposited on Zenodo, not tracked in
+# the repository) is absent. make_all.py reports such scripts as skipped, not failed.
+EXIT_RAW_DATA_MISSING = 3
+
 PRIMARY = _style.PRIMARY
 LIGHT = _style.PRIMARY_LIGHT
 DARK = _style.PRIMARY_DARK
