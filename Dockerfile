@@ -36,7 +36,7 @@ COPY .coveragerc ./
 # Provenance: which commit produced this image.
 ARG GIT_SHA=unknown
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
-LABEL org.opencontainers.image.source="https://github.com/Tonylac77/LearnM8"
+LABEL org.opencontainers.image.source="https://github.com/drugm8/LearnM8"
 ENV LEARNM8_IMAGE_REVISION=${GIT_SHA}
 
 CMD ["/bin/bash"]
