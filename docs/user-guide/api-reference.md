@@ -150,11 +150,11 @@ The master DataFrame always has exactly 7 columns:
 |--------|------|-------------|
 | `ID` | `Utf8` | Compound identifier |
 | `SMILES` | `Utf8` | SMILES string |
-| `status` | `Utf8` | `'unlabeled'`, `'labeled'`, or `'pruned'` |
+| `status` | `Utf8` | `'unlabeled'`, `'labeled'`, `'pruned'`, or `'failed'` (oracle returned no finite value; never retrained on or reselected) |
 | `selected_cycle` | `Int32 \| null` | Cycle when compound was selected |
 | `labeled_cycle` | `Int32 \| null` | Cycle when compound was labeled |
 | `pruned_cycle` | `Int32 \| null` | Cycle when compound was pruned |
-| `{target_col}` | `Float64 \| null` | Measured value; `null` if unlabeled |
+| `{target_col}` | `Float64 \| null` | Measured value; `null` if unlabeled or failed |
 
 Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as columns on the master DataFrame.
 
@@ -168,6 +168,7 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 | `n_selected` | `int` | Compounds selected this cycle |
 | `n_labeled` | `int` | Total labeled after this cycle |
 | `remaining_unlabeled` | `int` | Unlabeled compounds remaining |
+| `n_failed` | `int` | Compounds selected this cycle whose oracle value was missing, null, NaN, infinite or non-numeric (status `failed`); `0` when none |
 | `avg_score_selected` | `float` | Mean oracle score of selected compounds |
 | `best_so_far` | `float` | Best oracle score found so far |
 | `total_time` | `float` | Total cycle time (seconds) |

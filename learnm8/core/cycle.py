@@ -291,6 +291,7 @@ def execute_cycle(
                 compounds_df.filter(pl.col('status') == 'labeled').height
             ),
             'cumulative_pruned': 0,
+            'n_failed': 0,
             'pruned_count': 0,
             'parquet_path': None,
             'selected_predictions': empty_predictions,
@@ -616,6 +617,11 @@ def _calculate_cycle_metrics(
     metrics['pool_size'] = int(
         compounds_df.filter(pl.col('status') == 'unlabeled').height
     )
+    metrics['n_failed'] = int(
+        compounds_df.filter(
+            (pl.col('status') == 'failed') & (pl.col('labeled_cycle') == cycle)
+        ).height
+    )
 
     # Pruning statistics. Streaming path passes `pruned_count` explicitly (the
     # pruned IDs are marked in the master DF via a join, not carried as a Python
@@ -733,8 +739,10 @@ def _calculate_cycle_metrics(
                 valid_mask = ~(np.isnan(eval_predictions) | np.isnan(eval_ground_truth))
 
                 if np.sum(valid_mask) > 0:
+                    # Failed compounds carry a null target; evaluate on measured rows only.
                     selected_for_eval = compounds_df.filter(
                         pl.col('ID').is_in(selected_ids)
+                        & pl.col(target_col).is_not_null()
                     ).select(['ID', 'SMILES', target_col])
 
                     pool_df_for_eval = None
@@ -1418,7 +1426,7 @@ def _measure_and_label(
     Returns:
         (updated_compounds_df, oracle_time)
     """
-    from learnm8.core.dataframe_ops import update_status
+    from learnm8.core.dataframe_ops import apply_measurements
 
     oracle_start_time = time.perf_counter()
     order_lookup = build_selection_order_lookup(selected_ids, context='Selected')
@@ -1453,23 +1461,12 @@ def _measure_and_label(
 
     oracle_time = time.perf_counter() - oracle_start_time
 
-    measurement_ids = measurements['ID'].to_list()
-    if not all(sid in measurement_ids for sid in selected_ids):
-        missing = set(selected_ids) - set(measurement_ids)
-        from learnm8.exceptions import _truncate_list
+    logger.debug(
+        f'Oracle returned {len(measurements)} rows for {len(selected_ids)} ids'
+    )
 
-        raise OracleError(
-            f'Oracle did not return measurements for {len(missing)} of '
-            f'{len(selected_ids)} selected compounds in cycle {cycle}. '
-            f'Missing IDs: {_truncate_list(missing)}. '
-            f'Check that your oracle contains data for all compound IDs in the pool.'
-        )
-
-    logger.debug(f'Measured {len(measurements)} compounds')
-
-    # Update Master DataFrame with Measurements (Series indexed by selected_ids).
-    target_series = measurements.select([target_col]).to_series()
-    compounds_df = update_status(
-        compounds_df, selected_ids, 'labeled', cycle, target_col, target_series
+    # Finite values -> labeled; omitted / null / NaN / inf / non-numeric -> failed.
+    compounds_df = apply_measurements(
+        compounds_df, selected_ids, measurements, cycle, target_col
     )
     return compounds_df, oracle_time

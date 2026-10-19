@@ -19,6 +19,8 @@ import logging
 
 import polars as pl
 
+from learnm8.exceptions import OracleError
+
 from .initialization import VALID_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ def _update_status_inplace(
     Args:
         df: Master DataFrame to modify in-place
         compound_ids: List of compound IDs to update
-        new_status: New status ('labeled', 'unlabeled', or 'pruned')
+        new_status: New status ('labeled', 'unlabeled', 'pruned', or 'failed')
         cycle: Current cycle number
         target_col: Name of target column (e.g., 'Activity')
         target_values: Optional Series with target values indexed by compound ID
@@ -65,7 +67,9 @@ def _update_status_inplace(
         .alias('status')
     )
 
-    if new_status == 'labeled':
+    if new_status in ('labeled', 'failed'):
+        # 'failed' (oracle returned no finite value) shares the cycle
+        # bookkeeping with 'labeled' but never touches the target column.
         df = df.with_columns(
             pl.when(mask)
             .then(pl.lit(cycle))
@@ -81,7 +85,7 @@ def _update_status_inplace(
             .alias('selected_cycle')
         )
 
-        if target_values is not None:
+        if new_status == 'labeled' and target_values is not None:
             if isinstance(target_values, dict):
                 id_to_value = target_values
             elif isinstance(target_values, pl.Series):
@@ -137,10 +141,16 @@ def update_status(
     Uses vectorized operations for O(n) performance. When updating to 'labeled'
     status, preserves the first selection cycle to maintain selection history.
 
+    Statuses: 'unlabeled' (candidate), 'labeled' (measured, used for training),
+    'pruned' (removed from the design space) and 'failed' (selected but the
+    oracle returned no finite value). 'failed' sets ``labeled_cycle`` and fills
+    a null ``selected_cycle`` like 'labeled', but leaves the target null; failed
+    compounds are never trained on or selected again.
+
     Args:
         df: Master DataFrame to update
         compound_ids: List of compound IDs to update
-        new_status: New status ('labeled', 'unlabeled', or 'pruned')
+        new_status: New status ('labeled', 'unlabeled', 'pruned', or 'failed')
         cycle: Current cycle number
         target_col: Name of target column (e.g., 'Activity')
         target_values: Optional Series (Polars) or dict with target values indexed by compound ID
@@ -184,6 +194,63 @@ def update_status(
     )
 
 
+def apply_measurements(
+    compounds_df: pl.DataFrame,
+    selected_ids: list,
+    measurements: pl.DataFrame,
+    cycle: int,
+    target_col: str,
+) -> pl.DataFrame:
+    """Label selected compounds from oracle ``measurements``; mark the rest failed.
+
+    The target column is cast with ``cast(pl.Float64, strict=False)``. A selected
+    ID is *measured* iff it appears in ``measurements`` with a finite cast value;
+    every other selected ID (omitted, null, NaN, +-inf, non-numeric) becomes
+    ``failed``. Values are mapped by ID, so ``measurements`` may be in any order.
+    This only marks; callers decide whether to warn.
+
+    Returns:
+        Updated master DataFrame (new copy, same columns).
+
+    Raises:
+        OracleError: If ``measurements`` has rows but no ``target_col`` column.
+    """
+    id_to_value: dict = {}
+    if measurements.height > 0:
+        if target_col not in measurements.columns:
+            raise OracleError(
+                f"Oracle result has no target column '{target_col}'. "
+                f'Available columns: {list(measurements.columns)}.'
+            )
+        finite = measurements.select(
+            pl.col('ID'), pl.col(target_col).cast(pl.Float64, strict=False).alias('_v')
+        ).filter(pl.col('_v').is_finite())
+        id_to_value = dict(
+            zip(finite['ID'].to_list(), finite['_v'].to_list(), strict=True)
+        )
+
+    measured_ids = [i for i in selected_ids if i in id_to_value]
+    failed_ids = [i for i in selected_ids if i not in id_to_value]
+    logger.debug(
+        f'Cycle {cycle}: {len(measured_ids)} measured, {len(failed_ids)} failed'
+    )
+
+    if measured_ids:
+        compounds_df = update_status(
+            compounds_df,
+            measured_ids,
+            'labeled',
+            cycle,
+            target_col,
+            {i: id_to_value[i] for i in measured_ids},
+        )
+    if failed_ids:
+        compounds_df = update_status(
+            compounds_df, failed_ids, 'failed', cycle, target_col
+        )
+    return compounds_df
+
+
 def iter_status_chunks(
     df: pl.DataFrame,
     status: str,
@@ -203,7 +270,7 @@ def iter_status_chunks(
 
     Args:
         df: Master DataFrame.
-        status: Status to iterate ('unlabeled', 'labeled', 'pruned').
+        status: Status to iterate ('unlabeled', 'labeled', 'pruned', 'failed').
         chunk_size: Rows per chunk (must be positive).
         columns: Columns to project into each chunk.
 
@@ -275,7 +342,7 @@ def get_compounds_by_status(
 
     Args:
         df: Master DataFrame
-        status: Status to filter by ('labeled', 'unlabeled', or 'pruned')
+        status: Status to filter by ('labeled', 'unlabeled', 'pruned', or 'failed')
         columns: Optional list of columns to return (default: all columns)
 
     Returns:

@@ -81,7 +81,7 @@ learnm8_results_20250118_143022/
 
 **Key Files:**
 
-- `compounds_final.csv`: All compounds with status (labeled/unlabeled), predictions, cycle information
+- `compounds_final.csv`: All compounds with status (labeled/unlabeled/pruned/failed), predictions, cycle information
 - `cycle_metrics.csv`: Per-cycle metrics (enrichment factor, top-10 discovery, timing)
 - `selection_history.csv`: Which compounds were selected in each cycle
 

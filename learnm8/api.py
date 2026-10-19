@@ -73,7 +73,7 @@ from learnm8.core.validation import (
     validate_compound_pool,
 )
 from learnm8.evaluation.metrics.similarity import RunCache
-from learnm8.exceptions import ConfigurationError, LearnM8Error
+from learnm8.exceptions import ConfigurationError, LearnM8Error, OracleError
 from learnm8.features.worker_pool import shutdown_featurization_pool
 from learnm8.learners import (
     DecisionTreeLearner,
@@ -415,6 +415,16 @@ def _build_cycle_schedule(
     return cycle_schedule
 
 
+def _warn_failed_compounds(cycle: int, metrics: dict[str, Any]) -> None:
+    n_failed = metrics.get('n_failed', 0)
+    if n_failed > 0:
+        logger.warning(
+            f'Cycle {cycle}: {n_failed} of {metrics["selected_count"]} selected '
+            f'compounds failed (oracle returned no finite value); they are '
+            f'excluded from training and will not be selected again.'
+        )
+
+
 def _initialize_active_learning(
     validation_result: Any,
     oracle: Oracle,
@@ -486,6 +496,15 @@ def _initialize_active_learning(
     # cycle 0's featurization so its idle workers do not linger through the
     # active-learning loop. Safe no-op if cycle 0 needed no featurization.
     shutdown_featurization_pool()
+
+    _warn_failed_compounds(0, cycle_0_metrics)
+    if cycle_0_metrics['cumulative_labeled'] == 0:
+        raise OracleError(
+            f'Initial batch produced no measurements: all '
+            f'{cycle_0_metrics["selected_count"]} selected compounds failed '
+            f'(oracle returned no finite value for any of them). '
+            f'Check your oracle function.'
+        )
 
     all_metrics = [cycle_0_metrics]
     logger.info(
@@ -561,6 +580,7 @@ def _execute_loop(
                 streaming=streaming,
             )
             all_metrics.append(metrics)
+            _warn_failed_compounds(cycle_num, metrics)
 
             cycle_parquet_path = metrics.get('parquet_path')
             if cycle_parquet_path is not None:
@@ -759,6 +779,7 @@ def _calculate_aggregate_metrics(
         compounds_df.filter(pl.col('status') == 'labeled').height
     )
     agg['total_pruned'] = int(compounds_df.filter(pl.col('status') == 'pruned').height)
+    agg['total_failed'] = int(compounds_df.filter(pl.col('status') == 'failed').height)
 
     return agg
 

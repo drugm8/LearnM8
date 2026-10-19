@@ -2,6 +2,7 @@ import polars as pl
 import pytest
 
 from learnm8.core.initialization import (
+    STATUS_FAILED,
     STATUS_LABELED,
     STATUS_PRUNED,
     STATUS_UNLABELED,
@@ -17,10 +18,11 @@ class TestConstants:
         assert STATUS_LABELED == 'labeled'
         assert STATUS_UNLABELED == 'unlabeled'
         assert STATUS_PRUNED == 'pruned'
+        assert STATUS_FAILED == 'failed'
 
     def test_valid_statuses_list(self):
-        assert VALID_STATUSES == ['unlabeled', 'labeled', 'pruned']
-        assert len(VALID_STATUSES) == 3
+        assert VALID_STATUSES == ['unlabeled', 'labeled', 'pruned', 'failed']
+        assert len(VALID_STATUSES) == 4
 
 
 # NOTE: TestGetPredictionColumns was removed because get_prediction_columns

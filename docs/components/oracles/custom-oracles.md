@@ -30,6 +30,14 @@ def my_oracle_function(compound_ids: List[str]) -> pd.DataFrame:
 - **Output**: DataFrame with `ID` column plus one or more score columns
 - **Return type**: pandas DataFrame or Polars DataFrame
 
+### Compounds That Cannot Be Measured
+
+If a compound cannot be measured (docking crash, failed assay, timeout), return `None` or `NaN` as its score, or leave its row out of the returned DataFrame. Do not substitute a placeholder such as `0.0`.
+
+Such a compound gets the status `failed`. It keeps its row in the results, with `selected_cycle` and `labeled_cycle` set to the cycle that selected it and a null target value. It is never used for training and never selected again. The `n_failed` cycle metric counts the failures of each cycle, and a warning is logged whenever a cycle has any. A missing row, a null, `NaN`, `+-inf` or a non-numeric value all count as a failure. If every compound of the initial batch fails, the run stops with an `OracleError` before any model is trained.
+
+CSV (benchmark) oracles stay strict: every requested ID must exist in the CSV and every target value must be filled, otherwise the run fails.
+
 ### Simple Scoring Function Example
 
 ```python

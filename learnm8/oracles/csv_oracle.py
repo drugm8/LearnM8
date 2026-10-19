@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 
 from learnm8.core.interfaces import Oracle
-from learnm8.exceptions import LearnM8Warning
+from learnm8.exceptions import LearnM8Warning, OracleError
 
 logger = logging.getLogger(__name__)
 
@@ -146,9 +146,14 @@ class CSVOracle(Oracle):
         # Preserve input order by sorting on temporary order column, then remove it
         result = result.sort('_input_order').drop('_input_order')
 
-        # Check if any compounds were not found
+        # Benchmark mode is strict: every requested compound must be in the ground truth.
         if result.height < compounds.height:
-            missing_count = compounds.height - result.height
-            logger.warning('%d compounds not found in ground truth', missing_count)
+            found = set(result['ID'].to_list())
+            missing = [i for i in compounds['ID'].to_list() if i not in found]
+            raise OracleError(
+                f'CSVOracle has no ground-truth row for {len(missing)} requested '
+                f'compounds (IDs: {missing[:5]}{"..." if len(missing) > 5 else ""}). '
+                f'Every compound in a benchmark pool must be present in the oracle CSV.'
+            )
 
         return result

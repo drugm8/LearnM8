@@ -132,7 +132,7 @@ PythonOracle executes custom Python functions to score compounds, enabling integ
 
 ### How PythonOracle Works
 
-PythonOracle loads a Python module and executes a user-defined function that accepts compound IDs and returns scores. In production mode, LearnM8 predicts only on unlabeled compounds to minimize computational cost, since there is no complete ground truth dataset.
+PythonOracle loads a Python module and executes a user-defined function that accepts compound IDs and returns scores. In production mode, LearnM8 predicts only on unlabeled compounds to minimize computational cost, since there is no complete ground truth dataset. If the function returns `None`/`NaN` for a compound (or omits its row), that compound is marked `failed`: it is never trained on or selected again and is counted in the `n_failed` cycle metric. See [Custom Oracles](custom-oracles.md#compounds-that-cannot-be-measured).
 
 ### Basic Usage
 

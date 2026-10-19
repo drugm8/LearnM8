@@ -313,3 +313,34 @@ def test_large_dataset():
         master_df, 'unlabeled', columns=['ID', 'SMILES']
     )
     assert len(unlabeled) == 9900
+
+
+def test_update_status_failed_sets_cycles_and_keeps_target(sample_compounds):
+    master = create_initialized_master_df(sample_compounds, 'Activity')
+    cid = master['ID'][0]
+    out = update_status(master, [cid], 'failed', cycle=2, target_col='Activity')
+    row = out.filter(pl.col('ID') == cid).row(0, named=True)
+    assert row['status'] == 'failed'
+    assert row['labeled_cycle'] == 2
+    assert row['selected_cycle'] == 2
+    assert row['Activity'] is None
+    assert out.columns == master.columns
+
+
+def test_update_status_failed_preserves_existing_selected_cycle(sample_compounds):
+    master = create_initialized_master_df(sample_compounds, 'Activity')
+    cid = master['ID'][0]
+    master = master.with_columns(
+        pl.when(pl.col('ID') == cid)
+        .then(1)
+        .otherwise(pl.col('selected_cycle'))
+        .alias('selected_cycle')
+    )
+    out = update_status(master, [cid], 'failed', cycle=2, target_col='Activity')
+    assert out.filter(pl.col('ID') == cid)['selected_cycle'][0] == 1
+
+
+def test_update_status_rejects_unknown_status(sample_compounds):
+    master = create_initialized_master_df(sample_compounds, 'Activity')
+    with pytest.raises(ValueError, match='Invalid status'):
+        update_status(master, [master['ID'][0]], 'broken', 1, 'Activity')

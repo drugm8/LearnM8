@@ -130,7 +130,9 @@ class PythonOracle(Oracle):
             properties: List of property names (not used for Python oracles)
 
         Returns:
-            DataFrame with 'ID' and measured property columns
+            DataFrame with 'ID' and measured property columns. Compounds the
+            function omitted, or returned null/NaN/inf/non-numeric for, are
+            not an error here: the cycle marks them with status ``failed``.
         """
         # Extract compound IDs
         compound_ids = compounds.get_column('ID').to_list()

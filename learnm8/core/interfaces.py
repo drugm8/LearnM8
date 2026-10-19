@@ -43,6 +43,12 @@ class Oracle(ABC):
             Implementations must preserve input row order. The calling code
             relies on positional correspondence between input compound IDs
             and returned measured values.
+
+        Failures:
+            Run-mode (Python) oracles may omit a compound or return a null,
+            NaN, infinite or non-numeric value for it; the compound is then
+            marked with status ``failed`` (never retrained on or reselected).
+            Benchmark (CSV) oracles are strict and raise instead.
         """
         pass
 

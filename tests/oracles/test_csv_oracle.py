@@ -1,6 +1,7 @@
 import polars as pl
 import pytest
 
+from learnm8.exceptions import OracleError
 from learnm8.oracles.csv_oracle import CSVOracle
 
 
@@ -147,17 +148,20 @@ class TestCSVOracleMeasure:
         result = oracle_with_data.measure(compounds, ['Activity'])
         assert result['ID'].to_list() == ['COMP_005', 'COMP_001', 'COMP_003']
 
-    def test_measure_missing_compounds(self, oracle_with_data, caplog):
+    def test_measure_missing_compounds_raises(self, oracle_with_data):
         compounds = pl.DataFrame(
             {'ID': ['COMP_001', 'COMP_999'], 'SMILES': ['CCO', 'CCNCC']}
         )
-        import logging
+        with pytest.raises(OracleError, match='COMP_999'):
+            oracle_with_data.measure(compounds, ['Activity'])
 
-        logging.getLogger('learnm8').propagate = True
-        with caplog.at_level('WARNING', logger='learnm8.oracles.csv_oracle'):
-            result = oracle_with_data.measure(compounds, ['Activity'])
-        assert result.height == 1
-        assert 'not found' in caplog.text
+    def test_measure_missing_compounds_lists_at_most_five_ids(self, oracle_with_data):
+        ids = [f'MISSING_{i}' for i in range(8)]
+        compounds = pl.DataFrame({'ID': ids, 'SMILES': ['C'] * 8})
+        with pytest.raises(OracleError) as exc:
+            oracle_with_data.measure(compounds, ['Activity'])
+        assert 'MISSING_4' in str(exc.value)
+        assert 'MISSING_5' not in str(exc.value)
 
     def test_measure_wrong_property_name(self, oracle_with_data):
         compounds = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})

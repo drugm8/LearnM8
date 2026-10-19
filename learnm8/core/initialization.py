@@ -21,7 +21,8 @@ from .interfaces import Oracle
 STATUS_UNLABELED = 'unlabeled'
 STATUS_LABELED = 'labeled'
 STATUS_PRUNED = 'pruned'
-VALID_STATUSES = [STATUS_UNLABELED, STATUS_LABELED, STATUS_PRUNED]
+STATUS_FAILED = 'failed'
+VALID_STATUSES = [STATUS_UNLABELED, STATUS_LABELED, STATUS_PRUNED, STATUS_FAILED]
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,11 @@ def calculate_initialization_metrics(
     metrics['remaining_unlabeled'] = int((compounds_df['status'] == 'unlabeled').sum())
     metrics['cumulative_labeled'] = int((compounds_df['status'] == 'labeled').sum())
     metrics['cumulative_pruned'] = 0
+    metrics['n_failed'] = int(
+        compounds_df.filter(
+            (pl.col('status') == 'failed') & (pl.col('labeled_cycle') == 0)
+        ).height
+    )
     metrics['pool_size'] = metrics['remaining_unlabeled']
 
     # Pruning statistics (none in initialization)
@@ -195,8 +201,9 @@ def calculate_initialization_metrics(
                 pl.col('status') == 'labeled'
             ).select(['ID', 'SMILES', target_col])
 
+            # Failed compounds carry a null target; evaluate on measured rows only.
             selected_for_eval = compounds_df.filter(
-                pl.col('ID').is_in(selected_ids)
+                pl.col('ID').is_in(selected_ids) & pl.col(target_col).is_not_null()
             ).select(['ID', 'SMILES', target_col])
 
             if cumulative_selected_ids is None:
@@ -220,7 +227,7 @@ def calculate_initialization_metrics(
                 disable_molecular_similarity=disable_molecular_similarity,
                 score_direction=score_direction,
                 cumulative_selected_ids=cumulative_selected_ids,
-                cumulative_labeled_count=len(selected_ids),
+                cumulative_labeled_count=selected_for_eval.height,
                 run_cache=run_cache,
                 featurizer=featurizer_obj,
                 cache_dir=cache_dir,
@@ -304,7 +311,7 @@ def select_initial_batch(
     """
     from learnm8.acquisition import get_acquisition_function
 
-    from .dataframe_ops import update_status
+    from .dataframe_ops import apply_measurements
 
     batch_size = min(
         max(1, math.ceil(original_pool_size * batch_fraction)), len(compounds_df)
@@ -394,35 +401,18 @@ def select_initial_batch(
             f'Check that your oracle function/CSV contains data for the selected compound IDs.'
         ) from e
 
-    measurement_ids = measurements['ID'].to_list()
-    if not all(sid in measurement_ids for sid in selected_ids):
-        missing = set(selected_ids) - set(measurement_ids)
-        from learnm8.exceptions import _truncate_list
-
-        raise OracleError(
-            f'Oracle did not return measurements for {len(missing)} of '
-            f'{len(selected_ids)} compounds during initialization. '
-            f'Missing IDs: {_truncate_list(missing)}. '
-            f'Check that your oracle contains data for all compound IDs in the pool.'
-        )
-
-    logger.debug(f'Oracle measured {len(selected_ids)} compounds')
-    logger.debug('Updating DataFrame: status=labeled, labeled_cycle=0')
-
-    # Extract target values from measurements
-    target_values = measurements.get_column(target_col)
-
-    compounds_df = update_status(
-        compounds_df,
-        selected_ids,
-        'labeled',
-        cycle=0,
-        target_col=target_col,
-        target_values=target_values,
+    logger.debug(
+        f'Oracle returned {len(measurements)} rows for {len(selected_ids)} ids'
     )
 
+    # Finite values -> labeled; omitted / null / NaN / inf / non-numeric -> failed.
+    compounds_df = apply_measurements(
+        compounds_df, selected_ids, measurements, 0, target_col
+    )
+    n_labeled = int((compounds_df['status'] == 'labeled').sum())
+
     logger.info(
-        f'Initialization (cycle 0) complete: {len(selected_ids)} compounds labeled '
+        f'Initialization (cycle 0) complete: {n_labeled} compounds labeled '
         f"(strategy='{strategy}')"
     )
 
