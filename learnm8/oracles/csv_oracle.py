@@ -86,7 +86,7 @@ class CSVOracle(Oracle):
             self.ground_truth = deduped
 
     def known_ids(self) -> set:
-        """IDs present in the oracle CSV (null targets are filtered per-property in measure())."""
+        """Return the set of IDs present in the oracle CSV."""
         return set(self.ground_truth['ID'].to_list())
 
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
