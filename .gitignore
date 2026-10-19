@@ -104,8 +104,8 @@ docs/BBLEAN_FEASIBILITY_STUDY.md
 examples/notebooks/results/
 
 # Private research material (never published)
-validation/
-scripts/
+/validation/
+/scripts/
 **/*.ckpt
 **/__pycache__/
 .shared_cache/
