@@ -102,6 +102,17 @@ class EnsembleLearner(Learner):
 
         logger.debug(f'Initialized EnsembleLearner with {len(learners)} base learners')
 
+    @property
+    def _feature_type(self) -> str:
+        """Feature type ('binary' or 'continuous'); forwarded to every member."""
+        return getattr(self, '_feature_type_value', 'binary')
+
+    @_feature_type.setter
+    def _feature_type(self, value: str) -> None:
+        self._feature_type_value = value
+        for member in getattr(self, 'learners', ()):
+            member._feature_type = value
+
     def _validate_learners(self) -> None:
         """Validate that all learners are compatible."""
         if not all(isinstance(learner, Learner) for learner in self.learners):
