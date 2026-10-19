@@ -94,7 +94,7 @@ class RandomForestLearner(SklearnLearner):
         """Predict with tree-level uncertainty estimation.
 
         Mean predictions use sklearn's optimized ``model.predict()`` path in
-        BOTH branches (feature 023 D9 — bit-identity across the
+        BOTH branches (bit-identity across the
         ``compute_uncertainty`` toggle). Uncertainty (when requested) is
         computed as ``np.std`` (ddof=0) across individual tree predictions
         from ``model.estimators_``.
@@ -107,7 +107,7 @@ class RandomForestLearner(SklearnLearner):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False, the
+            compute_uncertainty: Keyword-only. When False, the
                 per-tree loop and ``np.std`` reduction are skipped entirely;
                 the unconditional gain is allocation elision of the
                 ``(n_trees, n_samples)`` array — wall-time scales with
@@ -141,7 +141,7 @@ class RandomForestLearner(SklearnLearner):
                 imputer=self._feature_imputer,
             )
 
-            # D9: unified mean source — both branches derive `predictions` from
+            # Unified mean source — both branches derive `predictions` from
             # the joblib-parallel `model.predict` path so the
             # `compute_uncertainty` toggle never flips top-K selections at ULP
             # precision.
@@ -162,7 +162,7 @@ class RandomForestLearner(SklearnLearner):
 
             # Only the std is taken: `predictions` stays the `model.predict()`
             # value from above so the mean is bit-identical across the
-            # `compute_uncertainty` toggle (D9). Welford's mean agrees to ~1e-15
+            # `compute_uncertainty` toggle. Welford's mean agrees to ~1e-15
             # but not to the last bit, which is enough to reorder tied compounds.
             n_jobs = getattr(self.model, 'n_jobs', -1) or -1
             _, uncertainty = fused_mean_std(

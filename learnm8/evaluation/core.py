@@ -208,7 +208,7 @@ def evaluate_cycle(
         metrics['uncertainty_mean'] = None
         metrics['uncertainty_std'] = None
 
-    # Diversity metrics (FR-001..FR-013b). Always emit all six DIVERSITY_KEYS
+    # Diversity metrics. Always emit all six DIVERSITY_KEYS
     # plus the fingerprint_used provenance column (None when fully disabled or
     # SMILES missing) so cycle_metrics.csv schema is stable across runs.
     default_diversity = {key: None for key in DIVERSITY_KEYS}
@@ -276,7 +276,7 @@ def evaluate_cycle(
             metrics['batch_ef'] = batch_ef
 
             # Sign-aware Score Improvement Ratios (always available with continuous data).
-            # Replaces the legacy abs()-trick `*_avg_score_ratio` columns (feature 019).
+            # Replaces the legacy abs()-trick `*_avg_score_ratio` columns.
             try:
                 metrics['cumulative_score_improvement_ratio'] = (
                     calculate_score_improvement_ratio(
@@ -422,7 +422,7 @@ def evaluate_cycle(
     if ground_truth_data is not None:
         metrics.update(gt_stats['gt_ef_metrics'])
 
-    # Diagnostic metrics (feature 014). Each function returns None when its
+    # Diagnostic metrics. Each function returns None when its
     # inputs are unavailable so the schema stays stable across modes.
     try:
         metrics['selected_percentile'] = compute_selected_percentile(

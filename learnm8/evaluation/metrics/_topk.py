@@ -1,4 +1,4 @@
-"""Private top-K index helper (Spec 022 FR-005).
+"""Private top-K index helper.
 
 Shared by ``top_k_overlap.py`` and ``unlabeled_enrichment_factor.py``: the
 helper centralises the ``np.argpartition`` recipe so the two callers cannot

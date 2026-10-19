@@ -41,7 +41,7 @@ GPU_ALIGNMENT = 32
 DEFAULT_SAFETY_FACTOR = 0.7
 FALLBACK_MEMORY_BYTES = 2 * 1024**3  # 2 GiB
 
-# Featurization chunk-size bounds (feature 025, Item 6). CAP bounds each loky
+# Featurization chunk-size bounds. CAP bounds each loky
 # worker's working set; FLOOR prevents pathologically small chunks. Distinct
 # from the prediction-time batch size — see featurization_chunk_size().
 FEATURIZATION_CHUNK_FLOOR = 1024
@@ -49,7 +49,7 @@ FEATURIZATION_CHUNK_CAP = 50_000
 
 _allocator_configured = False
 
-# glibc malloc-arena tuning (R1 — cold-featurization worker RSS). Detected
+# glibc malloc-arena tuning (cold-featurization worker RSS). Detected
 # once at import; configure_host_allocator() is a no-op off a glibc/Linux host.
 _IS_GLIBC_LINUX: bool = sys.platform == 'linux' and platform.libc_ver()[0] == 'glibc'
 _host_allocator_configured: bool = False
@@ -358,7 +358,7 @@ def _predict_chunk(
     The third element is the wall-clock seconds spent inside ``extract_features``
     so callers can report it separately from learner-side prediction time.
 
-    ``compute_uncertainty`` (feature 023) is forwarded to ``learner.predict``
+    ``compute_uncertainty`` is forwarded to ``learner.predict``
     as a keyword-only argument so skip-eligible learners can elide
     uncertainty-specific compute paths.
     """
@@ -533,7 +533,7 @@ def predict_with_batching(
         memory_safety_factor: Fraction of available memory to use.
         n_jobs: Number of parallel workers.
         compute_uncertainty: Forwarded to ``learner.predict`` per chunk
-            (feature 023). When False, the post-chunk
+            When False, the post-chunk
             ``supports_uncertainty()``-based stack invariant is also relaxed:
             every chunk must return ``None`` for uncertainty (uniform
             skip-path contract). Default True preserves prior behaviour.
@@ -573,7 +573,7 @@ def predict_with_batching(
 
     all_predictions: list[np.ndarray] = []
     all_uncertainties: list[np.ndarray] = []
-    # Feature 023: `has_uncertainty` is the cross-chunk invariant — when the
+    # `has_uncertainty` is the cross-chunk invariant — when the
     # cycle asked for uncertainty AND the learner supports it, every chunk
     # MUST return non-None uncertainties. When compute_uncertainty=False the
     # contract is uniform: every chunk returns None.
@@ -628,7 +628,7 @@ def predict_with_batching(
             else np.concatenate(all_uncertainties)
         )
 
-    # Spec 022 FR-008: single dtype-conversion boundary. predict_with_batching is
+    # Single dtype-conversion boundary. predict_with_batching is
     # the sole producer cast site; downstream consumers (persistence, metric
     # aggregators) receive float32 inputs. ``copy=False`` skips the copy if the
     # learner already returned float32 (e.g. torch float32 inference).

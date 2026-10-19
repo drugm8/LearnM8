@@ -25,10 +25,10 @@ MAX_SMILES_LENGTH = 10000
 # keys disambiguate different seeds.
 DEFAULT_3D_RANDOM_STATE: int = 0xF00D
 
-# Cache-irrelevant featurizer parameters (feature 025, Item 1). These are
+# Cache-irrelevant featurizer parameters. These are
 # surfaced by scikit-fingerprints' ``get_params()`` but never change feature
 # VALUES: ``n_jobs`` is a parallelism knob, ``verbose`` a logging knob, and
-# ``batch_size`` a per-call working-set knob (feature 025, Item 6). They are
+# ``batch_size`` a per-call working-set knob. They are
 # denylisted (excluded) from the config hash so the cache is not fragmented by
 # core count, verbosity, or chunk size. The filter is a denylist: any
 # ``get_params()`` key NOT in this set is hashed by default — a fail-safe
@@ -39,7 +39,7 @@ _CACHE_IRRELEVANT_PARAMS: frozenset[str] = frozenset(
 )
 
 # scikit-fingerprints classes whose ``_calculate_fingerprint`` feeds the
-# SMILES *string* into the feature computation (feature 026, REQ-3). For these
+# SMILES *string* into the feature computation. For these
 # — and only these — the parent process must keep converting SMILES to ``Mol``
 # first, because skfp's ``ensure_smiles`` canonicalises ``Mol`` input via
 # ``MolToSmiles``. Handing them raw SMILES would silently change feature values
@@ -65,22 +65,22 @@ _SMILES_CONSUMING_FINGERPRINTS: frozenset[str] = frozenset(
     }
 )
 
-# Row count at or above which a SMILES-consuming featurizer (REQ-3) warns about
-# its unbounded parent-heap Mol allocation (feature 026, REQ-4). ~11 KB per
+# Row count at or above which a SMILES-consuming featurizer warns about
+# its unbounded parent-heap Mol allocation. ~11 KB per
 # RDKit Mol puts 1M rows at roughly 11 GB held in the calling process.
 SMILES_CONSUMING_WARN_ROWS: int = 1_000_000
 
-# One-shot guard for the orphaned-cache WARNING (feature 025, REQ-4).
+# One-shot guard for the orphaned-cache WARNING.
 _orphan_cache_warning_emitted: bool = False
 
-# One-shot guard for the SMILES-consuming large-input WARNING (feature 026, REQ-4).
+# One-shot guard for the SMILES-consuming large-input WARNING.
 _smiles_consuming_warning_emitted: bool = False
 
 
 def _warn_orphaned_cache_once() -> None:
-    """Emit a single WARNING that the Item-1 hash-recipe change orphans old cache.
+    """Emit a single WARNING that the hash-recipe change orphans old cache.
 
-    Feature 025 Item 1 widens the config-hash denylist (``verbose`` and
+    The config-hash denylist was widened (``verbose`` and
     ``batch_size`` join ``n_jobs``), which changes ``get_config_hash()`` for
     every featurizer. Cache rows written by earlier LearnM8 versions therefore
     become unreachable. This fires once per process from :meth:`get_config` —
@@ -93,7 +93,7 @@ def _warn_orphaned_cache_once() -> None:
     _orphan_cache_warning_emitted = True
     logger.warning(
         'Featurization cache config-hash recipe changed in this version '
-        '(LearnM8 feature 025 / Item 1: n_jobs, verbose, and batch_size are '
+        '(n_jobs, verbose, and batch_size are '
         'now excluded from the hash). If you have a feature cache from an '
         'earlier LearnM8 version, its rows for this featurizer are now '
         'orphaned — they will not be reused and new rows are appended '
@@ -111,10 +111,10 @@ def _reset_orphan_cache_warning() -> None:
 def _warn_smiles_consuming_once(featurizer_name: str, n_smiles: int) -> None:
     """Warn once that a SMILES-consuming featurizer holds Mols in the parent.
 
-    Feature 026 moves RDKit parsing into the loky workers for every featurizer
+    RDKit parsing now happens in the loky workers for every featurizer
     that can accept SMILES directly, removing the parent-heap ``Mol`` list. The
     three fingerprints in :data:`_SMILES_CONSUMING_FINGERPRINTS` cannot make
-    that move without changing their feature values (REQ-3), so at large row
+    that move without changing their feature values, so at large row
     counts they still allocate the full ``Mol`` list in the calling process —
     roughly 11 KB per molecule. This flags that cost rather than leaving it to
     be rediscovered as an OOM on a cluster node.
@@ -225,10 +225,10 @@ class SkfpFeaturizer(Featurizer):
         self._fingerprint_params = fingerprint_params
         self._description = description
 
-        # REQ-5: the paths that still materialise Mol objects in this process
-        # (3D conformer generation, and the SMILES-consuming fingerprints of
-        # REQ-3) parse across n_jobs cores instead of one. Everything else
-        # bypasses this transformer entirely and parses worker-side.
+        # The paths that still materialise Mol objects in this process
+        # (3D conformer generation, and the SMILES-consuming fingerprints) parse
+        # across n_jobs cores instead of one. Everything else bypasses this
+        # transformer entirely and parses worker-side.
         self.mol_from_smiles = MolFromSmilesTransformer(n_jobs=n_jobs)
 
         if self.requires_3d() and auto_generate_conformers:
@@ -275,16 +275,16 @@ class SkfpFeaturizer(Featurizer):
             For 3D fingerprints, conformers are auto-generated if
             auto_generate_conformers=True (default).
 
-            Dispatch is three-way (feature 026):
+            Dispatch is three-way:
 
             1. ``requires_3d()`` — SMILES are converted to ``Mol`` here, given
-               conformers, then fingerprinted (REQ-2).
+               conformers, then fingerprinted.
             2. A fingerprint in :data:`_SMILES_CONSUMING_FINGERPRINTS` — the
                ``Mol`` round-trip is kept because those fingerprints read the
-               canonicalised SMILES text itself (REQ-3).
+               canonicalised SMILES text itself.
             3. Everything else — SMILES go straight to the fingerprint, which
                parses them inside its own workers. No ``Mol`` list is
-               materialised in this process (REQ-1).
+               materialised in this process.
         """
 
         for smiles in smiles_list:
@@ -301,7 +301,7 @@ class SkfpFeaturizer(Featurizer):
 
         try:
             if self.requires_3d():
-                # REQ-2: unchanged 3D path — SMILES -> Mol -> conformers -> fp.
+                # Unchanged 3D path — SMILES -> Mol -> conformers -> fp.
                 # The Mol conversion stays ahead of the conformer_gen guard so
                 # the failure mode for invalid SMILES is exactly as before.
                 mols = self.mol_from_smiles.transform(smiles_list)
@@ -324,7 +324,7 @@ class SkfpFeaturizer(Featurizer):
                 features = self.fingerprint.transform(mols)
 
             elif self.fingerprint.__class__.__name__ in _SMILES_CONSUMING_FINGERPRINTS:
-                # REQ-3: these read the SMILES text itself, and skfp's
+                # These read the SMILES text itself, and skfp's
                 # ensure_smiles canonicalises Mol input via MolToSmiles. Passing
                 # raw SMILES would change their feature values for any
                 # non-canonical input, so the round-trip is load-bearing here.
@@ -334,7 +334,7 @@ class SkfpFeaturizer(Featurizer):
                 features = self.fingerprint.transform(mols)
 
             else:
-                # REQ-1: hand SMILES straight through. Every 2D skfp fingerprint
+                # Hand SMILES straight through. Every 2D skfp fingerprint
                 # calls ensure_mols(X) at the top of _calculate_fingerprint, so
                 # the parse still happens — but inside each loky worker, on its
                 # own batch_size slice, instead of as one list in this process.
@@ -498,7 +498,7 @@ class SkfpFeaturizer(Featurizer):
             config['conformer_params'] = self.conformer_params
 
         params = self.fingerprint.get_params()
-        # REQ-1: explicit denylist filter applied ONLY to the get_params()
+        # Explicit denylist filter applied ONLY to the get_params()
         # sub-dict. Drops n_jobs / verbose / batch_size (parallelism, logging,
         # and per-call chunk-size knobs that never change feature values);
         # every other key — including unknown ones — is kept.

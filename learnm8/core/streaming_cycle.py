@@ -159,7 +159,7 @@ def _pass1_predict_to_parquet(
             )
             feature_time += feat_t
             ids = chunk_df['ID']
-            # Per-chunk NaN/Inf guards (FR-005) with better error locality than
+            # Per-chunk NaN/Inf guards with better error locality than
             # the legacy single full-array guard.
             assert_no_nan(preds, ids, 'predictions')
             chunk_unc = uncs if with_uncertainty else None

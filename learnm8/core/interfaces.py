@@ -179,7 +179,7 @@ class Learner(ABC):
             the float32 inflation (4x RAM saving on a 2048-bit Morgan matrix).
 
             Concrete (non-abstract) so existing third-party Learner subclasses
-            keep working unchanged (REQ-14).
+            keep working unchanged.
         """
         return 'float32'
 
@@ -413,9 +413,8 @@ class Featurizer(ABC):
             logging, or per-call working-set size (``n_jobs``, ``verbose``,
             ``batch_size``) MUST NOT change the hash — otherwise the cache
             fragments by core count / verbosity / chunk size. ``SkfpFeaturizer``
-            enforces this via the ``_CACHE_IRRELEVANT_PARAMS`` denylist
-            (feature 025, Item 1); any other parameter — including unknown
-            ones — is hashed by default so a new feature-determining param
+            enforces this via the ``_CACHE_IRRELEVANT_PARAMS`` denylist; any other
+            parameter — including unknown ones — is hashed by default so a new feature-determining param
             still invalidates the cache.
         """
         config = self.get_config()

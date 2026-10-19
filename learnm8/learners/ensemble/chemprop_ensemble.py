@@ -227,9 +227,9 @@ class ChempropEnsemble(EnsembleLearner):
                 features: Optional pre-computed molecular descriptors (x_d),
                         forwarded to every member model for hybrid mode. May be None.
                 smiles: SMILES strings (required)
-                compute_uncertainty: Keyword-only (feature 023). When False the
-                        outer std-reduction is skipped (FR-005 / D10). Threaded to
-                        each member for cascade (FR-006).
+                compute_uncertainty: Keyword-only. When False the
+                        outer std-reduction is skipped. Threaded to
+                        each member for cascade.
 
         Returns:
                 Tuple of (predictions, uncertainties)

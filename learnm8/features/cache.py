@@ -11,7 +11,7 @@ Cache-key recipe:
   blake2b(f'{smiles}_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode(),
           digest_size=16, usedforsecurity=False)
   The SMILES is keyed verbatim; callers supply RDKit-canonical SMILES via
-  learnm8.core.validation.canonicalize_for_cache (feature 025, Item 5).
+  learnm8.core.validation.canonicalize_for_cache.
 
 The 128-bit digest gives ~1.5e-23 collision probability at N=10**8 (birthday
 formula).
@@ -115,19 +115,19 @@ RDCC_NSLOTS = 1_000_003
 # Bound transient memory during unpackbits 8x expansion (10k rows ~ 240 MB at dim=2048).
 MAX_UNPACK_CHUNK_ROWS = 10_000
 
-# Large-merge threshold (T014): vectorized merge mandatory above this.
+# Large-merge threshold: vectorized merge mandatory above this.
 VECTORIZED_MERGE_THRESHOLD = 10_000_000
 
 # h5py docs: >1000 fancy-index elements may degrade; chunk the gather.
 H5_FANCY_INDEX_CHUNK = 1000
 
-# Row count at or above which cache-key hashing is dispatched to loky workers
-# (feature 026, REQ-7). ``hashlib`` only releases the GIL for inputs larger
+# Row count at or above which cache-key hashing is dispatched to loky workers.
+# ``hashlib`` only releases the GIL for inputs larger
 # than 2 KB, so a thread pool cannot help on SMILES-sized strings — processes
 # are the only way to use more than one core.
 #
-# Measured on the 026 merge gate (32-core dev host, real Enamine REAL SMILES,
-# 'morgan'; see the spec's Acceptance Checklist):
+# Measured on a 32-core dev host with real Enamine REAL SMILES
+# and the 'morgan' featurizer:
 #
 #     N       serial     parallel (cold pool)   parallel (warm pool)
 #     200k    0.094 s    8.86 s  (94x SLOWER)   0.047 s  (1.99x)
@@ -135,7 +135,7 @@ H5_FANCY_INDEX_CHUNK = 1000
 #     2M      0.904 s    9.07 s  (10x SLOWER)   0.472 s  (1.92x)
 #
 # Two facts set this constant. First, loky pool spin-up is a FIXED ~8.7 s, and
-# ``worker_pool.shutdown_featurization_pool()`` (feature 025, Item 4) tears the
+# ``worker_pool.shutdown_featurization_pool()`` tears the
 # pool down once per cycle — while this function runs BEFORE featurization in
 # the ``cache_features`` wrapper. The pool is therefore cold on essentially
 # every real call, so cold is the case to design for. Second, the warm speedup
@@ -145,12 +145,12 @@ H5_FANCY_INDEX_CHUNK = 1000
 # Cold break-even against the serial loop:
 #     8.7 s / (0.452 - 0.236) us/row  ~=  40.3M rows
 #
-# The spec proposed 200_000, which the measurement showed to be a 94x
-# regression at that size. Set to the measured break-even instead, so the
-# parallel path can never be slower than the serial one it replaces.
+# A threshold of 200_000 was measured to be a 94x regression at that size,
+# so this is set to the measured break-even instead; the
+# parallel path can then never be slower than the serial one it replaces.
 PARALLEL_HASH_MIN_ROWS: int = 40_000_000
 
-# Default lock timeout (FR-009); env-overridable via LEARNM8_LOCK_TIMEOUT_S.
+# Default lock timeout; env-overridable via LEARNM8_LOCK_TIMEOUT_S.
 # One hour: at 100M scale a first writer can hold the lock for a long time,
 # and a short wait made concurrent runs fail spuriously.
 LOCK_TIMEOUT_S: float = float(os.environ.get('LEARNM8_LOCK_TIMEOUT_S', '3600.0'))
@@ -171,7 +171,7 @@ DEFAULT_HASH_INDEX_LRU_MAX: int = 4
 # ---------------------------------------------------------------------------
 # Process-level hash_index LRU cache
 # ---------------------------------------------------------------------------
-# WHY: NFR-003 (<1 s open at 100M) requires we don't re-read the ~1.6 GB
+# WHY: a <1 s open at 100M requires we don't re-read the ~1.6 GB
 # /hash_index on every reader open. Strong-ref OrderedDict LRU keyed on
 # (path, mtime_ns, write_epoch) auto-invalidates on writer commit (write_epoch
 # bumps under LOCK_EX) and on external mtime changes. Bounded by
@@ -239,12 +239,12 @@ def hash_index_cache_bytes() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Storage dtype helpers (T006, T007, T008)
+# Storage dtype helpers
 # ---------------------------------------------------------------------------
 
 
 def _normalize_storage_dtype(dtype_str: str) -> str:
-    """Validate and normalize a storage dtype string (FR-015)."""
+    """Validate and normalize a storage dtype string."""
     if dtype_str not in ALLOWED_STORAGE_DTYPES:
         raise ConfigurationError(
             f'unknown storage_dtype: {dtype_str!r}; supported: '
@@ -338,7 +338,7 @@ def from_storage(
 
 
 # ---------------------------------------------------------------------------
-# Locking (T026)
+# Locking
 # ---------------------------------------------------------------------------
 
 
@@ -399,7 +399,7 @@ def _acquire_lock(
 
 
 # ---------------------------------------------------------------------------
-# Cache-key recipe (FR-004)
+# Cache-key recipe
 # ---------------------------------------------------------------------------
 
 
@@ -407,13 +407,13 @@ def _hash_smiles_slice(smiles: list[str], suffix: bytes) -> np.ndarray:
     """Digest one contiguous slice of SMILES into an ``|S16`` array.
 
     Module-level (not a closure or lambda) so loky can pickle it by reference
-    rather than shipping the enclosing scope — feature 026, REQ-9.
+    rather than shipping the enclosing scope.
 
     Args:
         smiles: Contiguous slice of the caller's SMILES list.
         suffix: Pre-encoded ``_{name}_{config_hash}`` bytes, hoisted out of the
-            loop by :func:`_cache_keys_bytes16` (REQ-6). Concatenating bytes is
-            equivalent to the pre-026 ``f'{s}_{name}_{config_hash}'.encode()``
+            loop by :func:`_cache_keys_bytes16`. Concatenating bytes is
+            equivalent to the previous ``f'{s}_{name}_{config_hash}'.encode()``
             because UTF-8 encoding is concatenative across whole strings.
 
     Returns:
@@ -434,34 +434,34 @@ def _cache_keys_bytes16(
     """Compute the 128-bit BLAKE2b cache key for each SMILES.
 
     The SMILES strings are keyed verbatim — there is no per-cycle
-    canonicalization step (feature 025, Item 5). Callers route SMILES through
+    canonicalization step. Callers route SMILES through
     :func:`learnm8.core.validation.canonicalize_for_cache` once, during the
     validation phase (or, on the ``skip_validation`` path, as a standalone
     pass), so equivalent representations (``"CCO"`` / ``"OCC"``) already
     collapse to one RDKit-canonical string before reaching the cache. Because
     that helper reproduces the legacy in-cache canonicalization byte-for-byte,
-    the keys are identical to the pre-change recipe — Item 5 triggers no cold
-    rebuild.
+    the keys are identical to the pre-change recipe, so no cold
+    rebuild is triggered.
 
     Returns an ``np.ndarray`` of shape ``(len(smiles_list),)`` and dtype
     ``|S16``. ``usedforsecurity=False`` keeps LearnM8 operational on
     FIPS-locked hosts (BLAKE2b would otherwise still be admitted, but the
     flag mirrors the MD5-era contract).
 
-    Feature 026 makes this the last single-threaded term on both the cache-hit
-    and cache-miss paths. Two changes: the ``_{name}_{config_hash}`` suffix is
+    This is the last single-threaded term on both the cache-hit
+    and cache-miss paths. Two optimisations: the ``_{name}_{config_hash}`` suffix is
     encoded once and concatenated as ``bytes`` rather than re-interpolated per
-    row (REQ-6), and above :data:`PARALLEL_HASH_MIN_ROWS` the work is split
-    across loky workers (REQ-7). Digests are byte-identical to the pre-026
-    recipe in every path (REQ-8).
+    row, and above :data:`PARALLEL_HASH_MIN_ROWS` the work is split
+    across loky workers. Digests are byte-identical to the previous
+    recipe in every path.
 
     Args:
         smiles_list: SMILES to key, already canonicalized by the caller.
         featurizer: Supplies ``get_name()`` and ``get_config_hash()`` for the
             key suffix. Never shipped to workers — only the suffix bytes are.
         n_jobs: Worker count for the parallel path, threaded through from
-            ``extract_features`` via the :func:`cache_features` wrapper
-            (REQ-10). The default of 1 keeps every existing two-argument call
+            ``extract_features`` via the :func:`cache_features` wrapper.
+            The default of 1 keeps every existing two-argument call
             site on the serial loop.
 
     Returns:
@@ -469,9 +469,9 @@ def _cache_keys_bytes16(
     """
     import joblib
 
-    # REQ-6: hoist the constant tail out of the per-row work. UTF-8 encoding is
+    # Hoist the constant tail out of the per-row work. UTF-8 encoding is
     # concatenative across whole strings, so s.encode() + suffix is byte-for-byte
-    # f'{s}_{name}_{config_hash}'.encode() — pinned by the REQ-8 tests.
+    # f'{s}_{name}_{config_hash}'.encode() — pinned by tests.
     suffix = f'_{featurizer.get_name()}_{featurizer.get_config_hash()}'.encode()
 
     n_rows = len(smiles_list)
@@ -489,7 +489,7 @@ def _cache_keys_bytes16(
     ]
 
     out = np.empty(n_rows, dtype=HASH_DTYPE)
-    # loky reuses the executor scikit-fingerprints already holds (REQ-9); this
+    # loky reuses the executor scikit-fingerprints already holds; this
     # neither creates nor tears down a pool of its own. return_as='generator'
     # yields in SUBMISSION order (joblib's ordered-generator guarantee), so
     # chunk i belongs at bounds[i] — 'generator_unordered' would silently
@@ -502,7 +502,7 @@ def _cache_keys_bytes16(
     # Write each chunk into its destination and let it fall out of scope.
     # np.concatenate(list(results)) would be shorter but materialises every
     # worker array before allocating the output, peaking at 2x the digest
-    # array (3.2 GB at N=100M) — the opposite of what feature 026 is for.
+    # array (3.2 GB at N=100M) — the opposite of what the parallel path is for.
     for (start, end), chunk in zip(bounds, results, strict=True):
         out[start:end] = chunk
 
@@ -510,7 +510,7 @@ def _cache_keys_bytes16(
 
 
 # ---------------------------------------------------------------------------
-# Vectorized merge (T014)
+# Vectorized merge
 # ---------------------------------------------------------------------------
 
 
@@ -529,7 +529,7 @@ def _merge_sorted_indices(
     For ``len(h_old) > VECTORIZED_MERGE_THRESHOLD`` uses vectorized
     ``np.searchsorted``+``np.insert``. Smaller inputs use ``np.argsort`` on the
     concatenation (TimSort detects sorted runs). Both paths reject duplicate
-    hashes (FR-010 tightening).
+    hashes.
     """
     if h_old.size > VECTORIZED_MERGE_THRESHOLD:
         sort_perm = np.argsort(h_new, kind='stable')
@@ -745,7 +745,7 @@ def _open_or_create_h5(cache_path: Path, featurizer: Featurizer) -> h5py.File:
 
 
 # ---------------------------------------------------------------------------
-# Integrity validation (T022)
+# Integrity validation
 # ---------------------------------------------------------------------------
 
 
@@ -905,7 +905,7 @@ def _validate_cache_integrity(
 
 
 # ---------------------------------------------------------------------------
-# Lookup, read, write (T011, T012, T015)
+# Lookup, read, write
 # ---------------------------------------------------------------------------
 
 
@@ -1011,8 +1011,8 @@ def _read_cache_hits(
     """Gather + dispatch-decode hit rows. Maintains caller order.
 
     ``output_dtype='uint8'`` short-circuits the float32 inflation for
-    ``packed_uint8`` / ``uint8`` storage (REQ-9). CSR storage always returns
-    float32 regardless (REQ-10).
+    ``packed_uint8`` / ``uint8`` storage. CSR storage always returns
+    float32 regardless.
 
     h5py fancy indexing requires strictly-increasing indices; duplicates in the
     caller's query (same SMILES twice) collapse to a single read and re-expand.
@@ -1135,7 +1135,7 @@ def _write_cache_misses(
     miss_hashes: np.ndarray,
     storage_dtype: str,
 ) -> None:
-    """Append miss rows; dispatches dense vs CSR by storage_dtype (T015)."""
+    """Append miss rows; dispatches dense vs CSR by storage_dtype."""
     if len(miss_smiles) == 0:
         return
 
@@ -1174,7 +1174,7 @@ def _write_cache_misses(
 
 
 # ---------------------------------------------------------------------------
-# Decorator + main entry (T016)
+# Decorator + main entry
 # ---------------------------------------------------------------------------
 
 
@@ -1190,7 +1190,7 @@ def _resolve_uint8_output(
     storage_dtype: str,
     featurizer_name: str,
 ) -> bool:
-    """Decide whether to allocate a uint8 output buffer (REQ-9, REQ-10).
+    """Decide whether to allocate a uint8 output buffer.
 
     Returns True only when caller asked for uint8 AND storage actually has the
     bits handy (packed_uint8 / uint8). For float32 / csr_uint16 storage we
@@ -1296,7 +1296,7 @@ def cache_features(
                 cache_dir / f'features_{featurizer_name}_{dim}_{storage_dtype}.h5'
             )
 
-            # REQ-10: read n_jobs with .get, not .pop — the wrapped function
+            # Read n_jobs with .get, not .pop — the wrapped function
             # still needs it. Above PARALLEL_HASH_MIN_ROWS this fans the digest
             # loop out to loky, which is the largest remaining single-threaded
             # term on BOTH the hit and the miss path.

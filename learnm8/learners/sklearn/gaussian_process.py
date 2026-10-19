@@ -181,7 +181,7 @@ class GaussianProcessLearner(SklearnLearner):
             if self._feature_scaler is not None:
                 features = self._feature_scaler.transform(features)
 
-            # Feature 023 FR-004: skip the O(n_train x n_pred) variance solve
+            # Skip the O(n_train x n_pred) variance solve
             # when the cycle does not need uncertainty. External validation:
             # sklearn#31374 reports ~96% wall-clock saving for the same.
             if not compute_uncertainty:

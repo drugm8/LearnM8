@@ -53,9 +53,9 @@ def _extract_features_with_featurizer(
             f'Extracting {featurizer.get_name()} features for {len(smiles_list)} compounds'
         )
 
-    # REQ-15/15a (feature 025, Item 6): set scikit-fingerprints' native
-    # batch_size so the transform splits into >= n_jobs tasks (Fix A — fills
-    # every loky worker) while still capping each worker's working set. It is
+    # Set scikit-fingerprints' native batch_size so the transform splits into
+    # >= n_jobs tasks (fills every loky worker) while still capping each
+    # worker's working set. It is
     # set on a per-call deepcopy of the featurizer — the shared featurizer
     # instance is used concurrently by other extract_features callers, so it
     # must never be mutated. The

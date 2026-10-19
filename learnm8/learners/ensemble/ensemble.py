@@ -194,7 +194,7 @@ class EnsembleLearner(Learner):
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix with ensemble uncertainty.
 
-        Feature 023 (FR-005, FR-006, D1, D10):
+        Uncertainty handling:
         * Each member receives ``compute_uncertainty`` directly so skip-eligible
           members can elide uncertainty compute.
         * The outer ``_calculate_uncertainty`` std-reduction is short-circuited

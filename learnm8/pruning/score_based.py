@@ -101,7 +101,7 @@ class ScoreBasedPruner(DesignSpacePruner):
             n_to_remove = n_compounds - 1
 
         # Sort compounds by score based on optimization direction.
-        # FR-015 (refined): use argpartition (O(n)) to locate the kept slice,
+        # Use argpartition (O(n)) to locate the kept slice,
         # ~3-5x faster than full stable timsort on 100M-compound libraries.
         # argpartition's boundary-tie membership is pivot-dependent and varies
         # across numpy versions, so resolve ties explicitly by input index

@@ -148,7 +148,7 @@ class LinearRegressionLearner(SklearnLearner):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False, the
+            compute_uncertainty: Keyword-only. When False, the
                 leverage solve (the dominant cost) is skipped entirely.
 
         Returns:

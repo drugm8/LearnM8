@@ -247,8 +247,8 @@ class RidgeCumlLearner(Learner):
         Args:
             features: Feature matrix (n_samples, n_features).
             smiles: Unused; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False the
-                (dominant) leverage solve is skipped (FR-004 amendment / D3).
+            compute_uncertainty: Keyword-only. When False the
+                (dominant) leverage solve is skipped.
 
         Returns:
             Tuple of (predictions, uncertainties) as numpy float64 arrays.

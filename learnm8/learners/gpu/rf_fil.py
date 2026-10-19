@@ -188,10 +188,9 @@ class RfFilLearner(SklearnLearner):
         Args:
             features: Feature matrix (n_samples, n_features).
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False, the
+            compute_uncertainty: Keyword-only. When False, the
                 ``predict_per_tree`` GPU call is replaced with the fused
-                ``model.predict`` and uncertainty is omitted (FR-004
-                amendment / D3).
+                ``model.predict`` and uncertainty is omitted.
 
         Returns:
             Tuple of (predictions, uncertainty) where predictions is the mean

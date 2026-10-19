@@ -197,7 +197,7 @@ class AcquisitionFunction(ABC):
                 f'will select all {len(compounds)} available compounds'
             )
 
-        # FR-005 ext (Should-Fix #7): defence-in-depth check using `if/raise
+        # Defence-in-depth check using `if/raise
         # LearnerError` so it survives `python -O` (where bare `assert` is
         # stripped). The canonical NaN guard is in core/cycle.py immediately
         # after learner.predict(). This branch only fires if the caller
@@ -225,7 +225,7 @@ class AcquisitionFunction(ABC):
         # Check uncertainty values if present
         if 'uncertainty' in compounds.columns:
             unc_col = compounds.get_column('uncertainty')
-            # FR-005 ext (Should-Fix #7): defence-in-depth secondary guard.
+            # Defence-in-depth secondary guard.
             if unc_col.is_null().any() or unc_col.is_nan().any():
                 nan_count = int(unc_col.is_null().sum()) + int(unc_col.is_nan().sum())
                 raise LearnerError(
@@ -285,7 +285,7 @@ class AcquisitionFunction(ABC):
 
         if ascending:
             if actual_n_select >= n:
-                # FR-015 ext (Should-Fix #8): kind='stable' for deterministic
+                # Use kind='stable' for deterministic
                 # ties on the full-sort branch.
                 top_indices = np.argsort(scores, kind='stable')
             else:
@@ -354,7 +354,7 @@ def validate_uncertainty_inputs(
     predictions = compounds.get_column('prediction').to_numpy()
     uncertainties = compounds.get_column('uncertainty').to_numpy()
 
-    # NaN guards live upstream in core/cycle.py (FR-005 single source of truth);
+    # NaN guards live upstream in core/cycle.py (single source of truth);
     # the acquisition-level secondary guards in validate_input + assert_no_nan
     # cover the bypass-cycle.py case. Re-checking here would mean ~3 extra
     # full-array scans per acquisition call on the canonical (clean) path.

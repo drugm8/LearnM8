@@ -45,7 +45,7 @@ class TanimotoKernel(Kernel):
         norm_X = np.sum(X**2, axis=1)
         norm_Y = np.sum(Y**2, axis=1)
         denominator = norm_X[:, None] + norm_Y[None, :] - XY
-        # Feature 019 FR-014: zero-zero pairs (denominator == 0) get T = 1
+        # Zero-zero pairs (denominator == 0) get T = 1
         # (canonical k(x,x)=1 identity, removable singularity from |x|→0+).
         # `denom_safe` swaps the zero entries to 1.0 BEFORE the divide so the
         # divide path never sees a zero — avoids the np.where double-eval
@@ -63,7 +63,7 @@ class TanimotoKernel(Kernel):
             return K, np.empty((X.shape[0], X.shape[0], 0))
 
     def diag(self, X: np.ndarray) -> np.ndarray:
-        # Feature 019 FR-014: canonical k(x,x)=1 identity, scaled by signal_variance.
+        # Canonical k(x,x)=1 identity, scaled by signal_variance.
         # Returns signal_variance for every row including zero vectors (removable
         # singularity); the previous ``zero-row → 0`` branch caused LinAlgError
         # when sklearn computed predictive variance on zero-fingerprint rows.

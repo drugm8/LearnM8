@@ -6,7 +6,7 @@ This package organizes metrics into logical categories:
 - similarity: Diversity metrics (the inverse of pairwise similarity);
   filename retained for git-history continuity.
 - diagnostics: Cycle diagnostic metrics — selected_percentile and
-  prediction_entropy (feature 014).
+  prediction_entropy.
 """
 
 from .diagnostics import (
@@ -16,7 +16,7 @@ from .diagnostics import (
 from .enrichment import (
     calculate_batch_enrichment_factor,
     calculate_batch_hit_rate,
-    # Sign-aware score improvement (replaces calculate_*_average_score_ratio in feature 019)
+    # Sign-aware score improvement (replaces calculate_*_average_score_ratio)
     calculate_batch_score_improvement_ratio,
     calculate_cumulative_enrichment_factor,
     # Existing functions (kept for compatibility)

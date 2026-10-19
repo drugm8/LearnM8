@@ -55,7 +55,7 @@ def _preprocess_features(
     if is_uint8_input:
         # uint8 admits no NaN/Inf; skip the float-only sanitisation so we
         # avoid TypeError from np.isnan and preserve the compact dtype on
-        # output (REQ-11).
+        # output.
         pass
     elif feature_type == 'continuous':
         features = np.where(np.isinf(features), np.nan, features)
@@ -382,7 +382,7 @@ class SklearnLearner(Learner):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). Base sklearn
+            compute_uncertainty: Keyword-only. Base sklearn
                 learners never produce uncertainty, so this is a no-op for
                 them — the second tuple element is always ``None``.
 
@@ -772,7 +772,7 @@ class TorchLearner(Learner):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). Base PyTorch
+            compute_uncertainty: Keyword-only. Base PyTorch
                 learners (plain ``MLPLearner``) never produce uncertainty, so
                 this is a no-op for them. Subclasses that DO produce
                 uncertainty (``MCDropoutLearner``) honour the flag via early

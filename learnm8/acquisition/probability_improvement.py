@@ -27,7 +27,7 @@ def _pi_scores(
 ) -> np.ndarray:
     """Higher-is-better Probability of Improvement (single source).
 
-    Spec 022 FR-006/FR-007: ndtr + symmetric z-clipping + Botorch sigma=0 →
+    Numerics: ndtr + symmetric z-clipping + Botorch sigma=0 →
     1.0 if improving else 0.0 convention.
     """
     if maximize:
@@ -120,7 +120,7 @@ class ProbabilityImprovementAcquisition(AcquisitionFunction):
             f'PIAcquisition: current_best={current_best:.3f}, calculating probability of improvement'
         )
 
-        # Single source: identical math to score_chunk (Spec 022 FR-006/FR-007).
+        # Single source: identical math to score_chunk.
         pi_scores = _pi_scores(
             predictions, uncertainties, current_best, self.xi, self.maximize
         )

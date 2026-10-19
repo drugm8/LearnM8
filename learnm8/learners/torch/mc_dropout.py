@@ -221,7 +221,7 @@ class MCDropoutLearner(TorchLearner):
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """Predict on feature matrix with uncertainty via Monte Carlo Dropout.
 
-        Feature 023 D4: MC Dropout stays *uniform-contract*. When
+        MC Dropout stays *uniform-contract*. When
         ``compute_uncertainty=False`` the N stochastic forward passes still
         execute (skipping them would change the mean semantics per Gal &
         Ghahramani 2016); only the std return is discarded.
@@ -296,7 +296,7 @@ class MCDropoutLearner(TorchLearner):
                 f'using {self.n_dropout_samples} MC samples'
             )
 
-            # Feature 023 D4: uniform contract — discard uncertainty when
+            # Uniform contract — discard uncertainty when
             # the cycle opted out. The N stochastic passes still ran above
             # (skipping them would change mean semantics).
             if not compute_uncertainty:

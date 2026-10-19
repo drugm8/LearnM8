@@ -137,9 +137,9 @@ class FastpropEnsemble(EnsembleLearner):
         Args:
             features: Feature matrix (n_samples, n_features)
             smiles: Ignored; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False the
-                outer std-reduction is skipped (FR-005 / D10) and the flag is
-                threaded to each member (FR-006).
+            compute_uncertainty: Keyword-only. When False the
+                outer std-reduction is skipped and the flag is
+                threaded to each member.
 
         Returns:
             Tuple of (predictions, uncertainties)

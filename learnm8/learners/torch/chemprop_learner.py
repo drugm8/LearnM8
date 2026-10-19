@@ -442,7 +442,7 @@ class ChempropLearner(Learner):
         Args:
                 features: Optional molecular descriptors (x_d)
                 smiles: Required SMILES strings
-                compute_uncertainty: Keyword-only (feature 023). Single Chemprop
+                compute_uncertainty: Keyword-only. Single Chemprop
                         never produces uncertainty; no-op.
 
         Returns:

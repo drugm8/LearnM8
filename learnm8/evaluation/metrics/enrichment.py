@@ -566,7 +566,7 @@ def _improvement_ratio(
     pop_mean: float,
     score_direction: ScoreDirection,
 ) -> float:
-    """Sign-aware improvement ratio formula (FR-012, FR-013).
+    """Sign-aware improvement ratio formula.
 
     Neutral baseline is ``0.0`` ("no improvement") in both finite and degenerate
     pop_mean cases; ``± inf`` only when the improvement is genuinely unbounded
@@ -594,8 +594,8 @@ def calculate_score_improvement_ratio(
 ) -> float:
     """Sign-aware improvement of selected mean over population mean.
 
-    Introduced in feature 019 (no backward-compat alias for the legacy
-    abs()-trick implementation). Formula::
+    There is no backward-compat alias for the legacy abs()-trick
+    implementation. Formula::
 
       higher:  (selected_mean - pop_mean) / |pop_mean|
       lower:   (pop_mean - selected_mean) / |pop_mean|
@@ -609,7 +609,7 @@ def calculate_score_improvement_ratio(
     Edge cases:
       - ``pop_mean == 0`` and ``selected_mean == 0`` → returns ``0.0`` (parity).
       - ``pop_mean == 0`` and ``selected_mean != 0`` → returns signed ``inf``.
-      - Empty ``selected_ids`` → raises ``ValueError`` (fail-fast per FR-013).
+      - Empty ``selected_ids`` → raises ``ValueError`` (fail-fast).
 
     Args:
         selected_ids: Set or sequence of compound IDs selected so far.
@@ -645,7 +645,7 @@ def calculate_batch_score_improvement_ratio(
     *,
     score_direction: ScoreDirection,
 ) -> float:
-    """Per-batch sign-aware improvement ratio (introduced in feature 019).
+    """Per-batch sign-aware improvement ratio.
 
     Same contract as :func:`calculate_score_improvement_ratio`, but operates on
     an already-filtered ``newly_selected_df`` instead of an ID set.
@@ -774,7 +774,7 @@ def calculate_multiple_unlabeled_enrichment_factors(
     results = {}
     descending = score_direction == 'higher'
 
-    # Spec 022 FR-005: one argpartition pass for max-K then sub-K slicing,
+    # One argpartition pass for max-K then sub-K slicing,
     # rather than one full sort per percentile.
     from learnm8.evaluation.metrics._topk import top_k_indices
 

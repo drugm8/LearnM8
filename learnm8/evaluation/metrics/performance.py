@@ -34,7 +34,7 @@ def calculate_average_score(scores: np.ndarray) -> float | None:
     """Calculate average score of compounds.
 
     Predictions and target scores are guaranteed to be NaN-free at this point
-    (cycle.py FR-005 upstream guard, feature 019). The previous silent
+    (cycle.py upstream guard). The previous silent
     ``np.isnan`` filter is removed so any NaN escaping the upstream guard
     propagates instead of being absorbed.
 

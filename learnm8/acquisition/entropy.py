@@ -1,7 +1,7 @@
 """Entropy acquisition function for the LearnM8 framework.
 
 Computes the canonical Gaussian differential entropy of the predictive
-distribution (units: nats). Refactored in feature 019 to replace the
+distribution (units: nats). Refactored to replace the
 mislabelled raw-σ / raw-σ² scoring with the proper differential-entropy
 formula. Selection ranking is rank-equivalent to a σ-descending baseline
 (NOT to UCB(β=0), which ranks by μ).
@@ -35,7 +35,7 @@ _HALF_LOG_2_PI_E: Final[float] = 0.5 * float(np.log(2.0 * np.pi * np.e))
 def _entropy_scores(uncertainties: np.ndarray, entropy_type: str) -> np.ndarray:
     """Higher-is-better Gaussian differential entropy in nats (single source).
 
-    Expanded form (FR-007): numerically robust at σ < 1e-154. Monotone in σ, so
+    Expanded form: numerically robust at σ < 1e-154. Monotone in σ, so
     rank-equivalent to σ-descending for both ``entropy_type`` values.
     """
     log_sigma = np.log(clamp_sigma(uncertainties))
@@ -57,8 +57,8 @@ class EntropyAcquisition(AcquisitionFunction):
     predictions (μ) alone (verified at learnm8/acquisition/ucb.py:61-66);
     EntropyAcquisition ranks by σ. These are orthogonal axes.
 
-    For epistemic-only entropy (BALD; mutual information between prediction
-    and model parameters), see future spec.
+    Epistemic-only entropy (BALD; mutual information between prediction
+    and model parameters) is not implemented.
     """
 
     def __init__(self, entropy_type: str = 'uncertainty', **kwargs: Any) -> None:
@@ -92,14 +92,14 @@ class EntropyAcquisition(AcquisitionFunction):
 
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
-        # FR-004: defence-in-depth NaN/Inf guards. Lazy ID source — only
+        # Defence-in-depth NaN/Inf guards. Lazy ID source — only
         # materialised on the error path inside numerical.py.
         ids = compounds.get_column('ID')
         assert_no_nan(predictions, ids, 'predictions')
         assert_no_nan(uncertainties, ids, 'uncertainties')
         assert_no_inf_uncertainty(uncertainties, ids)
 
-        # FR-008: aggregated single warning per call when sub-floor σ values
+        # Aggregated single warning per call when sub-floor σ values
         # are non-trivial (≥ 1% of input). Below threshold → debug log only.
         # The comparison works on any float dtype (SIGMA_FLOOR=1e-9 > float32 eps),
         # so no `.astype(float64)` copy is needed for the count alone.
@@ -112,7 +112,7 @@ class EntropyAcquisition(AcquisitionFunction):
             else:
                 logger.debug(msg)
 
-        # Single source: identical math to score_chunk (FR-007).
+        # Single source: identical math to score_chunk.
         entropy_scores = _entropy_scores(uncertainties, self.entropy_type)
 
         if logger.isEnabledFor(logging.DEBUG):

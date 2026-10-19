@@ -314,10 +314,10 @@ class GPyTorchGPLearner(Learner):
         Args:
             features: Feature matrix of shape (n_samples, n_features).
             smiles: Unused; present for interface compatibility.
-            compute_uncertainty: Keyword-only (feature 023). When False, only
+            compute_uncertainty: Keyword-only. When False, only
                 ``posterior.mean`` is accessed — ``posterior.variance`` and
                 the surrounding ``gpytorch.settings.fast_pred_var()`` context
-                are skipped (FR-004 amendment / D3). The Cholesky-backed
+                are skipped. The Cholesky-backed
                 variance solve is the dominant cost.
 
         Returns:

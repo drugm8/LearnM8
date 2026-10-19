@@ -1,7 +1,6 @@
 """Numerical-safety primitives shared by acquisition functions and the cycle loop.
 
-Introduced in feature 019 (Mathematical Correctness — Silent Science Bugs) as the
-single source of truth for σ-clamping and NaN/Inf assertion. Three call sites
+The single source of truth for σ-clamping and NaN/Inf assertion. Three call sites
 need ``clamp_sigma`` (EI, PI, EntropyAcquisition) and one needs ``assert_no_nan``
 (``learnm8/core/cycle.py``); centralising here prevents the three-place
 duplication anti-pattern.
@@ -60,10 +59,10 @@ def assert_no_nan(arr: np.ndarray, ids: IdSource, name: str) -> None:
 def assert_no_inf_uncertainty(uncertainties: np.ndarray | None, ids: IdSource) -> None:
     """Raise :class:`LearnerError` if ``uncertainties`` contains any ±inf entry.
 
-    Spec edge case: legitimate ``inf`` σ (a learner explicitly signalling
+    Edge case: legitimate ``inf`` σ (a learner explicitly signalling
     unbounded uncertainty) must NOT be silently clamped to a finite value.
 
-    Feature 023 FR-012: ``None`` is a valid "uncertainty skipped" signal from
+    ``None`` is a valid "uncertainty skipped" signal from
     the cycle — short-circuit without raising so callers can pass-through
     unconditionally.
     """

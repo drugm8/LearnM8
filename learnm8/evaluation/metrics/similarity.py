@@ -97,7 +97,7 @@ def __getattr__(name: str) -> NoReturn:
 
 
 # ============================================================================
-# Module-level constants (FR-025)
+# Module-level constants
 # ============================================================================
 
 N_PILOT_PAIRS: int = 500  # pilot draw for sigma-hat estimation
@@ -108,8 +108,8 @@ Z_95: float = 1.96  # 95% normal critical value
 FALLBACK_FP_RADIUS: int = 2
 FALLBACK_FP_SIZE: int = 2048
 
-# Spec 022 (FR-003): cap the cumulative fingerprint reservoir at this size.
-# Internal — not exposed in the public API per constitution §8.2.
+# Cap the cumulative fingerprint reservoir at this size.
+# Internal — not exposed in the public API.
 K_RESERVOIR: int = 100_000
 
 
@@ -140,14 +140,14 @@ class RunCache:
     cumulative_fp_buffer: list[ExplicitBitVect] = field(default_factory=list)
     cumulative_smiles_seen: set[str] = field(default_factory=set)
     bit_sum_buffer: np.ndarray | None = None
-    # Spec 022 FR-001: incremental cumulative-scaffold accumulator. Mirrors the
+    # Incremental cumulative-scaffold accumulator. Mirrors the
     # Shannon ``bit_sum_buffer`` pattern: ``update(new_batch)`` per cycle
     # instead of re-iterating the full cumulative SMILES list.
     cumulative_unique_scaffolds: set[str] = field(default_factory=set)
     cumulative_valid_count: int = 0
-    # Spec 022 FR-003: global stream counter for Vitter Algorithm R reservoir
+    # Global stream counter for Vitter Algorithm R reservoir
     # sampling on ``cumulative_fp_buffer``. Persists across batches; must be
-    # incremented per-fingerprint (not per-batch) — see research.md Pitfall #1.
+    # incremented per-fingerprint (not per-batch).
     cumulative_seen_count: int = 0
 
     def clear(self) -> None:
@@ -170,8 +170,8 @@ class RunCache:
 def _derive_rng(global_seed: int | None, cycle: int) -> np.random.Generator:
     """Derive a per-cycle deterministic RNG from (global_seed, cycle).
 
-    Per FR-008: re-running with the same ``random_state`` produces identical
-    pair samples for the same cycle. When ``global_seed`` is None (FR-009),
+    Re-running with the same ``random_state`` produces identical
+    pair samples for the same cycle. When ``global_seed`` is None,
     we fall back to a constant offset so within-run sampling is still stable
     across cycles even though cross-run reproducibility is not guaranteed.
     """
@@ -185,12 +185,12 @@ def _reservoir_extend(
     new_fps: list[ExplicitBitVect],
     rng: np.random.Generator,
 ) -> None:
-    """Vitter Algorithm R reservoir extension with global stream counter (FR-003).
+    """Vitter Algorithm R reservoir extension with global stream counter.
 
     Mutates ``cache.cumulative_fp_buffer`` and ``cache.cumulative_seen_count`` in
     place. The buffer is capped at ``K_RESERVOIR``; ``cumulative_seen_count`` is
     the global stream count of fingerprints offered to the reservoir (NOT a
-    per-batch counter — see research.md Pitfall #1).
+    per-batch counter).
 
     Each item in the cumulative stream survives in the final reservoir with
     probability exactly ``K_RESERVOIR / cumulative_seen_count`` (Vitter 1985).
@@ -209,7 +209,7 @@ def _reservoir_extend(
             if j < K_RESERVOIR:
                 buf[j] = fp
     cache.cumulative_seen_count = n
-    # FR-003 invariant: buffer capped at K_RESERVOIR; counter monotonic.
+    # Invariant: buffer capped at K_RESERVOIR; counter monotonic.
     assert len(buf) <= K_RESERVOIR
     assert cache.cumulative_seen_count >= 0
 
@@ -285,7 +285,7 @@ def _mean_tanimoto_adaptive_sampled(
     fps: list[ExplicitBitVect],
     rng: np.random.Generator,
 ) -> float | None:
-    """Adaptive mean Tanimoto via pilot-then-scale sampling (FR-001).
+    """Adaptive mean Tanimoto via pilot-then-scale sampling.
 
     1. Pilot: draw ``N_PILOT_PAIRS`` distinct pairs and compute sigma-hat.
     2. Size: ``n_pairs = ceil(Z_95**2 * sigma-hat**2 / TARGET_EPSILON**2)``,
@@ -353,7 +353,7 @@ def _scaffold_for_smiles(smi: str) -> str | None:
     then ``MurckoScaffold.MurckoScaffoldSmiles`` for the scaffold string.
     Acyclic compounds canonically yield the empty string ``""``. Returns
     ``None`` on RDKit parse / scaffold failure (caller drops these from
-    both numerator and denominator per FR-002).
+    both numerator and denominator).
     """
     try:
         mol = Chem.MolFromSmiles(smi)
@@ -375,7 +375,7 @@ def _scaffold_diversity_index(
     smiles_list: list[str],
     scaffold_cache: dict[str, str],
 ) -> float | None:
-    """Bemis-Murcko unique-scaffold ratio (FR-002).
+    """Bemis-Murcko unique-scaffold ratio.
 
     Returns ``len(unique_scaffolds) / valid_compound_count``. Compounds
     whose scaffold cannot be computed are excluded from BOTH numerator
@@ -386,7 +386,7 @@ def _scaffold_diversity_index(
     the same compound skip RDKit work.
 
     Used for the per-batch path. The cumulative path uses the incremental
-    accumulator on ``RunCache`` (Spec 022 FR-001/FR-002) instead of
+    accumulator on ``RunCache`` instead of
     re-iterating the cumulative SMILES list each cycle.
     """
     if not smiles_list:
@@ -413,7 +413,7 @@ def _compute_batch_scaffolds(
     smiles_list: list[str],
     scaffold_cache: dict[str, str],
 ) -> tuple[set[str], int]:
-    """Spec 022 FR-001/FR-002 helper: scaffolds + valid count for ONE batch.
+    """Helper: scaffolds + valid count for ONE batch.
 
     Returns ``(new_scaffolds_set, new_valid_count)``. Designed to feed the
     incremental cumulative-scaffold accumulator on ``RunCache`` so the
@@ -535,7 +535,7 @@ def _get_or_build_fps(
     is_binary_featurizer = bool(
         featurizer is not None and getattr(featurizer, 'feature_type', None) == 'binary'
     )
-    # FR-013 + 016: append storage dtype token. Each token is one positional
+    # Append storage dtype token. Each token is one positional
     # element under naive _-splitting parsers (uint8packed, csruint16, uint8, float32).
     storage_dtype = (
         getattr(featurizer, 'get_storage_dtype', lambda: 'float32')()
@@ -664,7 +664,7 @@ def compute_diversity_metrics(
     batch_ms = (time.perf_counter() - batch_start) * 1000.0
 
     # ----- Cumulative fingerprints (reservoir-sampled buffer) -----
-    # Spec 022 FR-003: cumulative_fp_buffer is capped at K_RESERVOIR via
+    # cumulative_fp_buffer is capped at K_RESERVOIR via
     # Vitter Algorithm R using the per-cycle deterministic RNG.
     cum_start = time.perf_counter()
     new_cumulative_smiles = [
@@ -685,7 +685,7 @@ def compute_diversity_metrics(
     cumulative_fps = run_cache.cumulative_fp_buffer
     cum_ms = (time.perf_counter() - cum_start) * 1000.0
 
-    # Spec 022 FR-004: append `_reservoir_<K>` suffix to fingerprint_used
+    # Append `_reservoir_<K>` suffix to fingerprint_used
     # provenance whenever the cumulative stream has overflowed K_RESERVOIR.
     fingerprint_used_label = fp_label_batch or fp_label_cum
     if run_cache.cumulative_seen_count > K_RESERVOIR:
@@ -712,7 +712,7 @@ def compute_diversity_metrics(
         metrics['mean_tanimoto_similarity_sampled_cumulative'] = None
 
     # ----- Scaffold diversity -----
-    # Spec 022 FR-001/FR-002: cumulative path uses incremental accumulator on
+    # Cumulative path uses incremental accumulator on
     # RunCache (O(batch) per cycle) instead of re-iterating cumulative_smiles.
     scaffold_start = time.perf_counter()
     try:
@@ -757,7 +757,7 @@ def compute_diversity_metrics(
             else:
                 metrics['bit_position_uniformity_entropy_batch'] = None
         if 'bit_position_uniformity_entropy_cumulative' not in disabled_set:
-            # Spec 022: use cumulative_seen_count (true cumulative count) as
+            # Use cumulative_seen_count (true cumulative count) as
             # denominator, not the now-capped reservoir buffer length.
             # bit_sum_buffer accumulates over ALL fingerprints, so the
             # denominator must too.
@@ -785,7 +785,7 @@ def compute_diversity_metrics(
         shannon_ms,
     )
 
-    # Coerce numpy scalars to Python floats per FR-013.
+    # Coerce numpy scalars to Python floats.
     for key in DIVERSITY_KEYS:
         v = metrics[key]
         if v is not None and not isinstance(v, float):

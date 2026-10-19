@@ -492,7 +492,7 @@ def _initialize_active_learning(
         disable_molecular_similarity=disable_molecular_similarity,
     )
 
-    # REQ-9 (call site a): reap the loky featurization worker pool after
+    # Reap the loky featurization worker pool after
     # cycle 0's featurization so its idle workers do not linger through the
     # active-learning loop. Safe no-op if cycle 0 needed no featurization.
     shutdown_featurization_pool()
@@ -612,7 +612,7 @@ def _execute_loop(
             )
             raise err from e
         finally:
-            # REQ-9 (call site b): reap the loky featurization worker pool at
+            # Reap the loky featurization worker pool at
             # the end of every cycle — after training, prediction, AND
             # acquisition-time featurization. In `finally` so it also fires on
             # the pool-exhausted `break` and on any re-raise.
@@ -817,14 +817,14 @@ def run_active_learning(
     # Resource control
     n_jobs: int = -1,
     device: str = 'auto',
-    # Large pool / output format (feature 018)
+    # Large pool / output format
     large_features_ack: bool = False,
     output_format: Literal['auto', 'csv', 'parquet'] = 'auto',
-    # Diversity metrics (feature 013)
+    # Diversity metrics
     disable_molecular_similarity: bool | Iterable[str] = False,
-    # Force uncertainty computation (feature 023)
+    # Force uncertainty computation
     force_uncertainty: bool = False,
-    # Skip validation (feature 030)
+    # Skip validation
     skip_validation: bool = False,
     # Streaming predict→select fusion (memory-efficient path)
     streaming: Literal['auto', 'always', 'never'] = 'auto',
@@ -982,7 +982,7 @@ def run_active_learning(
             resolves ``compute_uncertainty = force_uncertainty OR
             acq_func.requires_uncertainty()`` once per cycle. CLI equivalent:
             ``--force-uncertainty``. Silent no-op for learners that do not
-            support uncertainty at all (chemprop, fastprop, mlp). Feature 023.
+            support uncertainty at all (chemprop, fastprop, mlp).
 
         skip_validation: When True, skip SMILES validation, duplicate-ID checks,
             and target-column dtype validation. All compounds are treated as
@@ -1024,7 +1024,7 @@ def run_active_learning(
 
     start_time = time.perf_counter()
 
-    # FR-026: per-run diversity-metric cache, lifetime owned here. The
+    # Per-run diversity-metric cache, lifetime owned here. The
     # try/finally below guarantees prompt eviction independent of GC timing
     # so cumulative buffers never bleed across runs in long-lived processes.
     run_cache = RunCache()
@@ -1277,7 +1277,7 @@ def run_active_learning(
                 invalid_compounds=pl.DataFrame(schema=compound_pool.schema),
                 validation_errors={},
             )
-            # REQ-14a: validation did not run, so its one-pass SMILES
+            # Validation did not run, so its one-pass SMILES
             # canonicalization did not run either. Apply the same
             # canonicalize_for_cache helper as a standalone parallel pass so
             # the master DataFrame's SMILES and the feature-cache keys match a

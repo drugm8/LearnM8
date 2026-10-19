@@ -321,7 +321,7 @@ class FastpropLearner(Learner):
         Args:
                 features: Feature matrix (n_samples, n_features)
                 smiles: Ignored; present for interface compatibility.
-                compute_uncertainty: Keyword-only (feature 023). Single
+                compute_uncertainty: Keyword-only. Single
                     Fastprop never produces uncertainty, so this is a no-op.
 
         Returns:

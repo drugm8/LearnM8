@@ -237,7 +237,7 @@ def execute_cycle(
         cycle=cycle,
     )
 
-    # Feature 023 D6 + FR-007: build the acquisition function once at cycle
+    # Build the acquisition function once at cycle
     # start so `requires_uncertainty()` can resolve before predict. The
     # `current_best` derivation matches `_select_and_measure` (line ~1131).
     acquisition_params_resolved = (config.acquisition_params or {}).copy()
@@ -258,7 +258,7 @@ def execute_cycle(
         cycle_idx=cycle,
     )
 
-    # Feature 023 FR-007: cycle-level resolution of compute_uncertainty. The
+    # Cycle-level resolution of compute_uncertainty. The
     # OR-precedence is asymmetric — force_uncertainty=True overrides skip even
     # for greedy/random; uncertainty-requiring acquisitions (UCB/EI/PI/etc.)
     # cannot be disabled. Skip-eligible learners (gp/rf/dt/lr +
@@ -274,7 +274,7 @@ def execute_cycle(
         logger.warning(
             f'No unlabeled compounds available for prediction in cycle {cycle}. Returning unchanged DataFrame.'
         )
-        # Feature 023 D5 / FR-009: drop the uncertainty column from the
+        # Drop the uncertainty column from the
         # empty-cycle fallback schema when the cycle opted out of uncertainty.
         # Polars consumers downstream column-gate on `'uncertainty' in df.columns`.
         empty_schema: dict[str, type[pl.DataType]] = {
@@ -386,7 +386,7 @@ def execute_cycle(
 
         # Derive raw arrays from cycle_predictions for downstream consumers
         # (_calculate_cycle_metrics + evaluate_cycle). Roundtrip is lossless for
-        # Float64 so REQ-5 value-equality is preserved.
+        # Float64 so value-equality is preserved.
         predictions = cycle_predictions['prediction'].to_numpy()
         uncertainties = (
             cycle_predictions['uncertainty'].to_numpy()
@@ -394,7 +394,7 @@ def execute_cycle(
             else None
         )
 
-        # FR-005 (019): single-source-of-truth NaN/Inf guard immediately after prediction.
+        # Single-source-of-truth NaN/Inf guard immediately after prediction.
         # `valid_compound_ids` is passed lazily; numerical.py only materialises it on the
         # error path, so the canonical clean path pays no per-cycle Python-list cost.
         valid_compound_ids = cycle_predictions['ID'].to_list()
@@ -637,7 +637,7 @@ def _calculate_cycle_metrics(
     # Selection statistics
     metrics['selected_ids'] = selected_ids
 
-    # Spec 022 FR-010: force float64 accumulator for nanmean / nanstd / nansum
+    # Force float64 accumulator for nanmean / nanstd / nansum
     # so float32 prediction storage does not bleed into float32 reductions at
     # 100M scale (np.mean on float32 accumulator loses ~1e-5 relative precision).
     # min/max/median are order statistics — dtype doesn't affect them — but we
@@ -656,7 +656,7 @@ def _calculate_cycle_metrics(
     metrics['prediction_max'] = stats.pred_max
     metrics['prediction_median'] = stats.pred_median
 
-    # Uncertainty statistics. Feature 023 FR-011: always populate the four
+    # Uncertainty statistics: always populate the four
     # uncertainty_* keys (None when uncertainty was skipped) so downstream
     # cycle_metrics.csv schema stays stable.
     metrics['uncertainty_mean'] = stats.unc_mean
@@ -829,7 +829,7 @@ def _apply_pruning(
     and validate non-empty post-prune pool.
 
     Owns try/except #5 (pruning). No dedicated stopwatch — pruning falls in
-    the untimed gap between predict and acquisition (REQ-3). When
+    the untimed gap between predict and acquisition. When
     `pruning_strategy` is None, returns the inputs unchanged (with a
     pruned_count=0 stats dict).
 
@@ -944,7 +944,7 @@ def _build_acquisition_function(
 ) -> 'AcquisitionFunction':
     """Construct (but do not call) an acquisition function instance.
 
-    Hoisted from _select_compounds per feature 023 D6 so the cycle can
+    Hoisted from _select_compounds so the cycle can
     pre-resolve `acq_func.requires_uncertainty()` before predict and thread
     `compute_uncertainty` through `_predict_pool`.
 
@@ -1044,7 +1044,7 @@ def _select_compounds(
     """
     # Note: current_best must be set from labeled data at cycle level, not predictions
     # This is handled in execute_cycle before calling _select_compounds.
-    # Per feature 023 D6: execute_cycle pre-builds the acquisition function so
+    # execute_cycle pre-builds the acquisition function so
     # `requires_uncertainty()` can be resolved before predict; if a pre-built
     # instance is provided we skip the re-construction here.
     if acq_func is None:
@@ -1353,7 +1353,7 @@ def _select_and_measure(
         f"Acquiring compounds with '{config.strategy}' strategy from {len(selection_pool)} candidates"
     )
 
-    # If a pre-built acq_func was supplied (feature 023 D6) and the user has
+    # If a pre-built acq_func was supplied and the user has
     # not customised current_best via acquisition_params, propagate the cycle's
     # current_best onto the instance so EI/PI behave identically to the
     # construct-on-demand path.

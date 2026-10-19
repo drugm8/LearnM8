@@ -27,7 +27,7 @@ def _ei_scores(
 ) -> np.ndarray:
     """Higher-is-better Expected Improvement (single source for select + score_chunk).
 
-    Spec 022 FR-006/FR-007: ndtr (C-level Cephes) + symmetric z-clipping for
+    Numerics: ndtr (C-level Cephes) + symmetric z-clipping for
     IEEE-754 safety + Botorch sigma=0 → max(improvement, 0) convention.
     """
     if maximize:
@@ -122,7 +122,7 @@ class ExpectedImprovementAcquisition(AcquisitionFunction):
             f'EIAcquisition: current_best={current_best:.3f}, calculating expected improvement'
         )
 
-        # Single source: identical math to score_chunk (Spec 022 FR-006/FR-007).
+        # Single source: identical math to score_chunk.
         ei_scores = _ei_scores(
             predictions, uncertainties, current_best, self.xi, self.maximize
         )

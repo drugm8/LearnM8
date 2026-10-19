@@ -1,4 +1,4 @@
-"""Featurization worker-pool lifecycle management (feature 025, Item 4).
+"""Featurization worker-pool lifecycle management.
 
 scikit-fingerprints featurizes via joblib's loky backend, which keeps a
 process-global reusable worker pool alive for loky's 300 s idle timeout.
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def shutdown_featurization_pool() -> None:
     """Best-effort teardown of the loky reusable worker pool.
 
-    Contract (REQ-9..REQ-11):
+    Contract:
       * Safe no-op when no pool has been created this cycle (e.g. an
         all-cache-hit cycle) — nothing is spawned.
       * Best-effort: any failure is logged at WARNING level and swallowed so
@@ -38,7 +38,7 @@ def shutdown_featurization_pool() -> None:
 
         executor = reusable_executor._executor
         if executor is None:
-            # No reusable worker pool exists — safe no-op (REQ-10).
+            # No reusable worker pool exists — safe no-op.
             return
         executor.shutdown(wait=True, kill_workers=True)
     except Exception as exc:

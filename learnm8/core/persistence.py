@@ -192,7 +192,7 @@ class CyclePredictionsWriter:
 
     Streaming pass 1 writes predictions chunk-by-chunk instead of building the
     full ``cycle_predictions`` DataFrame in memory. The arrow schema is fixed at
-    construction from ``with_uncertainty`` so it matches feature 023's
+    construction from ``with_uncertainty`` so it matches the
     column-presence semantics (no ``uncertainty`` column at all when the cycle
     skips it) and ``pyarrow``'s requirement of a stable schema across row groups.
 
@@ -406,7 +406,7 @@ class CyclePredictionsWriter:
 def read_cycle_predictions(parquet_path: Path) -> pl.DataFrame:
     """Read a cycle-predictions parquet, accepting both Float32 and Float64.
 
-    Spec 022 FR-009 backward-compat: old runs wrote Float64 columns; new runs
+    Backward-compat: older runs wrote Float64 columns; newer runs
     write Float32. The loader transparently downcasts Float64 fixtures so
     downstream code always sees Float32. Implemented as
     ``scan_parquet → with_columns(...cast(pl.Float32)) → collect`` to avoid
@@ -683,7 +683,7 @@ def save_results(
             }
             sanitized_metrics.append(cm_copy)
 
-        # FR-013 / FR-013b: schema_overrides forces stable dtypes for the
+        # schema_overrides forces stable dtypes for the
         # six diversity numeric columns and the fingerprint_used provenance
         # column even when every value is null (e.g., when
         # disable_molecular_similarity=True). Without this, an all-null

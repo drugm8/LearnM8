@@ -23,8 +23,7 @@ def canonicalize_for_cache(smiles: str) -> str:
     ``kekuleSmiles`` override — so the result is character-identical to the
     legacy in-cache ``_canonicalize_smiles`` recipe. Computing it once at the
     validation phase lets the feature-cache key path drop its per-cycle
-    canonicalization while keeping cache keys byte-identical (feature 025,
-    Item 5).
+    canonicalization while keeping cache keys byte-identical.
 
     RDKit canonicalization only reorders atoms; it does not change the
     molecule, so feature values and run results are unchanged.
@@ -114,7 +113,7 @@ def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
         Tuple of (is_valid, canonical_smiles, error_message). ``canonical_smiles``
         is the RDKit-canonical form of the *raw* input molecule
         (:func:`canonicalize_for_cache`), computed once here so the per-cycle
-        feature-cache key path no longer canonicalizes (feature 025, Item 5).
+        feature-cache key path no longer canonicalizes.
         On failure the second element is the empty string.
     """
     try:
@@ -131,7 +130,7 @@ def _validate_smiles(smiles: str) -> tuple[bool, str, str]:
         if mol is None:
             return False, '', 'Molecule sanitization failed'
 
-        # REQ-12: the cache-canonical form is the RDKit canonical of the *raw*
+        # The cache-canonical form is the RDKit canonical of the *raw*
         # input molecule — NOT the datamol-standardized mol, whose tautomer /
         # charge normalisation would change feature values. Computed inside
         # this try-block so a parse/serialize failure marks the compound
@@ -228,7 +227,7 @@ def validate_compound_pool(
         zip(unique_pool.iter_rows(named=True), results, strict=False)
     ):
         if is_valid:
-            # REQ-13: carry the RDKit-canonical SMILES into the master
+            # Carry the RDKit-canonical SMILES into the master
             # DataFrame by replacing the SMILES value in place — keeps the row
             # at the original column set. invalid_compounds retain raw SMILES
             # (they are a diagnostic surface).

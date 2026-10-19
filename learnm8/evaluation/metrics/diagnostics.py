@@ -1,4 +1,4 @@
-"""Diagnostic cycle metrics — feature 014, refined in feature 019.
+"""Diagnostic cycle metrics.
 
 Two pure functions and one trivial helper used by ``evaluate_cycle``:
 
@@ -9,12 +9,8 @@ Two pure functions and one trivial helper used by ``evaluate_cycle``:
 - ``compute_prediction_entropy``: Shannon entropy (units: nats) of the model's
   predictions over the **unlabeled subset** of the pool, computed via a fixed
   50-bin count histogram with post-normalisation smoothing. Scale-invariant by
-  construction; units changed from bits → nats in feature 019 for cross-contract
-  consistency with ``EntropyAcquisition``.
-
-See ``specs/014-diagnostic-metrics/spec.md`` and
-``specs/019-math-correctness/contracts/prediction_entropy.md`` for the full
-requirements.
+  construction; units are nats, consistent with
+  ``EntropyAcquisition``.
 """
 
 from __future__ import annotations
@@ -101,7 +97,7 @@ def compute_prediction_entropy(
     ``Σ p log p`` is unbiased. Units are nats (base = e), matching
     ``EntropyAcquisition`` and ``scipy.stats.norm.entropy``.
 
-    Predictions are guaranteed to be NaN-free upstream (cycle.py FR-005 guard);
+    Predictions are guaranteed to be NaN-free upstream (cycle.py guard);
     the previous internal silent-NaN filter has been removed.
 
     Args:
@@ -133,7 +129,7 @@ def compute_prediction_entropy(
     if len(preds) == 0:
         return None
 
-    # Spec US3 #2: constant predictions → exactly 0.0 (no smoothing bias).
+    # Constant predictions → exactly 0.0 (no smoothing bias).
     if preds.size > 0 and float(preds.min()) == float(preds.max()):
         return 0.0
 
