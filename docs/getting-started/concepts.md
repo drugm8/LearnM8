@@ -380,7 +380,7 @@ results = run_active_learning(
     compound_pool='virtual_library.csv',
     oracle='docking.py:score_binding',  # Custom function
     target_col='binding_affinity',
-    learner='ensemble',
+    learner='rf_ensemble',
     featurizer='morgan'
 )
 ```

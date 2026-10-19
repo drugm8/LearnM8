@@ -71,7 +71,7 @@ from learnm8 import run_active_learning
 results = run_active_learning(
     compound_pool='ESSENCE_benchmark_input/ADA.csv',
     oracle=None,  # Auto-detect from compound pool
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     n_cycles=15,
@@ -84,7 +84,7 @@ results = run_active_learning(
 ```bash
 learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
-  --learner ensemble \
+  --learner rf_ensemble \
   --featurizer morgan \
   --n-cycles 15 \
   --batch-fraction 0.01
@@ -241,7 +241,7 @@ from learnm8 import run_active_learning
 results = run_active_learning(
     compound_pool='compound_library.csv',
     oracle='docking_oracle.py:dock_compounds',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='docking_score',
     featurizer='morgan',
     score_direction='lower',
@@ -254,7 +254,7 @@ results = run_active_learning(
 ```bash
 learnm8 run compound_library.csv docking_oracle.py:dock_compounds \
   --target docking_score \
-  --learner ensemble \
+  --learner rf_ensemble \
   --featurizer morgan \
   --score-direction lower \
   --n-cycles 25
@@ -348,7 +348,7 @@ from learnm8 import run_active_learning, CycleConfig
 benchmark_results = run_active_learning(
     compound_pool='ESSENCE_benchmark_input/ADA.csv',
     oracle=None,
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -362,7 +362,7 @@ benchmark_results = run_active_learning(
 production_results = run_active_learning(
     compound_pool='screening_library.csv',
     oracle='docking_oracle.py:score',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='affinity',
     featurizer='morgan',
     cycles=[
@@ -379,14 +379,14 @@ production_results = run_active_learning(
 # 1. Test strategies on benchmark
 learnm8 run ESSENCE_benchmark_input/ADA.csv \
   --target Activity \
-  --learner ensemble \
+  --learner rf_ensemble \
   --featurizer morgan \
   --cycles "random:0.02 ucb:0.01*8 greedy:0.01"
 
 # 2. Deploy best strategy in production
 learnm8 run screening_library.csv docking_oracle.py:score \
   --target affinity \
-  --learner ensemble \
+  --learner rf_ensemble \
   --featurizer morgan \
   --cycles "random:0.02 ucb:0.01*8 greedy:0.01"
 ```

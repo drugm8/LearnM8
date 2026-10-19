@@ -163,6 +163,17 @@ component; removal does not affect standard API or CLI usage.
   ``_FEATURIZER_CONFIG`` factory in ``learnm8/features/__init__.py``; new
   featurizers are added there, not as files in those packages.
 
+### Removed — the bare `ensemble` learner name (BREAKING)
+
+`'ensemble'` is no longer a key of `LEARNER_REGISTRY`, so `learner='ensemble'`
+and `--learner ensemble` now raise `ValueError: Unknown learner`. It mapped to
+the generic `EnsembleLearner`, which needs an explicit `learners=[...]` list,
+so it could never be built from a name. There is no alias.
+
+Migration: use `rf_ensemble` (three Random Forest members, uncertainty from
+member spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
+`EnsembleLearner([...])` instance for custom members.
+
 ## [0.11.0] — 2026-05-13
 
 ### Added — Acquisition-Aware Uncertainty Computation (feature 023)

@@ -35,7 +35,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -67,7 +67,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='virtual_library.csv',
     oracle='scoring.py:calculate_binding',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='binding_score',
     featurizer='morgan',
     cycles=[
@@ -200,7 +200,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -342,7 +342,7 @@ for path in results['saved_files']:
 learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
 
 # Production screening
-learnm8 run compounds.csv scoring.py:score --target score --learner ensemble --n-cycles 20
+learnm8 run compounds.csv scoring.py:score --target score --learner rf_ensemble --n-cycles 20
 
 # Custom strategy
 learnm8 run compounds.csv --target Activity --learner gp --featurizer ecfp6 \

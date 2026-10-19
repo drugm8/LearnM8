@@ -5,8 +5,12 @@ import polars as pl
 import pytest
 
 from learnm8.api import _create_learner, list_available_learners
+from learnm8.core.interfaces import Learner
+from learnm8.exceptions import LearnerError
 from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
+
+_GPU_ONLY_KEYS = {'rf_fil', 'ridge_cuml', 'gpu_gp', 'svgp'}
 
 
 @pytest.mark.unit
@@ -43,19 +47,28 @@ class TestLearnerCreation:
 
         assert learner1.random_states != learner2.random_states
 
-    def test_create_all_available_learners(self):
-        """Test that all registered learners can be created."""
-        available = list_available_learners()
+    @pytest.mark.parametrize('learner_str', list_available_learners())
+    def test_create_all_available_learners(self, learner_str):
+        """Every registered learner key can be created."""
+        try:
+            learner = _create_learner(learner_str, random_state=42)
+        except ImportError as e:
+            if learner_str in _GPU_ONLY_KEYS:
+                pytest.skip(f"'{learner_str}' needs unavailable GPU libs: {e}")
+            raise
+        except (LearnerError, RuntimeError) as e:
+            if learner_str in _GPU_ONLY_KEYS and any(
+                t in str(e).lower() for t in ('cuda', 'cuml', 'gpu')
+            ):
+                pytest.skip(f"'{learner_str}' needs unavailable GPU: {e}")
+            raise
+        assert isinstance(learner, Learner)
 
-        for learner_str in available:
-            if learner_str == 'ensemble':
-                continue
-
-            try:
-                learner = _create_learner(learner_str, random_state=42)
-                assert learner is not None
-            except Exception as e:
-                pytest.fail(f"Failed to create learner '{learner_str}': {e}")
+    def test_bare_ensemble_shortcut_removed(self):
+        """The bare 'ensemble' shortcut is no longer a registered learner."""
+        assert 'ensemble' not in list_available_learners()
+        with pytest.raises(ValueError, match='Unknown learner'):
+            _create_learner('ensemble', random_state=42)
 
     def test_unknown_learner_raises_error(self):
         """Test error handling for unknown learner string."""

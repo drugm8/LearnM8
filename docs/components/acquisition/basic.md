@@ -175,7 +175,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -308,7 +308,7 @@ topk_tight = TopKAcquisition(k_fraction=0.05, score_direction='higher')
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[

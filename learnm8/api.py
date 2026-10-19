@@ -78,7 +78,6 @@ from learnm8.features.worker_pool import shutdown_featurization_pool
 from learnm8.learners import (
     DecisionTreeLearner,
     DTEnsemble,
-    EnsembleLearner,
     FastpropEnsemble,
     FastpropLearner,
     GaussianProcessLearner,
@@ -125,7 +124,6 @@ LEARNER_REGISTRY = {
     'chemprop': ChempropLearner,
     'chemprop_ensemble': ChempropEnsemble,
     # Ensemble learners
-    'ensemble': EnsembleLearner,
     'rf_ensemble': RFEnsemble,
     'lr_ensemble': LREnsemble,
     'xgb_ensemble': XGBEnsemble,
@@ -168,7 +166,6 @@ LEARNER_DISPLAY_NAMES = {
     'fastprop': 'FastProp',
     'chemprop': 'Chemprop',
     'chemprop_ensemble': 'Chemprop Ensemble',
-    'ensemble': 'Mixed Ensemble',
     'rf_ensemble': 'RF Ensemble',
     'lr_ensemble': 'LR Ensemble',
     'xgb_ensemble': 'XGBoost Ensemble',
@@ -215,7 +212,6 @@ def _create_learner(
     - 'mlp': Multi-Layer Perceptron
     - 'mc_dropout': Monte Carlo Dropout
     - 'chemprop': Chemprop Ensemble (supports fine-tuning)
-    - 'ensemble': Ensemble (default configuration)
     - 'rf_ensemble': Random Forest Ensemble
     - 'lr_ensemble': Linear Regression Ensemble
     - 'xgb_ensemble': XGBoost Ensemble

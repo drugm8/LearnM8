@@ -341,7 +341,7 @@ from learnm8 import run_active_learning
 results = run_active_learning(
     compound_pool='compound_library.csv',
     oracle='scoring_module.py:calculate_affinity',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='binding_score',
     featurizer='morgan',
     n_cycles=20
@@ -351,7 +351,7 @@ results = run_active_learning(
 **CLI alternative:**
 ```bash
 learnm8 run compound_library.csv scoring_module.py:calculate_affinity \
-  --target binding_score --learner ensemble --featurizer morgan --n-cycles 20
+  --target binding_score --learner rf_ensemble --featurizer morgan --n-cycles 20
 ```
 
 ### Benchmark with Explicit Oracle

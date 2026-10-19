@@ -207,7 +207,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -224,7 +224,7 @@ results = run_active_learning(
 # Random initialization → UCB exploration → Greedy exploitation
 learnm8 run compounds.csv oracle.py:score --target binding \
   --cycles "random:0.01 ucb:0.005*5 greedy:0.005*4" \
-  --learner ensemble --featurizer morgan
+  --learner rf_ensemble --featurizer morgan
 ```
 
 ## See Also

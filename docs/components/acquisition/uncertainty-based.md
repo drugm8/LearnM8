@@ -69,7 +69,7 @@ learnm8 run compounds.csv --target Activity \
 **CLI with custom β (more exploration):**
 ```bash
 learnm8 run compounds.csv --target Activity \
-  --learner ensemble --featurizer morgan \
+  --learner rf_ensemble --featurizer morgan \
   --cycles "random:0.02 ucb:0.005*5" \
   --acquisition-params '{"beta": 3.0}'
 ```
@@ -339,7 +339,7 @@ from learnm8 import run_active_learning
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -433,7 +433,7 @@ learnm8 run compounds.csv --target Activity \
 **CLI with variance-based entropy:**
 ```bash
 learnm8 run compounds.csv --target Activity \
-  --learner ensemble --featurizer morgan \
+  --learner rf_ensemble --featurizer morgan \
   --cycles "random:0.02 entropy:0.01*5" \
   --acquisition-params '{"entropy_type": "variance"}'
 ```

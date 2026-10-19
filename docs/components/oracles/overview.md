@@ -170,7 +170,7 @@ Specify the oracle using `module.py:function` syntax:
 
 ```bash
 learnm8 run compounds.csv scoring.py:calculate_affinity --target binding_affinity \
-  --learner ensemble --featurizer morgan --n-cycles 20
+  --learner rf_ensemble --featurizer morgan --n-cycles 20
 ```
 
 ### API Usage

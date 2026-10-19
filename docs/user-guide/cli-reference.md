@@ -67,7 +67,7 @@ learnm8 run COMPOUND_POOL [ORACLE] --target COLUMN --featurizer TYPE --learner M
 - Scikit-learn: `rf`, `gp`, `xgb`, `dt`, `lr`
 - PyTorch: `mlp`, `mc_dropout`, `fastprop`
 - Graph Neural Networks: `chemprop`, `chemprop_ensemble`
-- Ensembles: `ensemble`, `mixed_ensemble`, `rf_ensemble`, `xgb_ensemble`, etc.
+- Ensembles: `mixed_ensemble`, `rf_ensemble`, `xgb_ensemble`, etc.
 
 Use `from learnm8.api import list_available_learners; list_available_learners()` (Python) to see all available learners in your environment.
 
@@ -394,7 +394,7 @@ learnm8 run compound_library.csv docking_module.py:calculate_binding \
 learnm8 run large_library.csv oracle.py:score \
   --target Activity \
   --featurizer descriptors \
-  --learner ensemble \
+  --learner rf_ensemble \
   --cycles "random:0.01 greedy:0.005*19" \
   --pruning-fraction 0.3 \
   --pruning-strategy score_based \
@@ -455,7 +455,7 @@ compound_pool: compounds.csv
 oracle: oracle.csv
 target_col: Activity
 featurizer: morgan
-learner: ensemble
+learner: rf_ensemble
 cycles:
   - strategy: random
     batch_fraction: 0.02

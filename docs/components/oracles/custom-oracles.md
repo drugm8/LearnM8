@@ -399,7 +399,7 @@ oracle = WebAPIOracle(
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle=oracle,
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='score',
     featurizer='morgan'
 )
@@ -739,7 +739,7 @@ def main():
     results = run_active_learning(
         compound_pool=compounds,
         oracle=oracle,
-        learner='ensemble',
+        learner='rf_ensemble',
         target_col='vina_score',
         featurizer='morgan',
         n_cycles=20,

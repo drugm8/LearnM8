@@ -60,11 +60,6 @@ def test_compute_uncertainty_false_returns_none(learner_name, tiny_data, request
     """
     if learner_name in _SMILES_LEARNERS:
         pytest.skip('Requires SMILES; covered by integration tests.')
-    if learner_name == 'ensemble':
-        pytest.skip(
-            'Plain EnsembleLearner requires explicit `learners=[...]`; '
-            'covered by concrete subclasses (rf_ensemble, etc.).'
-        )
     if learner_name in _GPU_LEARNERS:
         # GPU-only learners are skip-eligible but require RAPIDS/gpytorch
         # backends not present in the default CI env.

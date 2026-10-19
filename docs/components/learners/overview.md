@@ -210,7 +210,7 @@ All available learners with their properties and dependencies:
 - ✅ = Supported/Required, ❌ = Not supported/Not required
 - `rf`, `dt`, `lr` uncertainty: tree std dev, leaf impurity, and leverage-based proxies respectively — suitable for ranking (UCB, EI, PI) but not for absolute calibration analyses
 - `chemprop` is a single MPNN model with no uncertainty; use `chemprop_ensemble` for uncertainty via model disagreement
-- `ensemble` is a generic ensemble wrapper requiring explicit member specification. Use `mixed_ensemble` (RF + LR + XGB) for a pre-configured ensemble.
+- For uncertainty from model disagreement use a concrete ensemble: `rf_ensemble` (three Random Forest members, uncertainty from member spread) or `mixed_ensemble` (RF + LR + XGB). The generic `EnsembleLearner` class needs explicit members and has no string shortcut.
 - GPU learners (`rf_fil`, `ridge_cuml`, `gpu_gp`, `svgp`) require optional dependencies and are added to the registry only when those imports succeed
 
 ## Using Learners
@@ -265,7 +265,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer descriptor
 learnm8 run compounds.csv --target Activity --learner chemprop --featurizer morgan
 
 # Ensemble for robust uncertainty
-learnm8 run compounds.csv --target Activity --learner ensemble --featurizer morgan
+learnm8 run compounds.csv --target Activity --learner rf_ensemble --featurizer morgan
 ```
 
 ### Listing Available Learners
@@ -284,7 +284,7 @@ from learnm8.api import list_available_learners
 
 available = list_available_learners()
 print(available)
-# ['rf', 'gp', 'xgb', 'mlp', 'mc_dropout', 'chemprop', 'ensemble', ...]
+# ['rf', 'gp', 'xgb', 'mlp', 'mc_dropout', 'chemprop', 'rf_ensemble', ...]
 ```
 
 ## Uncertainty Quantification Methods
@@ -368,7 +368,7 @@ All learners accept a `random_state` parameter for reproducibility:
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='ensemble',
+    learner='rf_ensemble',
     target_col='Activity',
     featurizer='morgan',
     random_state=42  # Fully reproducible

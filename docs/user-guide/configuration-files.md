@@ -99,7 +99,7 @@ Multi-strategy experiment with per-cycle control:
 compound_pool: "compound_library.csv"
 oracle: "scoring_module.py:calculate_affinity"
 target_col: "binding_score"
-learner: "ensemble"
+learner: "rf_ensemble"
 featurizer: "morgan"
 score_direction: "lower"
 random_state: 123
@@ -189,7 +189,7 @@ JSON format is also supported, with identical schema to YAML but different synta
   "compound_pool": "compound_library.csv",
   "oracle": "scoring_module.py:calculate_affinity",
   "target_col": "binding_score",
-  "learner": "ensemble",
+  "learner": "rf_ensemble",
   "featurizer": "morgan",
   "score_direction": "lower",
   "cycles": [
@@ -288,7 +288,7 @@ CLI flags override configuration file values when explicitly provided:
 ```bash
 # Use config but override learner and output directory
 learnm8 run --config experiment.yaml \
-  --learner ensemble \
+  --learner rf_ensemble \
   -o results/modified_experiment
 ```
 
@@ -351,7 +351,7 @@ with open("base_config.yaml") as f:
     config = yaml.safe_load(f)
 
 # Override specific parameters
-config['learner'] = 'ensemble'
+config['learner'] = 'rf_ensemble'
 config['output_dir'] = 'results/modified'
 
 # Run experiment
