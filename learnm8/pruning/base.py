@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 import polars as pl
 
+from learnm8.exceptions import PruningError
+
 logger = logging.getLogger(__name__)
 
 
@@ -201,8 +203,3 @@ class DesignSpacePruner(ABC):
             raise
         except (ValueError, RuntimeError, TypeError) as e:
             raise PruningError(f'Failed to prune compounds: {e}') from e
-
-
-from learnm8.exceptions import (
-    PruningError,
-)

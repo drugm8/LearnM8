@@ -92,6 +92,7 @@ def test_packed_storage_uses_correct_packed_width(tmp_path: Path):
 @pytest.mark.unit
 def test_uint8_csr_fallback_warns_once(tmp_path: Path, caplog):
     import logging
+
     from learnm8.features import cache as cache_module
 
     cache_module._uint8_fallback_warned.clear()

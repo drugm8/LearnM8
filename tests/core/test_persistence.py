@@ -59,7 +59,7 @@ def test_add_csv_metadata(tmp_path):
 
     _add_csv_metadata(csv_file, metadata)
 
-    with open(csv_file, 'r') as f:
+    with open(csv_file) as f:
         lines = f.readlines()
 
     assert '# LearnM8 Active Learning Results\n' in lines
@@ -464,7 +464,7 @@ def test_save_results_config_json(tmp_path):
 
     assert saved_files['config'].exists()
 
-    with open(saved_files['config'], 'r') as f:
+    with open(saved_files['config']) as f:
         loaded_config = json.load(f)
 
     assert loaded_config == config

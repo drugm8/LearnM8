@@ -24,11 +24,11 @@ from learnm8.evaluation.metrics.similarity import (
     TARGET_EPSILON,
     Z_95,
     RunCache,
+    _bit_position_uniformity_entropy_from_bit_sum,
     _derive_rng,
     _get_or_build_fps,
     _mean_tanimoto_adaptive_sampled,
     _scaffold_diversity_index,
-    _bit_position_uniformity_entropy_from_bit_sum,
     compute_diversity_metrics,
 )
 

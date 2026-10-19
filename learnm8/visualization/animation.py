@@ -548,7 +548,9 @@ def create_dashboard_animation_from_csv(
         ax2.set_xlim(0, max_pct * 1.1)
         ax2.set_xlabel('Data Explored (%)', fontsize=10)
         ax2.set_xticks(pct_explored)
-        x_labels = [f'{pct:.1f}%\n(c{c})' for c, pct in zip(cycles, pct_explored)]
+        x_labels = [
+            f'{pct:.1f}%\n(c{c})' for c, pct in zip(cycles, pct_explored, strict=True)
+        ]
         ax2.set_xticklabels(x_labels, fontsize=8, rotation=0)
 
         # Panel C: Cumulative Best Value Found

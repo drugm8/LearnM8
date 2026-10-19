@@ -4,13 +4,13 @@ Interface compliance tests for core LearnM8 components.
 Tests that all components properly implement their abstract interfaces.
 """
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
 from learnm8.core.interfaces import Learner, Oracle
 from learnm8.features import extract_features
-from learnm8.learners.sklearn import RandomForestLearner, GaussianProcessLearner
+from learnm8.learners.sklearn import GaussianProcessLearner, RandomForestLearner
 from learnm8.oracles.csv_oracle import CSVOracle
 
 
@@ -273,7 +273,7 @@ class TestInterfaceIntegration:
 
         learner.train(features, targets)
 
-        predictions, uncertainty = learner.predict(features)
+        predictions, _uncertainty = learner.predict(features)
 
         n_select = min(5, len(compounds))
         selected_indices = np.argsort(predictions)[-n_select:]
@@ -311,7 +311,7 @@ class TestInterfaceIntegration:
         test_features = extract_features(
             test_compounds['SMILES'].to_list(), 'morgan', tmp_path
         )
-        predictions, uncertainty = learner.predict(test_features)
+        predictions, _uncertainty = learner.predict(test_features)
 
         assert len(predictions) == len(test_compounds)
 

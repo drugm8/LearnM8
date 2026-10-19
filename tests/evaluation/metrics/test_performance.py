@@ -3,13 +3,13 @@
 Tests for ML model performance metrics using real molecular data.
 """
 
-import pytest
 import numpy as np
+import pytest
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.performance import (
-    calculate_spearman_correlation,
     calculate_average_score,
+    calculate_spearman_correlation,
 )
 
 

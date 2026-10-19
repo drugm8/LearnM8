@@ -1,14 +1,14 @@
 """Tests for logging formatters module."""
 
-import pytest
 import polars as pl
-import numpy as np
+import pytest
+
+from learnm8.core.config import CycleConfig
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
     format_duration,
     format_experiment_summary,
 )
-from learnm8.core.config import CycleConfig
 
 
 @pytest.mark.unit

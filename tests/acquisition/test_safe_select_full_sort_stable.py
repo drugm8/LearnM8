@@ -17,7 +17,6 @@ import pytest
 
 from learnm8.acquisition.base import AcquisitionFunction
 
-
 pytestmark = pytest.mark.unit
 
 

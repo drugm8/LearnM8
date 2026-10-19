@@ -121,7 +121,7 @@ class CSVOracle(Oracle):
         compound_data = compounds.select(preserve_cols).with_row_index('_input_order')
 
         # Determine which columns to get from ground truth
-        ground_truth_cols = ['ID'] + properties
+        ground_truth_cols = ['ID', *properties]
         # If SMILES is not in compounds but is in ground truth, get it from ground truth
         if 'SMILES' not in compounds.columns and 'SMILES' in self.ground_truth.columns:
             ground_truth_cols.append('SMILES')

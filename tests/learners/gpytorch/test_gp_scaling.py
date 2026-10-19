@@ -7,7 +7,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 gpytorch = pytest.importorskip('gpytorch')
 
-from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner
+# Import below needs importorskip first.
+from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner  # noqa: E402
 
 
 class TestGPyTorchGPScaling:

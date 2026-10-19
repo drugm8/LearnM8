@@ -3,16 +3,15 @@
 Focused tests for critical error conditions and edge cases using real molecular data.
 """
 
-import pytest
-import polars as pl
-import numpy as np
-import tempfile
-from pathlib import Path
+import contextlib
 
+import numpy as np
+import polars as pl
+import pytest
+
+from learnm8.acquisition import GreedyAcquisition, get_acquisition_function
+from learnm8.exceptions import FeatureExtractionError, OracleError
 from learnm8.features import extract_features
-from learnm8.acquisition import get_acquisition_function
-from learnm8.acquisition import GreedyAcquisition
-from learnm8.exceptions import OracleError
 from learnm8.oracles.csv_oracle import CSVOracle
 from learnm8.oracles.python_oracle import PythonOracle
 
@@ -55,7 +54,7 @@ class TestDataValidationErrors:
         invalid_smiles = ['CCO', 'invalid_smiles', 'C1CCC']  # One valid, two invalid
 
         # Should raise error for invalid SMILES
-        with pytest.raises(Exception):
+        with pytest.raises(FeatureExtractionError):
             extract_features(invalid_smiles, 'morgan', tmp_path)
 
     def test_mismatched_array_lengths(self, small_real_compounds):
@@ -319,7 +318,7 @@ class TestIntegrationErrors:
         mixed_smiles = ['CCO', 'invalid_smiles', 'CCC', '']  # Mixed valid/invalid
 
         # Should raise error for invalid SMILES
-        with pytest.raises(Exception):
+        with pytest.raises(FeatureExtractionError):
             extract_features(mixed_smiles, 'morgan', tmp_path)
 
     @pytest.mark.slow
@@ -328,10 +327,8 @@ class TestIntegrationErrors:
         # Simulate error during feature computation
         invalid_smiles = ['completely_invalid_smiles_string']
 
-        try:
+        with contextlib.suppress(Exception):  # Expected to fail
             extract_features(invalid_smiles, 'morgan', tmp_path)
-        except Exception:
-            pass  # Expected to fail
 
         # Check that no partial cache files were left
         cache_dir = tmp_path / '.features'
@@ -366,7 +363,7 @@ class TestErrorRecovery:
         smiles_list[5] = ''
 
         # Should raise error for invalid SMILES
-        with pytest.raises(Exception):
+        with pytest.raises(FeatureExtractionError):
             extract_features(smiles_list, 'morgan', tmp_path)
 
     @pytest.mark.slow
@@ -394,7 +391,7 @@ class TestErrorRecovery:
 
         try:
             acq.select(compounds_no_pred, n_select=3)
-            assert False, 'Should have raised an error'
+            pytest.fail('Should have raised an error')
         except (ValueError, KeyError) as e:
             error_msg = str(e).lower()
             # Error message should be informative
@@ -410,7 +407,7 @@ class TestErrorRecovery:
 
         try:
             acq.select(compounds, n_select=-1)
-            assert False, 'Should have raised an error'
+            pytest.fail('Should have raised an error')
         except ValueError as e:
             error_msg = str(e).lower()
             # Should mention n_select and positive

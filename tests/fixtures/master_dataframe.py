@@ -9,17 +9,16 @@ CRITICAL: create_initialized_master_df() helper function is used by 50+ tests.
 Preserve exact signature and behavior during refactoring.
 """
 
-from typing import Optional, List
-import pytest
-import polars as pl
 import numpy as np
+import polars as pl
+import pytest
 
 
 def create_initialized_master_df(
     valid_compounds: pl.DataFrame,
     target_col: str,
-    initial_labeled_ids: Optional[List[str]] = None,
-    initial_measurements: Optional[dict] = None,
+    initial_labeled_ids: list[str] | None = None,
+    initial_measurements: dict | None = None,
 ) -> pl.DataFrame:
     """Helper to create master DataFrame with initial labeled compounds.
 
@@ -37,8 +36,8 @@ def create_initialized_master_df(
     Returns:
         Master DataFrame with initial compounds labeled
     """
-    from learnm8.core.initialization import initialize_master_dataframe_empty
     from learnm8.core.dataframe_ops import update_status
+    from learnm8.core.initialization import initialize_master_dataframe_empty
 
     master_df = initialize_master_dataframe_empty(valid_compounds, target_col)
 
@@ -70,7 +69,7 @@ def sample_master_df(sample_compounds) -> pl.DataFrame:
 
     initial_compounds = compounds.head(2)
     initial_ids = initial_compounds.get_column('ID').to_list()
-    initial_values = dict(zip(initial_ids, [0.3, 0.6]))
+    initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=True))
 
     return create_initialized_master_df(
         valid_compounds=compounds,
@@ -147,7 +146,7 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
     )
 
     selected_ids_0 = unlabeled_ids[:1]
-    target_values_0 = dict(zip(selected_ids_0, [0.45]))
+    target_values_0 = dict(zip(selected_ids_0, [0.45], strict=True))
     master_df = update_status(
         df=master_df,
         compound_ids=selected_ids_0,
@@ -168,7 +167,7 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
         )
 
         selected_ids_1 = unlabeled_ids[:1]
-        target_values_1 = dict(zip(selected_ids_1, [0.65]))
+        target_values_1 = dict(zip(selected_ids_1, [0.65], strict=True))
         master_df = update_status(
             df=master_df,
             compound_ids=selected_ids_1,

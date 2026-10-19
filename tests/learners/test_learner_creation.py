@@ -1,12 +1,12 @@
 """Tests for learner creation via API."""
 
-import pytest
 import numpy as np
 import polars as pl
-from pathlib import Path
+import pytest
+
 from learnm8.api import _create_learner, list_available_learners
-from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
+from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 
 @pytest.mark.unit

@@ -5,7 +5,7 @@ Provides session-scoped Morgan fingerprints computed once per test session
 """
 
 import pytest
-import numpy as np
+
 from learnm8.features.extraction import extract_features
 
 

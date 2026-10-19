@@ -1,6 +1,6 @@
-import pytest
 import polars as pl
-from pathlib import Path
+import pytest
+
 from learnm8.oracles.csv_oracle import CSVOracle
 
 

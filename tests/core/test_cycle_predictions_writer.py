@@ -84,27 +84,33 @@ class TestRowGroupAlignment:
 
 class TestSchemaInvariant:
     def test_uncertainty_none_with_schema_true_raises(self, tmp_path):
-        with pytest.raises(LearnerError):
-            with CyclePredictionsWriter(tmp_path, 1, with_uncertainty=True) as w:
-                w.write_chunk(pl.Series('ID', ['a']), np.array([1.0], np.float32), None)
+        with (
+            pytest.raises(LearnerError),
+            CyclePredictionsWriter(tmp_path, 1, with_uncertainty=True) as w,
+        ):
+            w.write_chunk(pl.Series('ID', ['a']), np.array([1.0], np.float32), None)
 
     def test_uncertainty_present_with_schema_false_raises(self, tmp_path):
-        with pytest.raises(LearnerError):
-            with CyclePredictionsWriter(tmp_path, 1, with_uncertainty=False) as w:
-                w.write_chunk(
-                    pl.Series('ID', ['a']),
-                    np.array([1.0], np.float32),
-                    np.array([0.1], np.float32),
-                )
+        with (
+            pytest.raises(LearnerError),
+            CyclePredictionsWriter(tmp_path, 1, with_uncertainty=False) as w,
+        ):
+            w.write_chunk(
+                pl.Series('ID', ['a']),
+                np.array([1.0], np.float32),
+                np.array([0.1], np.float32),
+            )
 
 
 class TestFailureModes:
     def test_exception_in_block_leaves_no_tmp_or_final(self, tmp_path):
         path = prediction_parquet_path(tmp_path, 1)
-        with pytest.raises(RuntimeError):
-            with CyclePredictionsWriter(tmp_path, 1, with_uncertainty=False) as w:
-                w.write_chunk(pl.Series('ID', ['a']), np.array([1.0], np.float32), None)
-                raise RuntimeError('boom')
+        with (
+            pytest.raises(RuntimeError),
+            CyclePredictionsWriter(tmp_path, 1, with_uncertainty=False) as w,
+        ):
+            w.write_chunk(pl.Series('ID', ['a']), np.array([1.0], np.float32), None)
+            raise RuntimeError('boom')
         assert not path.exists()
         assert not path.with_name(path.name + '.tmp').exists()
 

@@ -6,13 +6,19 @@ metrics based on mode (benchmark vs run) and data availability.
 
 import logging
 import threading
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from weakref import finalize
 
 import numpy as np
 import polars as pl
 
+# Import specialized metric functions from modular metrics package
+from .metrics.diagnostics import (
+    compute_prediction_entropy,
+    compute_selected_percentile,
+)
 from .metrics.enrichment import (
     calculate_batch_enrichment_factor,
     calculate_batch_hit_rate,
@@ -25,12 +31,6 @@ from .metrics.enrichment import (
     calculate_multiple_unlabeled_top_k_overlaps,
     calculate_score_improvement_ratio,
     calculate_unlabeled_ranking_correlation,
-)
-
-# Import specialized metric functions from modular metrics package
-from .metrics.diagnostics import (
-    compute_prediction_entropy,
-    compute_selected_percentile,
 )
 from .metrics.performance import calculate_average_score
 from .metrics.similarity import (

@@ -72,10 +72,8 @@ class TestTorchLearnerCheckpointing:
         assert len(history) > 0
 
         best_epoch = min(range(len(history)), key=lambda i: history[i]['val_loss'])
-        best_val_loss = history[best_epoch]['val_loss']
 
         last_epoch_idx = len(history) - 1
-        last_val_loss = history[last_epoch_idx]['val_loss']
 
         X_proc = learner.scaler.transform(
             X[:, learner._valid_feature_mask]
@@ -86,7 +84,7 @@ class TestTorchLearnerCheckpointing:
         X_t = torch.FloatTensor(X_proc).to(device)
         learner.model.eval()
         with torch.no_grad():
-            preds = learner.model(X_t).squeeze().cpu().numpy()
+            learner.model(X_t).squeeze().cpu().numpy()
 
         assert learner.is_trained
         if best_epoch < last_epoch_idx:
@@ -143,8 +141,6 @@ class TestTorchLearnerCheckpointing:
         history = learner.training_history
         assert len(history) == 15
 
-        best_val_loss = min(h['val_loss'] for h in history)
-
         mask = learner._valid_feature_mask
         X_in = X[:, mask] if mask is not None else X
         current_loss = _compute_val_loss(learner.model, learner.scaler, X_in, y)
@@ -170,7 +166,6 @@ class TestTorchLearnerCheckpointing:
         learner.train(X, y)
 
         history = learner.training_history
-        best_val_loss = min(h['val_loss'] for h in history)
 
         mask = learner._valid_feature_mask
         X_in = X[:, mask] if mask is not None else X

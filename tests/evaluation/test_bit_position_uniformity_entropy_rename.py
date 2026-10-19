@@ -15,7 +15,6 @@ import importlib
 import numpy as np
 import pytest
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -34,10 +33,11 @@ def test_metric_function_exists() -> None:
 
 
 def test_metric_value_unchanged_vs_explicit_compute() -> None:
+    from scipy.stats import entropy as scipy_entropy
+
     from learnm8.evaluation.metrics.similarity import (
         _bit_position_uniformity_entropy_from_bit_sum,
     )
-    from scipy.stats import entropy as scipy_entropy
 
     bit_sum = np.array([1, 2, 3, 4, 5], dtype=np.int64)
     n_compounds = 5
@@ -49,7 +49,7 @@ def test_metric_value_unchanged_vs_explicit_compute() -> None:
 def test_shannon_symbol_dot_access_raises_attributeerror() -> None:
     similarity = importlib.import_module('learnm8.evaluation.metrics.similarity')
     with pytest.raises(AttributeError) as exc_info:
-        _ = similarity._shannon_entropy_from_bit_sum  # noqa: SLF001
+        _ = similarity._shannon_entropy_from_bit_sum
     msg = str(exc_info.value)
     assert "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'" in msg
 
@@ -57,7 +57,7 @@ def test_shannon_symbol_dot_access_raises_attributeerror() -> None:
 def test_bit_marginal_symbol_dot_access_raises_attributeerror() -> None:
     similarity = importlib.import_module('learnm8.evaluation.metrics.similarity')
     with pytest.raises(AttributeError) as exc_info:
-        _ = similarity._bit_marginal_entropy_from_bit_sum  # noqa: SLF001
+        _ = similarity._bit_marginal_entropy_from_bit_sum
     msg = str(exc_info.value)
     assert "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'" in msg
 
@@ -65,15 +65,17 @@ def test_bit_marginal_symbol_dot_access_raises_attributeerror() -> None:
 def test_old_symbol_getattr_raises_attributeerror() -> None:
     similarity = importlib.import_module('learnm8.evaluation.metrics.similarity')
     with pytest.raises(AttributeError):
-        getattr(similarity, '_shannon_entropy_from_bit_sum')
+        _ = similarity._shannon_entropy_from_bit_sum
     with pytest.raises(AttributeError):
-        getattr(similarity, '_bit_marginal_entropy_from_bit_sum')
+        _ = similarity._bit_marginal_entropy_from_bit_sum
 
 
 def test_old_symbol_from_import_raises_importerror() -> None:
     """`from X import Y` translates AttributeError -> ImportError."""
     with pytest.raises(ImportError) as exc_info:
-        from learnm8.evaluation.metrics.similarity import _shannon_entropy_from_bit_sum  # type: ignore[attr-defined]  # noqa: F401
+        from learnm8.evaluation.metrics.similarity import (
+            _shannon_entropy_from_bit_sum,  # type: ignore[attr-defined]  # noqa: F401
+        )
     assert '_shannon_entropy_from_bit_sum' in str(exc_info.value)
 
 

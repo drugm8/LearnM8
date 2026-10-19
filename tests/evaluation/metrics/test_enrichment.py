@@ -9,8 +9,8 @@ import pytest
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.metrics.enrichment import (
-    _count_actives_numpy,
     _active_expr,
+    _count_actives_numpy,
     calculate_enrichment_factor,
     calculate_multiple_enrichment_factors,
     calculate_multiple_top_k_discovery_rates,

@@ -1,14 +1,11 @@
-import pytest
 from pathlib import Path
+
 import polars as pl
-import tempfile
+import pytest
 
 from learnm8.utils.file_loaders import (
-    load_compound_file,
     _detect_file_format,
-    _load_csv_with_polars,
-    _load_sdf_with_datamol,
-    _load_smi_with_rdkit,
+    load_compound_file,
 )
 
 
@@ -191,7 +188,7 @@ class TestLoadSMI:
         smi_path.write_text('Not a valid SMILES file\n')
 
         with pytest.raises(
-            ValueError, match='Failed to load SMILES file|No valid molecules found'
+            ValueError, match=r'Failed to load SMILES file|No valid molecules found'
         ):
             load_compound_file(smi_path)
 

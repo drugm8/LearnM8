@@ -13,7 +13,6 @@ from learnm8.utils.numerical import (
     assert_no_nan,
 )
 
-
 pytestmark = pytest.mark.unit
 
 

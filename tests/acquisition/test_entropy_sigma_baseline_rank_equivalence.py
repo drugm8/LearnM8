@@ -14,9 +14,7 @@ import pytest
 from learnm8.acquisition.entropy import EntropyAcquisition
 from learnm8.acquisition.ucb import UCBAcquisition
 from learnm8.exceptions import LearnM8Warning
-
 from tests.conftest import RNG_SEED
-
 
 pytestmark = pytest.mark.unit
 

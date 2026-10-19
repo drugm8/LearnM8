@@ -19,9 +19,9 @@ class PythonOracle(Oracle):
 
     def __init__(
         self,
-        module_path: str = None,
-        oracle_path: str = None,
-        function_name: str = None,
+        module_path: str | None = None,
+        oracle_path: str | None = None,
+        function_name: str | None = None,
         **kwargs,
     ):
         """
@@ -54,7 +54,7 @@ class PythonOracle(Oracle):
         # Load the oracle function
         self.oracle_function = self._load_oracle_function(function_name)
 
-    def _load_oracle_function(self, function_name: str = None) -> Callable:
+    def _load_oracle_function(self, function_name: str | None = None) -> Callable:
         """Load oracle function from Python file."""
         # Load module from file
         spec = importlib.util.spec_from_file_location('oracle_module', self.oracle_path)

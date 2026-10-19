@@ -21,7 +21,6 @@ from learnm8.evaluation.metrics.similarity import (
     compute_diversity_metrics,
 )
 
-
 SMILES_POOL = [
     'CCO',
     'CCC',

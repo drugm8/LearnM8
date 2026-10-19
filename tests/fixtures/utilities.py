@@ -10,6 +10,7 @@ Simple wrappers around pytest's caplog fixture.
 """
 
 import logging
+
 import pytest
 
 

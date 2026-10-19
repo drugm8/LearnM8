@@ -4,11 +4,10 @@ Tests the pruning factory function and integration with the main active learning
 Uses only public API (create_pruning_strategy) rather than internal validators.
 """
 
-import pytest
-import numpy as np
-import pandas as pd
-import polars as pl
 import json
+
+import numpy as np
+import pytest
 
 from learnm8.pruning import create_pruning_strategy
 from learnm8.pruning.score_based import ScoreBasedPruner
@@ -68,7 +67,7 @@ def test_create_pruning_strategy_unexpected_params():
         )
 
 
-def test_create_pruning_strategy_unknown_strategy():
+def test_create_pruning_strategy_unknown_strategy_rejected():
     """Test factory rejects unknown strategy."""
     with pytest.raises(ValueError, match="Unknown pruning strategy 'UnknownStrategy'"):
         create_pruning_strategy('UnknownStrategy', {})
@@ -157,8 +156,6 @@ def test_pruning_integration_with_score_direction_injection(small_real_compounds
 def test_pruning_integration_error_handling(small_real_compounds):
     """Test error handling in pruning integration."""
     from learnm8.pruning import create_pruning_strategy
-
-    predictions = np.random.rand(len(small_real_compounds))
 
     # Test unknown strategy
     with pytest.raises(ValueError, match='Unknown pruning strategy'):

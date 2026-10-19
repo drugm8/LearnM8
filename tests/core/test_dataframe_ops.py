@@ -20,7 +20,7 @@ def test_initialize_master_dataframe(sample_compounds):
     """Test initialization with valid compound pool."""
     all_ids = sample_compounds.get_column('ID').to_list()
     initial_ids = all_ids[:2]
-    initial_values = dict(zip(initial_ids, [0.5, 0.7]))
+    initial_values = dict(zip(initial_ids, [0.5, 0.7], strict=True))
 
     master_df = create_initialized_master_df(
         valid_compounds=sample_compounds,
@@ -126,7 +126,7 @@ def test_update_compound_status_to_labeled(sample_master_df):
         .to_list()
     )
     compound_ids = unlabeled_ids[:2]
-    target_values = dict(zip(compound_ids, [0.8, 0.9]))
+    target_values = dict(zip(compound_ids, [0.8, 0.9], strict=True))
 
     updated_df = update_status(
         df=sample_master_df,
@@ -288,7 +288,9 @@ def test_large_dataset():
     )
 
     initial_ids = [f'COMP_{i:06d}' for i in range(100)]
-    initial_values = dict(zip(initial_ids, [float(i) * 0.01 for i in range(100)]))
+    initial_values = dict(
+        zip(initial_ids, [float(i) * 0.01 for i in range(100)], strict=True)
+    )
 
     # Test initialization
     master_df = create_initialized_master_df(

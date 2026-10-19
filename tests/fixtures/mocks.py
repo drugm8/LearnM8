@@ -6,10 +6,10 @@ without requiring actual ML libraries or expensive computations.
 All fixtures are session-scoped (stateless objects safe to reuse).
 """
 
-from typing import Tuple
-import pytest
-import polars as pl
 import numpy as np
+import polars as pl
+import pytest
+
 from learnm8.core.interfaces import Learner, Oracle
 
 

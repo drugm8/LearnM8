@@ -3,13 +3,12 @@
 Tests the ScoreBasedPruner implementation using real molecular data.
 """
 
-import pytest
 import numpy as np
-import polars as pl
+import pytest
 from polars.testing import assert_frame_equal
 
-from learnm8.pruning.score_based import ScoreBasedPruner
 from learnm8.pruning.base import PruningError
+from learnm8.pruning.score_based import ScoreBasedPruner
 
 pytestmark = pytest.mark.unit
 
@@ -28,12 +27,12 @@ def test_score_based_pruner_initialization():
 
     # Invalid pruning fraction
     with pytest.raises(
-        PruningError, match='pruning_fraction must be between 0.0 and 0.9'
+        PruningError, match=r'pruning_fraction must be between 0\.0 and 0\.9'
     ):
         ScoreBasedPruner(pruning_fraction=1.0)
 
     with pytest.raises(
-        PruningError, match='pruning_fraction must be between 0.0 and 0.9'
+        PruningError, match=r'pruning_fraction must be between 0\.0 and 0\.9'
     ):
         ScoreBasedPruner(pruning_fraction=-0.1)
 
@@ -119,7 +118,7 @@ def test_score_based_pruner_edge_cases(sample_compounds):
 def test_score_based_pruner_doesnt_require_uncertainty():
     """Test that ScoreBasedPruner doesn't require uncertainty."""
     pruner = ScoreBasedPruner()
-    assert pruner.requires_uncertainty() == False
+    assert pruner.requires_uncertainty() is False
 
 
 def test_score_based_pruner_name():

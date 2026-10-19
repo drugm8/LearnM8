@@ -3,10 +3,9 @@
 Tests the base DesignSpacePruner interface and utility functions using real molecular data.
 """
 
-import pytest
 import numpy as np
 import polars as pl
-from typing import Optional
+import pytest
 
 from learnm8.pruning.base import (
     DesignSpacePruner,
@@ -33,7 +32,7 @@ class MockPruner(DesignSpacePruner):
         self,
         compounds: pl.DataFrame,
         predictions: np.ndarray,
-        uncertainties: Optional[np.ndarray] = None,
+        uncertainties: np.ndarray | None = None,
     ) -> pl.DataFrame:
         # Validate inputs
         self.validate_inputs(compounds, predictions, uncertainties)
@@ -113,7 +112,6 @@ def test_uncertainty_validation(sample_compounds):
 
 def test_safe_prune_by_indices(sample_compounds):
     """Test the _safe_prune_by_indices utility method."""
-    predictions = np.random.rand(len(sample_compounds))
     pruner = MockPruner()
 
     # Test boolean indexing
@@ -150,7 +148,7 @@ def test_pruning_fraction_calculation():
 def test_requires_uncertainty_default():
     """Test that requires_uncertainty defaults to False."""
     pruner = MockPruner()
-    assert pruner.requires_uncertainty() == False
+    assert pruner.requires_uncertainty() is False
 
 
 def test_pruner_name():

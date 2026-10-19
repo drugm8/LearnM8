@@ -170,7 +170,7 @@ class TestPreprocessFeatures:
 
         with caplog.at_level(logging.WARNING):
             features = np.array([[1.0, 0.0], [0.0, 1.0]])
-            result, _, _ = _preprocess_features(
+            _result, _, _ = _preprocess_features(
                 features,
                 remove_zero_variance=False,
                 is_training=True,

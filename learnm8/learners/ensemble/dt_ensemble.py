@@ -32,7 +32,7 @@ class DTEnsemble(EnsembleLearner):
         )
 
         learners = []
-        for depth, rs in zip(max_depths, random_states):
+        for depth, rs in zip(max_depths, random_states, strict=True):
             dt = DecisionTreeLearner(max_depth=depth, random_state=rs)
             learners.append(dt)
 

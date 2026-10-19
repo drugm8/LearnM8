@@ -1,13 +1,12 @@
 """Tests for XGBoostLearner implementation."""
 
-import pytest
 import numpy as np
 import polars as pl
-from unittest.mock import Mock
+import pytest
 
 from learnm8.exceptions import LearnerError
-from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 from learnm8.features.extraction import extract_features
+from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
 
 @pytest.mark.integration
@@ -188,7 +187,7 @@ class TestXGBoostLearner:
         features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
 
-        predictions, uncertainty = learner.predict(features)
+        _predictions, uncertainty = learner.predict(features)
 
         assert learner.supports_uncertainty() is False
         assert uncertainty is None

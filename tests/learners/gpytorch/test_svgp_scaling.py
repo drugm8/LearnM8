@@ -7,7 +7,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 gpytorch = pytest.importorskip('gpytorch')
 
-from learnm8.learners.gpytorch.svgp import SVGPLearner
+# Import below needs importorskip first.
+from learnm8.learners.gpytorch.svgp import SVGPLearner  # noqa: E402
 
 
 class TestSVGPScaling:

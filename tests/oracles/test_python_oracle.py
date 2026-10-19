@@ -1,5 +1,6 @@
-import pytest
 import polars as pl
+import pytest
+
 from learnm8.exceptions import OracleError
 from learnm8.oracles.python_oracle import PythonOracle
 
@@ -109,7 +110,9 @@ class TestPythonOracleMeasure:
             {'ID': ['A', 'BB', 'CCC'], 'SMILES': ['CCO', 'CCC', 'CCCC']}
         )
         result = simple_oracle.measure(compounds, ['score'])
-        id_to_score = dict(zip(result['ID'].to_list(), result['score'].to_list()))
+        id_to_score = dict(
+            zip(result['ID'].to_list(), result['score'].to_list(), strict=True)
+        )
         assert id_to_score['A'] == pytest.approx(1.0)
         assert id_to_score['BB'] == pytest.approx(2.0)
         assert id_to_score['CCC'] == pytest.approx(3.0)

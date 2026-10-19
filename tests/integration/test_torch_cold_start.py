@@ -1,6 +1,7 @@
+import hashlib
+
 import numpy as np
 import pytest
-import hashlib
 
 from learnm8.learners.torch.mlp import MLPLearner
 
@@ -18,12 +19,10 @@ class TestTorchColdStartIntegration:
         # Cycle 1
         targets1 = rng.randn(50).astype(np.float32)
         learner.train(features, targets1)
-        state1 = {k: v.clone() for k, v in learner.model.state_dict().items()}
 
         # Cycle 2 - same features, different targets
         targets2 = rng.randn(50).astype(np.float32) * 10
         learner.train(features, targets2)
-        state2 = learner.model.state_dict()
 
         # Model should be recreated (cold-start), so initial weights are the same
         # but after training they differ due to different targets

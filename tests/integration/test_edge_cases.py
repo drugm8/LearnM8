@@ -4,12 +4,14 @@ Edge case tests consolidated from across the test suite.
 Covers boundary conditions and unusual inputs for all components.
 """
 
-import pytest
-import polars as pl
 import numpy as np
-from learnm8.features import extract_features
+import polars as pl
+import pytest
+
 from learnm8.acquisition import GreedyAcquisition, RandomAcquisition
 from learnm8.evaluation.core import evaluate_cycle
+from learnm8.exceptions import FeatureExtractionError
+from learnm8.features import extract_features
 
 
 @pytest.mark.integration
@@ -34,7 +36,7 @@ class TestFeatureExtractionEdgeCases:
         invalid_smiles = ['INVALID', 'C(((']  # Invalid SMILES
 
         # Should raise error for invalid SMILES
-        with pytest.raises(Exception):
+        with pytest.raises(FeatureExtractionError):
             extract_features(invalid_smiles, 'morgan', tmp_path)
 
     def test_empty_dataset(self, tmp_path):

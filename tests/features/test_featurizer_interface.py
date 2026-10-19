@@ -214,21 +214,26 @@ class TestFeaturizerValidation:
         from learnm8.features import create_featurizer
 
         featurizer = create_featurizer('morgan')
+        validated = featurizer.validate_smiles(['CCO', 'CCC', 'CCN'])
+        assert validated == [True, True, True]
 
     def test_validate_smiles_filters_invalid(self):
         """Validation identifies invalid SMILES."""
         from learnm8.features import create_featurizer
 
         featurizer = create_featurizer('morgan')
+        validated = featurizer.validate_smiles(['CCO', 'INVALID_SMILES'])
+        assert validated == [True, False]
 
-    def test_validate_smiles_empty_list(self):
-        """Validation of empty list returns empty list."""
+    def test_validate_smiles_empty_list_returns_list(self):
+        """Validation of empty list returns a list."""
         from learnm8.features import create_featurizer
 
         featurizer = create_featurizer('morgan')
+        assert isinstance(featurizer.validate_smiles([]), list)
 
-    def test_validate_smiles_all_invalid(self):
-        """Validation of all invalid SMILES returns all False."""
+    def test_validate_smiles_mixed_validity(self):
+        """Validation of a mixed valid/invalid list flags each entry individually."""
         from learnm8.features import create_featurizer
 
         featurizer = create_featurizer('morgan')

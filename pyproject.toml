@@ -70,6 +70,7 @@ packages = {find = {}}
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF"]

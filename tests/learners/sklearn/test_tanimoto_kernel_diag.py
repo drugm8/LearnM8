@@ -11,7 +11,6 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 
 from learnm8.learners.sklearn.kernels import TanimotoKernel
 
-
 pytestmark = pytest.mark.unit
 
 

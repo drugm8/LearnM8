@@ -316,44 +316,44 @@ class ChempropLearner(Learner):
             val_loader = None
 
         # Load checkpoint if fine-tuning enabled and checkpoint exists
-        if self.enable_fine_tuning and self.current_checkpoint_path is not None:
-            if self.current_checkpoint_path.exists():
-                try:
-                    logger.debug(
-                        f'Loading checkpoint for fine-tuning: {self.current_checkpoint_path}'
-                    )
-                    self.model = models.MPNN.load_from_checkpoint(
-                        str(self.current_checkpoint_path)
-                    )
-                    logger.debug(
-                        'Checkpoint loaded successfully, fine-tuning from previous state'
-                    )
-                except FileNotFoundError:
+        if (
+            self.enable_fine_tuning
+            and self.current_checkpoint_path is not None
+            and self.current_checkpoint_path.exists()
+        ):
+            try:
+                logger.debug(
+                    f'Loading checkpoint for fine-tuning: {self.current_checkpoint_path}'
+                )
+                self.model = models.MPNN.load_from_checkpoint(
+                    str(self.current_checkpoint_path)
+                )
+                logger.debug(
+                    'Checkpoint loaded successfully, fine-tuning from previous state'
+                )
+            except FileNotFoundError:
+                logger.warning(
+                    f'Checkpoint file not found: {self.current_checkpoint_path}. Training fresh model.'
+                )
+                self.model = None
+            except RuntimeError as e:
+                # Catch architecture mismatch errors
+                if 'state_dict' in str(e).lower() or 'unexpected key' in str(e).lower():
                     logger.warning(
-                        f'Checkpoint file not found: {self.current_checkpoint_path}. Training fresh model.'
+                        f'Checkpoint incompatible with current architecture: {e}. '
+                        f'Training fresh model.'
                     )
                     self.model = None
-                except RuntimeError as e:
-                    # Catch architecture mismatch errors
-                    if (
-                        'state_dict' in str(e).lower()
-                        or 'unexpected key' in str(e).lower()
-                    ):
-                        logger.warning(
-                            f'Checkpoint incompatible with current architecture: {e}. '
-                            f'Training fresh model.'
-                        )
-                        self.model = None
-                    else:
-                        logger.warning(
-                            f'Error loading checkpoint: {e}. Training fresh model.'
-                        )
-                        self.model = None
-                except (ValueError, TypeError, OSError) as e:
+                else:
                     logger.warning(
-                        f'Unexpected error loading checkpoint: {e}. Training fresh model.'
+                        f'Error loading checkpoint: {e}. Training fresh model.'
                     )
                     self.model = None
+            except (ValueError, TypeError, OSError) as e:
+                logger.warning(
+                    f'Unexpected error loading checkpoint: {e}. Training fresh model.'
+                )
+                self.model = None
 
         # Create fresh model if no checkpoint was loaded
         if self.model is None:
@@ -537,7 +537,7 @@ class ChempropLearner(Learner):
     ) -> data.MoleculeDataset:
         """Create Chemprop dataset from SMILES and targets."""
         datapoints = []
-        for smi, y in zip(smiles, targets):
+        for smi, y in zip(smiles, targets, strict=True):
             dp = data.MoleculeDatapoint.from_smi(smi, y=[y])
             datapoints.append(dp)
 
@@ -562,7 +562,7 @@ class ChempropLearner(Learner):
             )
 
         datapoints = []
-        for smi, y, x_d in zip(smiles, targets, descriptors):
+        for smi, y, x_d in zip(smiles, targets, descriptors, strict=True):
             dp = data.MoleculeDatapoint.from_smi(smi, y=[y], x_d=x_d)
             datapoints.append(dp)
 

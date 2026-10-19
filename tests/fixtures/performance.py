@@ -17,12 +17,13 @@ Configuration:
 - adaptation_scenarios: Adaptation config dict
 """
 
-from typing import List, Dict, Any
+from typing import Any
+
 import pytest
 
 
 @pytest.fixture
-def performance_data_sequence() -> List[Dict[str, Any]]:
+def performance_data_sequence() -> list[dict[str, Any]]:
     """Create sequence of performance data for adaptation testing."""
     return [
         {
@@ -59,7 +60,7 @@ def performance_data_sequence() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def declining_performance_sequence() -> List[Dict[str, Any]]:
+def declining_performance_sequence() -> list[dict[str, Any]]:
     """Create declining performance sequence for edge case testing."""
     return [
         {
@@ -90,7 +91,7 @@ def declining_performance_sequence() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def rapid_change_performance() -> List[Dict[str, Any]]:
+def rapid_change_performance() -> list[dict[str, Any]]:
     """Create rapid performance changes for edge case testing."""
     return [
         {'improvement_rate': 0.1, 'selection_diversity': 0.8, 'oracle_efficiency': 0.9},
@@ -118,31 +119,31 @@ def rapid_change_performance() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def stagnant_performance_sequence() -> List[float]:
+def stagnant_performance_sequence() -> list[float]:
     """Create stagnant performance sequence for PerformanceBasedPruner."""
     return [0.5, 0.51, 0.49, 0.5, 0.52, 0.48, 0.5]
 
 
 @pytest.fixture
-def improving_performance_sequence() -> List[float]:
+def improving_performance_sequence() -> list[float]:
     """Create improving performance sequence for PerformanceBasedPruner."""
     return [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85]
 
 
 @pytest.fixture
-def declining_performance_values() -> List[float]:
+def declining_performance_values() -> list[float]:
     """Create declining performance values for PerformanceBasedPruner."""
     return [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 
 
 @pytest.fixture
-def performance_metric_names() -> List[str]:
+def performance_metric_names() -> list[str]:
     """List of valid performance metric names."""
     return ['improvement_rate', 'diversity', 'efficiency']
 
 
 @pytest.fixture
-def adaptation_scenarios() -> Dict[str, Dict[str, Any]]:
+def adaptation_scenarios() -> dict[str, dict[str, Any]]:
     """Different adaptation scenarios for comprehensive testing."""
     return {
         'conservative': {

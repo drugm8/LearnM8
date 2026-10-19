@@ -1,11 +1,10 @@
-import pytest
 import polars as pl
-from pathlib import Path
+import pytest
 
 from learnm8.core.validation import (
-    validate_compound_pool,
     ValidationResult,
     _validate_smiles,
+    validate_compound_pool,
 )
 from learnm8.exceptions import ValidationError
 
@@ -114,7 +113,7 @@ class TestValidateCompoundPool:
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 2
         assert len(result.validation_errors) >= 1
-        assert 'Missing columns' in list(result.validation_errors.values())[0]
+        assert 'Missing columns' in next(iter(result.validation_errors.values()))
 
     def test_missing_smiles_column(self):
         missing_smiles_df = pl.DataFrame(
@@ -126,7 +125,7 @@ class TestValidateCompoundPool:
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 2
         assert len(result.validation_errors) == 2
-        assert 'Missing columns' in list(result.validation_errors.values())[0]
+        assert 'Missing columns' in next(iter(result.validation_errors.values()))
 
     def test_missing_both_columns(self):
         missing_both_df = pl.DataFrame(

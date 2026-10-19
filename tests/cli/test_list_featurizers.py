@@ -1,6 +1,6 @@
 import pytest
 
-from learnm8.features import create_featurizer, FEATURIZER_REGISTRY
+from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 
 pytestmark = pytest.mark.unit
 

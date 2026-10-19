@@ -14,7 +14,6 @@ import pytest
 
 from learnm8.pruning.score_based import ScoreBasedPruner
 
-
 pytestmark = pytest.mark.unit
 
 

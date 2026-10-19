@@ -628,7 +628,7 @@ class TestPredictWithBatching:
                 'learnm8.core.batching.extract_features',
                 side_effect=lambda smiles, *a, **kw: np.ones((len(smiles), 2048)),
             ),
-            pytest.raises(LearnerError, match='uncertain.*None'),
+            pytest.raises(LearnerError, match=r'uncertain.*None'),
         ):
             predict_with_batching(pool, learner, 'morgan', tmp_path)
 
@@ -671,7 +671,7 @@ class TestPredictWithBatching:
                 return_value=np.ones((n, 2048)),
             ),
         ):
-            preds, uncerts, ids, feat_time = predict_with_batching(
+            preds, uncerts, _ids, _feat_time = predict_with_batching(
                 pool, learner, 'morgan', tmp_path, compute_uncertainty=False
             )
 

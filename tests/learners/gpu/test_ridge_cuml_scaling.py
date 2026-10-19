@@ -7,7 +7,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 cuml = pytest.importorskip('cuml')
 
-from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
+# Import below needs importorskip first.
+from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner  # noqa: E402
 
 
 class TestRidgeCumlScaling:
@@ -34,5 +35,5 @@ class TestRidgeCumlScaling:
         learner.train(features, targets)
 
         pred_features = rng.randn(10, 5).astype(np.float32) * 100
-        preds, uncert = learner.predict(pred_features)
+        preds, _uncert = learner.predict(pred_features)
         assert np.all(np.isfinite(preds))

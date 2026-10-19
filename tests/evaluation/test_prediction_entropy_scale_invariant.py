@@ -10,9 +10,7 @@ import polars as pl
 import pytest
 
 from learnm8.evaluation.metrics.diagnostics import compute_prediction_entropy
-
 from tests.conftest import RNG_SEED
-
 
 pytestmark = pytest.mark.unit
 

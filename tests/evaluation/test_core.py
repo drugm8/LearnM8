@@ -6,16 +6,16 @@ Focused tests for core evaluation functions using real molecular data.
 import logging
 from unittest.mock import patch
 
-import pytest
 import numpy as np
 import pandas as pd
 import polars as pl
+import pytest
 from numpy.testing import assert_allclose
 
 from learnm8.evaluation.core import (
     evaluate_cycle,
-    format_progress_output,
     export_metrics_csv,
+    format_progress_output,
 )
 
 

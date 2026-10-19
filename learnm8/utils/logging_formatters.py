@@ -10,8 +10,12 @@ All functions return formatted strings suitable for logging at INFO level.
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 import polars as pl
+
+if TYPE_CHECKING:
+    from learnm8.core.config import CycleConfig
 
 logger = logging.getLogger(__name__)
 

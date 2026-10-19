@@ -4,15 +4,13 @@ Tests for cycle execution functionality in learnm8.py.
 Tests execute_cycle function with real molecular data, focusing on integration and data flow.
 """
 
-import pytest
 import numpy as np
 import polars as pl
+import pytest
 
-from learnm8.exceptions import LearnerError
-from unittest.mock import Mock
-
-from learnm8.core.cycle import execute_cycle
 from learnm8.core.config import CycleConfig
+from learnm8.core.cycle import execute_cycle
+from learnm8.exceptions import LearnerError
 
 
 def create_test_master_df(compounds, initial_labeled_count=3):
@@ -24,7 +22,9 @@ def create_test_master_df(compounds, initial_labeled_count=3):
     initial_compounds = compounds.slice(0, initial_labeled_count)
     initial_ids = initial_compounds['ID'].to_list()
     initial_values = dict(
-        zip(initial_ids, np.random.uniform(0.1, 0.9, initial_labeled_count))
+        zip(
+            initial_ids, np.random.uniform(0.1, 0.9, initial_labeled_count), strict=True
+        )
     )
 
     return initialize_master_dataframe(
@@ -238,7 +238,7 @@ class TestCycleExecution:
 
         for batch_fraction, expected_selected in test_cases:
             config = CycleConfig(strategy='random', batch_fraction=batch_fraction)
-            updated_master_df, metrics = execute_cycle(
+            _updated_master_df, metrics = execute_cycle(
                 compounds_df=master_df.clone(),
                 cycle=0,
                 config=config,
@@ -265,7 +265,7 @@ class TestCycleExecution:
         )
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = dict(zip(initial_ids, [0.9, 0.1]))
+        initial_values = dict(zip(initial_ids, [0.9, 0.1], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -308,7 +308,7 @@ class TestCycleExecution:
         )
 
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
+        initial_values = dict(zip(initial_ids, [0.3, 0.7], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -391,7 +391,7 @@ class TestCycleExecution:
         )
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -403,7 +403,7 @@ class TestCycleExecution:
         learner = mock_learner_with_uncertainty
 
         config = CycleConfig(strategy='random', batch_fraction=0.2)
-        updated_master_df, metrics = execute_cycle(
+        _updated_master_df, metrics = execute_cycle(
             compounds_df=master_df,
             cycle=0,
             config=config,
@@ -445,7 +445,7 @@ class TestCycleExecution:
             }
         )
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9]))
+        initial_values = dict(zip(initial_ids, [0.1, 0.5, 0.9], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -497,7 +497,7 @@ class TestCycleExecution:
         )
 
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8], strict=True))
 
         oracle = mock_oracle
         learner = mock_learner_with_uncertainty
@@ -695,7 +695,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8]))
+        initial_values = dict(zip(initial_ids, [0.2, 0.5, 0.8], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -708,7 +708,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Execute benchmark mode cycle
         config = CycleConfig(strategy='greedy', batch_fraction=0.25)
-        updated_master_df, metrics = execute_cycle(
+        _, _ = execute_cycle(
             compounds_df=master_df,
             cycle=0,
             config=config,
@@ -756,7 +756,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -771,7 +771,7 @@ class TestMasterDataFrameCycleIntegration:
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         config = CycleConfig(strategy='greedy', batch_fraction=0.2)
-        updated_master_df, _ = execute_cycle(
+        _updated_master_df, _ = execute_cycle(
             compounds_df=master_df,
             cycle=0,
             config=config,
@@ -815,7 +815,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 3 labeled
         initial_ids = compounds['ID'].head(3).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9]))
+        initial_values = dict(zip(initial_ids, [0.3, 0.6, 0.9], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -830,7 +830,7 @@ class TestMasterDataFrameCycleIntegration:
         unlabeled_count = (master_df['status'] == 'unlabeled').sum()
 
         config = CycleConfig(strategy='greedy', batch_fraction=0.2)
-        updated_master_df, _ = execute_cycle(
+        _updated_master_df, _ = execute_cycle(
             compounds_df=master_df,
             cycle=0,
             config=config,
@@ -874,7 +874,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 5 labeled
         initial_ids = compounds['ID'].head(5).to_list()
-        initial_values = dict(zip(initial_ids, [0.2, 0.4, 0.6, 0.8, 1.0]))
+        initial_values = dict(zip(initial_ids, [0.2, 0.4, 0.6, 0.8, 1.0], strict=True))
         master_df_run = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',
@@ -896,7 +896,7 @@ class TestMasterDataFrameCycleIntegration:
         benchmark_dir.mkdir()
 
         # Execute run mode cycle
-        updated_df_run, metrics_run = execute_cycle(
+        _, _ = execute_cycle(
             compounds_df=master_df_run,
             cycle=0,
             config=config,
@@ -912,7 +912,7 @@ class TestMasterDataFrameCycleIntegration:
         )
 
         # Execute benchmark mode cycle
-        updated_df_benchmark, metrics_benchmark = execute_cycle(
+        _, _ = execute_cycle(
             compounds_df=master_df_benchmark,
             cycle=0,
             config=config,
@@ -965,7 +965,7 @@ class TestMasterDataFrameCycleIntegration:
 
         # Create master DataFrame with 2 labeled initially
         initial_ids = compounds['ID'].head(2).to_list()
-        initial_values = dict(zip(initial_ids, [0.3, 0.7]))
+        initial_values = dict(zip(initial_ids, [0.3, 0.7], strict=True))
         master_df = initialize_master_dataframe(
             valid_compounds=compounds,
             target_col='Activity',

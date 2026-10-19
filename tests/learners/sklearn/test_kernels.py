@@ -97,7 +97,7 @@ class TestTanimotoKernel:
             kernel(X_binary, Y=Y, eval_gradient=True)
 
     def test_gradient_numerical_check(self, kernel, X_binary):
-        K, grad_analytic = kernel(X_binary, eval_gradient=True)
+        _K, grad_analytic = kernel(X_binary, eval_gradient=True)
         theta = kernel.theta.copy()
         eps = 1e-5
         grad_numerical = np.zeros_like(grad_analytic)

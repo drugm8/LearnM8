@@ -262,5 +262,5 @@ class TestFeaturizerErrorHandling:
 
         monkeypatch.setattr(featurizer.fingerprint, 'transform', _bad_transform)
 
-        with pytest.raises(FeatureExtractionError, match='[Nn]on-finite'):
+        with pytest.raises(FeatureExtractionError, match=r'[Nn]on-finite'):
             featurizer.transform(smiles)

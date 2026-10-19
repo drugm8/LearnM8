@@ -5,17 +5,17 @@ import warnings
 import pytest
 
 from learnm8.exceptions import (
-    LearnM8Error,
+    AcquisitionError,
     ConfigurationError,
-    ValidationError,
+    ConvergenceWarning,
     FeatureExtractionError,
     LearnerError,
-    AcquisitionError,
+    LearnM8Error,
+    LearnM8Warning,
     OracleError,
     PersistenceError,
     PruningError,
-    LearnM8Warning,
-    ConvergenceWarning,
+    ValidationError,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -91,14 +91,14 @@ class TestWarningHierarchy:
     def test_captured_by_warnings_module(self):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always')
-            warnings.warn('test', LearnM8Warning)
+            warnings.warn('test', LearnM8Warning, stacklevel=2)
             assert len(w) == 1
             assert issubclass(w[0].category, LearnM8Warning)
 
     def test_captured_by_learnm8warning_filter(self):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('always', LearnM8Warning)
-            warnings.warn('not converged', ConvergenceWarning)
+            warnings.warn('not converged', ConvergenceWarning, stacklevel=2)
             assert len(w) == 1
             assert issubclass(w[0].category, ConvergenceWarning)
 
@@ -106,17 +106,17 @@ class TestWarningHierarchy:
 class TestImportPaths:
     def test_import_from_top_level(self):
         from learnm8 import (  # noqa: F401
-            LearnM8Error,
+            AcquisitionError,
             ConfigurationError,
-            ValidationError,
+            ConvergenceWarning,
             FeatureExtractionError,
             LearnerError,
-            AcquisitionError,
+            LearnM8Error,
+            LearnM8Warning,
             OracleError,
             PersistenceError,
             PruningError,
-            LearnM8Warning,
-            ConvergenceWarning,
+            ValidationError,
         )
 
     def test_import_from_exceptions_module(self):
@@ -137,8 +137,8 @@ class TestImportPaths:
 
     def test_all_exceptions_same_identity(self):
         from learnm8 import AcquisitionError as A1
-        from learnm8.exceptions import AcquisitionError as A2
         from learnm8.acquisition import AcquisitionError as A3
+        from learnm8.exceptions import AcquisitionError as A2
 
         assert A1 is A2 is A3
 

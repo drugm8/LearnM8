@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 pytestmark = pytest.mark.unit

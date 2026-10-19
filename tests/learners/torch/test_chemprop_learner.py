@@ -279,7 +279,6 @@ class TestChempropLearnerEarlyStopping:
 
         smiles = compounds['SMILES'].to_list()
         targets = compounds['Activity'].to_numpy()
-        n_samples = len(smiles)
 
         learner.train(features=None, targets=targets, smiles=smiles)
 
