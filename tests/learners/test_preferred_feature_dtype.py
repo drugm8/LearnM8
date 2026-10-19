@@ -67,7 +67,7 @@ def test_torch_learners_always_float32():
         for ft in ('binary', 'continuous'):
             learner._feature_type = ft
             assert learner.preferred_feature_dtype() == 'float32', (
-                f"{cls.__name__} with _feature_type={ft!r} should be float32"
+                f'{cls.__name__} with _feature_type={ft!r} should be float32'
             )
 
 

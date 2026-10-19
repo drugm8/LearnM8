@@ -5,7 +5,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
-cuml = pytest.importorskip("cuml")
+cuml = pytest.importorskip('cuml')
 
 from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
 
@@ -17,11 +17,11 @@ class TestRidgeCumlScaling:
         targets = rng.randn(50).astype(np.float32)
 
         learner = RidgeCumlLearner(alpha=0.1, random_state=42)
-        learner._feature_type = "continuous"
+        learner._feature_type = 'continuous'
         learner.train(features, targets)
 
         assert learner.is_trained
-        assert hasattr(learner, "_feature_scaler")
+        assert hasattr(learner, '_feature_scaler')
         assert learner._feature_scaler is not None
 
     def test_predictions_use_scaled_features(self):
@@ -30,7 +30,7 @@ class TestRidgeCumlScaling:
         targets = rng.randn(50).astype(np.float32)
 
         learner = RidgeCumlLearner(alpha=0.1, random_state=42)
-        learner._feature_type = "continuous"
+        learner._feature_type = 'continuous'
         learner.train(features, targets)
 
         pred_features = rng.randn(10, 5).astype(np.float32) * 100

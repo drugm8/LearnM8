@@ -5,7 +5,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.molecular]
 
-chemprop = pytest.importorskip("chemprop")
+chemprop = pytest.importorskip('chemprop')
 
 
 def test_chemprop_create_model_does_not_mutate_global_rng_state():

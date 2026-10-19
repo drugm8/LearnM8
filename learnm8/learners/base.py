@@ -76,9 +76,7 @@ def _preprocess_features(
         # feature matrices come fresh from extract_features (not user-owned),
         # so this avoids a full matrix copy — material at the 100M-compound
         # scale where a float32 binary matrix is hundreds of GB.
-        features = np.nan_to_num(
-            features, nan=0.0, posinf=0.0, neginf=0.0, copy=False
-        )
+        features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
 
     if not remove_zero_variance:
         return features, None, imputer

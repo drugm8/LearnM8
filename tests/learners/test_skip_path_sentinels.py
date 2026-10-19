@@ -55,8 +55,7 @@ def test_gp_skip_does_not_call_predict_with_return_std_true():
         kwargs = call.kwargs
         if 'return_std' in kwargs:
             assert kwargs['return_std'] is False, (
-                'GP skip path must not request return_std=True; saw '
-                f'{kwargs!r}'
+                f'GP skip path must not request return_std=True; saw {kwargs!r}'
             )
 
 
@@ -92,15 +91,12 @@ def test_dt_skip_does_not_call_apply():
     learner = DecisionTreeLearner(max_depth=5, random_state=42)
     learner.train(X, y)
 
-    with patch.object(
-        learner.model, 'apply', wraps=learner.model.apply
-    ) as mock_apply:
+    with patch.object(learner.model, 'apply', wraps=learner.model.apply) as mock_apply:
         _preds, sigmas = learner.predict(X, compute_uncertainty=False)
 
     assert sigmas is None
     assert mock_apply.call_count == 0, (
-        f'DT skip path called model.apply {mock_apply.call_count}x; '
-        f'expected 0.'
+        f'DT skip path called model.apply {mock_apply.call_count}x; expected 0.'
     )
 
 
@@ -112,9 +108,7 @@ def test_lr_skip_does_not_call_compute_leverages_cpu():
     learner = lr_module.LinearRegressionLearner(alpha=0.1, random_state=42)
     learner.train(X, y)
 
-    with patch.object(
-        lr_module, '_compute_leverages_cpu'
-    ) as mock_leverages:
+    with patch.object(lr_module, '_compute_leverages_cpu') as mock_leverages:
         _preds, sigmas = learner.predict(X, compute_uncertainty=False)
 
     assert sigmas is None
@@ -168,9 +162,7 @@ def test_ridge_cuml_skip_does_not_call_compute_leverages():
     learner = RidgeCumlLearner(alpha=0.1, random_state=42)
     learner.train(X, y)
 
-    with patch.object(
-        learner, '_compute_leverages'
-    ) as mock_leverages:
+    with patch.object(learner, '_compute_leverages') as mock_leverages:
         _preds, sigmas = learner.predict(X, compute_uncertainty=False)
 
     assert sigmas is None
@@ -218,9 +210,7 @@ def test_svgp_skip_does_not_access_variance():
     from learnm8.learners.gpytorch.svgp import SVGPLearner
 
     X, y = _tiny_fixture()
-    learner = SVGPLearner(
-        random_state=42, device='cpu', n_epochs=2, n_inducing=8
-    )
+    learner = SVGPLearner(random_state=42, device='cpu', n_epochs=2, n_inducing=8)
     learner.train(X, y)
     _preds, sigmas = learner.predict(X, compute_uncertainty=False)
     assert sigmas is None

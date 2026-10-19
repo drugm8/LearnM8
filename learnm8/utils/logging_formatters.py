@@ -45,16 +45,22 @@ def format_cycle_schedule(cycle_num: int, config: 'CycleConfig', pool_size: int)
     batch_size = int(pool_size * config.batch_fraction)
 
     if config.n_cycles == 1:
-        msg = f"Cycle {cycle_num}: {config.strategy.upper()} acquisition "
-        msg += f"({batch_size} compounds, {config.batch_fraction*100:.1f}% batch size)"
+        msg = f'Cycle {cycle_num}: {config.strategy.upper()} acquisition '
+        msg += (
+            f'({batch_size} compounds, {config.batch_fraction * 100:.1f}% batch size)'
+        )
     else:
         end_cycle = cycle_num + config.n_cycles - 1
-        msg = f"Cycles {cycle_num}-{end_cycle}: {config.strategy.upper()} acquisition "
-        msg += f"({batch_size} compounds per cycle, {config.batch_fraction*100:.1f}% batch size)"
+        msg = f'Cycles {cycle_num}-{end_cycle}: {config.strategy.upper()} acquisition '
+        msg += f'({batch_size} compounds per cycle, {config.batch_fraction * 100:.1f}% batch size)'
 
     if config.pruning_strategy:
-        prune_frac = config.pruning_params.get('pruning_fraction', 0.3) if config.pruning_params else 0.3
-        msg += f", {prune_frac*100:.0f}% pruned per cycle"
+        prune_frac = (
+            config.pruning_params.get('pruning_fraction', 0.3)
+            if config.pruning_params
+            else 0.3
+        )
+        msg += f', {prune_frac * 100:.0f}% pruned per cycle'
 
     return msg
 
@@ -83,21 +89,19 @@ def format_duration(seconds: float) -> str:
         '2 hours 3 minutes'
     """
     if seconds < 60:
-        return f"{seconds:.1f} seconds"
+        return f'{seconds:.1f} seconds'
     elif seconds < 3600:
         minutes = int(seconds // 60)
         secs = int(seconds % 60)
-        return f"{minutes} minutes {secs} seconds"
+        return f'{minutes} minutes {secs} seconds'
     else:
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
-        return f"{hours} hours {minutes} minutes"
+        return f'{hours} hours {minutes} minutes'
 
 
 def format_experiment_summary(
-    compounds_df: pl.DataFrame,
-    duration: float,
-    total_cycles: int
+    compounds_df: pl.DataFrame, duration: float, total_cycles: int
 ) -> list[str]:
     """
     Generate experiment completion summary lines.
@@ -134,22 +138,22 @@ def format_experiment_summary(
     lines = []
 
     lines.append(
-        f"Total compounds labeled: {total_labeled} of {total_compounds} "
-        f"({total_labeled/total_compounds*100:.1f}%)"
+        f'Total compounds labeled: {total_labeled} of {total_compounds} '
+        f'({total_labeled / total_compounds * 100:.1f}%)'
     )
 
     if total_pruned > 0:
         lines.append(
-            f"Total compounds pruned: {total_pruned} "
-            f"({total_pruned/total_compounds*100:.1f}%)"
+            f'Total compounds pruned: {total_pruned} '
+            f'({total_pruned / total_compounds * 100:.1f}%)'
         )
 
     lines.append(
-        f"Final unlabeled pool: {total_unlabeled} compounds "
-        f"({total_unlabeled/total_compounds*100:.1f}%)"
+        f'Final unlabeled pool: {total_unlabeled} compounds '
+        f'({total_unlabeled / total_compounds * 100:.1f}%)'
     )
 
     duration_str = format_duration(duration)
-    lines.append(f"Duration: {duration_str}")
+    lines.append(f'Duration: {duration_str}')
 
     return lines

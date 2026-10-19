@@ -23,12 +23,13 @@ class TestWriterOOMSubchunkOrdering:
         preds_all = np.arange(n, dtype=np.float32)
         # Simulate OOM sub-chunking: write in irregular pieces.
         pieces = [(0, 40), (40, 1), (41, 9), (50, 200)]
-        with CyclePredictionsWriter(tmp_path, 1, with_uncertainty=False,
-                                    row_group_size=64) as w:
+        with CyclePredictionsWriter(
+            tmp_path, 1, with_uncertainty=False, row_group_size=64
+        ) as w:
             for start, ln in pieces:
                 w.write_chunk(
-                    pl.Series('ID', ids_all[start:start + ln]),
-                    preds_all[start:start + ln],
+                    pl.Series('ID', ids_all[start : start + ln]),
+                    preds_all[start : start + ln],
                     None,
                 )
         df = read_cycle_predictions(w.path)

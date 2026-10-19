@@ -64,23 +64,23 @@ def load_compound_file(
     file_path = Path(file_path)
 
     if not file_path.exists():
-        raise FileNotFoundError(f"Compound pool file not found: {file_path}")
+        raise FileNotFoundError(f'Compound pool file not found: {file_path}')
 
     format_type = _detect_file_format(file_path)
 
     if format_type == 'sdf':
-        logger.info(f"Loading SDF file with datamol (n_jobs={n_jobs})")
+        logger.info(f'Loading SDF file with datamol (n_jobs={n_jobs})')
         return _load_sdf_with_datamol(file_path, id_column, n_jobs, progress)
     elif format_type == 'csv':
-        logger.info("Loading CSV file with Polars")
+        logger.info('Loading CSV file with Polars')
         return _load_csv_with_polars(
             file_path, smiles_column, id_column, name_column, id_as_text
         )
     elif format_type == 'smi':
-        logger.info("Loading SMILES file with RDKit")
+        logger.info('Loading SMILES file with RDKit')
         return _load_smi_with_rdkit(file_path)
     else:
-        raise ValueError(f"Unsupported format: {format_type}")
+        raise ValueError(f'Unsupported format: {format_type}')
 
 
 def _detect_file_format(file_path: Path) -> str:
@@ -109,11 +109,11 @@ def _detect_file_format(file_path: Path) -> str:
         return 'smi'
     else:
         raise ValueError(
-            f"Unsupported file format: {suffix}. "
-            f"Supported formats: "
-            f"CSV ({', '.join(SUPPORTED_CSV_FORMATS)}), "
-            f"SDF ({', '.join(SUPPORTED_SDF_FORMATS)}), "
-            f"SMILES ({', '.join(SUPPORTED_SMI_FORMATS)})"
+            f'Unsupported file format: {suffix}. '
+            f'Supported formats: '
+            f'CSV ({", ".join(SUPPORTED_CSV_FORMATS)}), '
+            f'SDF ({", ".join(SUPPORTED_SDF_FORMATS)}), '
+            f'SMILES ({", ".join(SUPPORTED_SMI_FORMATS)})'
         )
 
 
@@ -161,25 +161,24 @@ def _load_csv_with_polars(
             df = df.rename({name_column: 'ID'})
         else:
             df = df.with_columns(
-                pl.lit('compound_').add(pl.int_range(pl.len()).cast(pl.Utf8)).alias('ID')
+                pl.lit('compound_')
+                .add(pl.int_range(pl.len()).cast(pl.Utf8))
+                .alias('ID')
             )
 
     if 'SMILES' not in df.columns:
         raise ValueError(
-            f"SMILES column not found in CSV file. "
-            f"Available columns: {df.columns}. "
-            f"Use smiles_column parameter to specify the correct column name."
+            f'SMILES column not found in CSV file. '
+            f'Available columns: {df.columns}. '
+            f'Use smiles_column parameter to specify the correct column name.'
         )
 
-    logger.info(f"Loaded {len(df)} compounds from CSV file")
+    logger.info(f'Loaded {len(df)} compounds from CSV file')
     return df
 
 
 def _load_sdf_with_datamol(
-    file_path: Path,
-    id_column: str | None,
-    n_jobs: int,
-    progress: bool
+    file_path: Path, id_column: str | None, n_jobs: int, progress: bool
 ) -> pl.DataFrame:
     """
     Load SDF files using datamol with parallel processing.
@@ -229,7 +228,7 @@ def _load_sdf_with_datamol(
         other_cols = [c for c in df.columns if c not in ['ID', 'SMILES']]
         df = df.select(['ID', 'SMILES', *other_cols])
 
-    logger.info(f"Loaded {len(df)} compounds from SDF file")
+    logger.info(f'Loaded {len(df)} compounds from SDF file')
     return df
 
 
@@ -249,16 +248,12 @@ def _load_smi_with_rdkit(file_path: Path) -> pl.DataFrame:
 
     try:
         suppl = Chem.SmilesMolSupplier(
-            str(file_path),
-            delimiter='\t',
-            smilesColumn=0,
-            nameColumn=1,
-            titleLine=True
+            str(file_path), delimiter='\t', smilesColumn=0, nameColumn=1, titleLine=True
         )
 
         for idx, mol in enumerate(suppl):
             if mol is None:
-                logger.debug(f"Skipping invalid molecule at index {idx}")
+                logger.debug(f'Skipping invalid molecule at index {idx}')
                 continue
 
             smiles = Chem.MolToSmiles(mol, canonical=True)
@@ -275,15 +270,13 @@ def _load_smi_with_rdkit(file_path: Path) -> pl.DataFrame:
     except (RuntimeError, Exception) as e:
         if not compounds:
             raise ValueError(
-                f"Failed to load SMILES file: {e}. "
-                f"Expected format: SMILES<tab>Name with optional header line."
+                f'Failed to load SMILES file: {e}. '
+                f'Expected format: SMILES<tab>Name with optional header line.'
             ) from e
 
     if not compounds:
-        raise ValueError(
-            f"No valid molecules found in SMILES file: {file_path}"
-        )
+        raise ValueError(f'No valid molecules found in SMILES file: {file_path}')
 
     df = pl.DataFrame(compounds)
-    logger.info(f"Loaded {len(df)} compounds from SMILES file")
+    logger.info(f'Loaded {len(df)} compounds from SMILES file')
     return df

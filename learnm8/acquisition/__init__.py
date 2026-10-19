@@ -39,7 +39,6 @@ ACQUISITION_REGISTRY = {
     'greedy': GreedyAcquisition,
     'random': RandomAcquisition,
     'topk': TopKAcquisition,
-
     # Uncertainty-based methods
     'ucb': UCBAcquisition,
     'ei': ExpectedImprovementAcquisition,
@@ -67,8 +66,8 @@ def get_acquisition_function(name: str):
         uncertainty = ['ucb', 'ei', 'pi', 'thompson', 'entropy']
         raise KeyError(
             f"Unknown acquisition strategy '{name}'. Available: {available}. "
-            f"Basic strategies (no uncertainty required): {', '.join(basic)}. "
-            f"Uncertainty-based strategies: {', '.join(uncertainty)}."
+            f'Basic strategies (no uncertainty required): {", ".join(basic)}. '
+            f'Uncertainty-based strategies: {", ".join(uncertainty)}.'
         )
 
     return ACQUISITION_REGISTRY[name]

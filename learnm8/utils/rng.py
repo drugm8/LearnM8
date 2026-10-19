@@ -82,9 +82,7 @@ def _key_base(seed_components: tuple[int, ...]) -> np.uint64:
     return np.uint64(acc)
 
 
-def chunk_uniform(
-    seed_components: tuple[int, ...], start: int, n: int
-) -> np.ndarray:
+def chunk_uniform(seed_components: tuple[int, ...], start: int, n: int) -> np.ndarray:
     """Uniform ``[0, 1)`` draws for stream positions ``[start, start + n)``.
 
     Args:
@@ -112,9 +110,7 @@ def chunk_uniform(
     return result
 
 
-def chunk_normal(
-    seed_components: tuple[int, ...], start: int, n: int
-) -> np.ndarray:
+def chunk_normal(seed_components: tuple[int, ...], start: int, n: int) -> np.ndarray:
     """Standard-normal draws for stream positions ``[start, start + n)``.
 
     Inverse-CDF transform of :func:`chunk_uniform` — exactly one uniform per

@@ -252,7 +252,10 @@ class CyclePredictionsWriter:
 
         self._pa = pa
         self._pq = pq
-        fields = [pa.field('ID', pa.large_string()), pa.field('prediction', pa.float32())]
+        fields = [
+            pa.field('ID', pa.large_string()),
+            pa.field('prediction', pa.float32()),
+        ]
         if self.with_uncertainty:
             fields.append(pa.field('uncertainty', pa.float32()))
         self._schema = pa.schema(fields)
@@ -323,13 +326,23 @@ class CyclePredictionsWriter:
     def _concat_buffer(self):
         pa = self._pa
         ids = pa.concat_arrays(
-            [a if isinstance(a, pa.Array) else pa.array(a, type=pa.large_string())
-             for a in self._buf_ids]
+            [
+                a if isinstance(a, pa.Array) else pa.array(a, type=pa.large_string())
+                for a in self._buf_ids
+            ]
         )
-        pred = np.concatenate(self._buf_pred) if len(self._buf_pred) > 1 else self._buf_pred[0]
+        pred = (
+            np.concatenate(self._buf_pred)
+            if len(self._buf_pred) > 1
+            else self._buf_pred[0]
+        )
         unc = None
         if self.with_uncertainty:
-            unc = np.concatenate(self._buf_unc) if len(self._buf_unc) > 1 else self._buf_unc[0]
+            unc = (
+                np.concatenate(self._buf_unc)
+                if len(self._buf_unc) > 1
+                else self._buf_unc[0]
+            )
         return ids, pred, unc
 
     def _flush_one_group(self, take: int) -> None:
@@ -859,17 +872,16 @@ def save_results(
     if validation_result.invalid_compounds.height > 0:
         try:
             invalid_df = validation_result.invalid_compounds.clone()
-            lookup_df = pl.DataFrame({
-                'ID': list(validation_result.validation_errors.keys()),
-                'error_new': list(validation_result.validation_errors.values())
-            })
+            lookup_df = pl.DataFrame(
+                {
+                    'ID': list(validation_result.validation_errors.keys()),
+                    'error_new': list(validation_result.validation_errors.values()),
+                }
+            )
             invalid_df = invalid_df.join(lookup_df, on='ID', how='left')
             if 'error' in invalid_df.columns:
                 invalid_df = invalid_df.with_columns(
-                    pl.coalesce(
-                        pl.col('error_new'),
-                        pl.col('error')
-                    ).alias('error')
+                    pl.coalesce(pl.col('error_new'), pl.col('error')).alias('error')
                 ).drop('error_new')
             else:
                 invalid_df = invalid_df.rename({'error_new': 'error'})

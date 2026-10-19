@@ -34,7 +34,9 @@ class TestRFEnsemble:
         with pytest.warns(DeprecationWarning, match='RFEnsemble is deprecated'):
             RFEnsemble(n_estimators=10)
 
-    def test_initialization_sets_default_estimator_count_random_states_and_untrained_state(self, rf_ensemble):
+    def test_initialization_sets_default_estimator_count_random_states_and_untrained_state(
+        self, rf_ensemble
+    ):
         """Test RFEnsemble initialization with default parameters."""
         assert len(rf_ensemble.learners) == 3
         assert rf_ensemble.n_estimators == 10

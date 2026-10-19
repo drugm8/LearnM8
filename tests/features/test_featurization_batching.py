@@ -27,27 +27,89 @@ from learnm8.features.extraction import extract_features
 # Validated SMILES (all parse with RDKit without errors)
 # ---------------------------------------------------------------------------
 _SMILES_VALID = [
-    'CCO', 'CCC', 'CCN', 'c1ccccc1', 'c1ccccc1O', 'c1ccccc1N',
-    'CC(=O)O', 'CC(=O)N', 'CC(C)O', 'CC(C)N',
-    'c1ccncc1', 'c1ccoc1', 'c1ccsc1', 'c1cc[nH]c1', 'C1CCCCC1',
-    'C1CCNCC1', 'C1CCOCC1', 'C1CCSC1', 'C1CCCC1', 'C1CCOCCO1',
-    'Cc1ccccc1', 'Cc1ccccn1', 'Cc1cc[nH]c1', 'Cc1ccsc1',
-    'OC(=O)c1ccccc1', 'NC(=O)c1ccccc1', 'CC(=O)c1ccccc1', 'Cc1ccccc1C',
-    'Cc1ccc(N)cc1', 'Cc1ccc(O)cc1', 'Cc1ccc(C)cc1', 'Cc1ccc(F)cc1',
-    'Cc1ccc(Cl)cc1', 'Cc1ccc(Br)cc1',
-    'c1ccc(O)cc1', 'c1ccc(N)cc1', 'c1ccc(F)cc1', 'c1ccc(Cl)cc1',
-    'c1ccc(Br)cc1', 'c1ccc(C)cc1', 'c1ccc(CC)cc1',
-    'c1ccc(OC)cc1', 'c1ccc(NC)cc1',
-    'COc1ccccc1', 'CNc1ccccc1', 'CCc1ccccc1',
-    'OCC', 'NCC', 'SCC', 'FCC', 'ClCC', 'BrCC',
-    'OCCO', 'NCCO', 'SCCO', 'OC(=O)CO', 'OC(=O)CN',
-    'CC(O)C', 'CC(N)C', 'CC(F)C', 'CC(Cl)C', 'CC(Br)C',
-    'OC1CCCCC1', 'NC1CCCCC1', 'FC1CCCCC1', 'ClC1CCCCC1',
-    'CC(=O)OCC', 'CC(=O)NCC', 'COC(=O)C', 'CNC(=O)C',
-    'c1ccc2ccccc2c1', 'c1ccnc2ccccc12',
-    'OC(=O)CC', 'NC(=O)CC', 'OC(=O)CCC',
-    'CCCC', 'CCCN', 'CCCO', 'CC(CC)O', 'CC(CC)N',
-    'c1ccccc1CC', 'c1ccccc1OC', 'c1ccccc1NC',
+    'CCO',
+    'CCC',
+    'CCN',
+    'c1ccccc1',
+    'c1ccccc1O',
+    'c1ccccc1N',
+    'CC(=O)O',
+    'CC(=O)N',
+    'CC(C)O',
+    'CC(C)N',
+    'c1ccncc1',
+    'c1ccoc1',
+    'c1ccsc1',
+    'c1cc[nH]c1',
+    'C1CCCCC1',
+    'C1CCNCC1',
+    'C1CCOCC1',
+    'C1CCSC1',
+    'C1CCCC1',
+    'C1CCOCCO1',
+    'Cc1ccccc1',
+    'Cc1ccccn1',
+    'Cc1cc[nH]c1',
+    'Cc1ccsc1',
+    'OC(=O)c1ccccc1',
+    'NC(=O)c1ccccc1',
+    'CC(=O)c1ccccc1',
+    'Cc1ccccc1C',
+    'Cc1ccc(N)cc1',
+    'Cc1ccc(O)cc1',
+    'Cc1ccc(C)cc1',
+    'Cc1ccc(F)cc1',
+    'Cc1ccc(Cl)cc1',
+    'Cc1ccc(Br)cc1',
+    'c1ccc(O)cc1',
+    'c1ccc(N)cc1',
+    'c1ccc(F)cc1',
+    'c1ccc(Cl)cc1',
+    'c1ccc(Br)cc1',
+    'c1ccc(C)cc1',
+    'c1ccc(CC)cc1',
+    'c1ccc(OC)cc1',
+    'c1ccc(NC)cc1',
+    'COc1ccccc1',
+    'CNc1ccccc1',
+    'CCc1ccccc1',
+    'OCC',
+    'NCC',
+    'SCC',
+    'FCC',
+    'ClCC',
+    'BrCC',
+    'OCCO',
+    'NCCO',
+    'SCCO',
+    'OC(=O)CO',
+    'OC(=O)CN',
+    'CC(O)C',
+    'CC(N)C',
+    'CC(F)C',
+    'CC(Cl)C',
+    'CC(Br)C',
+    'OC1CCCCC1',
+    'NC1CCCCC1',
+    'FC1CCCCC1',
+    'ClC1CCCCC1',
+    'CC(=O)OCC',
+    'CC(=O)NCC',
+    'COC(=O)C',
+    'CNC(=O)C',
+    'c1ccc2ccccc2c1',
+    'c1ccnc2ccccc12',
+    'OC(=O)CC',
+    'NC(=O)CC',
+    'OC(=O)CCC',
+    'CCCC',
+    'CCCN',
+    'CCCO',
+    'CC(CC)O',
+    'CC(CC)N',
+    'c1ccccc1CC',
+    'c1ccccc1OC',
+    'c1ccccc1NC',
 ]
 
 
@@ -67,7 +129,10 @@ class TestFeaturizationChunkSize:
         assert featurization_chunk_size(500) == FEATURIZATION_CHUNK_FLOOR
 
     def test_at_floor_returns_floor(self):
-        assert featurization_chunk_size(FEATURIZATION_CHUNK_FLOOR) == FEATURIZATION_CHUNK_FLOOR
+        assert (
+            featurization_chunk_size(FEATURIZATION_CHUNK_FLOOR)
+            == FEATURIZATION_CHUNK_FLOOR
+        )
 
     def test_between_floor_and_cap_is_identity(self):
         mid = 20_000
@@ -75,16 +140,24 @@ class TestFeaturizationChunkSize:
         assert featurization_chunk_size(mid) == mid
 
     def test_at_cap_returns_cap(self):
-        assert featurization_chunk_size(FEATURIZATION_CHUNK_CAP) == FEATURIZATION_CHUNK_CAP
+        assert (
+            featurization_chunk_size(FEATURIZATION_CHUNK_CAP) == FEATURIZATION_CHUNK_CAP
+        )
 
     def test_above_cap_returns_cap(self):
         assert featurization_chunk_size(99_999_999) == FEATURIZATION_CHUNK_CAP
 
     def test_one_below_floor_returns_floor(self):
-        assert featurization_chunk_size(FEATURIZATION_CHUNK_FLOOR - 1) == FEATURIZATION_CHUNK_FLOOR
+        assert (
+            featurization_chunk_size(FEATURIZATION_CHUNK_FLOOR - 1)
+            == FEATURIZATION_CHUNK_FLOOR
+        )
 
     def test_one_above_cap_returns_cap(self):
-        assert featurization_chunk_size(FEATURIZATION_CHUNK_CAP + 1) == FEATURIZATION_CHUNK_CAP
+        assert (
+            featurization_chunk_size(FEATURIZATION_CHUNK_CAP + 1)
+            == FEATURIZATION_CHUNK_CAP
+        )
 
     def test_floor_constant_value(self):
         assert FEATURIZATION_CHUNK_FLOOR == 1024
@@ -117,9 +190,7 @@ class TestFeaturizationChunkSize:
 
     def test_njobs_aware_respects_floor(self):
         # ceil(50k / 64) = 782 < FLOOR → clamped up to FLOOR.
-        assert (
-            featurization_chunk_size(50_000, n_jobs=64) == FEATURIZATION_CHUNK_FLOOR
-        )
+        assert featurization_chunk_size(50_000, n_jobs=64) == FEATURIZATION_CHUNK_FLOOR
 
     def test_nonpositive_njobs_treated_as_one(self):
         # Defensive: an unresolved 0 / -1 collapses to single-task sizing.
@@ -150,14 +221,14 @@ class TestChunkIndependence:
 
         ref = results[0]
         ref_bytes = ref.tobytes()
-        for i, (bs, arr) in enumerate(zip(batch_sizes[1:], results[1:], strict=True), start=1):
+        for i, (bs, arr) in enumerate(
+            zip(batch_sizes[1:], results[1:], strict=True), start=1
+        ):
             assert np.array_equal(arr, ref), (
                 f'batch_size={batch_sizes[i]} produced different output '
                 f'from batch_size={batch_sizes[0]}'
             )
-            assert arr.tobytes() == ref_bytes, (
-                f'batch_size={bs} tobytes mismatch'
-            )
+            assert arr.tobytes() == ref_bytes, f'batch_size={bs} tobytes mismatch'
 
     def test_float_descriptor_allclose_across_batch_sizes(self):
         """rdkit_2d_descriptors output is np.allclose for batch_size in {None, 1, 7, 16, 64}."""
@@ -171,7 +242,9 @@ class TestChunkIndependence:
             results.append(out)
 
         ref = results[0]
-        for i, (_bs, arr) in enumerate(zip(batch_sizes[1:], results[1:], strict=True), start=1):
+        for i, (_bs, arr) in enumerate(
+            zip(batch_sizes[1:], results[1:], strict=True), start=1
+        ):
             assert np.allclose(arr, ref, rtol=1e-5, atol=1e-8, equal_nan=True), (
                 f'rdkit_2d_descriptors batch_size={batch_sizes[i]} not allclose '
                 f'to batch_size={batch_sizes[0]}'
@@ -212,7 +285,9 @@ class TestExtractFeaturesBoundaryCases:
         assert result.dtype == np.float32
 
     def test_non_empty_returns_2d_array(self, tmp_path):
-        result = extract_features(_SMILES_VALID[:5], 'morgan', cache_dir=tmp_path, n_jobs=1)
+        result = extract_features(
+            _SMILES_VALID[:5], 'morgan', cache_dir=tmp_path, n_jobs=1
+        )
         assert result.ndim == 2
 
 

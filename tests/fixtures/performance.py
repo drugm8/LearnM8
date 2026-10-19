@@ -29,32 +29,32 @@ def performance_data_sequence() -> List[Dict[str, Any]]:
             'improvement_rate': 0.05,
             'selection_diversity': 0.7,
             'oracle_efficiency': 0.8,
-            'cycle': 1
+            'cycle': 1,
         },
         {
             'improvement_rate': 0.08,
             'selection_diversity': 0.75,
             'oracle_efficiency': 0.85,
-            'cycle': 2
+            'cycle': 2,
         },
         {
             'improvement_rate': 0.03,
             'selection_diversity': 0.6,
             'oracle_efficiency': 0.7,
-            'cycle': 3
+            'cycle': 3,
         },
         {
             'improvement_rate': -0.02,
             'selection_diversity': 0.5,
             'oracle_efficiency': 0.6,
-            'cycle': 4
+            'cycle': 4,
         },
         {
             'improvement_rate': 0.12,
             'selection_diversity': 0.9,
             'oracle_efficiency': 0.95,
-            'cycle': 5
-        }
+            'cycle': 5,
+        },
     ]
 
 
@@ -66,26 +66,26 @@ def declining_performance_sequence() -> List[Dict[str, Any]]:
             'improvement_rate': 0.1,
             'selection_diversity': 0.8,
             'oracle_efficiency': 0.9,
-            'cycle': 1
+            'cycle': 1,
         },
         {
             'improvement_rate': 0.05,
             'selection_diversity': 0.7,
             'oracle_efficiency': 0.8,
-            'cycle': 2
+            'cycle': 2,
         },
         {
             'improvement_rate': -0.05,
             'selection_diversity': 0.5,
             'oracle_efficiency': 0.6,
-            'cycle': 3
+            'cycle': 3,
         },
         {
             'improvement_rate': -0.15,
             'selection_diversity': 0.3,
             'oracle_efficiency': 0.4,
-            'cycle': 4
-        }
+            'cycle': 4,
+        },
     ]
 
 
@@ -94,10 +94,26 @@ def rapid_change_performance() -> List[Dict[str, Any]]:
     """Create rapid performance changes for edge case testing."""
     return [
         {'improvement_rate': 0.1, 'selection_diversity': 0.8, 'oracle_efficiency': 0.9},
-        {'improvement_rate': -0.2, 'selection_diversity': 0.2, 'oracle_efficiency': 0.3},
-        {'improvement_rate': 0.3, 'selection_diversity': 0.9, 'oracle_efficiency': 0.95},
-        {'improvement_rate': -0.1, 'selection_diversity': 0.4, 'oracle_efficiency': 0.5},
-        {'improvement_rate': 0.25, 'selection_diversity': 0.85, 'oracle_efficiency': 0.9}
+        {
+            'improvement_rate': -0.2,
+            'selection_diversity': 0.2,
+            'oracle_efficiency': 0.3,
+        },
+        {
+            'improvement_rate': 0.3,
+            'selection_diversity': 0.9,
+            'oracle_efficiency': 0.95,
+        },
+        {
+            'improvement_rate': -0.1,
+            'selection_diversity': 0.4,
+            'oracle_efficiency': 0.5,
+        },
+        {
+            'improvement_rate': 0.25,
+            'selection_diversity': 0.85,
+            'oracle_efficiency': 0.9,
+        },
     ]
 
 
@@ -132,16 +148,16 @@ def adaptation_scenarios() -> Dict[str, Dict[str, Any]]:
         'conservative': {
             'adaptation_rate': 0.05,
             'min_retention_fraction': 0.5,
-            'max_retention_fraction': 0.9
+            'max_retention_fraction': 0.9,
         },
         'aggressive': {
             'adaptation_rate': 0.2,
             'min_retention_fraction': 0.1,
-            'max_retention_fraction': 0.8
+            'max_retention_fraction': 0.8,
         },
         'balanced': {
             'adaptation_rate': 0.1,
             'min_retention_fraction': 0.3,
-            'max_retention_fraction': 0.8
-        }
+            'max_retention_fraction': 0.8,
+        },
     }

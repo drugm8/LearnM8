@@ -27,6 +27,7 @@ class MixedEnsemble(EnsembleLearner):
         if device == 'cuda':
             from learnm8.learners.gpu.rf_fil import RfFilLearner
             from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
+
             learners = [
                 RfFilLearner(n_estimators=100, random_state=rs_rf),
                 RidgeCumlLearner(alpha=1.0, random_state=rs_lr),
@@ -34,18 +35,9 @@ class MixedEnsemble(EnsembleLearner):
             ]
         else:
             learners = [
-                RandomForestLearner(
-                    n_estimators=100,
-                    random_state=rs_rf
-                ),
-                LinearRegressionLearner(
-                    alpha=1.0,
-                    random_state=rs_lr
-                ),
-                XGBoostLearner(
-                    learning_rate=0.1,
-                    random_state=rs_xgb
-                )
+                RandomForestLearner(n_estimators=100, random_state=rs_rf),
+                LinearRegressionLearner(alpha=1.0, random_state=rs_lr),
+                XGBoostLearner(learning_rate=0.1, random_state=rs_xgb),
             ]
 
         # Set default ensemble parameters
@@ -59,4 +51,4 @@ class MixedEnsemble(EnsembleLearner):
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        return "MixedEnsemble(RF+LR+XGB)"
+        return 'MixedEnsemble(RF+LR+XGB)'

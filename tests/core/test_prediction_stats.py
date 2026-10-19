@@ -57,8 +57,9 @@ class TestFromLazyParity:
         rng = np.random.default_rng(1)
         preds = rng.normal(size=n).astype(np.float32)
         unc = rng.uniform(0, 1, size=n).astype(np.float32)
-        df = pl.DataFrame({'ID': [f'c{i}' for i in range(n)], 'prediction': preds,
-                           'uncertainty': unc})
+        df = pl.DataFrame(
+            {'ID': [f'c{i}' for i in range(n)], 'prediction': preds, 'uncertainty': unc}
+        )
         pq = tmp_path / 'p.parquet'
         df.write_parquet(pq)
 
@@ -72,7 +73,9 @@ class TestFromLazyParity:
         assert from_lazy.count == n
         np.testing.assert_allclose(from_lazy.pred_mean, from_arr.pred_mean, rtol=1e-6)
         np.testing.assert_allclose(from_lazy.pred_std, from_arr.pred_std, rtol=1e-6)
-        np.testing.assert_allclose(from_lazy.pred_median, from_arr.pred_median, rtol=1e-6)
+        np.testing.assert_allclose(
+            from_lazy.pred_median, from_arr.pred_median, rtol=1e-6
+        )
         np.testing.assert_allclose(from_lazy.pred_min, from_arr.pred_min, rtol=1e-6)
         np.testing.assert_allclose(from_lazy.pred_max, from_arr.pred_max, rtol=1e-6)
         np.testing.assert_allclose(from_lazy.unc_mean, from_arr.unc_mean, rtol=1e-6)

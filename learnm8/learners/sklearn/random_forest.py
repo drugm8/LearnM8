@@ -180,7 +180,13 @@ class RandomForestLearner(SklearnLearner):
 
         except LearnerError:
             raise
-        except (ValueError, RuntimeError, TypeError, AttributeError, np.linalg.LinAlgError) as e:
+        except (
+            ValueError,
+            RuntimeError,
+            TypeError,
+            AttributeError,
+            np.linalg.LinAlgError,
+        ) as e:
             logger.error(f'Failed to predict with {self.get_name()}: {e}')
             raise LearnerError(
                 f'Prediction failed for {self.get_name()} on {len(features)} samples: {e}. '

@@ -72,7 +72,13 @@ def test_old_style_subclass_raises_typeerror_on_first_predict(
     err = exc_info.value
     while err is not None:
         error_chain.append(str(err))
-        err = err.__cause__ if err.__cause__ is not None else err.__context__ if err is not exc_info.value else None
+        err = (
+            err.__cause__
+            if err.__cause__ is not None
+            else err.__context__
+            if err is not exc_info.value
+            else None
+        )
         if err in error_chain or err is None:
             break
 

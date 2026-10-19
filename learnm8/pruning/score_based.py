@@ -41,9 +41,9 @@ class ScoreBasedPruner(DesignSpacePruner):
         """
         if not 0.0 <= pruning_fraction <= 0.9:
             raise PruningError(
-                f"pruning_fraction must be between 0.0 and 0.9, got {pruning_fraction}. "
-                f"Values above 0.9 risk removing too many candidates. "
-                f"Use 0.0 to disable pruning or set pruning_strategy=None."
+                f'pruning_fraction must be between 0.0 and 0.9, got {pruning_fraction}. '
+                f'Values above 0.9 risk removing too many candidates. '
+                f'Use 0.0 to disable pruning or set pruning_strategy=None.'
             )
 
         if score_direction not in ['higher', 'lower']:
@@ -56,10 +56,12 @@ class ScoreBasedPruner(DesignSpacePruner):
         self.score_direction = score_direction
         self._last_stats: dict[str, Any] = {}
 
-    def prune(self,
-              compounds: pl.DataFrame,
-              predictions: np.ndarray,
-              uncertainties: np.ndarray | None = None) -> pl.DataFrame:
+    def prune(
+        self,
+        compounds: pl.DataFrame,
+        predictions: np.ndarray,
+        uncertainties: np.ndarray | None = None,
+    ) -> pl.DataFrame:
         """Prune compounds based on predicted scores.
 
         Args:
@@ -85,7 +87,7 @@ class ScoreBasedPruner(DesignSpacePruner):
                 'compounds_pruned': 0,
                 'pruning_fraction_actual': 0.0,
                 'score_direction': self.score_direction,
-                'pruning_fraction_requested': self.pruning_fraction
+                'pruning_fraction_requested': self.pruning_fraction,
             }
             return compounds.clone()
 
@@ -127,7 +129,9 @@ class ScoreBasedPruner(DesignSpacePruner):
         pruned_compounds = self._safe_prune_by_indices(compounds, keep_indices)
 
         # Calculate actual pruning statistics
-        actual_pruning_fraction = self._calculate_pruning_fraction(n_compounds, len(pruned_compounds))
+        actual_pruning_fraction = self._calculate_pruning_fraction(
+            n_compounds, len(pruned_compounds)
+        )
 
         # Store statistics
         self._last_stats = {
@@ -137,17 +141,22 @@ class ScoreBasedPruner(DesignSpacePruner):
             'pruning_fraction_actual': actual_pruning_fraction,
             'pruning_fraction_requested': self.pruning_fraction,
             'score_direction': self.score_direction,
-            'score_threshold': float(predictions[keep_indices].min() if self.score_direction == 'higher'
-                                   else predictions[keep_indices].max()),
+            'score_threshold': float(
+                predictions[keep_indices].min()
+                if self.score_direction == 'higher'
+                else predictions[keep_indices].max()
+            ),
             'score_range_kept': {
                 'min': float(predictions[keep_indices].min()),
                 'max': float(predictions[keep_indices].max()),
-                'mean': float(predictions[keep_indices].mean())
-            }
+                'mean': float(predictions[keep_indices].mean()),
+            },
         }
 
-        logger.info(f"ScoreBasedPruner: removed {self._last_stats['compounds_pruned']} compounds "
-                   f"({actual_pruning_fraction:.1%}) with worst scores for '{self.score_direction}' optimization")
+        logger.info(
+            f'ScoreBasedPruner: removed {self._last_stats["compounds_pruned"]} compounds '
+            f"({actual_pruning_fraction:.1%}) with worst scores for '{self.score_direction}' optimization"
+        )
 
         return pruned_compounds
 
@@ -157,7 +166,7 @@ class ScoreBasedPruner(DesignSpacePruner):
         Returns:
             Strategy name string
         """
-        return f"ScoreBasedPruner(fraction={self.pruning_fraction}, direction={self.score_direction})"
+        return f'ScoreBasedPruner(fraction={self.pruning_fraction}, direction={self.score_direction})'
 
     def requires_uncertainty(self) -> bool:
         """Return False as this strategy only needs predictions.

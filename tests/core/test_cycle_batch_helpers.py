@@ -59,10 +59,7 @@ class TestPredictChunk:
         mock_learner = Mock()
         mock_learner.requires_smiles.return_value = False
         mock_learner.get_name.return_value = 'MockLearner'
-        mock_learner.predict.return_value = (
-            np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
-            None
-        )
+        mock_learner.predict.return_value = (np.array([1.0, 2.0, 3.0, 4.0, 5.0]), None)
 
         with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)
@@ -77,7 +74,9 @@ class TestPredictChunk:
             mock_extract.assert_called_once()
             mock_learner.predict.assert_called_once()
 
-    def test_feature_based_learner_requires_featurizer(self, tmp_path, sample_compounds):
+    def test_feature_based_learner_requires_featurizer(
+        self, tmp_path, sample_compounds
+    ):
         """Feature-based learner should raise error if featurizer is None."""
         chunk_df = sample_compounds.head(5)
 
@@ -85,7 +84,7 @@ class TestPredictChunk:
         mock_learner.requires_smiles.return_value = False
         mock_learner.get_name.return_value = 'MockLearner'
 
-        with pytest.raises(ValueError, match="featurizer is required"):
+        with pytest.raises(ValueError, match='featurizer is required'):
             _predict_chunk(chunk_df, mock_learner, None, tmp_path, show_progress=False)
 
     def test_smiles_aware_learner_without_features(self, tmp_path, sample_compounds):
@@ -96,7 +95,7 @@ class TestPredictChunk:
         mock_learner.requires_smiles.return_value = True
         mock_learner.predict.return_value = (
             np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
-            np.array([0.1, 0.2, 0.3, 0.4, 0.5])
+            np.array([0.1, 0.2, 0.3, 0.4, 0.5]),
         )
 
         predictions, uncertainties, feat_time = _predict_chunk(
@@ -117,10 +116,7 @@ class TestPredictChunk:
 
         mock_learner = Mock()
         mock_learner.requires_smiles.return_value = True
-        mock_learner.predict.return_value = (
-            np.array([1.0, 2.0, 3.0, 4.0, 5.0]),
-            None
-        )
+        mock_learner.predict.return_value = (np.array([1.0, 2.0, 3.0, 4.0, 5.0]), None)
 
         with patch('learnm8.core.batching.extract_features') as mock_extract:
             mock_extract.return_value = np.random.rand(5, 2048)

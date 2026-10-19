@@ -26,7 +26,9 @@ class TestLREnsemble:
     def features_20(self, small_real_morgan_features):
         return small_real_morgan_features[:20]
 
-    def test_initialization_sets_default_regularization_strengths_random_states_and_untrained_state(self, lr_ensemble):
+    def test_initialization_sets_default_regularization_strengths_random_states_and_untrained_state(
+        self, lr_ensemble
+    ):
         """Test ensemble initialization with default parameters."""
         assert len(lr_ensemble.learners) == 3
         assert lr_ensemble.aggregation_method == 'mean'
@@ -43,8 +45,7 @@ class TestLREnsemble:
         custom_states = [10, 20, 30]
 
         ensemble = LREnsemble(
-            regularization_strengths=custom_alphas,
-            random_states=custom_states
+            regularization_strengths=custom_alphas, random_states=custom_states
         )
 
         assert len(ensemble.learners) == 3
@@ -62,26 +63,28 @@ class TestLREnsemble:
     def test_get_name_includes_regularization_strengths(self, lr_ensemble):
         """Test name generation for LR ensemble."""
         name = lr_ensemble.get_name()
-        assert "LREnsemble" in name
-        assert "3xRidge" in name
-        assert "0.1" in name
-        assert "1.0" in name
-        assert "10.0" in name
+        assert 'LREnsemble' in name
+        assert '3xRidge' in name
+        assert '0.1' in name
+        assert '1.0' in name
+        assert '10.0' in name
 
     def test_get_name_custom_alphas(self):
         """Test name generation with custom regularization strengths."""
         ensemble = LREnsemble(regularization_strengths=[0.01, 0.5, 5.0])
         name = ensemble.get_name()
-        assert "LREnsemble" in name
-        assert "0.0" in name
-        assert "0.5" in name
-        assert "5.0" in name
+        assert 'LREnsemble' in name
+        assert '0.0' in name
+        assert '0.5' in name
+        assert '5.0' in name
 
     def test_regularization_effect_on_predictions(self, compounds_20, features_20):
         """Test that different regularization strengths produce different predictions."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = features_20
 
@@ -108,7 +111,9 @@ class TestLREnsemble:
         """Test that predictions are consistent across multiple calls."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         features = features_20
         lr_ensemble.train(features, compounds['Activity'].to_numpy())

@@ -7,11 +7,13 @@ from .ensemble import EnsembleLearner, _derive_random_states
 class DTEnsemble(EnsembleLearner):
     """Ensemble of 3 Decision Tree learners with different max depths."""
 
-    def __init__(self,
-                 max_depths: list[int] | None = None,
-                 random_states: list[int] | None = None,
-                 random_state: int = 42,
-                 **kwargs):
+    def __init__(
+        self,
+        max_depths: list[int] | None = None,
+        random_states: list[int] | None = None,
+        random_state: int = 42,
+        **kwargs,
+    ):
         """Initialize DT ensemble.
 
         Args:
@@ -31,10 +33,7 @@ class DTEnsemble(EnsembleLearner):
 
         learners = []
         for depth, rs in zip(max_depths, random_states):
-            dt = DecisionTreeLearner(
-                max_depth=depth,
-                random_state=rs
-            )
+            dt = DecisionTreeLearner(max_depth=depth, random_state=rs)
             learners.append(dt)
 
         # Set default ensemble parameters
@@ -49,4 +48,4 @@ class DTEnsemble(EnsembleLearner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         depths_str = ','.join(str(d) for d in self.max_depths)
-        return f"DTEnsemble(3xDT,depth=[{depths_str}])"
+        return f'DTEnsemble(3xDT,depth=[{depths_str}])'

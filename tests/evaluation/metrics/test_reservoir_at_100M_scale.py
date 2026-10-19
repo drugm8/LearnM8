@@ -42,7 +42,7 @@ def test_reservoir_ram_footprint_capped_at_100m_scale() -> None:
     # capped. 1000 distinct fingerprints reused across batches keeps the
     # test footprint small and the wall-clock manageable.
     template_fps = [
-        gen.GetFingerprint(Chem.MolFromSmiles(f"c1ccccc1{'C' * (i + 1)}"))
+        gen.GetFingerprint(Chem.MolFromSmiles(f'c1ccccc1{"C" * (i + 1)}'))
         for i in range(1000)
     ]
 
@@ -69,5 +69,5 @@ def test_reservoir_ram_footprint_capped_at_100m_scale() -> None:
     # The list holds K pointers; on 64-bit, ~8 B per pointer.
     pointer_bytes = K_RESERVOIR * 8
     assert list_overhead + pointer_bytes < 30 * 1024 * 1024, (
-        f"Reservoir buffer overhead exceeded 30 MB: {list_overhead + pointer_bytes:,} B"
+        f'Reservoir buffer overhead exceeded 30 MB: {list_overhead + pointer_bytes:,} B'
     )

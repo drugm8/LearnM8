@@ -18,8 +18,8 @@ pytestmark = pytest.mark.unit
 
 class MockPruner(DesignSpacePruner):
     """Mock pruner for testing base functionality."""
-    
-    def __init__(self, requires_uncertainty=False, name="MockPruner"):
+
+    def __init__(self, requires_uncertainty=False, name='MockPruner'):
         self.requires_uncertainty_flag = requires_uncertainty
         self.name = name
 
@@ -29,8 +29,12 @@ class MockPruner(DesignSpacePruner):
     def get_name(self) -> str:
         return self.name
 
-    def prune(self, compounds: pl.DataFrame, predictions: np.ndarray,
-              uncertainties: Optional[np.ndarray] = None) -> pl.DataFrame:
+    def prune(
+        self,
+        compounds: pl.DataFrame,
+        predictions: np.ndarray,
+        uncertainties: Optional[np.ndarray] = None,
+    ) -> pl.DataFrame:
         # Validate inputs
         self.validate_inputs(compounds, predictions, uncertainties)
 
@@ -61,22 +65,22 @@ def test_pruner_interface_validation(sample_compounds):
 
     # Test empty DataFrame
     empty_df = sample_compounds.head(0)
-    with pytest.raises(PruningError, match="Cannot prune an empty compound pool"):
+    with pytest.raises(PruningError, match='Cannot prune an empty compound pool'):
         pruner.prune(empty_df, np.array([]))
 
     # Test missing columns
     bad_df = sample_compounds.drop(['SMILES'])
-    with pytest.raises(PruningError, match="missing required columns"):
+    with pytest.raises(PruningError, match='missing required columns'):
         pruner.prune(bad_df, predictions)
 
     # Test mismatched prediction length
-    with pytest.raises(PruningError, match="Predictions length"):
+    with pytest.raises(PruningError, match='Predictions length'):
         pruner.prune(sample_compounds, predictions[:3])
 
     # Test NaN predictions
     bad_predictions = predictions.copy()
     bad_predictions[0] = np.nan
-    with pytest.raises(PruningError, match="Predictions contain"):
+    with pytest.raises(PruningError, match='Predictions contain'):
         pruner.prune(sample_compounds, bad_predictions)
 
 
@@ -87,23 +91,23 @@ def test_uncertainty_validation(sample_compounds):
 
     # Test uncertainty-requiring pruner without uncertainty
     uncertainty_pruner = MockPruner(requires_uncertainty=True)
-    with pytest.raises(PruningError, match="requires uncertainty estimates"):
+    with pytest.raises(PruningError, match='requires uncertainty estimates'):
         uncertainty_pruner.prune(sample_compounds, predictions)
 
     # Test mismatched uncertainty length
-    with pytest.raises(PruningError, match="Uncertainties length"):
+    with pytest.raises(PruningError, match='Uncertainties length'):
         uncertainty_pruner.prune(sample_compounds, predictions, uncertainties[:3])
 
     # Test negative uncertainties
     bad_uncertainties = uncertainties.copy()
     bad_uncertainties[0] = -1.0
-    with pytest.raises(PruningError, match="Uncertainties contain"):
+    with pytest.raises(PruningError, match='Uncertainties contain'):
         uncertainty_pruner.prune(sample_compounds, predictions, bad_uncertainties)
 
     # Test NaN uncertainties
     bad_uncertainties = uncertainties.copy()
     bad_uncertainties[0] = np.nan
-    with pytest.raises(PruningError, match="Uncertainties contain"):
+    with pytest.raises(PruningError, match='Uncertainties contain'):
         uncertainty_pruner.prune(sample_compounds, predictions, bad_uncertainties)
 
 
@@ -133,10 +137,10 @@ def test_safe_prune_by_indices(sample_compounds):
 def test_pruning_fraction_calculation():
     """Test the _calculate_pruning_fraction utility method."""
     pruner = MockPruner()
-    
+
     # Normal case
     assert pruner._calculate_pruning_fraction(100, 80) == 0.2
-    
+
     # Edge cases
     assert pruner._calculate_pruning_fraction(0, 0) == 0.0
     assert pruner._calculate_pruning_fraction(10, 0) == 1.0
@@ -151,5 +155,5 @@ def test_requires_uncertainty_default():
 
 def test_pruner_name():
     """Test pruner name functionality."""
-    pruner = MockPruner(name="TestPruner")
-    assert pruner.get_name() == "TestPruner"
+    pruner = MockPruner(name='TestPruner')
+    assert pruner.get_name() == 'TestPruner'

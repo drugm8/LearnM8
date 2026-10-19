@@ -18,11 +18,17 @@ def old_float64_predictions_parquet(tmp_path_factory: pytest.TempPathFactory) ->
     self-healing on schema changes (regenerated on each test session).
     """
     path = tmp_path_factory.mktemp('back_compat') / 'old_cycle_predictions_f64.parquet'
-    pl.DataFrame({
-        'ID': [f'M{i:06d}' for i in range(100)],
-        'prediction': pl.Series(values=[0.1 * i for i in range(100)], dtype=pl.Float64),
-        'uncertainty_at_selection': pl.Series(values=[0.01 * i for i in range(100)], dtype=pl.Float64),
-        'cycle': [1] * 100,
-        'set': ['unlabeled'] * 100,
-    }).write_parquet(path, compression='zstd')
+    pl.DataFrame(
+        {
+            'ID': [f'M{i:06d}' for i in range(100)],
+            'prediction': pl.Series(
+                values=[0.1 * i for i in range(100)], dtype=pl.Float64
+            ),
+            'uncertainty_at_selection': pl.Series(
+                values=[0.01 * i for i in range(100)], dtype=pl.Float64
+            ),
+            'cycle': [1] * 100,
+            'set': ['unlabeled'] * 100,
+        }
+    ).write_parquet(path, compression='zstd')
     return path

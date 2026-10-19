@@ -18,26 +18,35 @@ pytestmark = pytest.mark.unit
 
 
 def test_organize_columns():
-    df = pl.DataFrame({
-        'ID': [1, 2],
-        'SMILES': ['CCO', 'CCC'],
-        'status': ['labeled', 'unlabeled'],
-        'prediction_cycle_0': [0.5, 0.6],
-        'prediction_cycle_1': [0.7, 0.8],
-        'uncertainty_cycle_0': [0.1, 0.2],
-        'extra_col': ['a', 'b']
-    })
+    df = pl.DataFrame(
+        {
+            'ID': [1, 2],
+            'SMILES': ['CCO', 'CCC'],
+            'status': ['labeled', 'unlabeled'],
+            'prediction_cycle_0': [0.5, 0.6],
+            'prediction_cycle_1': [0.7, 0.8],
+            'uncertainty_cycle_0': [0.1, 0.2],
+            'extra_col': ['a', 'b'],
+        }
+    )
 
     column_groups = [
         ['ID', 'SMILES', 'status'],
         ['prediction_cycle_0', 'prediction_cycle_1'],
-        ['uncertainty_cycle_0']
+        ['uncertainty_cycle_0'],
     ]
 
     result = _organize_columns(df, column_groups)
 
-    expected_order = ['ID', 'SMILES', 'status', 'prediction_cycle_0',
-                     'prediction_cycle_1', 'uncertainty_cycle_0', 'extra_col']
+    expected_order = [
+        'ID',
+        'SMILES',
+        'status',
+        'prediction_cycle_0',
+        'prediction_cycle_1',
+        'uncertainty_cycle_0',
+        'extra_col',
+    ]
     assert list(result.columns) == expected_order
 
 
@@ -46,11 +55,7 @@ def test_add_csv_metadata(tmp_path):
     df = pl.DataFrame({'A': [1, 2], 'B': [3, 4]})
     df.write_csv(csv_file)
 
-    metadata = {
-        'Description': 'Test file',
-        'Count': 2,
-        '': ''
-    }
+    metadata = {'Description': 'Test file', 'Count': 2, '': ''}
 
     _add_csv_metadata(csv_file, metadata)
 
@@ -67,15 +72,17 @@ def test_add_csv_metadata(tmp_path):
 def test_save_results_basic(tmp_path):
     np.random.seed(42)
 
-    compounds_df = pl.DataFrame({
-        'ID': [f'COMP_{i:03d}' for i in range(10)],
-        'SMILES': ['CCO'] * 10,
-        'status': ['labeled'] * 3 + ['unlabeled'] * 7,
-        'labeled_cycle': [-1, -1, -1] + [None] * 7,
-        'selected_cycle': [-1, -1, -1] + [None] * 7,
-        'pruned_cycle': [None] * 10,
-        'Activity': [0.3, 0.6, 0.9] + [None] * 7,
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': [f'COMP_{i:03d}' for i in range(10)],
+            'SMILES': ['CCO'] * 10,
+            'status': ['labeled'] * 3 + ['unlabeled'] * 7,
+            'labeled_cycle': [-1, -1, -1] + [None] * 7,
+            'selected_cycle': [-1, -1, -1] + [None] * 7,
+            'pruned_cycle': [None] * 10,
+            'Activity': [0.3, 0.6, 0.9] + [None] * 7,
+        }
+    )
 
     cycle_metrics = [
         {
@@ -98,7 +105,7 @@ def test_save_results_basic(tmp_path):
             'measured_min': 0.4,
             'measured_max': 0.6,
             'measured_best': 0.6,
-            'best_so_far': 0.9
+            'best_so_far': 0.9,
         },
         {
             'cycle': 1,
@@ -120,14 +127,14 @@ def test_save_results_basic(tmp_path):
             'measured_min': 0.65,
             'measured_max': 0.7,
             'measured_best': 0.7,
-            'best_so_far': 0.9
-        }
+            'best_so_far': 0.9,
+        },
     ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-        validation_errors={}
+        validation_errors={},
     )
 
     config = {
@@ -136,7 +143,7 @@ def test_save_results_basic(tmp_path):
         'score_direction': 'higher',
         'mode': 'run',
         'n_cycles': 2,
-        'random_state': 42
+        'random_state': 42,
     }
 
     saved_files = save_results(
@@ -164,31 +171,48 @@ def test_save_results_basic(tmp_path):
 
 
 def test_save_results_compounds_final_structure(tmp_path):
-    compounds_df = pl.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
-        'SMILES': ['CCO', 'CCC', 'CCN'],
-        'status': ['labeled', 'labeled', 'unlabeled'],
-        'labeled_cycle': [-1, 0, None],
-        'selected_cycle': [-1, 0, None],
-        'pruned_cycle': [None, None, None],
-        'Activity': [0.3, 0.6, None],
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+            'SMILES': ['CCO', 'CCC', 'CCN'],
+            'status': ['labeled', 'labeled', 'unlabeled'],
+            'labeled_cycle': [-1, 0, None],
+            'selected_cycle': [-1, 0, None],
+            'pruned_cycle': [None, None, None],
+            'Activity': [0.3, 0.6, None],
+        }
+    )
 
-    cycle_metrics = [{
-        'cycle': 0, 'strategy': 'random', 'batch_size': 1, 'selected_count': 1,
-        'remaining_unlabeled': 1, 'cumulative_labeled': 2, 'cumulative_pruned': 0,
-        'selected_ids': ['COMP_002'], 'pruned_ids': []
-    }]
+    cycle_metrics = [
+        {
+            'cycle': 0,
+            'strategy': 'random',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 1,
+            'cumulative_labeled': 2,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_002'],
+            'pruned_ids': [],
+        }
+    ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-        validation_errors={}
+        validation_errors={},
     )
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan', 'n_cycles': 1}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path, output_format='auto')
+    saved_files = save_results(
+        compounds_df,
+        cycle_metrics,
+        validation_result,
+        config,
+        tmp_path,
+        output_format='auto',
+    )
 
     assert saved_files['compounds_final'].suffix == '.csv'
     final_df = pd.read_csv(saved_files['compounds_final'], comment='#')
@@ -205,37 +229,43 @@ def test_save_results_compounds_final_structure(tmp_path):
 
 
 def test_save_results_cycle_metrics_no_list_columns(tmp_path):
-    compounds_df = pl.DataFrame({
-        'ID': ['COMP_001'],
-        'SMILES': ['CCO'],
-        'status': ['labeled'],
-        'labeled_cycle': [0],
-        'selected_cycle': [0],
-        'pruned_cycle': [None],
-        'Activity': [0.5]
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': ['COMP_001'],
+            'SMILES': ['CCO'],
+            'status': ['labeled'],
+            'labeled_cycle': [0],
+            'selected_cycle': [0],
+            'pruned_cycle': [None],
+            'Activity': [0.5],
+        }
+    )
 
-    cycle_metrics = [{
-        'cycle': 0,
-        'strategy': 'random',
-        'batch_size': 1,
-        'selected_count': 1,
-        'remaining_unlabeled': 0,
-        'cumulative_labeled': 1,
-        'cumulative_pruned': 0,
-        'selected_ids': ['COMP_001'],
-        'pruned_ids': []
-    }]
+    cycle_metrics = [
+        {
+            'cycle': 0,
+            'strategy': 'random',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 0,
+            'cumulative_labeled': 1,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_001'],
+            'pruned_ids': [],
+        }
+    ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-        validation_errors={}
+        validation_errors={},
     )
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
+    saved_files = save_results(
+        compounds_df, cycle_metrics, validation_result, config, tmp_path
+    )
 
     metrics_df = pd.read_csv(saved_files['cycle_metrics'], comment='#')
 
@@ -244,51 +274,74 @@ def test_save_results_cycle_metrics_no_list_columns(tmp_path):
 
 
 def test_save_results_selection_history(tmp_path):
-    compounds_df = pl.DataFrame({
-        'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
-        'SMILES': ['CCO', 'CCC', 'CCN'],
-        'status': ['labeled', 'labeled', 'labeled'],
-        'labeled_cycle': [-1, 0, 1],
-        'selected_cycle': [-1, 0, 1],
-        'pruned_cycle': [None, None, None],
-        'Activity': [0.3, 0.6, 0.9],
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+            'SMILES': ['CCO', 'CCC', 'CCN'],
+            'status': ['labeled', 'labeled', 'labeled'],
+            'labeled_cycle': [-1, 0, 1],
+            'selected_cycle': [-1, 0, 1],
+            'pruned_cycle': [None, None, None],
+            'Activity': [0.3, 0.6, 0.9],
+        }
+    )
 
     # Cycle-time captures replace the old prediction_cycle_N columns.
     cycle_metrics = [
         {
-            'cycle': 0, 'strategy': 'random', 'batch_size': 1,
-            'selected_count': 1, 'remaining_unlabeled': 1,
-            'cumulative_labeled': 2, 'cumulative_pruned': 0,
-            'selected_ids': ['COMP_002'], 'pruned_ids': [],
-            'selected_predictions': pl.DataFrame({
-                'ID': ['COMP_002'],
-                'prediction': [0.5],
-                'uncertainty': [0.15],
-            }),
+            'cycle': 0,
+            'strategy': 'random',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 1,
+            'cumulative_labeled': 2,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_002'],
+            'pruned_ids': [],
+            'selected_predictions': pl.DataFrame(
+                {
+                    'ID': ['COMP_002'],
+                    'prediction': [0.5],
+                    'uncertainty': [0.15],
+                }
+            ),
         },
         {
-            'cycle': 1, 'strategy': 'greedy', 'batch_size': 1,
-            'selected_count': 1, 'remaining_unlabeled': 0,
-            'cumulative_labeled': 3, 'cumulative_pruned': 0,
-            'selected_ids': ['COMP_003'], 'pruned_ids': [],
-            'selected_predictions': pl.DataFrame({
-                'ID': ['COMP_003'],
-                'prediction': [0.85],
-                'uncertainty': [0.1],
-            }),
-        }
+            'cycle': 1,
+            'strategy': 'greedy',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 0,
+            'cumulative_labeled': 3,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_003'],
+            'pruned_ids': [],
+            'selected_predictions': pl.DataFrame(
+                {
+                    'ID': ['COMP_003'],
+                    'prediction': [0.85],
+                    'uncertainty': [0.1],
+                }
+            ),
+        },
     ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-        validation_errors={}
+        validation_errors={},
     )
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path, output_format='auto')
+    saved_files = save_results(
+        compounds_df,
+        cycle_metrics,
+        validation_result,
+        config,
+        tmp_path,
+        output_format='auto',
+    )
 
     assert saved_files['selection_history'].suffix == '.csv'
     history_df = pd.read_csv(saved_files['selection_history'], comment='#')
@@ -304,42 +357,52 @@ def test_save_results_selection_history(tmp_path):
 
 
 def test_save_results_validation_report(tmp_path):
-    compounds_df = pl.DataFrame({
-        'ID': ['COMP_001'],
-        'SMILES': ['CCO'],
-        'status': ['labeled'],
-        'labeled_cycle': [0],
-        'selected_cycle': [0],
-        'pruned_cycle': [None],
-        'Activity': [0.5]
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': ['COMP_001'],
+            'SMILES': ['CCO'],
+            'status': ['labeled'],
+            'labeled_cycle': [0],
+            'selected_cycle': [0],
+            'pruned_cycle': [None],
+            'Activity': [0.5],
+        }
+    )
 
-    invalid_compounds = pl.DataFrame({
-        'ID': ['INVALID_001', 'INVALID_002'],
-        'SMILES': ['INVALID', 'BADSMILES']
-    })
+    invalid_compounds = pl.DataFrame(
+        {'ID': ['INVALID_001', 'INVALID_002'], 'SMILES': ['INVALID', 'BADSMILES']}
+    )
 
     validation_errors = {
         'INVALID_001': 'Invalid SMILES syntax',
-        'INVALID_002': 'Feature extraction failed'
+        'INVALID_002': 'Feature extraction failed',
     }
 
-    cycle_metrics = [{
-        'cycle': 0, 'strategy': 'random', 'batch_size': 1,
-        'selected_count': 1, 'remaining_unlabeled': 0,
-        'cumulative_labeled': 1, 'cumulative_pruned': 0,
-        'selected_ids': ['COMP_001'], 'pruned_ids': []
-    }]
+    cycle_metrics = [
+        {
+            'cycle': 0,
+            'strategy': 'random',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 0,
+            'cumulative_labeled': 1,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_001'],
+            'pruned_ids': [],
+        }
+    ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=invalid_compounds,
-        validation_errors=validation_errors
+        validation_errors=validation_errors,
     )
 
     config = {'target_col': 'Activity', 'featurizer': 'morgan'}
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
+    saved_files = save_results(
+        compounds_df, cycle_metrics, validation_result, config, tmp_path
+    )
 
     assert 'validation_report' in saved_files
     assert saved_files['validation_report'].exists()
@@ -354,27 +417,36 @@ def test_save_results_validation_report(tmp_path):
 
 
 def test_save_results_config_json(tmp_path):
-    compounds_df = pl.DataFrame({
-        'ID': ['COMP_001'],
-        'SMILES': ['CCO'],
-        'status': ['labeled'],
-        'labeled_cycle': [0],
-        'selected_cycle': [0],
-        'pruned_cycle': [None],
-        'Activity': [0.5]
-    })
+    compounds_df = pl.DataFrame(
+        {
+            'ID': ['COMP_001'],
+            'SMILES': ['CCO'],
+            'status': ['labeled'],
+            'labeled_cycle': [0],
+            'selected_cycle': [0],
+            'pruned_cycle': [None],
+            'Activity': [0.5],
+        }
+    )
 
-    cycle_metrics = [{
-        'cycle': 0, 'strategy': 'random', 'batch_size': 1,
-        'selected_count': 1, 'remaining_unlabeled': 0,
-        'cumulative_labeled': 1, 'cumulative_pruned': 0,
-        'selected_ids': ['COMP_001'], 'pruned_ids': []
-    }]
+    cycle_metrics = [
+        {
+            'cycle': 0,
+            'strategy': 'random',
+            'batch_size': 1,
+            'selected_count': 1,
+            'remaining_unlabeled': 0,
+            'cumulative_labeled': 1,
+            'cumulative_pruned': 0,
+            'selected_ids': ['COMP_001'],
+            'pruned_ids': [],
+        }
+    ]
 
     validation_result = ValidationResult(
         valid_compounds=compounds_df.select(['ID', 'SMILES']),
         invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-        validation_errors={}
+        validation_errors={},
     )
 
     config = {
@@ -383,10 +455,12 @@ def test_save_results_config_json(tmp_path):
         'score_direction': 'higher',
         'mode': 'run',
         'n_cycles': 1,
-        'random_state': 42
+        'random_state': 42,
     }
 
-    saved_files = save_results(compounds_df, cycle_metrics, validation_result, config, tmp_path)
+    saved_files = save_results(
+        compounds_df, cycle_metrics, validation_result, config, tmp_path
+    )
 
     assert saved_files['config'].exists()
 
@@ -440,6 +514,7 @@ def test_parquet_roundtrip_values(tmp_path):
 def test_parquet_compression_is_zstd(tmp_path):
     """Parquet files are zstd-compressed."""
     import pyarrow.parquet as pq
+
     df = _make_predictions_df(n=5)
     path = write_cycle_predictions(df, tmp_path, cycle=0)
     pf = pq.ParquetFile(path)

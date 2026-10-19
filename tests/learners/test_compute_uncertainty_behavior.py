@@ -39,8 +39,11 @@ def _tiny_fixture(rng_seed: int = 0):
     X = rng.integers(0, 2, size=(n, p)).astype(np.float32)
     # Targets correlate with the first two columns so trees produce non-zero
     # impurity (DT leverages, LR coefficients, GP signal).
-    y = (X[:, 0].astype(np.float64) * 0.5 + X[:, 1].astype(np.float64) * 0.3
-         + rng.normal(0, 0.1, size=n)).astype(np.float32)
+    y = (
+        X[:, 0].astype(np.float64) * 0.5
+        + X[:, 1].astype(np.float64) * 0.3
+        + rng.normal(0, 0.1, size=n)
+    ).astype(np.float32)
     return X, y
 
 
@@ -67,6 +70,7 @@ def test_compute_uncertainty_false_returns_none(learner_name, tiny_data, request
         # backends not present in the default CI env.
         try:
             import importlib
+
             if learner_name == 'rf_fil':
                 importlib.import_module('cuml')
                 importlib.import_module('treelite')

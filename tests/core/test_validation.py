@@ -2,14 +2,17 @@ import pytest
 import polars as pl
 from pathlib import Path
 
-from learnm8.core.validation import validate_compound_pool, ValidationResult, _validate_smiles
+from learnm8.core.validation import (
+    validate_compound_pool,
+    ValidationResult,
+    _validate_smiles,
+)
 from learnm8.exceptions import ValidationError
 
 
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestValidateSMILES:
-
     def test_validate_smiles_valid(self):
         is_valid, std_smiles, error = _validate_smiles('CCO')
         assert is_valid
@@ -44,13 +47,8 @@ class TestValidateSMILES:
 @pytest.mark.slow
 @pytest.mark.molecular
 class TestValidateCompoundPool:
-
     def test_all_valid_compounds(self, sample_compounds):
-        result = validate_compound_pool(
-            sample_compounds,
-            n_jobs=4,
-            progress=False
-        )
+        result = validate_compound_pool(sample_compounds, n_jobs=4, progress=False)
 
         assert isinstance(result, ValidationResult)
         assert len(result.valid_compounds) == len(sample_compounds)
@@ -59,16 +57,14 @@ class TestValidateCompoundPool:
         assert result.success_rate == 1.0
 
     def test_all_invalid_compounds(self):
-        invalid_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
-            'SMILES': ['INVALID', 'ALSO_INVALID', 'NOT_A_SMILES']
-        })
-
-        result = validate_compound_pool(
-            invalid_df,
-            n_jobs=4,
-            progress=False
+        invalid_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+                'SMILES': ['INVALID', 'ALSO_INVALID', 'NOT_A_SMILES'],
+            }
         )
+
+        result = validate_compound_pool(invalid_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 3
@@ -76,16 +72,14 @@ class TestValidateCompoundPool:
         assert result.success_rate == 0.0
 
     def test_mixed_valid_invalid(self):
-        mixed_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'],
-            'SMILES': ['CCO', 'INVALID', 'CCC', 'NOT_SMILES']
-        })
-
-        result = validate_compound_pool(
-            mixed_df,
-            n_jobs=4,
-            progress=False
+        mixed_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003', 'COMP_004'],
+                'SMILES': ['CCO', 'INVALID', 'CCC', 'NOT_SMILES'],
+            }
         )
+
+        result = validate_compound_pool(mixed_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 2
         assert len(result.invalid_compounds) == 2
@@ -103,11 +97,7 @@ class TestValidateCompoundPool:
     def test_empty_compound_pool(self):
         empty_df = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8})
 
-        result = validate_compound_pool(
-            empty_df,
-            n_jobs=4,
-            progress=False
-        )
+        result = validate_compound_pool(empty_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 0
@@ -115,16 +105,11 @@ class TestValidateCompoundPool:
         assert result.success_rate == 0.0
 
     def test_missing_id_column(self):
-        missing_id_df = pl.DataFrame({
-            'compound_id': ['C1', 'C2'],
-            'SMILES': ['CCO', 'CCC']
-        })
-
-        result = validate_compound_pool(
-            missing_id_df,
-            n_jobs=4,
-            progress=False
+        missing_id_df = pl.DataFrame(
+            {'compound_id': ['C1', 'C2'], 'SMILES': ['CCO', 'CCC']}
         )
+
+        result = validate_compound_pool(missing_id_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 2
@@ -132,16 +117,11 @@ class TestValidateCompoundPool:
         assert 'Missing columns' in list(result.validation_errors.values())[0]
 
     def test_missing_smiles_column(self):
-        missing_smiles_df = pl.DataFrame({
-            'ID': ['C1', 'C2'],
-            'structure': ['CCO', 'CCC']
-        })
-
-        result = validate_compound_pool(
-            missing_smiles_df,
-            n_jobs=4,
-            progress=False
+        missing_smiles_df = pl.DataFrame(
+            {'ID': ['C1', 'C2'], 'structure': ['CCO', 'CCC']}
         )
+
+        result = validate_compound_pool(missing_smiles_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 2
@@ -149,32 +129,25 @@ class TestValidateCompoundPool:
         assert 'Missing columns' in list(result.validation_errors.values())[0]
 
     def test_missing_both_columns(self):
-        missing_both_df = pl.DataFrame({
-            'compound_id': ['C1', 'C2'],
-            'structure': ['CCO', 'CCC']
-        })
-
-        result = validate_compound_pool(
-            missing_both_df,
-            n_jobs=4,
-            progress=False
+        missing_both_df = pl.DataFrame(
+            {'compound_id': ['C1', 'C2'], 'structure': ['CCO', 'CCC']}
         )
+
+        result = validate_compound_pool(missing_both_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 0
         assert len(result.invalid_compounds) == 2
         assert len(result.validation_errors) >= 1
 
     def test_validation_errors_contain_messages(self):
-        invalid_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002'],
-            'SMILES': ['INVALID_SMILES', 'ALSO_INVALID']
-        })
-
-        result = validate_compound_pool(
-            invalid_df,
-            n_jobs=4,
-            progress=False
+        invalid_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002'],
+                'SMILES': ['INVALID_SMILES', 'ALSO_INVALID'],
+            }
         )
+
+        result = validate_compound_pool(invalid_df, n_jobs=4, progress=False)
 
         assert len(result.validation_errors) == 2
         for error_msg in result.validation_errors.values():
@@ -182,26 +155,17 @@ class TestValidateCompoundPool:
             assert len(error_msg) > 0
 
     def test_parallel_execution(self):
-        compounds = pl.DataFrame({
-            'ID': [f'mol{i}' for i in range(100)],
-            'SMILES': ['CCO'] * 100
-        })
-
-        result = validate_compound_pool(
-            compounds,
-            n_jobs=4,
-            progress=False
+        compounds = pl.DataFrame(
+            {'ID': [f'mol{i}' for i in range(100)], 'SMILES': ['CCO'] * 100}
         )
+
+        result = validate_compound_pool(compounds, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 100
         assert result.success_rate == 1.0
 
     def test_validation_result_structure(self, sample_compounds):
-        result = validate_compound_pool(
-            sample_compounds,
-            n_jobs=4,
-            progress=False
-        )
+        result = validate_compound_pool(sample_compounds, n_jobs=4, progress=False)
 
         assert hasattr(result, 'valid_compounds')
         assert hasattr(result, 'invalid_compounds')
@@ -214,32 +178,28 @@ class TestValidateCompoundPool:
         assert isinstance(result.success_rate, float)
 
     def test_success_rate_calculation(self):
-        mixed_df = pl.DataFrame({
-            'ID': ['C1', 'C2', 'C3', 'C4', 'C5'],
-            'SMILES': ['CCO', 'CCC', 'INVALID', 'CCN', 'BAD']
-        })
-
-        result = validate_compound_pool(
-            mixed_df,
-            n_jobs=4,
-            progress=False
+        mixed_df = pl.DataFrame(
+            {
+                'ID': ['C1', 'C2', 'C3', 'C4', 'C5'],
+                'SMILES': ['CCO', 'CCC', 'INVALID', 'CCN', 'BAD'],
+            }
         )
+
+        result = validate_compound_pool(mixed_df, n_jobs=4, progress=False)
 
         expected_rate = 3 / 5
         assert result.success_rate == pytest.approx(expected_rate)
 
     def test_duplicate_ids_all_valid_smiles(self):
         """Test that duplicate IDs are detected and marked as invalid."""
-        duplicate_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003', 'COMP_002'],
-            'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC']
-        })
-
-        result = validate_compound_pool(
-            duplicate_df,
-            n_jobs=4,
-            progress=False
+        duplicate_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003', 'COMP_002'],
+                'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC'],
+            }
         )
+
+        result = validate_compound_pool(duplicate_df, n_jobs=4, progress=False)
 
         # Only unique ID should be valid (COMP_003)
         assert len(result.valid_compounds) == 1
@@ -253,21 +213,19 @@ class TestValidateCompoundPool:
         assert 'COMP_003' in valid_ids
 
         # Check that duplicates have correct error message
-        assert result.validation_errors['COMP_001'] == "Duplicate ID"
-        assert result.validation_errors['COMP_002'] == "Duplicate ID"
+        assert result.validation_errors['COMP_001'] == 'Duplicate ID'
+        assert result.validation_errors['COMP_002'] == 'Duplicate ID'
 
     def test_duplicate_ids_with_invalid_smiles(self):
         """Test duplicate IDs when some have invalid SMILES."""
-        duplicate_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003'],
-            'SMILES': ['CCO', 'INVALID', 'CCC', 'BADSMILES']
-        })
-
-        result = validate_compound_pool(
-            duplicate_df,
-            n_jobs=4,
-            progress=False
+        duplicate_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_001', 'COMP_003'],
+                'SMILES': ['CCO', 'INVALID', 'CCC', 'BADSMILES'],
+            }
         )
+
+        result = validate_compound_pool(duplicate_df, n_jobs=4, progress=False)
 
         # No valid compounds (all COMP_001 are duplicates, COMP_002 and COMP_003 are invalid)
         assert len(result.valid_compounds) == 0
@@ -277,22 +235,20 @@ class TestValidateCompoundPool:
         assert len(result.validation_errors) == 3
 
         # Check error messages
-        assert result.validation_errors['COMP_001'] == "Duplicate ID"
+        assert result.validation_errors['COMP_001'] == 'Duplicate ID'
         assert 'COMP_002' in result.validation_errors
         assert 'COMP_003' in result.validation_errors
 
     def test_no_duplicate_ids(self):
         """Test that validation works normally when there are no duplicates."""
-        no_dup_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
-            'SMILES': ['CCO', 'CCC', 'CCN']
-        })
-
-        result = validate_compound_pool(
-            no_dup_df,
-            n_jobs=4,
-            progress=False
+        no_dup_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+                'SMILES': ['CCO', 'CCC', 'CCN'],
+            }
         )
+
+        result = validate_compound_pool(no_dup_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 3
         assert len(result.invalid_compounds) == 0
@@ -301,16 +257,14 @@ class TestValidateCompoundPool:
 
     def test_all_duplicate_ids(self):
         """Test when all compounds are duplicates of the first."""
-        all_dup_df = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_001', 'COMP_001'],
-            'SMILES': ['CCO', 'CCC', 'CCN']
-        })
-
-        result = validate_compound_pool(
-            all_dup_df,
-            n_jobs=4,
-            progress=False
+        all_dup_df = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_001', 'COMP_001'],
+                'SMILES': ['CCO', 'CCC', 'CCN'],
+            }
         )
+
+        result = validate_compound_pool(all_dup_df, n_jobs=4, progress=False)
 
         # No valid compounds (all are duplicates)
         assert len(result.valid_compounds) == 0
@@ -322,20 +276,18 @@ class TestValidateCompoundPool:
         assert 'COMP_001' in result.validation_errors
 
         # Error should be for duplicate ID
-        assert result.validation_errors['COMP_001'] == "Duplicate ID"
+        assert result.validation_errors['COMP_001'] == 'Duplicate ID'
 
     def test_duplicate_ids_keeps_first_occurrence(self):
         """Test that all duplicates are marked invalid."""
-        duplicate_df = pl.DataFrame({
-            'ID': ['A', 'B', 'A', 'C', 'B'],
-            'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC']
-        })
-
-        result = validate_compound_pool(
-            duplicate_df,
-            n_jobs=4,
-            progress=False
+        duplicate_df = pl.DataFrame(
+            {
+                'ID': ['A', 'B', 'A', 'C', 'B'],
+                'SMILES': ['CCO', 'CCC', 'CCN', 'CCCC', 'CCCCC'],
+            }
         )
+
+        result = validate_compound_pool(duplicate_df, n_jobs=4, progress=False)
 
         # Only unique ID should be valid
         assert len(result.valid_compounds) == 1
@@ -350,21 +302,14 @@ class TestValidateCompoundPool:
         # Should have errors for A and B
         assert 'A' in result.validation_errors
         assert 'B' in result.validation_errors
-        assert result.validation_errors['A'] == "Duplicate ID"
-        assert result.validation_errors['B'] == "Duplicate ID"
+        assert result.validation_errors['A'] == 'Duplicate ID'
+        assert result.validation_errors['B'] == 'Duplicate ID'
 
     def test_single_compound_no_duplicates(self):
         """Test edge case with single compound."""
-        single_df = pl.DataFrame({
-            'ID': ['COMP_001'],
-            'SMILES': ['CCO']
-        })
+        single_df = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})
 
-        result = validate_compound_pool(
-            single_df,
-            n_jobs=4,
-            progress=False
-        )
+        result = validate_compound_pool(single_df, n_jobs=4, progress=False)
 
         assert len(result.valid_compounds) == 1
         assert len(result.invalid_compounds) == 0
@@ -378,11 +323,13 @@ class TestValidateTargetDtype:
     """Target-column dtype validation (Item 5)."""
 
     def _pool(self, target):
-        return pl.DataFrame({
-            'ID': ['C1', 'C2', 'C3'],
-            'SMILES': ['CCO', 'CCC', 'CCN'],
-            'target': target,
-        })
+        return pl.DataFrame(
+            {
+                'ID': ['C1', 'C2', 'C3'],
+                'SMILES': ['CCO', 'CCC', 'CCN'],
+                'target': target,
+            }
+        )
 
     def test_numeric_float_target_passes(self):
         result = validate_compound_pool(
@@ -398,7 +345,9 @@ class TestValidateTargetDtype:
 
     def test_numeric_string_target_is_cast_to_float(self):
         result = validate_compound_pool(
-            self._pool(['0.1', '0.2', '0.3']), n_jobs=1, progress=False,
+            self._pool(['0.1', '0.2', '0.3']),
+            n_jobs=1,
+            progress=False,
             target_col='target',
         )
         assert result.valid_compounds['target'].dtype == pl.Float64
@@ -406,27 +355,35 @@ class TestValidateTargetDtype:
     def test_non_numeric_string_target_raises(self):
         with pytest.raises(ValidationError, match='non-numeric'):
             validate_compound_pool(
-                self._pool(['active', 'inactive', 'active']), n_jobs=1,
-                progress=False, target_col='target',
+                self._pool(['active', 'inactive', 'active']),
+                n_jobs=1,
+                progress=False,
+                target_col='target',
             )
 
     def test_boolean_target_raises(self):
         with pytest.raises(ValidationError, match='Boolean'):
             validate_compound_pool(
-                self._pool([True, False, True]), n_jobs=1, progress=False,
+                self._pool([True, False, True]),
+                n_jobs=1,
+                progress=False,
                 target_col='target',
             )
 
     def test_missing_target_col_is_ignored(self):
         result = validate_compound_pool(
-            self._pool([0.1, 0.2, 0.3]), n_jobs=1, progress=False,
+            self._pool([0.1, 0.2, 0.3]),
+            n_jobs=1,
+            progress=False,
             target_col='not_a_column',
         )
         assert len(result.valid_compounds) == 3
 
     def test_no_target_col_skips_validation(self):
         result = validate_compound_pool(
-            self._pool(['active', 'inactive', 'active']), n_jobs=1, progress=False,
+            self._pool(['active', 'inactive', 'active']),
+            n_jobs=1,
+            progress=False,
         )
         assert result.valid_compounds['target'].dtype == pl.Utf8
 
@@ -434,20 +391,23 @@ class TestValidateTargetDtype:
 @pytest.mark.integration
 @pytest.mark.molecular
 class TestValidationResult:
-
     def test_success_rate_all_valid(self):
         result = ValidationResult(
-            valid_compounds=pl.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['CCO', 'CCC']}),
+            valid_compounds=pl.DataFrame(
+                {'ID': ['C1', 'C2'], 'SMILES': ['CCO', 'CCC']}
+            ),
             invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-            validation_errors={}
+            validation_errors={},
         )
         assert result.success_rate == 1.0
 
     def test_success_rate_all_invalid(self):
         result = ValidationResult(
             valid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-            invalid_compounds=pl.DataFrame({'ID': ['C1', 'C2'], 'SMILES': ['BAD', 'INVALID']}),
-            validation_errors={'C1': 'error1', 'C2': 'error2'}
+            invalid_compounds=pl.DataFrame(
+                {'ID': ['C1', 'C2'], 'SMILES': ['BAD', 'INVALID']}
+            ),
+            validation_errors={'C1': 'error1', 'C2': 'error2'},
         )
         assert result.success_rate == 0.0
 
@@ -455,7 +415,7 @@ class TestValidationResult:
         result = ValidationResult(
             valid_compounds=pl.DataFrame({'ID': ['C1'], 'SMILES': ['CCO']}),
             invalid_compounds=pl.DataFrame({'ID': ['C2'], 'SMILES': ['BAD']}),
-            validation_errors={'C2': 'error'}
+            validation_errors={'C2': 'error'},
         )
         assert result.success_rate == 0.5
 
@@ -463,6 +423,6 @@ class TestValidationResult:
         result = ValidationResult(
             valid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
             invalid_compounds=pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8}),
-            validation_errors={}
+            validation_errors={},
         )
         assert result.success_rate == 0.0

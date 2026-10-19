@@ -34,11 +34,11 @@ class GPyTorchGPLearner(Learner):
 
     def __init__(
         self,
-        kernel: str = "auto",
+        kernel: str = 'auto',
         alpha: float = 0.1,
         max_train_size: int = 10000,
         n_iterations: int | None = None,
-        device: str = "auto",
+        device: str = 'auto',
         random_state: int = 42,
         remove_zero_variance: bool = True,
         enable_aggressive_gc: bool = True,
@@ -51,8 +51,8 @@ class GPyTorchGPLearner(Learner):
                 "GPyTorch required for 'gpu_gp' learner. Install: pip install gpytorch"
             ) from err
 
-        if device == "auto":
-            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device == 'auto':
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self._device = torch.device(device)
 
@@ -73,7 +73,7 @@ class GPyTorchGPLearner(Learner):
         self._feature_scaler = None
         self._target_mean: float = 0.0
         self._target_std: float = 1.0
-        self._kernel_name: str = ""
+        self._kernel_name: str = ''
         self._feature_type = 'binary'
 
         torch.manual_seed(random_state)
@@ -86,29 +86,29 @@ class GPyTorchGPLearner(Learner):
         is_binary = self._feature_type == 'binary'
         kernel_spec = self.kernel
 
-        if kernel_spec == "auto":
-            kernel_spec = "tanimoto" if is_binary else "rbf"
+        if kernel_spec == 'auto':
+            kernel_spec = 'tanimoto' if is_binary else 'rbf'
 
-        if kernel_spec == "tanimoto":
+        if kernel_spec == 'tanimoto':
             try:
                 from gauche.kernels.fingerprint_kernels.tanimoto_kernel import (
                     TanimotoKernel,
                 )
             except ImportError as err:
                 raise ConfigurationError(
-                    "GAUCHE required for Tanimoto kernel with gpu_gp. Install: pip install gauche"
+                    'GAUCHE required for Tanimoto kernel with gpu_gp. Install: pip install gauche'
                 ) from err
-            return gpytorch.kernels.ScaleKernel(TanimotoKernel()), "tanimoto"
+            return gpytorch.kernels.ScaleKernel(TanimotoKernel()), 'tanimoto'
 
-        if kernel_spec == "rbf":
-            return gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel()), "rbf"
+        if kernel_spec == 'rbf':
+            return gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel()), 'rbf'
 
         if isinstance(kernel_spec, gpytorch.kernels.Kernel):
             if isinstance(kernel_spec, gpytorch.kernels.ScaleKernel):
                 return kernel_spec, type(kernel_spec).__name__
             return gpytorch.kernels.ScaleKernel(kernel_spec), type(kernel_spec).__name__
 
-        raise ConfigurationError(f"Unknown kernel: {kernel_spec!r}")
+        raise ConfigurationError(f'Unknown kernel: {kernel_spec!r}')
 
     def _make_model(self, train_x, train_y, likelihood, covar_module):
         import gpytorch
@@ -141,9 +141,15 @@ class GPyTorchGPLearner(Learner):
         train_y = train_y.to(target_device)
 
         noise_constraint = gpytorch.constraints.GreaterThan(1e-6)
-        likelihood = GaussianLikelihood(noise_constraint=noise_constraint).double().to(target_device)
+        likelihood = (
+            GaussianLikelihood(noise_constraint=noise_constraint)
+            .double()
+            .to(target_device)
+        )
         with torch.no_grad():
-            likelihood.noise = torch.tensor(self.alpha, dtype=torch.float64, device=target_device)
+            likelihood.noise = torch.tensor(
+                self.alpha, dtype=torch.float64, device=target_device
+            )
 
         covar_module = covar_module.double().to(target_device)
         model = self._make_model(train_x, train_y, likelihood, covar_module)
@@ -158,7 +164,11 @@ class GPyTorchGPLearner(Learner):
         mll = ExactMarginalLogLikelihood(likelihood, model)
 
         n = train_x.shape[0]
-        n_iters = self.n_iterations if self.n_iterations is not None else (100 if n < 1000 else 200)
+        n_iters = (
+            self.n_iterations
+            if self.n_iterations is not None
+            else (100 if n < 1000 else 200)
+        )
 
         initial_loss: float | None = None
         final_loss: float = 0.0
@@ -169,7 +179,7 @@ class GPyTorchGPLearner(Learner):
             loss = -mll(output, train_y)
             if torch.isnan(loss):
                 raise LearnerError(
-                    "GP training produced NaN loss. Try a different kernel or check your features."
+                    'GP training produced NaN loss. Try a different kernel or check your features.'
                 )
             if initial_loss is None:
                 initial_loss = loss.item()
@@ -177,13 +187,15 @@ class GPyTorchGPLearner(Learner):
             loss.backward()
             optimizer.step()
             if i % 20 == 0:
-                logger.debug("GP training iter %d/%d — loss: %.4f", i, n_iters, final_loss)
+                logger.debug(
+                    'GP training iter %d/%d — loss: %.4f', i, n_iters, final_loss
+                )
 
         if initial_loss is not None and final_loss > initial_loss:
             warnings.warn(
                 ConvergenceWarning(
-                    f"GP training did not converge: final_loss ({final_loss:.4f}) > "
-                    f"initial_loss ({initial_loss:.4f}). Consider more iterations or a different kernel."
+                    f'GP training did not converge: final_loss ({final_loss:.4f}) > '
+                    f'initial_loss ({initial_loss:.4f}). Consider more iterations or a different kernel.'
                 ),
                 stacklevel=2,
             )
@@ -211,28 +223,32 @@ class GPyTorchGPLearner(Learner):
         self._n_train = n
         if n > self.max_train_size:
             raise LearnerError(
-                f"Training set size {n} exceeds max_train_size={self.max_train_size}. "
-                "Reduce the training set or increase max_train_size."
+                f'Training set size {n} exceeds max_train_size={self.max_train_size}. '
+                'Reduce the training set or increase max_train_size.'
             )
         if 5000 < n <= self.max_train_size:
             logger.warning(
-                "GP training on %d samples has O(n^2) memory scaling. Consider max_train_size.", n
+                'GP training on %d samples has O(n^2) memory scaling. Consider max_train_size.',
+                n,
             )
 
         covar_module, kernel_name = self._resolve_kernel(features)
 
         features_proc, mask, self._feature_imputer = _preprocess_features(
-            features, remove_zero_variance=self.remove_zero_variance, is_training=True,
+            features,
+            remove_zero_variance=self.remove_zero_variance,
+            is_training=True,
             feature_type=self._feature_type,
         )
         if features_proc.shape[1] == 0:
-            raise LearnerError("No valid features remain after zero-variance removal.")
+            raise LearnerError('No valid features remain after zero-variance removal.')
 
         self._valid_feature_mask = mask
         self._kernel_name = kernel_name
 
         if kernel_name == 'rbf':
             from sklearn.preprocessing import StandardScaler
+
             self._feature_scaler = StandardScaler()
             features_proc = self._feature_scaler.fit_transform(features_proc)
         else:
@@ -251,22 +267,22 @@ class GPyTorchGPLearner(Learner):
             )
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
-                "CUDA out of memory" in str(exc)
+                'CUDA out of memory' in str(exc)
             )
             if not oom:
                 raise
             logger.warning(
-                "GPU OOM during GP training — falling back to CPU. Error: %s", exc
+                'GPU OOM during GP training — falling back to CPU. Error: %s', exc
             )
             if self._model is not None:
                 del self._model
             if self._likelihood is not None:
                 del self._likelihood
-            if self._device.type == "cuda":
+            if self._device.type == 'cuda':
                 torch.cuda.empty_cache()
             gc.collect()
 
-            cpu_device = torch.device("cpu")
+            cpu_device = torch.device('cpu')
             covar_module_cpu, _ = self._resolve_kernel(features)
             model, likelihood = self._train_on_device(
                 train_x.cpu(), train_y.cpu(), covar_module_cpu, cpu_device
@@ -277,7 +293,7 @@ class GPyTorchGPLearner(Learner):
         self._likelihood = likelihood
         self.is_trained = True
 
-        if self.enable_aggressive_gc and self._device.type == "cuda":
+        if self.enable_aggressive_gc and self._device.type == 'cuda':
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -308,7 +324,9 @@ class GPyTorchGPLearner(Learner):
         """
         del smiles
         if not self.is_trained:
-            raise LearnerError("GPyTorchGPLearner must be trained before predict(). Call train() first.")
+            raise LearnerError(
+                'GPyTorchGPLearner must be trained before predict(). Call train() first.'
+            )
 
         features_proc, _, _ = _preprocess_features(
             features,
@@ -331,7 +349,9 @@ class GPyTorchGPLearner(Learner):
         try:
             for start in range(0, n, self.predict_chunk_size):
                 chunk = features_proc[start : start + self.predict_chunk_size]
-                chunk_tensor = torch.tensor(chunk, dtype=torch.float64, device=self._device)
+                chunk_tensor = torch.tensor(
+                    chunk, dtype=torch.float64, device=self._device
+                )
                 if compute_uncertainty:
                     with (
                         torch.no_grad(),
@@ -348,7 +368,7 @@ class GPyTorchGPLearner(Learner):
                         all_means.append(posterior.mean.cpu().numpy())
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
-                "CUDA out of memory" in str(exc)
+                'CUDA out of memory' in str(exc)
             )
             if not oom:
                 raise
@@ -359,7 +379,7 @@ class GPyTorchGPLearner(Learner):
         means = np.concatenate(all_means).astype(np.float64)
         means = means * self._target_std + self._target_mean
 
-        if self.enable_aggressive_gc and self._device.type == "cuda":
+        if self.enable_aggressive_gc and self._device.type == 'cuda':
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -372,9 +392,9 @@ class GPyTorchGPLearner(Learner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner instance."""
         if not self.is_trained or self._likelihood is None:
-            return "GPyTorchGP(untrained)"
+            return 'GPyTorchGP(untrained)'
         noise = self._likelihood.noise.item()
-        return f"GPyTorchGP({self._kernel_name},noise={noise:.4f})"
+        return f'GPyTorchGP({self._kernel_name},noise={noise:.4f})'
 
     def supports_uncertainty(self) -> bool:
         """Return True; GP models always provide uncertainty estimates."""

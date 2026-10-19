@@ -39,7 +39,7 @@ def small_k(monkeypatch: pytest.MonkeyPatch) -> int:
     Patches the source-module global; ``_reservoir_extend`` reads it at call
     time, so the override propagates without touching production code.
     """
-    monkeypatch.setattr(_similarity, "K_RESERVOIR", TEST_K_RESERVOIR)
+    monkeypatch.setattr(_similarity, 'K_RESERVOIR', TEST_K_RESERVOIR)
     return TEST_K_RESERVOIR
 
 
@@ -49,7 +49,7 @@ def _make_fp(seed: int) -> Any:
     We need distinguishable fingerprints for survivor counting, so we use the
     seed value as the alkyl-chain length in a benzene + chain SMILES.
     """
-    smi = f"c1ccccc1{'C' * (seed % 100 + 1)}"
+    smi = f'c1ccccc1{"C" * (seed % 100 + 1)}'
     mol = Chem.MolFromSmiles(smi)
     gen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
     return gen.GetFingerprint(mol)
@@ -91,7 +91,9 @@ def test_reservoir_determinism_seed42() -> None:
 
     # Compare by ExplicitBitVect identity over the buffer order.
     assert len(cache_a.cumulative_fp_buffer) == len(cache_b.cumulative_fp_buffer)
-    for fp_a, fp_b in zip(cache_a.cumulative_fp_buffer, cache_b.cumulative_fp_buffer, strict=True):
+    for fp_a, fp_b in zip(
+        cache_a.cumulative_fp_buffer, cache_b.cumulative_fp_buffer, strict=True
+    ):
         assert fp_a.GetNumOnBits() == fp_b.GetNumOnBits()
 
 
@@ -120,8 +122,8 @@ def test_reservoir_uses_global_not_per_batch_counter(small_k: int) -> None:
     batch3_fp_ids = {id(fp) for fp in batch_fps[2]}
     survivors = sum(1 for fp in cache.cumulative_fp_buffer if id(fp) in batch3_fp_ids)
     assert 2_500 <= survivors <= 4_200, (
-        f"Batch-3 survivors {survivors} outside [2_500, 4_200]; expected "
-        f"≈3_333 for correct global counter. Per-batch-counter bug would "
+        f'Batch-3 survivors {survivors} outside [2_500, 4_200]; expected '
+        f'≈3_333 for correct global counter. Per-batch-counter bug would '
         f"yield ~5_000. Investigate _reservoir_extend's stream-counter logic."
     )
 
@@ -169,7 +171,7 @@ def test_reservoir_golden_snapshot_seed42() -> None:
             if j < K:
                 buf2[j] = item
     survivors_repeat = tuple(sorted(buf2))
-    assert survivors == survivors_repeat, "Two runs with same seed diverged"
+    assert survivors == survivors_repeat, 'Two runs with same seed diverged'
     # Count check: exactly K items.
     assert len(survivors) == K
     # Coverage check: items survive across the stream range (uniform-ish).

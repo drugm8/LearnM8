@@ -6,7 +6,7 @@ import numpy as np
 from learnm8.utils.logging_formatters import (
     format_cycle_schedule,
     format_duration,
-    format_experiment_summary
+    format_experiment_summary,
 )
 from learnm8.core.config import CycleConfig
 
@@ -33,7 +33,7 @@ class TestFormatCycleSchedule:
             n_cycles=5,
             batch_fraction=0.005,
             pruning_strategy='score_based',
-            pruning_params={'pruning_fraction': 0.3}
+            pruning_params={'pruning_fraction': 0.3},
         )
         result = format_cycle_schedule(1, config, 10000)
 
@@ -58,7 +58,7 @@ class TestFormatCycleSchedule:
             n_cycles=1,
             batch_fraction=0.01,
             pruning_strategy='score_based',
-            pruning_params=None
+            pruning_params=None,
         )
         result = format_cycle_schedule(1, config, 10000)
 
@@ -95,18 +95,18 @@ class TestFormatDuration:
         assert '1 hours 0 minutes' in result
 
 
-
-
 @pytest.mark.unit
 class TestFormatExperimentSummary:
     """Test experiment summary formatting."""
 
     def test_summary_with_pruning(self):
         """Format summary with labeled, pruned, and unlabeled compounds."""
-        df = pl.DataFrame({
-            'ID': range(1000),
-            'status': ['labeled'] * 300 + ['pruned'] * 200 + ['unlabeled'] * 500
-        })
+        df = pl.DataFrame(
+            {
+                'ID': range(1000),
+                'status': ['labeled'] * 300 + ['pruned'] * 200 + ['unlabeled'] * 500,
+            }
+        )
 
         lines = format_experiment_summary(df, 3723.5, 10)
 
@@ -121,10 +121,9 @@ class TestFormatExperimentSummary:
 
     def test_summary_no_pruning(self):
         """Format summary without pruning."""
-        df = pl.DataFrame({
-            'ID': range(1000),
-            'status': ['labeled'] * 400 + ['unlabeled'] * 600
-        })
+        df = pl.DataFrame(
+            {'ID': range(1000), 'status': ['labeled'] * 400 + ['unlabeled'] * 600}
+        )
 
         lines = format_experiment_summary(df, 154.2, 5)
         summary = '\n'.join(lines)
@@ -135,10 +134,7 @@ class TestFormatExperimentSummary:
 
     def test_summary_all_labeled(self):
         """Format summary when all compounds are labeled."""
-        df = pl.DataFrame({
-            'ID': range(100),
-            'status': ['labeled'] * 100
-        })
+        df = pl.DataFrame({'ID': range(100), 'status': ['labeled'] * 100})
 
         lines = format_experiment_summary(df, 60.5, 3)
         summary = '\n'.join(lines)
@@ -148,10 +144,9 @@ class TestFormatExperimentSummary:
 
     def test_duration_formats_correctly(self):
         """Verify duration is formatted in summary."""
-        df = pl.DataFrame({
-            'ID': range(100),
-            'status': ['labeled'] * 50 + ['unlabeled'] * 50
-        })
+        df = pl.DataFrame(
+            {'ID': range(100), 'status': ['labeled'] * 50 + ['unlabeled'] * 50}
+        )
 
         lines_short = format_experiment_summary(df, 45.0, 2)
         assert any('seconds' in line for line in lines_short)

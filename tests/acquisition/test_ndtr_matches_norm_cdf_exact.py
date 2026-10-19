@@ -21,9 +21,9 @@ def test_ndtr_matches_norm_cdf_exact_at_pinned_floor() -> None:
     """``ndtr`` is bit-exact equivalent of ``norm.cdf`` across normal use."""
     z = np.array([-50, -10, -3.7, -1, 0, 1, 3.7, 10, 50], dtype=np.float64)
     assert np.array_equal(ndtr(z), norm.cdf(z)), (
-        "scipy.special.ndtr is no longer bit-exact equivalent to scipy.stats.norm.cdf. "
-        "The inline ndtr path may now produce values that drift from the legacy path. "
-        "Either pin a tighter scipy floor or re-audit the inline-norm contract."
+        'scipy.special.ndtr is no longer bit-exact equivalent to scipy.stats.norm.cdf. '
+        'The inline ndtr path may now produce values that drift from the legacy path. '
+        'Either pin a tighter scipy floor or re-audit the inline-norm contract.'
     )
 
 

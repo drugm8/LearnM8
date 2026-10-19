@@ -18,7 +18,9 @@ class TestDTEnsemble:
         """Create DTEnsemble instance for testing."""
         return DTEnsemble()
 
-    def test_initialization_sets_default_depths_random_states_and_untrained_state(self, dt_ensemble):
+    def test_initialization_sets_default_depths_random_states_and_untrained_state(
+        self, dt_ensemble
+    ):
         """Test DTEnsemble initialization with default parameters."""
         assert len(dt_ensemble.learners) == 3
         assert dt_ensemble.max_depths == [5, 10, 15]
@@ -65,20 +67,22 @@ class TestDTEnsemble:
     def test_get_name_includes_model_count_and_depth_list(self, dt_ensemble):
         """Test name generation for DTEnsemble."""
         name = dt_ensemble.get_name()
-        assert "DTEnsemble" in name
-        assert "3xDT" in name
-        assert "depth=" in name
-        assert "5,10,15" in name
+        assert 'DTEnsemble' in name
+        assert '3xDT' in name
+        assert 'depth=' in name
+        assert '5,10,15' in name
 
     def test_get_name_custom_depths(self):
         """Test name generation with custom depths."""
         ensemble = DTEnsemble(max_depths=[3, 7, 11], random_states=[1, 2, 3])
         name = ensemble.get_name()
-        assert "DTEnsemble" in name
-        assert "3xDT" in name
-        assert "3,7,11" in name
+        assert 'DTEnsemble' in name
+        assert '3xDT' in name
+        assert '3,7,11' in name
 
-    def test_train_with_mismatched_arrays(self, dt_ensemble, small_real_morgan_features):
+    def test_train_with_mismatched_arrays(
+        self, dt_ensemble, small_real_morgan_features
+    ):
         """Test error handling with mismatched feature and target sizes."""
         features = small_real_morgan_features[:10]
         targets = np.random.beta(2, 5, 15)
@@ -86,7 +90,9 @@ class TestDTEnsemble:
         with pytest.raises((ValueError, LearnerError)):
             dt_ensemble.train(features, targets)
 
-    def test_consistency_with_fixed_random_state(self, small_real_compounds, small_real_morgan_features):
+    def test_consistency_with_fixed_random_state(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test prediction consistency with fixed random states."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -106,7 +112,9 @@ class TestDTEnsemble:
 
         assert np.allclose(predictions1, predictions2)
 
-    def test_failed_learner_handling(self, small_real_compounds, small_real_morgan_features):
+    def test_failed_learner_handling(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test handling of failed learners during training."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -118,11 +126,14 @@ class TestDTEnsemble:
 
         class MockBadLearner(Learner):
             def train(self, features, targets):
-                raise RuntimeError("Training failed")
+                raise RuntimeError('Training failed')
+
             def predict(self, features):
                 return np.random.randn(len(features)), None
+
             def get_name(self):
-                return "BadLearner"
+                return 'BadLearner'
+
             def supports_uncertainty(self):
                 return False
 

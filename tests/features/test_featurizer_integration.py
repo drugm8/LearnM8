@@ -1,6 +1,5 @@
 """Test featurizer integration with API and registry."""
 
-
 import numpy as np
 import pytest
 

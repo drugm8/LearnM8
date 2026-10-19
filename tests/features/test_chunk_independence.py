@@ -272,8 +272,7 @@ class TestColdWarmInvariance:
 
         assert cold.shape == warm.shape
         assert _float_close(cold, warm), (
-            f'estate cold vs warm: max diff = '
-            f'{np.nanmax(np.abs(cold - warm)):.3e}'
+            f'estate cold vs warm: max diff = {np.nanmax(np.abs(cold - warm)):.3e}'
         )
 
     def test_usr_cold_vs_warm(self, tmp_path):
@@ -284,8 +283,7 @@ class TestColdWarmInvariance:
 
         assert cold.shape == warm.shape
         assert _float_close(cold, warm), (
-            f'usr cold vs warm: max diff = '
-            f'{np.nanmax(np.abs(cold - warm)):.3e}'
+            f'usr cold vs warm: max diff = {np.nanmax(np.abs(cold - warm)):.3e}'
         )
 
     def test_morgan_cold_vs_warm_subset_consistent(self, tmp_path):

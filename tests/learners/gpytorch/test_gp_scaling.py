@@ -5,7 +5,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
-gpytorch = pytest.importorskip("gpytorch")
+gpytorch = pytest.importorskip('gpytorch')
 
 from learnm8.learners.gpytorch.gpu_gp import GPyTorchGPLearner
 
@@ -16,12 +16,12 @@ class TestGPyTorchGPScaling:
         features = rng.randn(50, 5).astype(np.float32) * 100
         targets = rng.randn(50).astype(np.float32)
 
-        learner = GPyTorchGPLearner(kernel="rbf", device="cpu", random_state=42)
-        learner._feature_type = "continuous"
+        learner = GPyTorchGPLearner(kernel='rbf', device='cpu', random_state=42)
+        learner._feature_type = 'continuous'
         learner.train(features, targets)
 
         assert learner.is_trained
-        assert hasattr(learner, "_feature_scaler")
+        assert hasattr(learner, '_feature_scaler')
         assert learner._feature_scaler is not None
 
     def test_tanimoto_kernel_skips_feature_scaling(self):
@@ -29,8 +29,8 @@ class TestGPyTorchGPScaling:
         features = (rng.rand(50, 10) > 0.5).astype(np.float32)
         targets = rng.randn(50).astype(np.float32)
 
-        learner = GPyTorchGPLearner(kernel="tanimoto", device="cpu", random_state=42)
-        learner._feature_type = "binary"
+        learner = GPyTorchGPLearner(kernel='tanimoto', device='cpu', random_state=42)
+        learner._feature_type = 'binary'
         learner.train(features, targets)
 
         assert learner.is_trained
@@ -41,10 +41,10 @@ class TestGPyTorchGPScaling:
         features = rng.randn(50, 5).astype(np.float32) * 100
         targets = rng.randn(50).astype(np.float32)
 
-        learner = GPyTorchGPLearner(kernel="auto", device="cpu", random_state=42)
-        learner._feature_type = "continuous"
+        learner = GPyTorchGPLearner(kernel='auto', device='cpu', random_state=42)
+        learner._feature_type = 'continuous'
         learner.train(features, targets)
 
         assert learner.is_trained
-        assert learner._kernel_name == "rbf"
+        assert learner._kernel_name == 'rbf'
         assert learner._feature_scaler is not None

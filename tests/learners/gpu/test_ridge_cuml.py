@@ -35,12 +35,17 @@ def _make_cuml_mock(n_train: int):
     return mock_cuml, mock_instance
 
 
-def _build_trained(X: np.ndarray, y: np.ndarray, alpha: float = 0.1) -> RidgeCumlLearner:
+def _build_trained(
+    X: np.ndarray, y: np.ndarray, alpha: float = 0.1
+) -> RidgeCumlLearner:
     """Build RidgeCumlLearner with internal state set directly (no cuml needed)."""
     learner = RidgeCumlLearner(alpha=alpha)
-    features_pp, mask, imputer = _preprocess_features(X, remove_zero_variance=True, is_training=True)
+    features_pp, mask, imputer = _preprocess_features(
+        X, remove_zero_variance=True, is_training=True
+    )
 
     from sklearn.preprocessing import StandardScaler
+
     scaler = StandardScaler()
     features_pp = scaler.fit_transform(features_pp)
 
@@ -62,14 +67,16 @@ def _build_trained(X: np.ndarray, y: np.ndarray, alpha: float = 0.1) -> RidgeCum
     learner._leverage_A_gpu = None
     preds = sk_model.predict(features_pp).astype(np.float64)
     residuals = y.astype(np.float64) - preds
-    learner._sigma_hat_sq = float(np.sum(residuals ** 2)) / max(n - p, 1)
+    learner._sigma_hat_sq = float(np.sum(residuals**2)) / max(n - p, 1)
     learner.is_trained = True
     return learner
 
 
 class TestConstruction:
     def test_construction_with_valid_parameters(self):
-        learner = RidgeCumlLearner(alpha=0.5, fit_intercept=False, solver='svd', random_state=0)
+        learner = RidgeCumlLearner(
+            alpha=0.5, fit_intercept=False, solver='svd', random_state=0
+        )
         assert learner.alpha == 0.5
         assert learner.fit_intercept is False
         assert learner.solver == 'svd'
@@ -100,8 +107,10 @@ class TestMissingCuml:
     def test_missing_cuml_raises_learner_error_with_message(self):
         X, y = _make_data()
         learner = RidgeCumlLearner(alpha=0.1)
-        with patch.dict('sys.modules', {'cuml': None, 'cuml.linear_model': None}), \
-             pytest.raises(LearnerError, match='cuml'):
+        with (
+            patch.dict('sys.modules', {'cuml': None, 'cuml.linear_model': None}),
+            pytest.raises(LearnerError, match='cuml'),
+        ):
             learner.train(X, y)
 
 
@@ -109,7 +118,10 @@ class TestTrain:
     def test_train_fits_cuml_ridge(self):
         X, y = _make_data()
         mock_cuml, mock_instance = _make_cuml_mock(len(y))
-        with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
+        with patch.dict(
+            'sys.modules',
+            {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model},
+        ):
             learner = RidgeCumlLearner(alpha=0.1)
             learner.train(X, y)
         mock_instance.fit.assert_called_once()
@@ -118,7 +130,10 @@ class TestTrain:
     def test_train_computes_L_inv_in_float64(self):
         X, y = _make_data()
         mock_cuml, _mock_instance = _make_cuml_mock(len(y))
-        with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
+        with patch.dict(
+            'sys.modules',
+            {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model},
+        ):
             learner = RidgeCumlLearner(alpha=0.1)
             learner.train(X, y)
         assert learner._L_inv_cpu is not None
@@ -137,13 +152,20 @@ class TestTrain:
         y = rng.standard_normal(n)
         mock_cuml, _ = _make_cuml_mock(n)
 
-        with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
+        with patch.dict(
+            'sys.modules',
+            {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model},
+        ):
             learner = RidgeCumlLearner(alpha=1e-12)
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter('always')
                 learner.train(X, y)
 
-        cond_warns = [w for w in caught if 'condition' in str(w.message).lower() or 'Gram' in str(w.message)]
+        cond_warns = [
+            w
+            for w in caught
+            if 'condition' in str(w.message).lower() or 'Gram' in str(w.message)
+        ]
         assert len(cond_warns) > 0
 
 
@@ -201,8 +223,13 @@ class TestPredict:
         X, y = _make_data(n=30, p=6)
         learner = _build_trained(X, y)
 
-        with patch('learnm8.learners.gpu.ridge_cuml._compute_leverages_cpu', side_effect=MemoryError('out of memory')), \
-             pytest.raises(LearnerError):
+        with (
+            patch(
+                'learnm8.learners.gpu.ridge_cuml._compute_leverages_cpu',
+                side_effect=MemoryError('out of memory'),
+            ),
+            pytest.raises(LearnerError),
+        ):
             learner.predict(X)
 
 
@@ -222,7 +249,9 @@ class TestGPULeverage:
         learner = _build_trained(X, y)
         learner._leverage_A_gpu = self._make_leverage_A(learner)
 
-        with patch.object(learner, '_compute_leverages_gpu', side_effect=MemoryError('GPU OOM')):
+        with patch.object(
+            learner, '_compute_leverages_gpu', side_effect=MemoryError('GPU OOM')
+        ):
             _, unc = learner.predict(X)
 
         assert np.all(np.isfinite(unc))
@@ -244,7 +273,11 @@ class TestGPULeverage:
         X, y = _make_data(n=50, p=6)
         learner = _build_trained(X, y)
 
-        result_small = _compute_leverages_cpu(learner._L_inv_cpu, X.astype(np.float64), chunk_size=7)
-        result_large = _compute_leverages_cpu(learner._L_inv_cpu, X.astype(np.float64), chunk_size=10000)
+        result_small = _compute_leverages_cpu(
+            learner._L_inv_cpu, X.astype(np.float64), chunk_size=7
+        )
+        result_large = _compute_leverages_cpu(
+            learner._L_inv_cpu, X.astype(np.float64), chunk_size=10000
+        )
 
         np.testing.assert_allclose(result_small, result_large, atol=1e-10)

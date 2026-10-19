@@ -20,26 +20,58 @@ import pytest
 from learnm8.evaluation.metrics.similarity import _derive_rng
 
 NEP19_FROZEN_SEED42_CYCLE0 = (
-    89250, 773956, 654571, 438878, 433015,
-    858597, 85945, 697368, 201469, 94177,
+    89250,
+    773956,
+    654571,
+    438878,
+    433015,
+    858597,
+    85945,
+    697368,
+    201469,
+    94177,
 )
 NEP19_FROZEN_SEED42_CYCLE1 = (
-    637987, 793502, 449405, 245958, 920042,
-    404426, 822724, 632755, 902618, 816194,
+    637987,
+    793502,
+    449405,
+    245958,
+    920042,
+    404426,
+    822724,
+    632755,
+    902618,
+    816194,
 )
 NEP19_FROZEN_SEED42_CYCLE5 = (
-    261009, 174686, 597003, 978610, 706853,
-    57004, 100141, 171094, 471883, 733027,
+    261009,
+    174686,
+    597003,
+    978610,
+    706853,
+    57004,
+    100141,
+    171094,
+    471883,
+    733027,
 )
 NEP19_FROZEN_SEEDNONE_CYCLE0 = (
-    46116, 914268, 604490, 744101, 96510,
-    824957, 181651, 202536, 708542, 643404,
+    46116,
+    914268,
+    604490,
+    744101,
+    96510,
+    824957,
+    181651,
+    202536,
+    708542,
+    643404,
 )
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    ("cycle", "expected"),
+    ('cycle', 'expected'),
     [
         (0, NEP19_FROZEN_SEED42_CYCLE0),
         (1, NEP19_FROZEN_SEED42_CYCLE1),
@@ -58,8 +90,8 @@ def test_derive_rng_seed42_produces_frozen_sequence(
     rng = _derive_rng(global_seed=42, cycle=cycle)
     actual = tuple(int(x) for x in rng.integers(0, 1_000_000, size=10))
     assert actual == expected, (
-        f"_derive_rng(42, {cycle}) shifted output. Numpy version may have "
-        f"violated NEP-19 stability promise. got={actual}"
+        f'_derive_rng(42, {cycle}) shifted output. Numpy version may have '
+        f'violated NEP-19 stability promise. got={actual}'
     )
 
 
@@ -74,8 +106,8 @@ def test_derive_rng_seed_none_produces_frozen_sequence() -> None:
     rng = _derive_rng(global_seed=None, cycle=0)
     actual = tuple(int(x) for x in rng.integers(0, 1_000_000, size=10))
     assert actual == NEP19_FROZEN_SEEDNONE_CYCLE0, (
-        f"_derive_rng(None, 0) shifted output. The 0xA17C7E offset path "
-        f"may have changed. got={actual}"
+        f'_derive_rng(None, 0) shifted output. The 0xA17C7E offset path '
+        f'may have changed. got={actual}'
     )
 
 
@@ -86,4 +118,4 @@ def test_derive_rng_two_calls_same_seed_match() -> None:
     rng_b = _derive_rng(global_seed=42, cycle=0)
     a = tuple(int(x) for x in rng_a.integers(0, 1_000_000, size=20))
     b = tuple(int(x) for x in rng_b.integers(0, 1_000_000, size=20))
-    assert a == b, "Two _derive_rng(42, 0) calls produced different sequences"
+    assert a == b, 'Two _derive_rng(42, 0) calls produced different sequences'

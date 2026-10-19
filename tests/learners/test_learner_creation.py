@@ -59,7 +59,7 @@ class TestLearnerCreation:
 
     def test_unknown_learner_raises_error(self):
         """Test error handling for unknown learner string."""
-        with pytest.raises(ValueError, match="Unknown learner"):
+        with pytest.raises(ValueError, match='Unknown learner'):
             _create_learner('nonexistent_learner', random_state=42)
 
 
@@ -67,7 +67,9 @@ class TestLearnerCreation:
 class TestAPIWithEnsembles:
     """Test run_active_learning with ensemble learners."""
 
-    def test_run_active_learning_with_string_ensemble(self, small_real_compounds, tmp_path):
+    def test_run_active_learning_with_string_ensemble(
+        self, small_real_compounds, tmp_path
+    ):
         """Test Pattern 1: String-based ensemble creation."""
         from learnm8 import run_active_learning
 
@@ -88,14 +90,16 @@ class TestAPIWithEnsembles:
             n_cycles=2,
             batch_fraction=0.1,
             cache_dir=tmp_path / '.cache',
-            output_dir=tmp_path / 'output'
+            output_dir=tmp_path / 'output',
         )
 
         assert results is not None
         assert 'compounds_df' in results
         assert len(results['cycle_metrics']) == 2
 
-    def test_run_active_learning_with_instance_ensemble(self, small_real_compounds, tmp_path):
+    def test_run_active_learning_with_instance_ensemble(
+        self, small_real_compounds, tmp_path
+    ):
         """Test Pattern 2: Pre-constructed ensemble."""
         from learnm8 import run_active_learning
         from learnm8.learners.ensemble import RFEnsemble
@@ -107,10 +111,7 @@ class TestAPIWithEnsembles:
         oracle_path = tmp_path / 'oracle.csv'
         oracle_df.write_csv(oracle_path)
 
-        ensemble = RFEnsemble(
-            n_estimators=50,
-            random_states=[10, 20, 30]
-        )
+        ensemble = RFEnsemble(n_estimators=50, random_states=[10, 20, 30])
 
         results = run_active_learning(
             compound_pool=small_real_compounds,
@@ -121,7 +122,7 @@ class TestAPIWithEnsembles:
             n_cycles=2,
             batch_fraction=0.1,
             cache_dir=tmp_path / '.cache',
-            output_dir=tmp_path / 'output'
+            output_dir=tmp_path / 'output',
         )
 
         assert results is not None
@@ -148,7 +149,7 @@ class TestAPIWithEnsembles:
             n_cycles=2,
             batch_fraction=0.1,
             cache_dir=tmp_path / '.cache1',
-            output_dir=tmp_path / 'output1'
+            output_dir=tmp_path / 'output1',
         )
 
         results2 = run_active_learning(
@@ -161,7 +162,7 @@ class TestAPIWithEnsembles:
             n_cycles=2,
             batch_fraction=0.1,
             cache_dir=tmp_path / '.cache2',
-            output_dir=tmp_path / 'output2'
+            output_dir=tmp_path / 'output2',
         )
 
         df1 = results1['compounds_df']

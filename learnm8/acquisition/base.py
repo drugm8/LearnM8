@@ -158,9 +158,9 @@ class AcquisitionFunction(ABC):
         # Check basic DataFrame structure
         if len(compounds) == 0:
             raise ValueError(
-                f"compounds DataFrame is empty. Cannot run {self.get_name()} on an empty compound pool. "
-                f"All compounds may have been labeled or pruned. "
-                f"Check n_cycles and pruning_fraction settings."
+                f'compounds DataFrame is empty. Cannot run {self.get_name()} on an empty compound pool. '
+                f'All compounds may have been labeled or pruned. '
+                f'Check n_cycles and pruning_fraction settings.'
             )
 
         # Check required columns
@@ -168,9 +168,9 @@ class AcquisitionFunction(ABC):
         missing_cols = set(required_cols) - set(compounds.columns)
         if missing_cols:
             raise ValueError(
-                f"Missing required columns for {self.get_name()}: expected {required_cols}, "
-                f"but {missing_cols} are missing. "
-                f"Available columns: {list(compounds.columns)}."
+                f'Missing required columns for {self.get_name()}: expected {required_cols}, '
+                f'but {missing_cols} are missing. '
+                f'Available columns: {list(compounds.columns)}.'
             )
 
         # Check uncertainty column if required
@@ -178,21 +178,23 @@ class AcquisitionFunction(ABC):
             uncertainty_strategies = ['greedy', 'random', 'topk']
             raise ValueError(
                 f"{self.get_name()} requires an 'uncertainty' column, but the learner did not "
-                f"provide uncertainty estimates. Use a learner that supports uncertainty "
-                f"(gp, mc_dropout, or ensemble variants), or switch to an acquisition "
+                f'provide uncertainty estimates. Use a learner that supports uncertainty '
+                f'(gp, mc_dropout, or ensemble variants), or switch to an acquisition '
                 f"strategy that doesn't require uncertainty (e.g., {', '.join(uncertainty_strategies)})."
             )
 
         # Check n_select
         if n_select <= 0:
             raise ValueError(
-                f"n_select must be positive, got {n_select}. "
-                f"This is usually caused by batch_fraction being too small for the pool size."
+                f'n_select must be positive, got {n_select}. '
+                f'This is usually caused by batch_fraction being too small for the pool size.'
             )
 
         if n_select > len(compounds):
-            logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
-                         f"will select all {len(compounds)} available compounds")
+            logger.warning(
+                f'n_select ({n_select}) exceeds available compounds ({len(compounds)}), '
+                f'will select all {len(compounds)} available compounds'
+            )
 
         # FR-005 ext (Should-Fix #7): defence-in-depth check using `if/raise
         # LearnerError` so it survives `python -O` (where bare `assert` is
@@ -203,10 +205,10 @@ class AcquisitionFunction(ABC):
         null_or_nan = pred_col.is_null() | pred_col.is_nan()
         if null_or_nan.any():
             raise LearnerError(
-                f"[secondary-guard] Predictions contain NaN values: found "
-                f"{null_or_nan.sum()} NaN/null values out of {len(compounds)} compounds. "
-                f"cycle.py upstream guard should have caught this — did the caller "
-                f"bypass cycle.py (direct .select() from notebook)?"
+                f'[secondary-guard] Predictions contain NaN values: found '
+                f'{null_or_nan.sum()} NaN/null values out of {len(compounds)} compounds. '
+                f'cycle.py upstream guard should have caught this — did the caller '
+                f'bypass cycle.py (direct .select() from notebook)?'
             )
 
         # Check for duplicate IDs — skipped on internal call path where uniqueness is guaranteed
@@ -215,8 +217,8 @@ class AcquisitionFunction(ABC):
             if n_unique_count != len(compounds):
                 n_dupes = len(compounds) - n_unique_count
                 raise ValueError(
-                    f"Found {n_dupes} duplicate compound IDs in input data. "
-                    f"Each compound must have a unique ID for acquisition selection."
+                    f'Found {n_dupes} duplicate compound IDs in input data. '
+                    f'Each compound must have a unique ID for acquisition selection.'
                 )
 
         # Check uncertainty values if present
@@ -226,20 +228,25 @@ class AcquisitionFunction(ABC):
             if unc_col.is_null().any() or unc_col.is_nan().any():
                 nan_count = unc_col.is_null().sum() + unc_col.is_nan().sum()
                 raise LearnerError(
-                    f"[secondary-guard] Uncertainties contain {nan_count} NaN/null values "
-                    f"out of {len(compounds)} compounds. cycle.py upstream guard should "
-                    f"have caught this — direct .select() bypassing cycle.py?"
+                    f'[secondary-guard] Uncertainties contain {nan_count} NaN/null values '
+                    f'out of {len(compounds)} compounds. cycle.py upstream guard should '
+                    f'have caught this — direct .select() bypassing cycle.py?'
                 )
 
             if (unc_col < 0).any():
                 neg_count = (unc_col < 0).sum()
                 raise ValueError(
-                    f"Uncertainties contain {neg_count} negative values. "
-                    f"Uncertainty estimates must be non-negative (>= 0)."
+                    f'Uncertainties contain {neg_count} negative values. '
+                    f'Uncertainty estimates must be non-negative (>= 0).'
                 )
 
-    def _safe_select_top_k(self, compounds: pl.DataFrame, scores: np.ndarray,
-                          n_select: int, ascending: bool = False) -> pl.DataFrame:
+    def _safe_select_top_k(
+        self,
+        compounds: pl.DataFrame,
+        scores: np.ndarray,
+        n_select: int,
+        ascending: bool = False,
+    ) -> pl.DataFrame:
         """Safely select top-k compounds based on scores.
 
         Args:
@@ -257,8 +264,8 @@ class AcquisitionFunction(ABC):
         if len(scores) != len(compounds):
             raise ValueError(
                 f"Acquisition scores length ({len(scores)}) doesn't match "
-                f"compounds length ({len(compounds)}). "
-                f"This is an internal error in the acquisition function implementation."
+                f'compounds length ({len(compounds)}). '
+                f'This is an internal error in the acquisition function implementation.'
             )
 
         # Handle invalid scores — copy only when bad values exist (avoids large allocation on normal path)
@@ -266,7 +273,9 @@ class AcquisitionFunction(ABC):
         # so this is safe. Do not reuse the array after calling this method if NaN/Inf were present.
         valid_mask = np.isfinite(scores)
         if not valid_mask.all():
-            logger.warning(f"Found {(~valid_mask).sum()} invalid scores, setting to worst value")
+            logger.warning(
+                f'Found {(~valid_mask).sum()} invalid scores, setting to worst value'
+            )
             scores = scores.copy()
             scores[~valid_mask] = np.inf if ascending else -np.inf
 
@@ -280,15 +289,23 @@ class AcquisitionFunction(ABC):
                 top_indices = np.argsort(scores, kind='stable')
             else:
                 # O(n) partition + O(k log k) sort with index-stable tie-breaking
-                top_indices = np.argpartition(scores, actual_n_select - 1)[:actual_n_select]
-                top_indices = top_indices[np.lexsort((top_indices, scores[top_indices]))]
+                top_indices = np.argpartition(scores, actual_n_select - 1)[
+                    :actual_n_select
+                ]
+                top_indices = top_indices[
+                    np.lexsort((top_indices, scores[top_indices]))
+                ]
         else:
             if actual_n_select >= n:
                 top_indices = np.argsort(scores, kind='stable')[::-1]
             else:
                 # O(n) partition + O(k log k) sort with index-stable tie-breaking
-                top_indices = np.argpartition(scores, -actual_n_select)[-actual_n_select:]
-                top_indices = top_indices[np.lexsort((top_indices, -scores[top_indices]))]
+                top_indices = np.argpartition(scores, -actual_n_select)[
+                    -actual_n_select:
+                ]
+                top_indices = top_indices[
+                    np.lexsort((top_indices, -scores[top_indices]))
+                ]
 
         # O(k) positional row retrieval — requires Polars >=1.0 and 0-based positional alignment.
         # Invariant: scores were extracted from this same DataFrame via .to_numpy() in the same
@@ -302,7 +319,9 @@ class AcquisitionFunction(ABC):
 
 
 # Utility functions for acquisition calculations
-def validate_uncertainty_inputs(compounds: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+def validate_uncertainty_inputs(
+    compounds: pl.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Validate and extract prediction means and uncertainties from compounds DataFrame.
 
@@ -318,17 +337,17 @@ def validate_uncertainty_inputs(compounds: pl.DataFrame) -> tuple[np.ndarray, np
     if 'prediction' not in compounds.columns:
         raise AcquisitionError(
             f"Compounds DataFrame is missing required 'prediction' column. "
-            f"Available columns: {list(compounds.columns)}. "
-            f"Ensure the learner has been trained and predictions were generated."
+            f'Available columns: {list(compounds.columns)}. '
+            f'Ensure the learner has been trained and predictions were generated.'
         )
 
     if 'uncertainty' not in compounds.columns:
         raise AcquisitionError(
             f"Compounds DataFrame is missing required 'uncertainty' column for "
-            f"uncertainty-based acquisition. Available columns: {list(compounds.columns)}. "
-            f"Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants), "
+            f'uncertainty-based acquisition. Available columns: {list(compounds.columns)}. '
+            f'Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants), '
             f"or switch to an acquisition strategy that doesn't require uncertainty "
-            f"(greedy, random, topk)."
+            f'(greedy, random, topk).'
         )
 
     predictions = compounds.get_column('prediction').to_numpy()
@@ -343,8 +362,8 @@ def validate_uncertainty_inputs(compounds: pl.DataFrame) -> tuple[np.ndarray, np
     if np.any(uncertainties < 0):
         neg_count = int((uncertainties < 0).sum())
         raise AcquisitionError(
-            f"Uncertainties contain {neg_count} negative values. "
-            f"Uncertainty estimates must be non-negative (>= 0)."
+            f'Uncertainties contain {neg_count} negative values. '
+            f'Uncertainty estimates must be non-negative (>= 0).'
         )
 
     return predictions, uncertainties

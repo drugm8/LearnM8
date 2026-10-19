@@ -59,9 +59,13 @@ class TestXGBoostDeviceCuda:
 
     def test_cuda_failure_at_train_raises_learner_error(self, features, targets):
         learner = XGBoostLearner(device='cuda', n_estimators=5)
-        cuda_err = RuntimeError('CUDA error: no kernel image is available for execution on the device')
-        with patch.object(learner.model, 'fit', side_effect=cuda_err), \
-                pytest.raises(LearnerError, match='XGBoost CUDA training failed'):
+        cuda_err = RuntimeError(
+            'CUDA error: no kernel image is available for execution on the device'
+        )
+        with (
+            patch.object(learner.model, 'fit', side_effect=cuda_err),
+            pytest.raises(LearnerError, match='XGBoost CUDA training failed'),
+        ):
             learner.train(features, targets)
 
     def test_no_silent_cpu_substitution_on_cuda_failure(self, features, targets):
@@ -112,7 +116,9 @@ class TestXGBoostAggressiveGc:
         assert learner.enable_aggressive_gc is True
 
     @pytest.mark.slow
-    def test_enable_aggressive_gc_deletes_old_model_before_refit(self, features, targets):
+    def test_enable_aggressive_gc_deletes_old_model_before_refit(
+        self, features, targets
+    ):
         learner = XGBoostLearner(n_estimators=5, enable_aggressive_gc=True)
         learner.train(features, targets)
         assert learner.is_trained

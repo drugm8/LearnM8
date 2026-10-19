@@ -138,6 +138,7 @@ class RfFilLearner(SklearnLearner):
 
         try:
             import cuml
+
             _ver = getattr(cuml, '__version__', '')
             _parts = tuple(int(x) for x in _ver.split('.')[:2])
             if _parts < (25, 4):

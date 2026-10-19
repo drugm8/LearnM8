@@ -54,7 +54,9 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
         # Extract predictions and uncertainties
         predictions, uncertainties = validate_uncertainty_inputs(compounds)
 
-        logger.debug(f"ThompsonAcquisition: sampling from posterior with random_state={self.random_state}")
+        logger.debug(
+            f'ThompsonAcquisition: sampling from posterior with random_state={self.random_state}'
+        )
 
         # Sample from posterior predictive distribution
         # Use uncertainties directly (already standard deviations, not variances)
@@ -66,8 +68,10 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
             compounds, thompson_samples, n_select, ascending=not self.maximize
         )
 
-        logger.debug(f"ThompsonSamplingAcquisition selected {len(selected)} compounds "
-                    f"with random_state={self.random_state}")
+        logger.debug(
+            f'ThompsonSamplingAcquisition selected {len(selected)} compounds '
+            f'with random_state={self.random_state}'
+        )
 
         return selected
 
@@ -109,4 +113,4 @@ class ThompsonSamplingAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        return f"Thompson(seed={self.random_state})"
+        return f'Thompson(seed={self.random_state})'

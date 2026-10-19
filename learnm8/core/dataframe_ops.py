@@ -30,7 +30,7 @@ def _update_status_inplace(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: pl.Series | dict | None = None
+    target_values: pl.Series | dict | None = None,
 ) -> pl.DataFrame:
     """Update compound status in-place (modifies df).
 
@@ -60,50 +60,53 @@ def _update_status_inplace(
     mask = pl.col('ID').is_in(compound_ids)
     df = df.with_columns(
         pl.when(mask)
-          .then(pl.lit(new_status))
-          .otherwise(pl.col('status'))
-          .alias('status')
+        .then(pl.lit(new_status))
+        .otherwise(pl.col('status'))
+        .alias('status')
     )
 
     if new_status == 'labeled':
         df = df.with_columns(
             pl.when(mask)
-              .then(pl.lit(cycle))
-              .otherwise(pl.col('labeled_cycle'))
-              .alias('labeled_cycle')
+            .then(pl.lit(cycle))
+            .otherwise(pl.col('labeled_cycle'))
+            .alias('labeled_cycle')
         )
 
         na_mask = mask & pl.col('selected_cycle').is_null()
         df = df.with_columns(
             pl.when(na_mask)
-              .then(pl.lit(cycle))
-              .otherwise(pl.col('selected_cycle'))
-              .alias('selected_cycle')
+            .then(pl.lit(cycle))
+            .otherwise(pl.col('selected_cycle'))
+            .alias('selected_cycle')
         )
 
         if target_values is not None:
             if isinstance(target_values, dict):
                 id_to_value = target_values
             elif isinstance(target_values, pl.Series):
-                id_to_value = dict(zip(compound_ids, target_values.to_list(), strict=True))
+                id_to_value = dict(
+                    zip(compound_ids, target_values.to_list(), strict=True)
+                )
             else:
                 raise TypeError(
-                    f"target_values must be dict or pl.Series, "
-                    f"got {type(target_values).__name__}. "
-                    f"Pass measured values as a Polars Series or dict mapping ID → value."
+                    f'target_values must be dict or pl.Series, '
+                    f'got {type(target_values).__name__}. '
+                    f'Pass measured values as a Polars Series or dict mapping ID → value.'
                 )
 
-            lookup_df = pl.DataFrame({
-                'ID': list(id_to_value.keys()),
-                f'{target_col}_new': list(id_to_value.values())
-            })
+            lookup_df = pl.DataFrame(
+                {
+                    'ID': list(id_to_value.keys()),
+                    f'{target_col}_new': list(id_to_value.values()),
+                }
+            )
             df = df.join(lookup_df, on='ID', how='left')
             if target_col in df.columns:
                 df = df.with_columns(
-                    pl.coalesce(
-                        pl.col(f'{target_col}_new'),
-                        pl.col(target_col)
-                    ).alias(target_col)
+                    pl.coalesce(pl.col(f'{target_col}_new'), pl.col(target_col)).alias(
+                        target_col
+                    )
                 ).drop(f'{target_col}_new')
             else:
                 df = df.rename({f'{target_col}_new': target_col})
@@ -111,9 +114,9 @@ def _update_status_inplace(
     elif new_status == 'pruned':
         df = df.with_columns(
             pl.when(mask)
-              .then(pl.lit(cycle))
-              .otherwise(pl.col('pruned_cycle'))
-              .alias('pruned_cycle')
+            .then(pl.lit(cycle))
+            .otherwise(pl.col('pruned_cycle'))
+            .alias('pruned_cycle')
         )
 
     logger.debug(f"Updated status to '{new_status}' for {len(compound_ids)} compounds")
@@ -127,7 +130,7 @@ def update_status(
     new_status: str,
     cycle: int,
     target_col: str,
-    target_values: pl.Series | dict | None = None
+    target_values: pl.Series | dict | None = None,
 ) -> pl.DataFrame:
     """Update compound status using vectorized boolean masking.
 
@@ -176,7 +179,9 @@ def update_status(
         >>> # C1 now has: labeled_cycle=1, selected_cycle=0 (preserved)
     """
     df = df.clone()
-    return _update_status_inplace(df, compound_ids, new_status, cycle, target_col, target_values)
+    return _update_status_inplace(
+        df, compound_ids, new_status, cycle, target_col, target_values
+    )
 
 
 def iter_status_chunks(
@@ -212,9 +217,7 @@ def iter_status_chunks(
     if chunk_size <= 0:
         raise ValueError(f'chunk_size must be positive, got {chunk_size}')
 
-    idx = df.select(
-        pl.arg_where(pl.col('status') == status).alias('i')
-    ).to_series()
+    idx = df.select(pl.arg_where(pl.col('status') == status).alias('i')).to_series()
     total = idx.len()
     cols = list(columns)
     for start in range(0, total, chunk_size):
@@ -264,9 +267,7 @@ def mark_pruned_by_ids(
 
 
 def get_compounds_by_status(
-    df: pl.DataFrame,
-    status: str,
-    columns: list[str] | None = None
+    df: pl.DataFrame, status: str, columns: list[str] | None = None
 ) -> pl.DataFrame:
     """Get compounds by status using vectorized filtering.
 

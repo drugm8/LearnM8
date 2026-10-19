@@ -19,7 +19,9 @@ class TestRandomForestLearner:
         """Create RandomForestLearner instance for testing."""
         return RandomForestLearner(n_estimators=10, random_state=42)
 
-    def test_initialization_sets_forest_parameters_and_uncertainty_support(self, learner):
+    def test_initialization_sets_forest_parameters_and_uncertainty_support(
+        self, learner
+    ):
         """Test learner initialization."""
         assert learner.n_estimators == 10
         assert learner.random_state == 42
@@ -76,7 +78,9 @@ class TestRandomForestLearner:
         assert 'RandomForest' in name
         assert 'n_estimators=10' in name
 
-    def test_get_oob_score_returns_float_after_training(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_get_oob_score_returns_float_after_training(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test out-of-bag score retrieval."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -113,7 +117,9 @@ class TestRandomForestLearner:
         assert learner.max_depth == 3
         assert predictions.shape[0] == len(compounds)
 
-    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(
+        self, learner, tmp_path
+    ):
         """Test with small diverse dataset."""
         small_compounds = pl.DataFrame(
             {

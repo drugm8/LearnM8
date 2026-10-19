@@ -19,7 +19,9 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
 TREE_LEARNER_FACTORIES = [
-    pytest.param(lambda: RandomForestLearner(n_estimators=20, random_state=42), id='rf'),
+    pytest.param(
+        lambda: RandomForestLearner(n_estimators=20, random_state=42), id='rf'
+    ),
     pytest.param(lambda: XGBoostLearner(n_estimators=20, random_state=42), id='xgb'),
     pytest.param(lambda: DecisionTreeLearner(max_depth=8, random_state=42), id='dt'),
 ]

@@ -116,8 +116,12 @@ class TestTopKShortlist:
     def test_finalize_clamps_when_shortlist_small(self):
         acq = get_acquisition_function('topk')(k_fraction=0.1, random_state=1)
         shortlist = pl.DataFrame(
-            {'ID': ['a', 'b'], 'prediction': [1.0, 2.0],
-             'acquisition_score': [1.0, 2.0], 'global_index': [0, 1]}
+            {
+                'ID': ['a', 'b'],
+                'prediction': [1.0, 2.0],
+                'acquisition_score': [1.0, 2.0],
+                'global_index': [0, 1],
+            }
         )
         out = acq.finalize(shortlist, 10)
         assert out.height == 2
@@ -125,10 +129,12 @@ class TestTopKShortlist:
     def test_finalize_samples_n_select(self):
         acq = get_acquisition_function('topk')(k_fraction=0.5, random_state=1)
         shortlist = pl.DataFrame(
-            {'ID': [f'c{i}' for i in range(20)],
-             'prediction': list(range(20)),
-             'acquisition_score': list(range(20)),
-             'global_index': list(range(20))}
+            {
+                'ID': [f'c{i}' for i in range(20)],
+                'prediction': list(range(20)),
+                'acquisition_score': list(range(20)),
+                'global_index': list(range(20)),
+            }
         )
         out = acq.finalize(shortlist, 5)
         assert out.height == 5

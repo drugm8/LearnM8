@@ -31,7 +31,9 @@ def test_tanimoto_diag_zero_vector_returns_signal_variance() -> None:
 
 def test_tanimoto_diag_mixed_zero_and_nonzero_rows() -> None:
     rng = np.random.default_rng(42)
-    X = np.vstack([np.zeros((1, 2048)), rng.integers(0, 2, (3, 2048)).astype(np.float64)])
+    X = np.vstack(
+        [np.zeros((1, 2048)), rng.integers(0, 2, (3, 2048)).astype(np.float64)]
+    )
     K = TanimotoKernel(signal_variance=1.0)
     diag = K.diag(X)
     np.testing.assert_array_equal(diag, np.full(4, 1.0))
@@ -60,10 +62,12 @@ def test_tanimoto_call_returns_signal_variance_on_zero_zero_pair() -> None:
 
 def test_tanimoto_call_diag_consistent_with_diag_method() -> None:
     rng = np.random.default_rng(42)
-    X = np.vstack([
-        np.zeros((2, 2048)),
-        rng.integers(0, 2, (8, 2048)).astype(np.float64),
-    ])
+    X = np.vstack(
+        [
+            np.zeros((2, 2048)),
+            rng.integers(0, 2, (8, 2048)).astype(np.float64),
+        ]
+    )
     K = TanimotoKernel(signal_variance=1.0)
     np.testing.assert_allclose(np.diag(K(X, X)), K.diag(X))
 
@@ -77,10 +81,12 @@ def test_tanimoto_call_zero_nonzero_returns_zero() -> None:
 
 def test_tanimoto_gpr_fit_succeeds_with_zero_row() -> None:
     rng = np.random.default_rng(42)
-    X = np.vstack([
-        np.zeros((1, 64)),
-        rng.integers(0, 2, (9, 64)).astype(np.float64),
-    ])
+    X = np.vstack(
+        [
+            np.zeros((1, 64)),
+            rng.integers(0, 2, (9, 64)).astype(np.float64),
+        ]
+    )
     y = rng.normal(size=10)
     gpr = GaussianProcessRegressor(
         kernel=TanimotoKernel(signal_variance=1.0),

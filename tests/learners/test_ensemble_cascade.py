@@ -33,7 +33,10 @@ def _members_called_with_compute_uncertainty(ensemble, X, *, value):
     def make_wrapper(idx, orig):
         def wrapper(features, smiles=None, *, compute_uncertainty=True):
             calls.append((idx, compute_uncertainty))
-            return orig(features, smiles=smiles, compute_uncertainty=compute_uncertainty)
+            return orig(
+                features, smiles=smiles, compute_uncertainty=compute_uncertainty
+            )
+
         return wrapper
 
     for i, m in enumerate(ensemble.learners):
@@ -66,7 +69,9 @@ def test_ensemble_base_cascade_threads_flag(tiny_data):
     from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
     X, y = tiny_data
-    members = [RandomForestLearner(n_estimators=5, random_state=42 + i) for i in range(2)]
+    members = [
+        RandomForestLearner(n_estimators=5, random_state=42 + i) for i in range(2)
+    ]
     ensemble = EnsembleLearner(learners=members)
     ensemble.train(X, y)
 
@@ -96,13 +101,20 @@ def test_chemprop_ensemble_cascade_threads_flag(tiny_data):  # pragma: no cover
         def make_w(idx, o):
             def w(features=None, smiles=None, *, compute_uncertainty=True):
                 captured.append((idx, compute_uncertainty))
-                return o(features=features, smiles=smiles, compute_uncertainty=compute_uncertainty)
+                return o(
+                    features=features,
+                    smiles=smiles,
+                    compute_uncertainty=compute_uncertainty,
+                )
+
             return w
 
         m.predict = make_w(i, orig)
 
     try:
-        _preds, sigmas = ensemble.predict(features=None, smiles=smiles, compute_uncertainty=False)
+        _preds, sigmas = ensemble.predict(
+            features=None, smiles=smiles, compute_uncertainty=False
+        )
     finally:
         for m, orig in zip(ensemble.learners, originals, strict=True):
             m.predict = orig

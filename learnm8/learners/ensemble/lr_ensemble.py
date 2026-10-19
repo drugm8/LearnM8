@@ -7,12 +7,14 @@ from .ensemble import EnsembleLearner, _derive_random_states
 class LREnsemble(EnsembleLearner):
     """Ensemble of 3 Linear Regression learners with different regularization strengths."""
 
-    def __init__(self,
-                 regularization_strengths: list[float] | None = None,
-                 random_states: list[int] | None = None,
-                 random_state: int = 42,
-                 device: str = 'cpu',
-                 **kwargs):
+    def __init__(
+        self,
+        regularization_strengths: list[float] | None = None,
+        random_states: list[int] | None = None,
+        random_state: int = 42,
+        device: str = 'cpu',
+        **kwargs,
+    ):
         """Initialize LR ensemble.
 
         Args:
@@ -36,15 +38,13 @@ class LREnsemble(EnsembleLearner):
         learners = []
         if device == 'cuda':
             from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
+
             for alpha, rs in zip(regularization_strengths, random_states):  # noqa: B905
                 member = RidgeCumlLearner(alpha=alpha, random_state=rs)
                 learners.append(member)
         else:
             for alpha, rs in zip(regularization_strengths, random_states):  # noqa: B905
-                lr = LinearRegressionLearner(
-                    alpha=alpha,
-                    random_state=rs
-                )
+                lr = LinearRegressionLearner(alpha=alpha, random_state=rs)
                 learners.append(lr)
 
         # Set default ensemble parameters
@@ -58,5 +58,5 @@ class LREnsemble(EnsembleLearner):
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        alphas_str = ','.join(f"{a:.1f}" for a in self.regularization_strengths)
-        return f"LREnsemble(3xRidge,alpha=[{alphas_str}])"
+        alphas_str = ','.join(f'{a:.1f}' for a in self.regularization_strengths)
+        return f'LREnsemble(3xRidge,alpha=[{alphas_str}])'

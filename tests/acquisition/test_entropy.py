@@ -12,15 +12,19 @@ def _pool_with_predictions_and_uncertainty(
     predictions: list[float] | np.ndarray,
     uncertainty: list[float] | np.ndarray,
 ) -> pl.DataFrame:
-    return compounds.with_columns([
-        pl.Series('prediction', predictions),
-        pl.Series('uncertainty', uncertainty),
-    ])
+    return compounds.with_columns(
+        [
+            pl.Series('prediction', predictions),
+            pl.Series('uncertainty', uncertainty),
+        ]
+    )
 
 
 @pytest.mark.unit
 class TestEntropyAcquisition:
-    def test_entropy_selects_highest_uncertainty_when_entropy_type_is_uncertainty(self, small_real_compounds):
+    def test_entropy_selects_highest_uncertainty_when_entropy_type_is_uncertainty(
+        self, small_real_compounds
+    ):
         # Feature 019: scores are now differential entropy in nats, not raw σ.
         # Selection rank still matches σ-descending baseline.
         compounds = _pool_with_predictions_and_uncertainty(
@@ -29,13 +33,19 @@ class TestEntropyAcquisition:
             [0.1, 0.6, 0.2, 0.5, 0.3],
         )
 
-        selected = EntropyAcquisition(entropy_type='uncertainty').select(compounds, n_select=2)
+        selected = EntropyAcquisition(entropy_type='uncertainty').select(
+            compounds, n_select=2
+        )
 
         scores = selected.get_column('acquisition_score').to_numpy()
         half_log_2pi_e = 0.5 * float(np.log(2.0 * np.pi * np.e))
-        np.testing.assert_allclose(scores, [half_log_2pi_e + np.log(0.6), half_log_2pi_e + np.log(0.5)])
+        np.testing.assert_allclose(
+            scores, [half_log_2pi_e + np.log(0.6), half_log_2pi_e + np.log(0.5)]
+        )
 
-    def test_entropy_selects_highest_variance_when_entropy_type_is_variance(self, small_real_compounds):
+    def test_entropy_selects_highest_variance_when_entropy_type_is_variance(
+        self, small_real_compounds
+    ):
         # Feature 019: 'variance' branch returns 0.5·log(2πe·σ⁴) = log(2πe) + 2·log(σ).
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(5).clone(),
@@ -43,13 +53,20 @@ class TestEntropyAcquisition:
             [0.1, 0.6, 0.2, 0.5, 0.3],
         )
 
-        selected = EntropyAcquisition(entropy_type='variance').select(compounds, n_select=2)
+        selected = EntropyAcquisition(entropy_type='variance').select(
+            compounds, n_select=2
+        )
 
         scores = selected.get_column('acquisition_score').to_numpy()
         half_log_2pi_e = 0.5 * float(np.log(2.0 * np.pi * np.e))
-        np.testing.assert_allclose(scores, [half_log_2pi_e + 2.0 * np.log(0.6), half_log_2pi_e + 2.0 * np.log(0.5)])
+        np.testing.assert_allclose(
+            scores,
+            [half_log_2pi_e + 2.0 * np.log(0.6), half_log_2pi_e + 2.0 * np.log(0.5)],
+        )
 
-    def test_entropy_returns_all_compounds_when_requested_batch_exceeds_pool(self, small_real_compounds):
+    def test_entropy_returns_all_compounds_when_requested_batch_exceeds_pool(
+        self, small_real_compounds
+    ):
         compounds = _pool_with_predictions_and_uncertainty(
             small_real_compounds.head(4).clone(),
             [0.4, 0.3, 0.2, 0.1],
@@ -86,16 +103,22 @@ class TestEntropyAcquisition:
         assert len(selected) == 3
         half_log_2pi_e = 0.5 * float(np.log(2.0 * np.pi * np.e))
         expected = half_log_2pi_e + np.log(0.4)
-        np.testing.assert_allclose(selected.get_column('acquisition_score').to_numpy(), expected)
+        np.testing.assert_allclose(
+            selected.get_column('acquisition_score').to_numpy(), expected
+        )
 
     def test_entropy_rejects_invalid_entropy_type(self):
         with pytest.raises(ValueError, match='entropy_type must be'):
             EntropyAcquisition(entropy_type='invalid')
 
     def test_entropy_rejects_missing_uncertainty_column(self, small_real_compounds):
-        compounds = small_real_compounds.head(5).clone().with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
+        compounds = (
+            small_real_compounds.head(5)
+            .clone()
+            .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
+        )
 
-        with pytest.raises(ValueError, match='requires an \'uncertainty\' column'):
+        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
             EntropyAcquisition().select(compounds, n_select=2)
 
     def test_entropy_rejects_non_positive_batch_size(self, small_real_compounds):

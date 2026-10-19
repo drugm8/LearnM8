@@ -49,8 +49,8 @@ class TestTorchLearnerColdStart:
         checksum_cycle2 = _state_dict_checksum(learner.model)
 
         assert checksum_cycle1 != checksum_cycle2, (
-            "Model weights should differ between consecutive train() calls "
-            "(cold-start recreates model from scratch each cycle)"
+            'Model weights should differ between consecutive train() calls '
+            '(cold-start recreates model from scratch each cycle)'
         )
 
     def test_model_recreated_when_input_dimensions_unchanged(self):
@@ -73,7 +73,7 @@ class TestTorchLearnerColdStart:
         model_id_after_cycle2 = id(learner.model)
 
         assert model_id_after_cycle1 != model_id_after_cycle2, (
-            "A new model object should be created on each train() call (cold-start)"
+            'A new model object should be created on each train() call (cold-start)'
         )
 
     def test_three_cycle_parameter_checksums_all_differ(self):
@@ -95,8 +95,8 @@ class TestTorchLearnerColdStart:
             checksums.append(_state_dict_checksum(learner.model))
 
         assert len(set(checksums)) == 3, (
-            f"All three cycles should produce different model states. "
-            f"Got checksums: {checksums}"
+            f'All three cycles should produce different model states. '
+            f'Got checksums: {checksums}'
         )
 
     def test_optimizer_recreated_each_cycle(self):
@@ -119,7 +119,7 @@ class TestTorchLearnerColdStart:
         optimizer_id_2 = id(learner.optimizer)
 
         assert optimizer_id_1 != optimizer_id_2, (
-            "Optimizer should be a new object after each train() call (cold-start)"
+            'Optimizer should be a new object after each train() call (cold-start)'
         )
 
     def test_feature_scaler_reset_each_cycle(self):
@@ -144,5 +144,5 @@ class TestTorchLearnerColdStart:
         mean2 = learner.scaler.mean_.copy()
 
         assert not np.allclose(mean1, mean2), (
-            "Feature scaler should be re-fit on each cycle (cold-start resets scaler)"
+            'Feature scaler should be re-fit on each cycle (cold-start resets scaler)'
         )

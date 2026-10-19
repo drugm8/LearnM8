@@ -1,6 +1,5 @@
 """Integration tests for batch prediction in execute_cycle()."""
 
-
 import polars as pl
 import pytest
 
@@ -14,6 +13,7 @@ from learnm8.oracles.csv_oracle import CSVOracle
 def oracle_csv(initialized_compounds, tmp_path):
     """Create oracle CSV with activity values for all compounds."""
     import csv
+
     csv_path = tmp_path / 'oracle.csv'
     ids = initialized_compounds['ID'].to_list()
     with open(csv_path, 'w', newline='') as f:
@@ -28,32 +28,37 @@ def oracle_csv(initialized_compounds, tmp_path):
 def initialized_compounds(sample_compounds, tmp_path):
     """Create initialized master DataFrame with some labeled compounds."""
     compounds_df = sample_compounds.clone()
-    compounds_df = compounds_df.with_columns([
-        pl.lit('unlabeled').alias('status'),
-        pl.lit(None).cast(pl.Int64).alias('selected_cycle'),
-        pl.lit(None).cast(pl.Int64).alias('labeled_cycle'),
-        pl.lit(None).cast(pl.Int64).alias('pruned_cycle'),
-        pl.lit(None).cast(pl.Float64).alias('Activity')
-    ])
+    compounds_df = compounds_df.with_columns(
+        [
+            pl.lit('unlabeled').alias('status'),
+            pl.lit(None).cast(pl.Int64).alias('selected_cycle'),
+            pl.lit(None).cast(pl.Int64).alias('labeled_cycle'),
+            pl.lit(None).cast(pl.Int64).alias('pruned_cycle'),
+            pl.lit(None).cast(pl.Float64).alias('Activity'),
+        ]
+    )
 
     labeled_indices = [0, 1, 2]
-    compounds_df = compounds_df.with_columns([
-        pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
-        .then(pl.lit('labeled'))
-        .otherwise(pl.col('status')).alias('status'),
-
-        pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
-        .then(pl.lit(0))
-        .otherwise(pl.col('selected_cycle')).alias('selected_cycle'),
-
-        pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
-        .then(pl.lit(0))
-        .otherwise(pl.col('labeled_cycle')).alias('labeled_cycle'),
-
-        pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
-        .then(pl.lit(5.0))
-        .otherwise(pl.col('Activity')).alias('Activity')
-    ])
+    compounds_df = compounds_df.with_columns(
+        [
+            pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
+            .then(pl.lit('labeled'))
+            .otherwise(pl.col('status'))
+            .alias('status'),
+            pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
+            .then(pl.lit(0))
+            .otherwise(pl.col('selected_cycle'))
+            .alias('selected_cycle'),
+            pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
+            .then(pl.lit(0))
+            .otherwise(pl.col('labeled_cycle'))
+            .alias('labeled_cycle'),
+            pl.when(pl.col('ID').is_in(compounds_df[labeled_indices]['ID']))
+            .then(pl.lit(5.0))
+            .otherwise(pl.col('Activity'))
+            .alias('Activity'),
+        ]
+    )
 
     return compounds_df
 
@@ -62,7 +67,9 @@ def initialized_compounds(sample_compounds, tmp_path):
 class TestCycleBatchPrediction:
     """Test batch prediction integration in execute_cycle()."""
 
-    def test_auto_batch_size_small_dataset(self, initialized_compounds, oracle_csv, tmp_path):
+    def test_auto_batch_size_small_dataset(
+        self, initialized_compounds, oracle_csv, tmp_path
+    ):
         """Small dataset (≤100k) should use single batch automatically."""
         learner = RandomForestLearner(random_state=42)
         oracle = CSVOracle(str(oracle_csv))
@@ -81,7 +88,7 @@ class TestCycleBatchPrediction:
             original_pool_size=len(initialized_compounds),
             score_direction='higher',
             oracle_type='run',
-            memory_safety_factor=0.7
+            memory_safety_factor=0.7,
         )
 
         assert 'batch_size' in metrics

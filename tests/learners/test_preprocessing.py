@@ -11,7 +11,9 @@ pytestmark = pytest.mark.unit
 
 def _make_cpu_learners():
     return [
-        pytest.param(lambda: RandomForestLearner(n_estimators=5, random_state=42), id='rf'),
+        pytest.param(
+            lambda: RandomForestLearner(n_estimators=5, random_state=42), id='rf'
+        ),
         pytest.param(lambda: XGBoostLearner(n_estimators=5, random_state=42), id='xgb'),
     ]
 
@@ -19,7 +21,9 @@ def _make_cpu_learners():
 class TestPreprocessFeatures:
     def test_nan_inf_handled_as_zero(self):
         features = np.array([[1.0, np.nan, np.inf], [2.0, -np.inf, 3.0]])
-        result, _, _ = _preprocess_features(features, remove_zero_variance=False, is_training=True)
+        result, _, _ = _preprocess_features(
+            features, remove_zero_variance=False, is_training=True
+        )
         assert np.all(np.isfinite(result))
         assert result[0, 1] == 0.0
         assert result[0, 2] == 0.0
@@ -36,7 +40,9 @@ class TestPreprocessFeatures:
         train_feats = np.array([[1.0, 5.0, 3.0], [2.0, 5.0, 4.0]])
         _, mask, _ = _preprocess_features(train_feats, is_training=True)
         pred_feats = np.array([[10.0, 99.0, 30.0]])
-        result, _, _ = _preprocess_features(pred_feats, valid_feature_mask=mask, is_training=False)
+        result, _, _ = _preprocess_features(
+            pred_feats, valid_feature_mask=mask, is_training=False
+        )
         assert result.shape[1] == 2
 
     def test_zero_variance_mask_persists_across_multiple_predict_calls(self):
@@ -44,7 +50,9 @@ class TestPreprocessFeatures:
         _, mask, _ = _preprocess_features(train_feats, is_training=True)
         for _ in range(3):
             pred_feats = np.random.rand(5, 2)
-            result, _, _ = _preprocess_features(pred_feats, valid_feature_mask=mask, is_training=False)
+            result, _, _ = _preprocess_features(
+                pred_feats, valid_feature_mask=mask, is_training=False
+            )
             assert result.shape[1] == 1
 
     def test_nan_replaced_before_variance_check(self):
@@ -61,13 +69,17 @@ class TestPreprocessFeatures:
 
     def test_remove_zero_variance_false_skips_masking(self):
         features = np.array([[1.0, 5.0, 3.0], [2.0, 5.0, 4.0]])
-        result, mask, _ = _preprocess_features(features, remove_zero_variance=False, is_training=True)
+        result, mask, _ = _preprocess_features(
+            features, remove_zero_variance=False, is_training=True
+        )
         assert result.shape[1] == 3
         assert mask is None
 
     def test_predict_without_mask_returns_all_columns(self):
         features = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-        result, _, _ = _preprocess_features(features, valid_feature_mask=None, is_training=False)
+        result, _, _ = _preprocess_features(
+            features, valid_feature_mask=None, is_training=False
+        )
         assert result.shape == features.shape
 
     def test_all_zero_variance_columns_raises(self):
@@ -99,7 +111,10 @@ class TestPreprocessFeatures:
         """T045: Continuous features use SimpleImputer with median strategy."""
         features = np.array([[1.0, np.nan, 3.0], [4.0, 5.0, np.nan], [7.0, 8.0, 9.0]])
         result, _, imputer = _preprocess_features(
-            features, remove_zero_variance=False, is_training=True, feature_type='continuous'
+            features,
+            remove_zero_variance=False,
+            is_training=True,
+            feature_type='continuous',
         )
         assert np.all(np.isfinite(result))
         assert imputer is not None
@@ -109,7 +124,10 @@ class TestPreprocessFeatures:
     def test_continuous_inf_converted_to_nan_then_imputed(self):
         features = np.array([[1.0, np.inf], [2.0, 3.0], [4.0, -np.inf]])
         result, _, imputer = _preprocess_features(
-            features, remove_zero_variance=False, is_training=True, feature_type='continuous'
+            features,
+            remove_zero_variance=False,
+            is_training=True,
+            feature_type='continuous',
         )
         assert np.all(np.isfinite(result))
         assert imputer is not None
@@ -117,31 +135,46 @@ class TestPreprocessFeatures:
     def test_continuous_imputer_applied_on_predict(self):
         train = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
         _, _, imputer = _preprocess_features(
-            train, remove_zero_variance=False, is_training=True, feature_type='continuous'
+            train,
+            remove_zero_variance=False,
+            is_training=True,
+            feature_type='continuous',
         )
         pred = np.array([[np.nan, 10.0]])
         result, _, _ = _preprocess_features(
-            pred, remove_zero_variance=False, is_training=False, feature_type='continuous', imputer=imputer
+            pred,
+            remove_zero_variance=False,
+            is_training=False,
+            feature_type='continuous',
+            imputer=imputer,
         )
         assert result[0, 0] == pytest.approx(3.0)
 
     def test_binary_nan_triggers_warning(self, caplog):
         """T046: Binary features with NaN trigger a warning."""
         import logging
+
         with caplog.at_level(logging.WARNING, logger='learnm8.learners.base'):
             features = np.array([[1.0, np.nan], [0.0, 1.0]])
             result, _, _ = _preprocess_features(
-                features, remove_zero_variance=False, is_training=True, feature_type='binary'
+                features,
+                remove_zero_variance=False,
+                is_training=True,
+                feature_type='binary',
             )
         assert 'NaN detected in binary fingerprint features' in caplog.text
         assert result[0, 1] == 0.0
 
     def test_binary_no_warning_when_clean(self, caplog):
         import logging
+
         with caplog.at_level(logging.WARNING):
             features = np.array([[1.0, 0.0], [0.0, 1.0]])
             result, _, _ = _preprocess_features(
-                features, remove_zero_variance=False, is_training=True, feature_type='binary'
+                features,
+                remove_zero_variance=False,
+                is_training=True,
+                feature_type='binary',
             )
         assert 'NaN detected' not in caplog.text
 

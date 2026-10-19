@@ -180,7 +180,9 @@ class GaussianProcessLearner(SklearnLearner):
             # sklearn#31374 reports ~96% wall-clock saving for the same.
             if not compute_uncertainty:
                 predictions = self.model.predict(features)
-                logger.debug(f'Predicted {len(predictions)} samples with {self.get_name()}')
+                logger.debug(
+                    f'Predicted {len(predictions)} samples with {self.get_name()}'
+                )
                 return predictions, None
 
             predictions, std = self.model.predict(features, return_std=True)

@@ -53,7 +53,9 @@ class LinearRegressionLearner(SklearnLearner):
             )
             self.is_ridge = True
 
-        super().__init__(model, random_state=random_state, scale_features=self.is_ridge, **kwargs)
+        super().__init__(
+            model, random_state=random_state, scale_features=self.is_ridge, **kwargs
+        )
 
         self.alpha = alpha
         self.fit_intercept = fit_intercept

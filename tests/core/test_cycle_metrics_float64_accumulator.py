@@ -35,7 +35,7 @@ def test_nanmean_with_float64_dtype_matches_float64_reference() -> None:
 
     # The float64 path matches the reference exactly.
     assert via_float64 == reference, (
-        f"nanmean(arr_f32, dtype=float64) {via_float64} != reference {reference}"
+        f'nanmean(arr_f32, dtype=float64) {via_float64} != reference {reference}'
     )
     # The default path may match (numpy uses pairwise sum which is stable
     # on uniform random data), but the FR-010 contract is on the API used.
@@ -63,20 +63,20 @@ def test_cycle_py_has_dtype_float64_in_calculate_metrics() -> None:
     import re
     from pathlib import Path
 
-    cycle_path = Path(__file__).resolve().parents[2] / "learnm8" / "core" / "cycle.py"
+    cycle_path = Path(__file__).resolve().parents[2] / 'learnm8' / 'core' / 'cycle.py'
     source = cycle_path.read_text()
     # Find all np.nanmean/nanstd/nansum calls.
-    matches = re.findall(r"np\.(nanmean|nanstd|nansum)\([^)]*\)", source)
-    assert matches, "Expected np.nanmean/nanstd/nansum calls in cycle.py"
+    matches = re.findall(r'np\.(nanmean|nanstd|nansum)\([^)]*\)', source)
+    assert matches, 'Expected np.nanmean/nanstd/nansum calls in cycle.py'
     # Every reduction in cycle.py's metric path must carry dtype=np.float64.
     # min/max are order-statistics where dtype doesn't matter — they remain
     # unannotated. We assert all `nanmean`/`nanstd`/`nansum` carry the kwarg.
     for m in matches:
         # Re-find with surrounding text to check for dtype kwarg.
-        full_match = re.search(rf"np\.{m}\([^)]*\)", source)
+        full_match = re.search(rf'np\.{m}\([^)]*\)', source)
         assert full_match is not None
-        if "dtype=np.float64" not in full_match.group():
+        if 'dtype=np.float64' not in full_match.group():
             pytest.fail(
-                f"np.{m} call missing dtype=np.float64: {full_match.group()}. "
-                f"Spec FR-010 requires float64 accumulators in cycle-metric reductions."
+                f'np.{m} call missing dtype=np.float64: {full_match.group()}. '
+                f'Spec FR-010 requires float64 accumulators in cycle-metric reductions.'
             )

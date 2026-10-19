@@ -19,7 +19,7 @@ class TestEnsembleLearner:
         """Create base learners for ensemble testing."""
         return [
             RandomForestLearner(n_estimators=5, random_state=42),
-            GaussianProcessLearner(random_state=42)
+            GaussianProcessLearner(random_state=42),
         ]
 
     @pytest.fixture
@@ -35,7 +35,9 @@ class TestEnsembleLearner:
     def features_20(self, small_real_morgan_features):
         return small_real_morgan_features[:20]
 
-    def test_initialization_sets_default_aggregation_uncertainty_and_untrained_state(self, ensemble, base_learners):
+    def test_initialization_sets_default_aggregation_uncertainty_and_untrained_state(
+        self, ensemble, base_learners
+    ):
         """Test ensemble initialization."""
         assert len(ensemble.learners) == 2
         assert ensemble.aggregation_method == 'mean'
@@ -68,35 +70,43 @@ class TestEnsembleLearner:
     def test_get_name_includes_aggregation_and_component_separator(self, ensemble):
         """Test name generation."""
         name = ensemble.get_name()
-        assert "Ensemble" in name
-        assert "mean" in name
-        assert "+" in name
+        assert 'Ensemble' in name
+        assert 'mean' in name
+        assert '+' in name
 
     def test_failed_learner_handling(self, compounds_20, features_20):
         """Test handling of failed learners during training."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         from learnm8.core.interfaces import Learner
 
         class MockGoodLearner(Learner):
             def train(self, features, targets):
                 pass
+
             def predict(self, features):
                 return np.random.randn(len(features)), None
+
             def get_name(self):
-                return "GoodLearner"
+                return 'GoodLearner'
+
             def supports_uncertainty(self):
                 return False
 
         class MockBadLearner(Learner):
             def train(self, features, targets):
-                raise RuntimeError("Training failed")
+                raise RuntimeError('Training failed')
+
             def predict(self, features):
                 return np.random.randn(len(features)), None
+
             def get_name(self):
-                return "BadLearner"
+                return 'BadLearner'
+
             def supports_uncertainty(self):
                 return False
 
@@ -114,7 +124,9 @@ class TestEnsembleLearner:
         """Test that ensemble uncertainty captures model diversity."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.Series('Activity', np.random.beta(2, 5, len(compounds))))
+            compounds = compounds.with_columns(
+                pl.Series('Activity', np.random.beta(2, 5, len(compounds)))
+            )
 
         ensemble = EnsembleLearner(base_learners)
 

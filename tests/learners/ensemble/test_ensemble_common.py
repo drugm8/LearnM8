@@ -20,21 +20,37 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 ENSEMBLE_CONFIGS = [
     pytest.param(
-        ('rf_ensemble', lambda: RFEnsemble(n_estimators=5, random_states=[42, 123])), id='rf_ensemble'
+        ('rf_ensemble', lambda: RFEnsemble(n_estimators=5, random_states=[42, 123])),
+        id='rf_ensemble',
     ),
-    pytest.param(('lr_ensemble', lambda: LREnsemble(
-        regularization_strengths=[0.1, 1.0],
-        random_states=[42, 123],
-    )), id='lr_ensemble'),
-    pytest.param(('dt_ensemble', lambda: DTEnsemble(
-        max_depths=[5, 10],
-        random_states=[42, 123],
-    )), id='dt_ensemble'),
     pytest.param(
-        ('xgb_ensemble', lambda: XGBEnsemble(
-            learning_rates=[0.05, 0.1],
-            random_states=[42, 123],
-        )),
+        (
+            'lr_ensemble',
+            lambda: LREnsemble(
+                regularization_strengths=[0.1, 1.0],
+                random_states=[42, 123],
+            ),
+        ),
+        id='lr_ensemble',
+    ),
+    pytest.param(
+        (
+            'dt_ensemble',
+            lambda: DTEnsemble(
+                max_depths=[5, 10],
+                random_states=[42, 123],
+            ),
+        ),
+        id='dt_ensemble',
+    ),
+    pytest.param(
+        (
+            'xgb_ensemble',
+            lambda: XGBEnsemble(
+                learning_rates=[0.05, 0.1],
+                random_states=[42, 123],
+            ),
+        ),
         id='xgb_ensemble',
         marks=pytest.mark.slow,
     ),
@@ -58,14 +74,26 @@ ENSEMBLE_CONFIGS = [
 ]
 
 FAST_ENSEMBLE_CONFIGS = [
-    pytest.param(('lr_ensemble', lambda: LREnsemble(
-        regularization_strengths=[0.1, 1.0],
-        random_states=[42, 123],
-    )), id='lr_ensemble'),
-    pytest.param(('dt_ensemble', lambda: DTEnsemble(
-        max_depths=[5, 10],
-        random_states=[42, 123],
-    )), id='dt_ensemble'),
+    pytest.param(
+        (
+            'lr_ensemble',
+            lambda: LREnsemble(
+                regularization_strengths=[0.1, 1.0],
+                random_states=[42, 123],
+            ),
+        ),
+        id='lr_ensemble',
+    ),
+    pytest.param(
+        (
+            'dt_ensemble',
+            lambda: DTEnsemble(
+                max_depths=[5, 10],
+                random_states=[42, 123],
+            ),
+        ),
+        id='dt_ensemble',
+    ),
 ]
 
 
@@ -74,11 +102,15 @@ def _make_ensemble_with_kwargs(name, **kwargs):
     if name == 'rf_ensemble':
         return RFEnsemble(n_estimators=5, random_states=[42, 123], **kwargs)
     elif name == 'lr_ensemble':
-        return LREnsemble(regularization_strengths=[0.1, 1.0], random_states=[42, 123], **kwargs)
+        return LREnsemble(
+            regularization_strengths=[0.1, 1.0], random_states=[42, 123], **kwargs
+        )
     elif name == 'dt_ensemble':
         return DTEnsemble(max_depths=[5, 10], random_states=[42, 123], **kwargs)
     elif name == 'xgb_ensemble':
-        return XGBEnsemble(learning_rates=[0.05, 0.1], random_states=[42, 123], **kwargs)
+        return XGBEnsemble(
+            learning_rates=[0.05, 0.1], random_states=[42, 123], **kwargs
+        )
     elif name == 'mixed_ensemble':
         return MixedEnsemble(random_state=42, **kwargs)
     elif name == 'ensemble':
@@ -153,7 +185,9 @@ class TestEnsembleCommon:
         assert np.all(uncertainty >= 0)
         assert np.std(uncertainty) > 0
 
-    def test_supports_uncertainty_returns_true_for_all_ensemble_types(self, ensemble_setup):
+    def test_supports_uncertainty_returns_true_for_all_ensemble_types(
+        self, ensemble_setup
+    ):
         _, ensemble = ensemble_setup
         assert ensemble.supports_uncertainty() is True
 
@@ -251,7 +285,9 @@ class TestEnsembleCommon:
         assert uncertainty.shape[0] == len(compounds)
         assert np.all(uncertainty >= 0)
 
-    def test_small_dataset_trains_and_predicts_finite_values_for_all_ensemble_types(self, ensemble_setup, tmp_path):
+    def test_small_dataset_trains_and_predicts_finite_values_for_all_ensemble_types(
+        self, ensemble_setup, tmp_path
+    ):
         _, ensemble = ensemble_setup
         small_dataset = pl.DataFrame(
             {

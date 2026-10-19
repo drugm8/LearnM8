@@ -28,7 +28,11 @@ from learnm8.oracles.csv_oracle import CSVOracle
     ],
 )
 def test_learner_train_dtype_round_trip(
-    diverse_real_compounds, tmp_path: Path, monkeypatch, learner_name, expected_dtype,
+    diverse_real_compounds,
+    tmp_path: Path,
+    monkeypatch,
+    learner_name,
+    expected_dtype,
     learner_cls,
 ):
     seen: dict[str, np.dtype] = {}
@@ -57,7 +61,7 @@ def test_learner_train_dtype_round_trip(
         output_dir=tmp_path / 'run',
     )
 
-    assert 'dtype' in seen, f"{learner_cls.__name__}.train was never called"
+    assert 'dtype' in seen, f'{learner_cls.__name__}.train was never called'
     assert seen['dtype'] == np.dtype(expected_dtype), (
-        f"{learner_name} expected feature dtype {expected_dtype}, got {seen['dtype']}"
+        f'{learner_name} expected feature dtype {expected_dtype}, got {seen["dtype"]}'
     )

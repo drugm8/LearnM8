@@ -55,12 +55,12 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 DIVERSITY_KEYS: tuple[str, ...] = (
-    "mean_tanimoto_similarity_sampled_batch",
-    "mean_tanimoto_similarity_sampled_cumulative",
-    "scaffold_diversity_index_batch",
-    "scaffold_diversity_index_cumulative",
-    "bit_position_uniformity_entropy_batch",
-    "bit_position_uniformity_entropy_cumulative",
+    'mean_tanimoto_similarity_sampled_batch',
+    'mean_tanimoto_similarity_sampled_cumulative',
+    'scaffold_diversity_index_batch',
+    'scaffold_diversity_index_cumulative',
+    'bit_position_uniformity_entropy_batch',
+    'bit_position_uniformity_entropy_cumulative',
 )
 
 
@@ -68,23 +68,23 @@ DIVERSITY_KEYS: tuple[str, ...] = (
 # below; emits a clear AttributeError / ImportError rather than silently
 # breaking. NO backward-compat alias is provided.
 _RENAMED_SYMBOLS: dict[str, str] = {
-    "_shannon_entropy_from_bit_sum": (
+    '_shannon_entropy_from_bit_sum': (
         "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'; "
-        "the new name reflects that this is the entropy of the bit-position "
-        "activation-frequency distribution, not the Shannon entropy of compound "
-        "sets. No backward-compat alias is provided (alpha clean break)."
+        'the new name reflects that this is the entropy of the bit-position '
+        'activation-frequency distribution, not the Shannon entropy of compound '
+        'sets. No backward-compat alias is provided (alpha clean break).'
     ),
-    "_bit_marginal_entropy_from_bit_sum": (
+    '_bit_marginal_entropy_from_bit_sum': (
         "Renamed to '_bit_position_uniformity_entropy_from_bit_sum'. The metric "
-        "computes the entropy of the (sum-normalised) bit-position activation "
-        "distribution — i.e. how uniformly bit positions are activated — not a "
+        'computes the entropy of the (sum-normalised) bit-position activation '
+        'distribution — i.e. how uniformly bit positions are activated — not a '
         "sum of per-bit Bernoulli entropies as 'bit_marginal_entropy' implied. "
-        "No backward-compat alias is provided (alpha clean break)."
+        'No backward-compat alias is provided (alpha clean break).'
     ),
-    "shannon_entropy_diversity_batch": (
+    'shannon_entropy_diversity_batch': (
         "Renamed to 'bit_position_uniformity_entropy_batch'. No alias provided."
     ),
-    "shannon_entropy_diversity_cumulative": (
+    'shannon_entropy_diversity_cumulative': (
         "Renamed to 'bit_position_uniformity_entropy_cumulative'. No alias provided."
     ),
 }
@@ -93,17 +93,18 @@ _RENAMED_SYMBOLS: dict[str, str] = {
 def __getattr__(name: str):
     if name in _RENAMED_SYMBOLS:
         raise AttributeError(_RENAMED_SYMBOLS[name])
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 # ============================================================================
 # Module-level constants (FR-025)
 # ============================================================================
 
-N_PILOT_PAIRS: int = 500          # pilot draw for sigma-hat estimation
-TARGET_EPSILON: float = 0.005     # 95% CI half-width target
-N_PAIRS_MIN: int = 1_000          # adaptive lower clamp
-N_PAIRS_MAX: int = 100_000        # adaptive upper clamp (perf safety)
-Z_95: float = 1.96                # 95% normal critical value
+N_PILOT_PAIRS: int = 500  # pilot draw for sigma-hat estimation
+TARGET_EPSILON: float = 0.005  # 95% CI half-width target
+N_PAIRS_MIN: int = 1_000  # adaptive lower clamp
+N_PAIRS_MAX: int = 100_000  # adaptive upper clamp (perf safety)
+Z_95: float = 1.96  # 95% normal critical value
 FALLBACK_FP_RADIUS: int = 2
 FALLBACK_FP_SIZE: int = 2048
 
@@ -317,7 +318,7 @@ def _mean_tanimoto_adaptive_sampled(
     if sigma_hat <= 0.0:
         n_pairs = N_PAIRS_MIN
     else:
-        raw = int(np.ceil((Z_95 ** 2) * (sigma_hat ** 2) / (TARGET_EPSILON ** 2)))
+        raw = int(np.ceil((Z_95**2) * (sigma_hat**2) / (TARGET_EPSILON**2)))
         n_pairs = max(N_PAIRS_MIN, min(raw, N_PAIRS_MAX))
 
     if n_pairs <= len(pilot):
@@ -449,7 +450,9 @@ def _bit_position_uniformity_entropy_from_bit_sum(
     """
     if n_compounds <= 0 or bit_sum is None:
         return None
-    bit_frequencies = bit_sum / float(n_compounds)  # int64 / float → float64, no copy of int data
+    bit_frequencies = bit_sum / float(
+        n_compounds
+    )  # int64 / float → float64, no copy of int data
     if not np.any(bit_frequencies > 0):
         return None
     try:
@@ -520,35 +523,35 @@ def _get_or_build_fps(
         radius=FALLBACK_FP_RADIUS, fpSize=FALLBACK_FP_SIZE
     )
     is_binary_featurizer = bool(
-        featurizer is not None and getattr(featurizer, "feature_type", None) == "binary"
+        featurizer is not None and getattr(featurizer, 'feature_type', None) == 'binary'
     )
     # FR-013 + 016: append storage dtype token. Each token is one positional
     # element under naive _-splitting parsers (uint8packed, csruint16, uint8, float32).
     storage_dtype = (
-        getattr(featurizer, "get_storage_dtype", lambda: "float32")()
+        getattr(featurizer, 'get_storage_dtype', lambda: 'float32')()
         if featurizer is not None
-        else "float32"
+        else 'float32'
     )
     _DTYPE_TOKEN_BY_STORAGE = {
-        "packed_uint8": "uint8packed",
-        "csr_uint16": "csruint16",
-        "uint8": "uint8",
-        "float32": "float32",
+        'packed_uint8': 'uint8packed',
+        'csr_uint16': 'csruint16',
+        'uint8': 'uint8',
+        'float32': 'float32',
     }
-    dtype_token = _DTYPE_TOKEN_BY_STORAGE.get(storage_dtype, "float32")
+    dtype_token = _DTYPE_TOKEN_BY_STORAGE.get(storage_dtype, 'float32')
 
-    label_base = "morgan_2_2048"
+    label_base = 'morgan_2_2048'
     if featurizer is not None and is_binary_featurizer:
         try:
             fp_name = featurizer.get_name()
         except Exception:  # pragma: no cover - defensive
-            fp_name = "morgan"
-        head = f"{fp_name}_2_2048" if fp_name == "morgan" else f"{fp_name}"
-        fingerprint_used_label = f"{head}_{dtype_token}"
+            fp_name = 'morgan'
+        head = f'{fp_name}_2_2048' if fp_name == 'morgan' else f'{fp_name}'
+        fingerprint_used_label = f'{head}_{dtype_token}'
     elif featurizer is not None and not is_binary_featurizer:
-        fingerprint_used_label = f"{label_base}_{dtype_token}_fallback"
+        fingerprint_used_label = f'{label_base}_{dtype_token}_fallback'
     else:
-        fingerprint_used_label = f"{label_base}_{dtype_token}"
+        fingerprint_used_label = f'{label_base}_{dtype_token}'
 
     rdkit_fps: list[ExplicitBitVect] = []
     valid_idx: list[int] = []
@@ -568,7 +571,7 @@ def _get_or_build_fps(
         packed_rows.append(_fp_to_packed(fp, n_bits))
     if skipped:
         logger.warning(
-            "diversity: skipped %d invalid SMILES while building fingerprints",
+            'diversity: skipped %d invalid SMILES while building fingerprints',
             skipped,
         )
     if packed_rows:
@@ -600,8 +603,8 @@ def _normalise_disable(
     unknown = named - frozenset(DIVERSITY_KEYS)
     if unknown:
         raise ValueError(
-            f"Unknown DIVERSITY_KEYS in disable: {sorted(unknown)}. "
-            f"Valid keys: {DIVERSITY_KEYS}"
+            f'Unknown DIVERSITY_KEYS in disable: {sorted(unknown)}. '
+            f'Valid keys: {DIVERSITY_KEYS}'
         )
     return (named == frozenset(DIVERSITY_KEYS)), named
 
@@ -625,23 +628,23 @@ def compute_diversity_metrics(
     numpy scalars) or ``None`` on disable / failure.
     """
     if cycle < 0:
-        raise ValueError(f"cycle must be >= 0, got {cycle}")
-    if "SMILES" not in newly_selected_df.columns:
+        raise ValueError(f'cycle must be >= 0, got {cycle}')
+    if 'SMILES' not in newly_selected_df.columns:
         raise ValueError("newly_selected_df must contain a 'SMILES' column")
-    if "SMILES" not in cumulative_selected_df.columns:
+    if 'SMILES' not in cumulative_selected_df.columns:
         raise ValueError("cumulative_selected_df must contain a 'SMILES' column")
 
     all_disabled, disabled_set = _normalise_disable(disable)
 
     metrics: dict[str, float | str | None] = {key: None for key in DIVERSITY_KEYS}
-    metrics["fingerprint_used"] = None
+    metrics['fingerprint_used'] = None
 
     if all_disabled:
         return metrics
 
     rng = _derive_rng(random_state, cycle)
-    batch_smiles: list[str] = newly_selected_df.get_column("SMILES").to_list()
-    cumulative_smiles: list[str] = cumulative_selected_df.get_column("SMILES").to_list()
+    batch_smiles: list[str] = newly_selected_df.get_column('SMILES').to_list()
+    cumulative_smiles: list[str] = cumulative_selected_df.get_column('SMILES').to_list()
 
     # ----- Batch fingerprints (always rebuilt; small) -----
     batch_start = time.perf_counter()
@@ -676,89 +679,100 @@ def compute_diversity_metrics(
     # provenance whenever the cumulative stream has overflowed K_RESERVOIR.
     fingerprint_used_label = fp_label_batch or fp_label_cum
     if run_cache.cumulative_seen_count > K_RESERVOIR:
-        fingerprint_used_label = f"{fingerprint_used_label}_reservoir_{K_RESERVOIR}"
-    metrics["fingerprint_used"] = fingerprint_used_label
+        fingerprint_used_label = f'{fingerprint_used_label}_reservoir_{K_RESERVOIR}'
+    metrics['fingerprint_used'] = fingerprint_used_label
 
     # ----- Mean Tanimoto (adaptive) -----
     try:
-        if "mean_tanimoto_similarity_sampled_batch" not in disabled_set:
-            metrics["mean_tanimoto_similarity_sampled_batch"] = (
+        if 'mean_tanimoto_similarity_sampled_batch' not in disabled_set:
+            metrics['mean_tanimoto_similarity_sampled_batch'] = (
                 _mean_tanimoto_adaptive_sampled(batch_fps, rng)
             )
-        if "mean_tanimoto_similarity_sampled_cumulative" not in disabled_set:
-            metrics["mean_tanimoto_similarity_sampled_cumulative"] = (
+        if 'mean_tanimoto_similarity_sampled_cumulative' not in disabled_set:
+            metrics['mean_tanimoto_similarity_sampled_cumulative'] = (
                 _mean_tanimoto_adaptive_sampled(cumulative_fps, rng)
             )
     except Exception as exc:
         logger.warning(
-            "diversity cycle=%d Tanimoto failed (%s); setting to None",
-            cycle, type(exc).__name__,
+            'diversity cycle=%d Tanimoto failed (%s); setting to None',
+            cycle,
+            type(exc).__name__,
         )
-        metrics["mean_tanimoto_similarity_sampled_batch"] = None
-        metrics["mean_tanimoto_similarity_sampled_cumulative"] = None
+        metrics['mean_tanimoto_similarity_sampled_batch'] = None
+        metrics['mean_tanimoto_similarity_sampled_cumulative'] = None
 
     # ----- Scaffold diversity -----
     # Spec 022 FR-001/FR-002: cumulative path uses incremental accumulator on
     # RunCache (O(batch) per cycle) instead of re-iterating cumulative_smiles.
     scaffold_start = time.perf_counter()
     try:
-        if "scaffold_diversity_index_batch" not in disabled_set:
-            metrics["scaffold_diversity_index_batch"] = _scaffold_diversity_index(
+        if 'scaffold_diversity_index_batch' not in disabled_set:
+            metrics['scaffold_diversity_index_batch'] = _scaffold_diversity_index(
                 batch_smiles, run_cache.scaffold_cache
             )
-        if "scaffold_diversity_index_cumulative" not in disabled_set:
+        if 'scaffold_diversity_index_cumulative' not in disabled_set:
             new_scaffolds, new_valid = _compute_batch_scaffolds(
                 new_cumulative_smiles, run_cache.scaffold_cache
             )
             run_cache.cumulative_unique_scaffolds.update(new_scaffolds)
             run_cache.cumulative_valid_count += new_valid
             if run_cache.cumulative_valid_count > 0:
-                metrics["scaffold_diversity_index_cumulative"] = float(
+                metrics['scaffold_diversity_index_cumulative'] = float(
                     len(run_cache.cumulative_unique_scaffolds)
                     / run_cache.cumulative_valid_count
                 )
             else:
-                metrics["scaffold_diversity_index_cumulative"] = None
+                metrics['scaffold_diversity_index_cumulative'] = None
     except Exception as exc:
         logger.warning(
-            "diversity cycle=%d scaffold failed (%s); setting to None",
-            cycle, type(exc).__name__,
+            'diversity cycle=%d scaffold failed (%s); setting to None',
+            cycle,
+            type(exc).__name__,
         )
-        metrics["scaffold_diversity_index_batch"] = None
-        metrics["scaffold_diversity_index_cumulative"] = None
+        metrics['scaffold_diversity_index_batch'] = None
+        metrics['scaffold_diversity_index_cumulative'] = None
     scaffold_ms = (time.perf_counter() - scaffold_start) * 1000.0
 
     # ----- Bit-marginal entropy (online accumulator + per-batch direct sum) -----
     shannon_start = time.perf_counter()
     try:
-        if "bit_position_uniformity_entropy_batch" not in disabled_set:
+        if 'bit_position_uniformity_entropy_batch' not in disabled_set:
             if batch_packed.shape[0] > 0:
                 batch_bit_sum = batch_packed.sum(axis=0).astype(np.int64)
-                metrics["bit_position_uniformity_entropy_batch"] = _bit_position_uniformity_entropy_from_bit_sum(
-                    batch_bit_sum, batch_packed.shape[0]
+                metrics['bit_position_uniformity_entropy_batch'] = (
+                    _bit_position_uniformity_entropy_from_bit_sum(
+                        batch_bit_sum, batch_packed.shape[0]
+                    )
                 )
             else:
-                metrics["bit_position_uniformity_entropy_batch"] = None
-        if "bit_position_uniformity_entropy_cumulative" not in disabled_set:
+                metrics['bit_position_uniformity_entropy_batch'] = None
+        if 'bit_position_uniformity_entropy_cumulative' not in disabled_set:
             # Spec 022: use cumulative_seen_count (true cumulative count) as
             # denominator, not the now-capped reservoir buffer length.
             # bit_sum_buffer accumulates over ALL fingerprints, so the
             # denominator must too.
-            metrics["bit_position_uniformity_entropy_cumulative"] = _bit_position_uniformity_entropy_from_bit_sum(
-                run_cache.bit_sum_buffer, run_cache.cumulative_seen_count
+            metrics['bit_position_uniformity_entropy_cumulative'] = (
+                _bit_position_uniformity_entropy_from_bit_sum(
+                    run_cache.bit_sum_buffer, run_cache.cumulative_seen_count
+                )
             )
     except Exception as exc:
         logger.warning(
-            "diversity cycle=%d bit-marginal entropy failed (%s); setting to None",
-            cycle, type(exc).__name__,
+            'diversity cycle=%d bit-marginal entropy failed (%s); setting to None',
+            cycle,
+            type(exc).__name__,
         )
-        metrics["bit_position_uniformity_entropy_batch"] = None
-        metrics["bit_position_uniformity_entropy_cumulative"] = None
+        metrics['bit_position_uniformity_entropy_batch'] = None
+        metrics['bit_position_uniformity_entropy_cumulative'] = None
     shannon_ms = (time.perf_counter() - shannon_start) * 1000.0
 
     logger.debug(
-        "diversity cycle=%d batch_ms=%.1f cum_ms=%.1f scaffold_ms=%.1f shannon_ms=%.1f",
-        cycle, batch_ms, cum_ms, scaffold_ms, shannon_ms,
+        'diversity cycle=%d batch_ms=%.1f cum_ms=%.1f scaffold_ms=%.1f shannon_ms=%.1f',
+        cycle,
+        batch_ms,
+        cum_ms,
+        scaffold_ms,
+        shannon_ms,
     )
 
     # Coerce numpy scalars to Python floats per FR-013.
@@ -774,12 +788,12 @@ def compute_diversity_metrics(
 
 
 __all__ = [
-    "DIVERSITY_KEYS",
-    "N_PAIRS_MAX",
-    "N_PAIRS_MIN",
-    "N_PILOT_PAIRS",
-    "TARGET_EPSILON",
-    "Z_95",
-    "RunCache",
-    "compute_diversity_metrics",
+    'DIVERSITY_KEYS',
+    'N_PAIRS_MAX',
+    'N_PAIRS_MIN',
+    'N_PILOT_PAIRS',
+    'TARGET_EPSILON',
+    'Z_95',
+    'RunCache',
+    'compute_diversity_metrics',
 ]

@@ -21,10 +21,7 @@ class TestDecisionTreeLearner:
     def test_initialization_sets_tree_hyperparameters_and_untrained_state(self):
         """Test DecisionTreeLearner initializes with correct parameters."""
         learner = DecisionTreeLearner(
-            max_depth=15,
-            min_samples_split=5,
-            min_samples_leaf=3,
-            random_state=123
+            max_depth=15, min_samples_split=5, min_samples_leaf=3, random_state=123
         )
 
         assert learner.max_depth == 15
@@ -33,7 +30,9 @@ class TestDecisionTreeLearner:
         assert learner.random_state == 123
         assert not learner.is_trained
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         """Test training and prediction with real molecular data."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -59,7 +58,7 @@ class TestDecisionTreeLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises((ValueError, LearnerError), match="empty dataset"):
+        with pytest.raises((ValueError, LearnerError), match='empty dataset'):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
@@ -67,19 +66,19 @@ class TestDecisionTreeLearner:
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises((ValueError, LearnerError), match="mismatched lengths"):
+        with pytest.raises((ValueError, LearnerError), match='mismatched lengths'):
             learner.train(features, targets)
 
     def test_predict_without_training(self, learner):
         """Test error when predicting without training."""
         features = np.random.randn(5, 10)
-        with pytest.raises((RuntimeError, LearnerError), match="must be trained"):
+        with pytest.raises((RuntimeError, LearnerError), match='must be trained'):
             learner.predict(features)
 
     def test_get_name_includes_decision_tree_identifier(self, learner):
         """Test name generation."""
         name = learner.get_name()
-        assert "DecisionTree" in name
+        assert 'DecisionTree' in name
 
     def test_supports_uncertainty_returns_true_for_default_criterion(self, learner):
         """Test DecisionTreeLearner supports uncertainty."""
@@ -93,7 +92,9 @@ class TestDecisionTreeLearner:
         with pytest.raises((ValueError, RuntimeError)):
             learner.train(features_1d, targets)
 
-    def test_same_random_state_produces_identical_predictions(self, small_real_compounds, small_real_morgan_features):
+    def test_same_random_state_produces_identical_predictions(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test predictions are deterministic with same random_state."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -114,7 +115,9 @@ class TestDecisionTreeLearner:
 
         np.testing.assert_array_equal(pred1, pred2)
 
-    def test_max_depth_limits_tree_depth_relative_to_deeper_model(self, small_real_compounds, small_real_morgan_features):
+    def test_max_depth_limits_tree_depth_relative_to_deeper_model(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test max_depth parameter affects model complexity."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
@@ -138,7 +141,9 @@ class TestDecisionTreeLearner:
         assert learner_shallow.model.get_depth() <= 2
         assert learner_deep.model.get_depth() > learner_shallow.model.get_depth()
 
-    def test_uncertainty_shape_matches_predictions(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_shape_matches_predictions(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
@@ -150,7 +155,9 @@ class TestDecisionTreeLearner:
         assert uncertainty is not None
         assert uncertainty.shape == predictions.shape
 
-    def test_uncertainty_non_negative(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_uncertainty_non_negative(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
@@ -163,7 +170,9 @@ class TestDecisionTreeLearner:
         assert np.all(uncertainty >= 0)
         assert np.all(np.isfinite(uncertainty))
 
-    def test_repeated_predictions_return_identical_uncertainty_values(self, learner, small_real_compounds, small_real_morgan_features):
+    def test_repeated_predictions_return_identical_uncertainty_values(
+        self, learner, small_real_compounds, small_real_morgan_features
+    ):
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
@@ -216,18 +225,23 @@ class TestDecisionTreeLearner:
     def test_majority_zero_uncertainty_logs_debug_message(self, caplog):
         """DEBUG message when >50% zero uncertainty."""
         import logging
+
         rng = np.random.RandomState(42)
         X = rng.randn(50, 5)
         y = rng.randn(50)
 
-        learner = DecisionTreeLearner(max_depth=None, min_samples_leaf=1, min_samples_split=2, random_state=42)
+        learner = DecisionTreeLearner(
+            max_depth=None, min_samples_leaf=1, min_samples_split=2, random_state=42
+        )
         learner.train(X, y)
 
         logging.getLogger('learnm8').propagate = True
-        with caplog.at_level(logging.DEBUG, logger="learnm8.learners.sklearn.decision_tree"):
+        with caplog.at_level(
+            logging.DEBUG, logger='learnm8.learners.sklearn.decision_tree'
+        ):
             learner.predict(X)
 
-        has_zero_msg = any("zero uncertainty" in r.message for r in caplog.records)
+        has_zero_msg = any('zero uncertainty' in r.message for r in caplog.records)
         assert has_zero_msg
 
     def test_supports_uncertainty_reflects_trained_criterion(self):
@@ -249,8 +263,10 @@ class TestDecisionTreeLearner:
         learner_ae.train(X, y)
         assert learner_ae.supports_uncertainty() is False
 
-    @pytest.mark.parametrize("max_depth", [2, 5, 10, None])
-    def test_predict_returns_finite_non_negative_uncertainty_across_tree_depths(self, max_depth):
+    @pytest.mark.parametrize('max_depth', [2, 5, 10, None])
+    def test_predict_returns_finite_non_negative_uncertainty_across_tree_depths(
+        self, max_depth
+    ):
         rng = np.random.RandomState(42)
         X = rng.randn(50, 5)
         y = rng.randn(50)
@@ -284,7 +300,9 @@ class TestDecisionTreeLearner:
         X = rng.randn(3, 2)
         y = rng.randn(3)
 
-        learner = DecisionTreeLearner(max_depth=2, min_samples_leaf=1, min_samples_split=2, random_state=42)
+        learner = DecisionTreeLearner(
+            max_depth=2, min_samples_leaf=1, min_samples_split=2, random_state=42
+        )
         learner.train(X, y)
         preds, unc = learner.predict(X)
 

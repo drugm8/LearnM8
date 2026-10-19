@@ -27,8 +27,9 @@ from tests.fixtures.master_dataframe import (
 
 @pytest.mark.integration
 class TestExecuteCycle:
-
-    def test_cycle_1_with_initialization(self, sample_compounds, mock_learner, mock_oracle, tmp_path):
+    def test_cycle_1_with_initialization(
+        self, sample_compounds, mock_learner, mock_oracle, tmp_path
+    ):
         """Test that cycle 1 (first AL cycle) trains and predicts after cycle 0 (initialization)."""
         from learnm8.core.initialization import (
             initialize_master_dataframe_empty,
@@ -48,7 +49,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            random_state=42
+            random_state=42,
         )
 
         init_labeled = master_df.filter(pl.col('labeled_cycle') == 0)
@@ -88,7 +89,9 @@ class TestExecuteCycle:
         assert metrics['cycle'] == 1
         assert metrics['strategy'] == 'greedy'
 
-    def test_cycle_execution_requires_labeled_data(self, sample_compounds, mock_learner, mock_oracle, tmp_path):
+    def test_cycle_execution_requires_labeled_data(
+        self, sample_compounds, mock_learner, mock_oracle, tmp_path
+    ):
         """Test that AL cycle execution fails if no labeled data (missing initialization)."""
         from learnm8.core.initialization import initialize_master_dataframe_empty
 
@@ -96,7 +99,7 @@ class TestExecuteCycle:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
 
-        with pytest.raises(LearnerError, match="No labeled compounds available"):
+        with pytest.raises(LearnerError, match='No labeled compounds available'):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=1,
@@ -107,10 +110,12 @@ class TestExecuteCycle:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=len(sample_compounds),
-                oracle_type='run'
+                oracle_type='run',
             )
 
-    def test_run_mode_basic_execution(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_run_mode_basic_execution(
+        self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         initial_ids = sample_compounds['ID'].head(2).to_list()
         initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=False))
 
@@ -118,7 +123,7 @@ class TestExecuteCycle:
             valid_compounds=sample_compounds,
             target_col='Activity',
             initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values
+            initial_measurements=initial_values,
         )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
@@ -145,10 +150,14 @@ class TestExecuteCycle:
         assert metrics['strategy'] == 'greedy'
         assert metrics['selected_count'] > 0
 
-    def test_benchmark_mode_requires_original_pool(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_benchmark_mode_requires_original_pool(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(ValueError, match="original_pool is required for benchmark mode"):
+        with pytest.raises(
+            ValueError, match='original_pool is required for benchmark mode'
+        ):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -160,10 +169,12 @@ class TestExecuteCycle:
                 cache_dir=tmp_path,
                 original_pool_size=100,
                 oracle_type='benchmark',
-                original_pool=None
+                original_pool=None,
             )
 
-    def test_benchmark_mode_predicts_unlabeled_only(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_benchmark_mode_predicts_unlabeled_only(
+        self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         initial_ids = sample_compounds['ID'].head(2).to_list()
         initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=False))
 
@@ -171,7 +182,7 @@ class TestExecuteCycle:
             valid_compounds=sample_compounds,
             target_col='Activity',
             initial_labeled_ids=initial_ids,
-            initial_measurements=initial_values
+            initial_measurements=initial_values,
         )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
@@ -199,13 +210,15 @@ class TestExecuteCycle:
         assert pred_count == unlabeled_count
 
     @pytest.mark.slow
-    def test_pruning_integration(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_pruning_integration(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig(
             'greedy',
             n_cycles=1,
             batch_fraction=0.05,
             pruning_strategy='score',
-            pruning_params={'pruning_fraction': 0.3}
+            pruning_params={'pruning_fraction': 0.3},
         )
 
         _updated_df, metrics = execute_cycle(
@@ -218,12 +231,14 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=100,
-            oracle_type='run'
+            oracle_type='run',
         )
 
         assert metrics['pruned_count'] >= 0
 
-    def test_score_direction_higher(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_score_direction_higher(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
         _updated_df, metrics = execute_cycle(
@@ -237,12 +252,14 @@ class TestExecuteCycle:
             cache_dir=tmp_path,
             original_pool_size=100,
             score_direction='higher',
-            oracle_type='run'
+            oracle_type='run',
         )
 
         assert metrics['best_so_far'] is not None
 
-    def test_score_direction_lower(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_score_direction_lower(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
         _updated_df, metrics = execute_cycle(
@@ -256,15 +273,19 @@ class TestExecuteCycle:
             cache_dir=tmp_path,
             original_pool_size=100,
             score_direction='lower',
-            oracle_type='run'
+            oracle_type='run',
         )
 
         assert metrics['best_so_far'] is not None
 
-    def test_invalid_score_direction_raises_error(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_invalid_score_direction_raises_error(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(ValueError, match="score_direction must be 'higher' or 'lower'"):
+        with pytest.raises(
+            ValueError, match="score_direction must be 'higher' or 'lower'"
+        ):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -276,10 +297,12 @@ class TestExecuteCycle:
                 cache_dir=tmp_path,
                 original_pool_size=100,
                 score_direction='invalid',
-                oracle_type='run'
+                oracle_type='run',
             )
 
-    def test_batch_size_computation_with_fraction(self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_batch_size_computation_with_fraction(
+        self, sample_master_df, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.4)
 
         _updated_df, metrics = execute_cycle(
@@ -292,19 +315,21 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=5,
-            oracle_type='run'
+            oracle_type='run',
         )
 
         expected_batch_size = int(5 * 0.4)
         assert metrics['selected_count'] == expected_batch_size
 
-    def test_batch_size_floor_one_for_tiny_pool(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_batch_size_floor_one_for_tiny_pool(
+        self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         pool_of_ten = sample_compounds.clone()[:10]
         master_df = initialize_master_dataframe(
             valid_compounds=pool_of_ten,
             target_col='Activity',
             initial_labeled_ids=[pool_of_ten[0, 'ID']],
-            initial_measurements={pool_of_ten[0, 'ID']: 0.5}
+            initial_measurements={pool_of_ten[0, 'ID']: 0.5},
         )
         config = CycleConfig('random', n_cycles=1, batch_fraction=0.001)
 
@@ -318,16 +343,18 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=10,
-            oracle_type='run'
+            oracle_type='run',
         )
         assert metrics['selected_count'] == 1
 
-    def test_training_failure_raises_error(self, sample_master_df, mock_oracle, tmp_path):
+    def test_training_failure_raises_error(
+        self, sample_master_df, mock_oracle, tmp_path
+    ):
         from learnm8.core.interfaces import Learner
 
         class FailingLearner(Learner):
             def train(self, features, targets):
-                raise RuntimeError("Training failed")
+                raise RuntimeError('Training failed')
 
             def predict(self, features, smiles=None, *, compute_uncertainty=True):
                 assert isinstance(compute_uncertainty, bool)
@@ -337,11 +364,11 @@ class TestExecuteCycle:
                 return False
 
             def get_name(self):
-                return "FailingLearner"
+                return 'FailingLearner'
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(LearnerError, match="Training failed in cycle 0"):
+        with pytest.raises(LearnerError, match='Training failed in cycle 0'):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -352,18 +379,22 @@ class TestExecuteCycle:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=100,
-                oracle_type='run'
+                oracle_type='run',
             )
 
-    def test_no_unlabeled_compounds_returns_unchanged(self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path):
+    def test_no_unlabeled_compounds_returns_unchanged(
+        self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
+    ):
         all_labeled = sample_compounds['ID'].to_list()
-        all_values = dict(zip(all_labeled, np.random.rand(len(all_labeled)), strict=False))
+        all_values = dict(
+            zip(all_labeled, np.random.rand(len(all_labeled)), strict=False)
+        )
 
         master_df = initialize_master_dataframe(
             valid_compounds=sample_compounds,
             target_col='Activity',
             initial_labeled_ids=all_labeled,
-            initial_measurements=all_values
+            initial_measurements=all_values,
         )
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
@@ -378,7 +409,7 @@ class TestExecuteCycle:
             featurizer='morgan',
             cache_dir=tmp_path,
             original_pool_size=len(sample_compounds),
-            oracle_type='run'
+            oracle_type='run',
         )
 
         assert metrics['selected_count'] == 0
@@ -432,7 +463,6 @@ class TestExecuteCycle:
 
 @pytest.mark.integration
 class TestCalculateCycleMetrics:
-
     def test_basic_metrics_structure(self, sample_master_df):
         predictions = np.random.rand(50)
         uncertainties = np.random.rand(50)
@@ -448,7 +478,7 @@ class TestCalculateCycleMetrics:
             selected_ids=selected_ids,
             pruned_ids=pruned_ids,
             target_col='Activity',
-            score_direction='higher'
+            score_direction='higher',
         )
 
         assert 'cycle' in metrics
@@ -472,7 +502,7 @@ class TestCalculateCycleMetrics:
             selected_ids=selected_ids,
             pruned_ids=[],
             target_col='Activity',
-            score_direction='higher'
+            score_direction='higher',
         )
 
         assert 'remaining_unlabeled' in metrics
@@ -491,7 +521,7 @@ class TestCalculateCycleMetrics:
             selected_ids=selected_ids,
             pruned_ids=[],
             target_col='Activity',
-            score_direction='higher'
+            score_direction='higher',
         )
 
         assert metrics['prediction_mean'] == pytest.approx(0.5)
@@ -512,7 +542,7 @@ class TestCalculateCycleMetrics:
             selected_ids=selected_ids,
             pruned_ids=[],
             target_col='Activity',
-            score_direction='higher'
+            score_direction='higher',
         )
 
         assert metrics['has_uncertainty'] is True
@@ -522,15 +552,12 @@ class TestCalculateCycleMetrics:
 
 @pytest.mark.integration
 class TestApplyPruning:
-
     @staticmethod
     def _make_pool(sample_compounds, with_uncertainty=False):
         """Build a selection_pool DataFrame with prediction (and optionally
         uncertainty) columns from sample_compounds."""
         pool = sample_compounds.clone()
-        pool = pool.with_columns(
-            pl.Series('prediction', np.random.rand(len(pool)))
-        )
+        pool = pool.with_columns(pl.Series('prediction', np.random.rand(len(pool))))
         if with_uncertainty:
             pool = pool.with_columns(
                 pl.Series('uncertainty', np.random.rand(len(pool)))
@@ -584,7 +611,7 @@ class TestApplyPruning:
             valid_compounds=sample_compounds, target_col='Activity'
         )
 
-        with pytest.raises(PruningError, match="Pruning failed with strategy"):
+        with pytest.raises(PruningError, match='Pruning failed with strategy'):
             _apply_pruning(
                 selection_pool=pool,
                 compounds_df=master_df,
@@ -598,12 +625,9 @@ class TestApplyPruning:
 
 @pytest.mark.integration
 class TestSelectCompounds:
-
     def test_greedy_selection(self, sample_compounds):
         pool = sample_compounds.clone()
-        pool = pool.with_columns(
-            pl.Series('prediction', np.random.rand(len(pool)))
-        )
+        pool = pool.with_columns(pl.Series('prediction', np.random.rand(len(pool))))
         batch_size = 2
 
         selected_df = _select_compounds(
@@ -611,16 +635,14 @@ class TestSelectCompounds:
             strategy='greedy',
             batch_size=batch_size,
             score_direction='higher',
-            acquisition_params={}
+            acquisition_params={},
         )
 
         assert len(selected_df) == batch_size
 
     def test_random_strategy_selects_requested_batch_size(self, sample_compounds):
         pool = sample_compounds.clone()
-        pool = pool.with_columns(
-            pl.Series('prediction', np.random.rand(len(pool)))
-        )
+        pool = pool.with_columns(pl.Series('prediction', np.random.rand(len(pool))))
         batch_size = 2
 
         selected_df = _select_compounds(
@@ -628,45 +650,40 @@ class TestSelectCompounds:
             strategy='random',
             batch_size=batch_size,
             score_direction='higher',
-            acquisition_params={}
+            acquisition_params={},
         )
 
         assert len(selected_df) == batch_size
 
     def test_unknown_strategy_raises_error(self, sample_compounds):
         pool = sample_compounds.clone()
-        pool = pool.with_columns(
-            pl.Series('prediction', np.random.rand(len(pool)))
-        )
+        pool = pool.with_columns(pl.Series('prediction', np.random.rand(len(pool))))
 
-        with pytest.raises(ValueError, match="Unknown acquisition strategy"):
+        with pytest.raises(ValueError, match='Unknown acquisition strategy'):
             _select_compounds(
                 pool,
                 strategy='invalid_strategy',
                 batch_size=10,
                 score_direction='higher',
-                acquisition_params={}
+                acquisition_params={},
             )
 
     def test_missing_uncertainty_for_ucb_raises_error(self, sample_compounds):
         pool = sample_compounds.clone()
-        pool = pool.with_columns(
-            pl.Series('prediction', np.random.rand(len(pool)))
-        )
+        pool = pool.with_columns(pl.Series('prediction', np.random.rand(len(pool))))
 
-        with pytest.raises(ValueError, match="requires uncertainty estimates"):
+        with pytest.raises(ValueError, match='requires uncertainty estimates'):
             _select_compounds(
                 pool,
                 strategy='ucb',
                 batch_size=10,
                 score_direction='higher',
-                acquisition_params={}
+                acquisition_params={},
             )
 
 
 @pytest.mark.integration
 class TestEdgeCaseHandling:
-
     @pytest.mark.slow
     def test_nan_predictions_handling(self, sample_master_df, mock_oracle, tmp_path):
         from learnm8.core.interfaces import Learner
@@ -684,11 +701,11 @@ class TestEdgeCaseHandling:
                 return False
 
             def get_name(self):
-                return "NaNLearner"
+                return 'NaNLearner'
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.05)
 
-        with pytest.raises(LearnerError, match="NaN predictions detected"):
+        with pytest.raises(LearnerError, match='NaN predictions detected'):
             execute_cycle(
                 compounds_df=sample_master_df,
                 cycle=0,
@@ -699,10 +716,12 @@ class TestEdgeCaseHandling:
                 featurizer='morgan',
                 cache_dir=tmp_path,
                 original_pool_size=100,
-                oracle_type='run'
+                oracle_type='run',
             )
 
-    def test_infinite_predictions_handling(self, sample_master_df, mock_oracle, tmp_path):
+    def test_infinite_predictions_handling(
+        self, sample_master_df, mock_oracle, tmp_path
+    ):
         from learnm8.core.interfaces import Learner
 
         class InfPredictingLearner(Learner):
@@ -718,7 +737,7 @@ class TestEdgeCaseHandling:
                 return False
 
             def get_name(self):
-                return "InfLearner"
+                return 'InfLearner'
 
         config = CycleConfig('random', n_cycles=1, batch_fraction=0.05)
 
@@ -759,7 +778,7 @@ class TestNarrowExceptPaths:
 
         class RaisingOracle(Oracle):
             def measure(self, compounds, properties):
-                raise OracleError("forced oracle failure for narrow-except test")
+                raise OracleError('forced oracle failure for narrow-except test')
 
         initial_ids = sample_compounds['ID'].head(2).to_list()
         initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=True))
@@ -772,7 +791,7 @@ class TestNarrowExceptPaths:
 
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
 
-        with pytest.raises(OracleError, match="forced oracle failure"):
+        with pytest.raises(OracleError, match='forced oracle failure'):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=1,
@@ -803,7 +822,9 @@ class TestNarrowExceptPaths:
                 return False
 
             def select(self, pool, batch_size):
-                raise AcquisitionError("forced acquisition failure for narrow-except test")
+                raise AcquisitionError(
+                    'forced acquisition failure for narrow-except test'
+                )
 
         initial_ids = sample_compounds['ID'].head(2).to_list()
         initial_values = dict(zip(initial_ids, [0.3, 0.6], strict=True))
@@ -817,22 +838,25 @@ class TestNarrowExceptPaths:
         config = CycleConfig('greedy', n_cycles=1, batch_fraction=0.1)
 
         with (
-            patch('learnm8.acquisition.get_acquisition_function', return_value=RaisingAcqClass),
-            pytest.raises(AcquisitionError, match="forced acquisition failure"),
+            patch(
+                'learnm8.acquisition.get_acquisition_function',
+                return_value=RaisingAcqClass,
+            ),
+            pytest.raises(AcquisitionError, match='forced acquisition failure'),
         ):
             execute_cycle(
-                    compounds_df=master_df,
-                    cycle=1,
-                    config=config,
-                    learner=mock_learner,
-                    oracle=mock_oracle,
-                    target_col='Activity',
-                    featurizer='morgan',
-                    cache_dir=tmp_path,
-                    original_pool_size=len(sample_compounds),
-                    oracle_type='run',
-                    output_dir=tmp_path,
-                )
+                compounds_df=master_df,
+                cycle=1,
+                config=config,
+                learner=mock_learner,
+                oracle=mock_oracle,
+                target_col='Activity',
+                featurizer='morgan',
+                cache_dir=tmp_path,
+                original_pool_size=len(sample_compounds),
+                oracle_type='run',
+                output_dir=tmp_path,
+            )
 
     def test_pruning_error_propagates_as_pruning_error(
         self, sample_compounds, mock_learner_with_uncertainty, mock_oracle, tmp_path
@@ -843,7 +867,7 @@ class TestNarrowExceptPaths:
 
         class RaisingPruner:
             def prune(self, pool, predictions, uncertainties):
-                raise PruningError("forced pruning failure for narrow-except test")
+                raise PruningError('forced pruning failure for narrow-except test')
 
         def fake_create_pruning_strategy(strategy_name, parameters):
             return RaisingPruner()
@@ -865,10 +889,13 @@ class TestNarrowExceptPaths:
             pruning_params={'pruning_fraction': 0.3},
         )
 
-        with patch(
-            'learnm8.pruning.create_pruning_strategy',
-            side_effect=fake_create_pruning_strategy,
-        ), pytest.raises(PruningError, match="forced pruning failure"):
+        with (
+            patch(
+                'learnm8.pruning.create_pruning_strategy',
+                side_effect=fake_create_pruning_strategy,
+            ),
+            pytest.raises(PruningError, match='forced pruning failure'),
+        ):
             execute_cycle(
                 compounds_df=master_df,
                 cycle=1,
@@ -899,7 +926,7 @@ class TestNarrowExceptPaths:
 
         def fake_evaluate_cycle(*args, **kwargs):
             raise pl.exceptions.ColumnNotFoundError(
-                "forced column-missing failure for narrow-except test"
+                'forced column-missing failure for narrow-except test'
             )
 
         initial_ids = sample_compounds['ID'].head(2).to_list()

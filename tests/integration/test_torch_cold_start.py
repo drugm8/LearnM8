@@ -6,6 +6,7 @@ from learnm8.learners.torch.mlp import MLPLearner
 
 pytestmark = pytest.mark.unit
 
+
 class TestTorchColdStartIntegration:
     def test_model_parameters_differ_between_cycles(self):
         """Model is recreated from scratch each cycle (cold-start)."""

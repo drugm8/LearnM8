@@ -49,11 +49,11 @@ def top_k_indices(scores: np.ndarray, max_k: int) -> np.ndarray:
     n = scores.size
     if max_k >= n:
         # Full-sort fallback; ``kind='stable'`` makes ties deterministic.
-        return np.argsort(-scores, kind="stable")
+        return np.argsort(-scores, kind='stable')
     # Partition once at the kth-from-end; right partition is the top-max_k unsorted.
     top_unsorted = np.argpartition(scores, kth=-max_k)[-max_k:]
     # Sort only the K-element window in descending order.
-    return top_unsorted[np.argsort(-scores[top_unsorted], kind="stable")]
+    return top_unsorted[np.argsort(-scores[top_unsorted], kind='stable')]
 
 
-__all__ = ["top_k_indices"]
+__all__ = ['top_k_indices']

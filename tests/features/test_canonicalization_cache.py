@@ -36,10 +36,12 @@ from learnm8.features.extraction import extract_features
 def test_validate_compound_pool_writes_canonical_smiles(tmp_path: Path) -> None:
     """validate_compound_pool replaces raw SMILES with RDKit-canonical forms."""
     raw_smiles = ['OCC', 'C1=CC=CC=C1', 'N#N', 'CC(O)=O']
-    df = pl.DataFrame({
-        'ID': [f'C{i}' for i in range(len(raw_smiles))],
-        'SMILES': raw_smiles,
-    })
+    df = pl.DataFrame(
+        {
+            'ID': [f'C{i}' for i in range(len(raw_smiles))],
+            'SMILES': raw_smiles,
+        }
+    )
 
     result = validate_compound_pool(df, n_jobs=1, progress=False)
 
@@ -56,10 +58,12 @@ def test_validate_compound_pool_writes_canonical_smiles(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_invalid_compounds_keep_raw_smiles() -> None:
     """invalid_compounds in ValidationResult keep the raw (non-canonical) SMILES."""
-    df = pl.DataFrame({
-        'ID': ['good', 'bad'],
-        'SMILES': ['OCC', 'NOT_A_SMILES!!!'],
-    })
+    df = pl.DataFrame(
+        {
+            'ID': ['good', 'bad'],
+            'SMILES': ['OCC', 'NOT_A_SMILES!!!'],
+        }
+    )
     result = validate_compound_pool(df, n_jobs=1, progress=False)
 
     assert len(result.valid_compounds) == 1
@@ -190,12 +194,36 @@ def test_feature_values_unchanged_by_canonicalization(tmp_path: Path) -> None:
 def _make_tiny_benchmark_csv(path: Path, n: int = 30) -> Path:
     """Write a tiny benchmark CSV with valid SMILES and numeric Activity."""
     smiles_pool = [
-        'CCO', 'CCC', 'CCN', 'c1ccccc1', 'CC(=O)O', 'CC(C)O',
-        'CCCC', 'CCCN', 'CCCl', 'CCBr',
-        'c1ccncc1', 'c1ccoc1', 'c1ccsc1', 'CC#N', 'CCC=O',
-        'CC(=O)N', 'CC(C)=O', 'CCS', 'CCSC', 'CCOC',
-        'CCF', 'CCCI', 'C1CCCC1', 'C1CCCCC1', 'C1CCNCC1',
-        'C1CCOCC1', 'CC(O)CC', 'CC(N)CC', 'CC(=O)CC', 'CCCO',
+        'CCO',
+        'CCC',
+        'CCN',
+        'c1ccccc1',
+        'CC(=O)O',
+        'CC(C)O',
+        'CCCC',
+        'CCCN',
+        'CCCl',
+        'CCBr',
+        'c1ccncc1',
+        'c1ccoc1',
+        'c1ccsc1',
+        'CC#N',
+        'CCC=O',
+        'CC(=O)N',
+        'CC(C)=O',
+        'CCS',
+        'CCSC',
+        'CCOC',
+        'CCF',
+        'CCCI',
+        'C1CCCC1',
+        'C1CCCCC1',
+        'C1CCNCC1',
+        'C1CCOCC1',
+        'CC(O)CC',
+        'CC(N)CC',
+        'CC(=O)CC',
+        'CCCO',
     ]
     rows = smiles_pool[:n]
     csv_path = path / 'benchmark.csv'
@@ -281,7 +309,9 @@ def test_multi_featurizer_canonical_smiles(tmp_path: Path) -> None:
     morgan_feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
     maccs_feat = create_featurizer('maccs', n_jobs=1)
 
-    morgan_feats = extract_features(canonical, morgan_feat, cache_dir=tmp_path / 'morgan')
+    morgan_feats = extract_features(
+        canonical, morgan_feat, cache_dir=tmp_path / 'morgan'
+    )
     maccs_feats = extract_features(canonical, maccs_feat, cache_dir=tmp_path / 'maccs')
 
     assert morgan_feats.shape == (len(canonical), 2048)
@@ -295,7 +325,9 @@ def test_multi_featurizer_canonical_smiles(tmp_path: Path) -> None:
     assert set(np.unique(maccs_feats).tolist()) <= {0.0, 1.0}
 
     # Verify via re-extraction (warm reads match cold).
-    morgan_warm = extract_features(canonical, morgan_feat, cache_dir=tmp_path / 'morgan')
+    morgan_warm = extract_features(
+        canonical, morgan_feat, cache_dir=tmp_path / 'morgan'
+    )
     maccs_warm = extract_features(canonical, maccs_feat, cache_dir=tmp_path / 'maccs')
     np.testing.assert_array_equal(morgan_feats, morgan_warm)
     np.testing.assert_array_equal(maccs_feats, maccs_warm)

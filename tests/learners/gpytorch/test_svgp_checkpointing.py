@@ -5,7 +5,7 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
-gpytorch = pytest.importorskip("gpytorch")
+gpytorch = pytest.importorskip('gpytorch')
 
 from learnm8.learners.gpytorch.svgp import SVGPLearner
 
@@ -19,11 +19,11 @@ class TestSVGPCheckpointing:
         targets = rng.randn(100).astype(np.float32)
 
         learner = SVGPLearner(
-            kernel="tanimoto",
+            kernel='tanimoto',
             n_inducing=20,
             n_epochs=50,
             early_stopping_patience=5,
-            device="cpu",
+            device='cpu',
             random_state=42,
         )
         learner.train(features, targets)

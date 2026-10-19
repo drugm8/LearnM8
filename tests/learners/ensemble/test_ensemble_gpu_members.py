@@ -37,8 +37,12 @@ class TestLREnsembleDeviceSelection:
         fake_module = MagicMock()
         fake_module.RidgeCumlLearner = mock_ridge_cls
 
-        with patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'):
+        with (
+            patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
             LREnsemble(device='cuda')
 
         assert mock_ridge_cls.call_count == 3
@@ -58,9 +62,17 @@ class TestLREnsembleDeviceSelection:
         alphas = [0.1, 1.0, 10.0]
         random_states = [42, 123, 456]
 
-        with patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'):
-            LREnsemble(device='cuda', regularization_strengths=alphas, random_states=random_states)
+        with (
+            patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
+            LREnsemble(
+                device='cuda',
+                regularization_strengths=alphas,
+                random_states=random_states,
+            )
 
         calls = mock_ridge_cls.call_args_list
         assert len(calls) == 3
@@ -73,14 +85,20 @@ class TestLREnsembleDeviceSelection:
         from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 
         mock_ridge_cls = MagicMock()
-        mock_ridge_cls.side_effect = LearnerError('alpha cannot be None for RidgeCumlLearner')
+        mock_ridge_cls.side_effect = LearnerError(
+            'alpha cannot be None for RidgeCumlLearner'
+        )
 
         fake_module = MagicMock()
         fake_module.RidgeCumlLearner = mock_ridge_cls
 
-        with patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'), \
-                pytest.raises(LearnerError):
+        with (
+            patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': fake_module}),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+            pytest.raises(LearnerError),
+        ):
             LREnsemble(device='cuda', regularization_strengths=[None, None, None])
 
     def test_lr_ensemble_device_auto_resolves_to_cpu(self):
@@ -138,18 +156,27 @@ class TestMixedEnsembleDeviceSelection:
         return mock_rf_fil_cls, mock_ridge_cls, fake_fil_module, fake_ridge_module
 
     def _patch_cuda_modules(self, fake_fil_module, fake_ridge_module):
-        return patch.dict('sys.modules', {
-            'learnm8.learners.gpu.rf_fil': fake_fil_module,
-            'learnm8.learners.gpu.ridge_cuml': fake_ridge_module,
-        })
+        return patch.dict(
+            'sys.modules',
+            {
+                'learnm8.learners.gpu.rf_fil': fake_fil_module,
+                'learnm8.learners.gpu.ridge_cuml': fake_ridge_module,
+            },
+        )
 
     def test_mixed_ensemble_device_cuda_rf_uses_rf_fil(self):
         from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
 
-        mock_rf_fil_cls, _mock_ridge_cls, fake_fil_module, fake_ridge_module = self._make_mixed_cuda_mocks()
+        mock_rf_fil_cls, _mock_ridge_cls, fake_fil_module, fake_ridge_module = (
+            self._make_mixed_cuda_mocks()
+        )
 
-        with self._patch_cuda_modules(fake_fil_module, fake_ridge_module), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'):
+        with (
+            self._patch_cuda_modules(fake_fil_module, fake_ridge_module),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
             MixedEnsemble(device='cuda')
 
         assert mock_rf_fil_cls.called
@@ -157,10 +184,16 @@ class TestMixedEnsembleDeviceSelection:
     def test_mixed_ensemble_device_cuda_lr_uses_ridge_cuml(self):
         from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
 
-        _mock_rf_fil_cls, mock_ridge_cls, fake_fil_module, fake_ridge_module = self._make_mixed_cuda_mocks()
+        _mock_rf_fil_cls, mock_ridge_cls, fake_fil_module, fake_ridge_module = (
+            self._make_mixed_cuda_mocks()
+        )
 
-        with self._patch_cuda_modules(fake_fil_module, fake_ridge_module), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'):
+        with (
+            self._patch_cuda_modules(fake_fil_module, fake_ridge_module),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
             MixedEnsemble(device='cuda')
 
         assert mock_ridge_cls.called
@@ -171,10 +204,16 @@ class TestMixedEnsembleDeviceSelection:
         from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
         from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
-        _mock_rf_fil_cls, _mock_ridge_cls, fake_fil_module, fake_ridge_module = self._make_mixed_cuda_mocks()
+        _mock_rf_fil_cls, _mock_ridge_cls, fake_fil_module, fake_ridge_module = (
+            self._make_mixed_cuda_mocks()
+        )
 
-        with self._patch_cuda_modules(fake_fil_module, fake_ridge_module), \
-                patch('learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'):
+        with (
+            self._patch_cuda_modules(fake_fil_module, fake_ridge_module),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
             ensemble = MixedEnsemble(device='cuda')
 
         xgb_members = [m for m in ensemble.learners if isinstance(m, XGBoostLearner)]

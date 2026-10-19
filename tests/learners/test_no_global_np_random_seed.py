@@ -13,7 +13,9 @@ from learnm8.learners.torch.mlp import MLPLearner
 pytestmark = pytest.mark.unit
 
 
-def _make_dataset(n: int = 32, d: int = 8, dtype=np.float32) -> tuple[np.ndarray, np.ndarray]:
+def _make_dataset(
+    n: int = 32, d: int = 8, dtype=np.float32
+) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(0)
     X = rng.standard_normal((n, d)).astype(dtype)
     y = rng.standard_normal(n).astype(dtype)

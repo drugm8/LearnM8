@@ -17,13 +17,13 @@ import pytest
 
 # Register fixture plugins from fixtures/ directory
 pytest_plugins = [
-    "tests.fixtures.molecules",
-    "tests.fixtures.mocks",
-    "tests.fixtures.master_dataframe",
-    "tests.fixtures.performance",
-    "tests.fixtures.utilities",
-    "tests.fixtures.features",
-    "tests.fixtures.trained_models",
+    'tests.fixtures.molecules',
+    'tests.fixtures.mocks',
+    'tests.fixtures.master_dataframe',
+    'tests.fixtures.performance',
+    'tests.fixtures.utilities',
+    'tests.fixtures.features',
+    'tests.fixtures.trained_models',
 ]
 
 
@@ -42,6 +42,7 @@ def synthetic_mu_sigma(rng: np.random.Generator):
 
     Returns a callable: f(n: int, include_zero_sigma: bool = True) -> (mu, sigma).
     """
+
     def _make(n: int, include_zero_sigma: bool = True):
         mu = rng.normal(loc=0.0, scale=5.0, size=n)
         sigma = np.abs(rng.normal(loc=1.0, scale=0.5, size=n))
@@ -55,7 +56,7 @@ def synthetic_mu_sigma(rng: np.random.Generator):
     return _make
 
 
-SPEED_MARKERS = {"unit", "integration", "slow"}
+SPEED_MARKERS = {'unit', 'integration', 'slow'}
 
 
 def pytest_xdist_auto_num_workers(config):
@@ -71,9 +72,9 @@ def pytest_collection_modifyitems(config, items):
             unmarked.append(item.nodeid)
     if unmarked:
         msg = (
-            f"{len(unmarked)} test(s) missing required speed markers "
-            f"(unit/integration/slow):\n"
-            + "\n".join(f"  - {nid}" for nid in unmarked[:20])
-            + (f"\n  ... and {len(unmarked) - 20} more" if len(unmarked) > 20 else "")
+            f'{len(unmarked)} test(s) missing required speed markers '
+            f'(unit/integration/slow):\n'
+            + '\n'.join(f'  - {nid}' for nid in unmarked[:20])
+            + (f'\n  ... and {len(unmarked) - 20} more' if len(unmarked) > 20 else '')
         )
         pytest.exit(msg, returncode=4)

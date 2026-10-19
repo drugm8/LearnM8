@@ -12,4 +12,4 @@ with contextlib.suppress(ImportError):
 with contextlib.suppress(ImportError):
     from .svgp import SVGPLearner
 
-__all__ = ["GPyTorchGPLearner", "SVGPLearner"]
+__all__ = ['GPyTorchGPLearner', 'SVGPLearner']

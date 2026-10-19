@@ -76,9 +76,7 @@ class PredictionStats:
         )
 
     @classmethod
-    def from_lazy(
-        cls, lf: pl.LazyFrame, *, with_uncertainty: bool
-    ) -> PredictionStats:
+    def from_lazy(cls, lf: pl.LazyFrame, *, with_uncertainty: bool) -> PredictionStats:
         """Streaming reduction from a predictions ``LazyFrame``.
 
         One ``collect`` over the parquet; ddof=0 and linear-interpolation median

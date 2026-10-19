@@ -23,7 +23,6 @@ from learnm8.learners.base import (
 logger = logging.getLogger(__name__)
 
 
-
 class RidgeCumlLearner(Learner):
     """cuML Ridge regression with leverage-based uncertainty estimation.
 
@@ -113,16 +112,19 @@ class RidgeCumlLearner(Learner):
         _validate_train_inputs(features, targets, self.get_name())
 
         t0 = time.perf_counter_ns()
-        features, self._valid_feature_mask, self._feature_imputer = _preprocess_features(
-            features,
-            remove_zero_variance=self.remove_zero_variance,
-            is_training=True,
-            feature_type=self._feature_type,
+        features, self._valid_feature_mask, self._feature_imputer = (
+            _preprocess_features(
+                features,
+                remove_zero_variance=self.remove_zero_variance,
+                is_training=True,
+                feature_type=self._feature_type,
+            )
         )
         t1 = time.perf_counter_ns()
         logger.debug('preprocess: %.3f ms', (t1 - t0) / 1e6)
 
         from sklearn.preprocessing import StandardScaler
+
         self._feature_scaler = StandardScaler()
         features = self._feature_scaler.fit_transform(features)
 
@@ -137,6 +139,7 @@ class RidgeCumlLearner(Learner):
 
         try:
             import cuml
+
             _ver = getattr(cuml, '__version__', '')
             _parts = tuple(int(x) for x in _ver.split('.')[:2])
             if _parts < (25, 4):
@@ -197,7 +200,10 @@ class RidgeCumlLearner(Learner):
             gram_gpu = cp.asarray(gram)
             L_gpu = cp.linalg.cholesky(gram_gpu)
             L_inv_gpu = cpla.solve_triangular(
-                L_gpu, cp.eye(p, dtype=cp.float64), lower=True, check_finite=False,
+                L_gpu,
+                cp.eye(p, dtype=cp.float64),
+                lower=True,
+                check_finite=False,
             )
             self._leverage_A_gpu = (L_inv_gpu.T @ L_inv_gpu).astype(cp.float32)
             del L_gpu, L_inv_gpu, gram_gpu
@@ -213,13 +219,16 @@ class RidgeCumlLearner(Learner):
             preds_train = np.zeros(n, dtype=np.float64)
 
         residuals = targets.astype(np.float64) - preds_train.astype(np.float64)
-        rss = float(np.sum(residuals ** 2))
+        rss = float(np.sum(residuals**2))
         self._sigma_hat_sq = rss / max(n - p, 1)
 
         self.is_trained = True
         logger.debug(
             'Trained %s on %d samples (p=%d), sigma_hat_sq=%.6f',
-            self.get_name(), n, p, self._sigma_hat_sq,
+            self.get_name(),
+            n,
+            p,
+            self._sigma_hat_sq,
         )
 
     def predict(
@@ -355,12 +364,16 @@ class RidgeCumlLearner(Learner):
                 del X_chunk, XA, h_chunk
                 start = end
             except (MemoryError, Exception) as exc:
-                is_oom = isinstance(exc, MemoryError) or 'out of memory' in str(exc).lower()
+                is_oom = (
+                    isinstance(exc, MemoryError) or 'out of memory' in str(exc).lower()
+                )
                 if not is_oom:
                     raise
                 cp.get_default_memory_pool().free_all_blocks()
                 chunk_size = max(MIN_BATCH_GPU, chunk_size // 2)
-                logger.warning('GPU OOM in leverage, retrying chunk_size=%d', chunk_size)
+                logger.warning(
+                    'GPU OOM in leverage, retrying chunk_size=%d', chunk_size
+                )
         t1 = time.perf_counter_ns()
         logger.debug('GPU leverage (float32): %.3f ms', (t1 - t0) / 1e6)
         return leverages

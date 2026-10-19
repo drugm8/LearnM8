@@ -47,19 +47,23 @@ class RandomAcquisition(AcquisitionFunction):
         """
         # Validate input (only basic validation needed)
         if len(compounds) == 0:
-            raise ValueError("compounds DataFrame is empty")
+            raise ValueError('compounds DataFrame is empty')
 
         if n_select <= 0:
-            raise ValueError("n_select must be positive")
+            raise ValueError('n_select must be positive')
 
         # Adjust n_select if it exceeds available compounds
         actual_n_select = min(n_select, len(compounds))
 
         if actual_n_select < n_select:
-            logger.warning(f"n_select ({n_select}) exceeds available compounds ({len(compounds)}), "
-                         f"will select all {len(compounds)} available compounds")
+            logger.warning(
+                f'n_select ({n_select}) exceeds available compounds ({len(compounds)}), '
+                f'will select all {len(compounds)} available compounds'
+            )
 
-        logger.debug(f"RandomAcquisition: randomly selecting {actual_n_select} from {len(compounds)} compounds with random_state={self.random_state}")
+        logger.debug(
+            f'RandomAcquisition: randomly selecting {actual_n_select} from {len(compounds)} compounds with random_state={self.random_state}'
+        )
 
         # Random selection using Polars
         selected = compounds.sample(n=actual_n_select, seed=self.random_state)
@@ -69,7 +73,7 @@ class RandomAcquisition(AcquisitionFunction):
             pl.Series('acquisition_score', self._rng.uniform(0, 1, size=len(selected)))
         )
 
-        logger.debug(f"RandomAcquisition randomly selected {len(selected)} compounds")
+        logger.debug(f'RandomAcquisition randomly selected {len(selected)} compounds')
 
         return selected
 
@@ -94,4 +98,4 @@ class RandomAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        return f"Random(seed={self.random_state})"
+        return f'Random(seed={self.random_state})'

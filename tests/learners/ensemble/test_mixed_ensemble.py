@@ -25,7 +25,7 @@ class TestMixedEnsemble:
         """Create MixedEnsemble instance for testing."""
         return MixedEnsemble(random_state=42)
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope='class')
     def trained_mixed(self, small_real_compounds, _small_real_morgan_features_raw):
         """Class-scoped trained MixedEnsemble — shared across read-only tests."""
         compounds = small_real_compounds.head(20).clone()
@@ -40,7 +40,9 @@ class TestMixedEnsemble:
         ensemble.train(features, targets)
         return ensemble, features, compounds
 
-    def test_initialization_sets_default_aggregation_uncertainty_and_random_state(self, mixed_ensemble):
+    def test_initialization_sets_default_aggregation_uncertainty_and_random_state(
+        self, mixed_ensemble
+    ):
         """Test mixed ensemble initialization."""
         assert len(mixed_ensemble.learners) == 3
         assert mixed_ensemble.aggregation_method == 'mean'
@@ -69,8 +71,8 @@ class TestMixedEnsemble:
     def test_get_name_lists_mixed_component_types(self, mixed_ensemble):
         """Test name generation shows Mixed ensemble."""
         name = mixed_ensemble.get_name()
-        assert name == "MixedEnsemble(RF+LR+XGB)"
-        assert "Mixed" in name
+        assert name == 'MixedEnsemble(RF+LR+XGB)'
+        assert 'Mixed' in name
 
     def test_initialization_with_custom_random_state(self):
         """Test initialization with custom random state."""
@@ -131,7 +133,9 @@ class TestMixedEnsemble:
         np.testing.assert_array_almost_equal(pred1, pred2)
         np.testing.assert_array_almost_equal(unc1, unc2)
 
-    def test_different_random_states_produce_different_results(self, compounds_20, features_20):
+    def test_different_random_states_produce_different_results(
+        self, compounds_20, features_20
+    ):
         """Test that different random states produce different results."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
@@ -153,11 +157,13 @@ class TestMixedEnsemble:
 
     def test_empty_features_handling(self, mixed_ensemble):
         """Test handling of empty feature arrays after training."""
-        dummy_compounds = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002'],
-            'SMILES': ['CCO', 'CCC'],
-            'Activity': [0.5, 0.7]
-        })
+        dummy_compounds = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002'],
+                'SMILES': ['CCO', 'CCC'],
+                'Activity': [0.5, 0.7],
+            }
+        )
 
         dummy_features = np.random.randn(2, 2048)
         mixed_ensemble.train(dummy_features, dummy_compounds['Activity'].to_numpy())

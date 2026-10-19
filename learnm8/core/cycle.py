@@ -313,7 +313,7 @@ def execute_cycle(
     if streaming == 'always' and not use_streaming:
         raise ConfigurationError(
             f"streaming='always' but cycle {cycle} is not streaming-eligible "
-            f"(strategy={config.strategy}, pruning={config.pruning_strategy}, "
+            f'(strategy={config.strategy}, pruning={config.pruning_strategy}, '
             f'output_dir={"set" if output_dir is not None else "None"}). '
             f"Use streaming='auto' to fall back, or a streamable configuration."
         )
@@ -324,7 +324,9 @@ def execute_cycle(
     pruned_ids_for_metrics: list = []
 
     if use_streaming:
-        logger.info('Cycle %d selection path: streaming (output_dir=%s)', cycle, output_dir)
+        logger.info(
+            'Cycle %d selection path: streaming (output_dir=%s)', cycle, output_dir
+        )
         assert output_dir is not None
         result = execute_streaming_selection(
             compounds_df=compounds_df,
@@ -362,17 +364,20 @@ def execute_cycle(
     else:
         logger.info('Cycle %d selection path: legacy', cycle)
         selection_path = 'legacy'
-        cycle_predictions, prediction_time, predict_feature_time, _valid_compound_ids = (
-            _predict_pool(
-                learner=learner,
-                prediction_pool=prediction_pool,
-                featurizer=featurizer,
-                cache_dir=cache_dir,
-                memory_safety_factor=memory_safety_factor,
-                n_jobs=n_jobs,
-                cycle=cycle,
-                compute_uncertainty=compute_uncertainty,
-            )
+        (
+            cycle_predictions,
+            prediction_time,
+            predict_feature_time,
+            _valid_compound_ids,
+        ) = _predict_pool(
+            learner=learner,
+            prediction_pool=prediction_pool,
+            featurizer=featurizer,
+            cache_dir=cache_dir,
+            memory_safety_factor=memory_safety_factor,
+            n_jobs=n_jobs,
+            cycle=cycle,
+            compute_uncertainty=compute_uncertainty,
         )
 
         # Derive raw arrays from cycle_predictions for downstream consumers
@@ -430,22 +435,26 @@ def execute_cycle(
             score_direction=score_direction,
         )
 
-        compounds_df, selected_ids, acquisition_time, oracle_time, selected_predictions = (
-            _select_and_measure(
-                compounds_df=compounds_df,
-                selection_pool=selection_pool,
-                cycle_predictions=cycle_predictions,
-                cycle=cycle,
-                config=config,
-                target_col=target_col,
-                score_direction=score_direction,
-                original_pool_size=original_pool_size,
-                oracle=oracle,
-                random_state=random_state,
-                featurizer_obj=featurizer_obj,
-                cache_dir=cache_dir,
-                acq_func=acq_func,
-            )
+        (
+            compounds_df,
+            selected_ids,
+            acquisition_time,
+            oracle_time,
+            selected_predictions,
+        ) = _select_and_measure(
+            compounds_df=compounds_df,
+            selection_pool=selection_pool,
+            cycle_predictions=cycle_predictions,
+            cycle=cycle,
+            config=config,
+            target_col=target_col,
+            score_direction=score_direction,
+            original_pool_size=original_pool_size,
+            oracle=oracle,
+            random_state=random_state,
+            featurizer_obj=featurizer_obj,
+            cache_dir=cache_dir,
+            acq_func=acq_func,
         )
         pruned_ids_for_metrics = pruning_stats.get('pruned_ids', [])
 
@@ -1183,7 +1192,9 @@ def _train_learner(
 
     # Carve feature-extraction time out of training_time so the two metrics
     # are mutually exclusive (required for stacked-bar compute breakdowns).
-    training_time = max(0.0, (time.perf_counter() - training_start_time) - train_feature_time)
+    training_time = max(
+        0.0, (time.perf_counter() - training_start_time) - train_feature_time
+    )
     logger.info(f'Training complete ({training_time:.2f}s)')
     return training_time, train_feature_time
 

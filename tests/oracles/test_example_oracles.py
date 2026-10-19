@@ -103,7 +103,9 @@ class TestSimilarityOracle:
         assert similarities[0] == 1.0
         assert similarities[1] is None
 
-    def test_similarity_oracle_supports_multiple_fingerprint_types(self, sample_compounds):
+    def test_similarity_oracle_supports_multiple_fingerprint_types(
+        self, sample_compounds
+    ):
         for fp_type in ['morgan', 'maccs', 'topological']:
             oracle = SimilarityOracle(
                 reference_smiles='C1CCCCC1N', fingerprint_type=fp_type
@@ -111,7 +113,9 @@ class TestSimilarityOracle:
             result = oracle.measure(sample_compounds, ['similarity'])
             assert result.height == 5
 
-    def test_similarity_oracle_supports_multiple_similarity_metrics(self, sample_compounds):
+    def test_similarity_oracle_supports_multiple_similarity_metrics(
+        self, sample_compounds
+    ):
         for metric in ['tanimoto', 'dice']:
             oracle = SimilarityOracle(reference_smiles='C1CCCCC1N', metric=metric)
             result = oracle.measure(sample_compounds, ['similarity'])

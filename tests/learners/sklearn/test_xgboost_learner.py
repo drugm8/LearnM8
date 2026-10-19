@@ -28,7 +28,9 @@ class TestXGBoostLearner:
     def features_20(self, small_real_morgan_features):
         return small_real_morgan_features[:20]
 
-    def test_initialization_sets_default_hyperparameters_and_no_uncertainty_support(self, learner):
+    def test_initialization_sets_default_hyperparameters_and_no_uncertainty_support(
+        self, learner
+    ):
         """Test learner initialization."""
         assert learner.n_estimators == 10
         assert learner.learning_rate == 0.1
@@ -38,11 +40,15 @@ class TestXGBoostLearner:
         assert learner.supports_uncertainty() is False
 
     @pytest.mark.slow
-    def test_predict_returns_finite_values_without_uncertainty_after_training(self, learner, compounds_20, features_20):
+    def test_predict_returns_finite_values_without_uncertainty_after_training(
+        self, learner, compounds_20, features_20
+    ):
         """Test training and prediction with real molecular data."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity')
+            )
 
         features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
@@ -55,29 +61,33 @@ class TestXGBoostLearner:
 
     def test_predict_without_training(self, learner, features_20):
         """Test error when predicting without training."""
-        with pytest.raises(LearnerError, match="must be trained before prediction"):
+        with pytest.raises(LearnerError, match='must be trained before prediction'):
             learner.predict(features_20)
 
     def test_get_name_includes_estimators_learning_rate_and_depth(self, learner):
         """Test name generation."""
         name = learner.get_name()
-        assert "XGBoost" in name
-        assert "n_estimators=10" in name
-        assert "lr=0.1" in name
-        assert "depth=6" in name
+        assert 'XGBoost' in name
+        assert 'n_estimators=10' in name
+        assert 'lr=0.1' in name
+        assert 'depth=6' in name
 
-    def test_custom_hyperparameters_train_and_predict(self, small_real_compounds, small_real_morgan_features):
+    def test_custom_hyperparameters_train_and_predict(
+        self, small_real_compounds, small_real_morgan_features
+    ):
         """Test learner with different hyperparameters."""
         compounds = small_real_compounds.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity')
+            )
 
         learner = XGBoostLearner(
             n_estimators=5,
             learning_rate=0.2,
             max_depth=3,
             subsample=0.7,
-            random_state=42
+            random_state=42,
         )
 
         features = small_real_morgan_features
@@ -89,15 +99,21 @@ class TestXGBoostLearner:
         assert learner.max_depth == 3
         assert predictions.shape[0] == len(compounds)
 
-    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(
+        self, learner, tmp_path
+    ):
         """Test with small diverse dataset."""
-        small_compounds = pl.DataFrame({
-            'ID': [f'COMP_{i:03d}' for i in range(5)],
-            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
-            'Activity': [0.5, 0.3, 0.8, 0.2, 0.6]
-        })
+        small_compounds = pl.DataFrame(
+            {
+                'ID': [f'COMP_{i:03d}' for i in range(5)],
+                'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+                'Activity': [0.5, 0.3, 0.8, 0.2, 0.6],
+            }
+        )
 
-        features = extract_features(small_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = extract_features(
+            small_compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
         learner.train(features, small_compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
@@ -108,13 +124,17 @@ class TestXGBoostLearner:
     def test_large_dataset_handling(self, learner, tmp_path):
         """Test XGBoost efficiency with larger datasets."""
         n_compounds = 100
-        large_compounds = pl.DataFrame({
-            'ID': [f'COMP_{i:04d}' for i in range(n_compounds)],
-            'SMILES': [f'C{"C" * (i % 10)}O' for i in range(n_compounds)],
-            'Activity': np.random.beta(2, 5, n_compounds)
-        })
+        large_compounds = pl.DataFrame(
+            {
+                'ID': [f'COMP_{i:04d}' for i in range(n_compounds)],
+                'SMILES': [f'C{"C" * (i % 10)}O' for i in range(n_compounds)],
+                'Activity': np.random.beta(2, 5, n_compounds),
+            }
+        )
 
-        features = extract_features(large_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = extract_features(
+            large_compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
         learner.train(features, large_compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
@@ -123,11 +143,13 @@ class TestXGBoostLearner:
 
     def test_numerical_stability(self, learner, tmp_path):
         """Test numerical stability with extreme values."""
-        compounds = pl.DataFrame({
-            'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
-            'SMILES': ['CCO', 'CCC', 'CCN'],
-            'Activity': [0.0, 1000.0, 0.001]
-        })
+        compounds = pl.DataFrame(
+            {
+                'ID': ['COMP_001', 'COMP_002', 'COMP_003'],
+                'SMILES': ['CCO', 'CCC', 'CCN'],
+                'Activity': [0.0, 1000.0, 0.001],
+            }
+        )
 
         features = extract_features(compounds['SMILES'].to_list(), 'morgan', tmp_path)
         learner.train(features, compounds['Activity'].to_numpy())
@@ -140,13 +162,12 @@ class TestXGBoostLearner:
         """Test learner with regularization parameters."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity')
+            )
 
         learner = XGBoostLearner(
-            n_estimators=10,
-            reg_alpha=0.1,
-            reg_lambda=0.5,
-            random_state=42
+            n_estimators=10, reg_alpha=0.1, reg_lambda=0.5, random_state=42
         )
 
         features = features_20
@@ -160,7 +181,9 @@ class TestXGBoostLearner:
     def test_uncertainty_consistency(self, learner, compounds_20, features_20):
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
-            compounds = compounds.with_columns(pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity'))
+            compounds = compounds.with_columns(
+                pl.lit(np.random.beta(2, 5, len(compounds))).alias('Activity')
+            )
 
         features = features_20
         learner.train(features, compounds['Activity'].to_numpy())
@@ -174,14 +197,14 @@ class TestXGBoostLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises(LearnerError, match="empty dataset"):
+        with pytest.raises(LearnerError, match='empty dataset'):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises(LearnerError, match="mismatched lengths"):
+        with pytest.raises(LearnerError, match='mismatched lengths'):
             learner.train(features, targets)
 
     def test_train_with_1d_features(self, learner):

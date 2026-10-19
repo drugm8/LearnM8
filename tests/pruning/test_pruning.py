@@ -18,17 +18,14 @@ pytestmark = pytest.mark.unit
 
 def test_create_pruning_strategy_valid_params():
     """Test factory with valid ScoreBasedPruner parameters."""
-    pruner = create_pruning_strategy('score', {
-        'pruning_fraction': 0.3,
-        'score_direction': 'higher'
-    })
+    pruner = create_pruning_strategy(
+        'score', {'pruning_fraction': 0.3, 'score_direction': 'higher'}
+    )
     assert isinstance(pruner, ScoreBasedPruner)
     assert pruner.pruning_fraction == 0.3
     assert pruner.score_direction == 'higher'
 
-    pruner = create_pruning_strategy('score', {
-        'pruning_fraction': 0.0
-    })
+    pruner = create_pruning_strategy('score', {'pruning_fraction': 0.0})
     assert isinstance(pruner, ScoreBasedPruner)
     assert pruner.pruning_fraction == 0.0
 
@@ -36,50 +33,39 @@ def test_create_pruning_strategy_valid_params():
 def test_create_pruning_strategy_invalid_fraction_too_high():
     """Test factory rejects invalid pruning fraction (too high)."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'pruning_fraction': 1.0
-        })
+        create_pruning_strategy('score', {'pruning_fraction': 1.0})
 
 
 def test_create_pruning_strategy_invalid_fraction_negative():
     """Test factory rejects invalid pruning fraction (negative)."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'pruning_fraction': -0.1
-        })
+        create_pruning_strategy('score', {'pruning_fraction': -0.1})
 
 
 def test_create_pruning_strategy_invalid_score_direction():
     """Test factory rejects invalid score_direction."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'score_direction': 'invalid'
-        })
+        create_pruning_strategy('score', {'score_direction': 'invalid'})
 
 
 def test_create_pruning_strategy_invalid_fraction_type():
     """Test factory rejects invalid pruning_fraction type."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'pruning_fraction': 'invalid'
-        })
+        create_pruning_strategy('score', {'pruning_fraction': 'invalid'})
 
 
 def test_create_pruning_strategy_invalid_direction_type():
     """Test factory rejects invalid score_direction type."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'score_direction': 123
-        })
+        create_pruning_strategy('score', {'score_direction': 123})
 
 
 def test_create_pruning_strategy_unexpected_params():
     """Test factory rejects unexpected parameters."""
     with pytest.raises(ValueError):
-        create_pruning_strategy('score', {
-            'pruning_fraction': 0.2,
-            'unexpected_param': 'value'
-        })
+        create_pruning_strategy(
+            'score', {'pruning_fraction': 0.2, 'unexpected_param': 'value'}
+        )
 
 
 def test_create_pruning_strategy_unknown_strategy():
@@ -91,10 +77,9 @@ def test_create_pruning_strategy_unknown_strategy():
 def test_create_pruning_strategy_success():
     """Test successful creation of ScoreBasedPruner."""
     # Basic creation
-    pruner = create_pruning_strategy('score', {
-        'pruning_fraction': 0.2,
-        'score_direction': 'higher'
-    })
+    pruner = create_pruning_strategy(
+        'score', {'pruning_fraction': 0.2, 'score_direction': 'higher'}
+    )
     assert isinstance(pruner, ScoreBasedPruner)
     assert pruner.pruning_fraction == 0.2
     assert pruner.score_direction == 'higher'
@@ -108,10 +93,13 @@ def test_create_pruning_strategy_success():
 
 def test_create_pruning_strategy_validation_failure():
     """Test that creation fails with invalid parameters."""
-    with pytest.raises(ValueError, match="Invalid parameters for pruning strategy"):
-        create_pruning_strategy('score', {
-            'pruning_fraction': 1.5  # Invalid
-        })
+    with pytest.raises(ValueError, match='Invalid parameters for pruning strategy'):
+        create_pruning_strategy(
+            'score',
+            {
+                'pruning_fraction': 1.5  # Invalid
+            },
+        )
 
 
 def test_create_pruning_strategy_unknown_strategy():
@@ -123,10 +111,13 @@ def test_create_pruning_strategy_unknown_strategy():
 def test_create_pruning_strategy_creation_failure():
     """Test handling of creation failures."""
     # This should trigger a validation error for invalid parameters
-    with pytest.raises(ValueError, match="Invalid parameters for pruning strategy"):
-        create_pruning_strategy('score', {
-            'score_direction': 'invalid_direction'  # This will cause validation to fail
-        })
+    with pytest.raises(ValueError, match='Invalid parameters for pruning strategy'):
+        create_pruning_strategy(
+            'score',
+            {
+                'score_direction': 'invalid_direction'  # This will cause validation to fail
+            },
+        )
 
 
 def test_pruning_integration_with_main_workflow(small_real_compounds):
@@ -138,8 +129,7 @@ def test_pruning_integration_with_main_workflow(small_real_compounds):
 
     # Test score-based pruning
     pruner = create_pruning_strategy(
-        'score',
-        {'pruning_fraction': 0.3, 'score_direction': 'higher'}
+        'score', {'pruning_fraction': 0.3, 'score_direction': 'higher'}
     )
     pruned_pool = pruner.prune(small_real_compounds, predictions, None)
 
@@ -156,8 +146,7 @@ def test_pruning_integration_with_score_direction_injection(small_real_compounds
 
     # Test with score_direction in params
     pruner = create_pruning_strategy(
-        'score',
-        {'pruning_fraction': 0.3, 'score_direction': 'lower'}
+        'score', {'pruning_fraction': 0.3, 'score_direction': 'lower'}
     )
     pruned_pool = pruner.prune(small_real_compounds, predictions, None)
 
@@ -172,14 +161,14 @@ def test_pruning_integration_error_handling(small_real_compounds):
     predictions = np.random.rand(len(small_real_compounds))
 
     # Test unknown strategy
-    with pytest.raises(ValueError, match="Unknown pruning strategy"):
+    with pytest.raises(ValueError, match='Unknown pruning strategy'):
         create_pruning_strategy('unknown_strategy', {})
 
     # Test invalid parameters
-    with pytest.raises(ValueError, match="Invalid parameters"):
+    with pytest.raises(ValueError, match='Invalid parameters'):
         create_pruning_strategy(
             'score',
-            {'pruning_fraction': 1.5}  # Invalid
+            {'pruning_fraction': 1.5},  # Invalid
         )
 
 
@@ -205,7 +194,7 @@ def test_pruning_backward_compatibility_removed():
         'PredictionThresholdPruner',
         'ConfidenceIntervalPruner',
         'CycleBudgetPruner',
-        'PerformanceBasedPruner'
+        'PerformanceBasedPruner',
     ]
 
     for strategy in old_strategies:
@@ -219,9 +208,9 @@ def test_pruning_backward_compatibility_removed():
         'prediction_threshold',
         'confidence_interval',
         'cycle_budget',
-        'performance_based'
+        'performance_based',
     ]
 
     for strategy in old_cli_names:
-        with pytest.raises(ValueError, match="Unknown pruning strategy"):
+        with pytest.raises(ValueError, match='Unknown pruning strategy'):
             create_pruning_strategy(strategy, {})

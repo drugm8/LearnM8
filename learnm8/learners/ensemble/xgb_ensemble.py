@@ -7,12 +7,14 @@ from .ensemble import EnsembleLearner, _derive_random_states
 class XGBEnsemble(EnsembleLearner):
     """Ensemble of 3 XGBoost learners with different learning rates."""
 
-    def __init__(self,
-                 learning_rates: list[float] | None = None,
-                 random_states: list[int] | None = None,
-                 random_state: int = 42,
-                 device: str = 'cpu',
-                 **kwargs):
+    def __init__(
+        self,
+        learning_rates: list[float] | None = None,
+        random_states: list[int] | None = None,
+        random_state: int = 42,
+        device: str = 'cpu',
+        **kwargs,
+    ):
         """Initialize XGB ensemble.
 
         Args:
@@ -54,5 +56,5 @@ class XGBEnsemble(EnsembleLearner):
 
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
-        lrs_str = ','.join(f"{lr:.2f}" for lr in self.learning_rates)
-        return f"XGBEnsemble(3xXGB,lr=[{lrs_str}])"
+        lrs_str = ','.join(f'{lr:.2f}' for lr in self.learning_rates)
+        return f'XGBEnsemble(3xXGB,lr=[{lrs_str}])'

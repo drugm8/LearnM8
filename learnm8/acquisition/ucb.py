@@ -50,7 +50,7 @@ class UCBAcquisition(AcquisitionFunction):
         """
         super().__init__(**kwargs)
         if beta < 0:
-            raise ValueError("beta must be non-negative")
+            raise ValueError('beta must be non-negative')
 
         self.beta = beta
 
@@ -79,7 +79,7 @@ class UCBAcquisition(AcquisitionFunction):
 
         assert_no_inf_uncertainty(uncertainties, compounds.get_column('ID'))
 
-        logger.debug(f"UCBAcquisition: β={self.beta}, calculating UCB scores")
+        logger.debug(f'UCBAcquisition: β={self.beta}, calculating UCB scores')
 
         # Calculate UCB scores based on score direction
         # Note: uncertainties are already standard deviations, not variances
@@ -90,7 +90,9 @@ class UCBAcquisition(AcquisitionFunction):
             # For minimization: select lower confidence bound
             ucb_scores = predictions - self.beta * uncertainties
 
-        logger.debug(f"UCB score statistics: min={ucb_scores.min():.3f}, max={ucb_scores.max():.3f}, mean={ucb_scores.mean():.3f}")
+        logger.debug(
+            f'UCB score statistics: min={ucb_scores.min():.3f}, max={ucb_scores.max():.3f}, mean={ucb_scores.mean():.3f}'
+        )
 
         # For maximization, pick the highest UCB (ascending=False); for
         # minimization, the lowest LCB (ascending=True).
@@ -99,7 +101,9 @@ class UCBAcquisition(AcquisitionFunction):
             compounds, ucb_scores, n_select, ascending=ascending
         )
 
-        logger.debug(f"UCBAcquisition selected {len(selected)} compounds with β={self.beta}")
+        logger.debug(
+            f'UCBAcquisition selected {len(selected)} compounds with β={self.beta}'
+        )
 
         return selected
 
@@ -127,4 +131,4 @@ class UCBAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        return f"UCB(β={self.beta})"
+        return f'UCB(β={self.beta})'

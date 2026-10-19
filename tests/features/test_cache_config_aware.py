@@ -395,14 +395,18 @@ class TestCacheHashDenylist:
 
         smiles = small_real_compounds.get_column('SMILES').to_list()[:10]
 
-        extract_features(smiles, create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path)
+        extract_features(
+            smiles, create_featurizer('morgan', n_jobs=1), cache_dir=tmp_path
+        )
 
         cache_file = tmp_path / 'features_morgan_packed_uint8.h5'
         assert cache_file.exists()
         with h5py.File(cache_file, 'r') as h5f:
             row_count_before = len(h5f['hash_index'][:])
 
-        extract_features(smiles, create_featurizer('morgan', n_jobs=8), cache_dir=tmp_path)
+        extract_features(
+            smiles, create_featurizer('morgan', n_jobs=8), cache_dir=tmp_path
+        )
 
         with h5py.File(cache_file, 'r') as h5f:
             row_count_after = len(h5f['hash_index'][:])
@@ -418,7 +422,8 @@ class TestCacheHashDenylist:
             featurizer.get_config()
 
         warning_records = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno == logging.WARNING and 'orphaned' in r.message.lower()
         ]
         assert len(warning_records) == 1

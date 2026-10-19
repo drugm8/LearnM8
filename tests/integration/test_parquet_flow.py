@@ -25,12 +25,19 @@ from learnm8.core.persistence import prediction_parquet_path
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 NARROW_BASE_COLS = {
-    'ID', 'SMILES', 'status', 'labeled_cycle', 'selected_cycle', 'pruned_cycle',
+    'ID',
+    'SMILES',
+    'status',
+    'labeled_cycle',
+    'selected_cycle',
+    'pruned_cycle',
 }
 
 
 @pytest.fixture
-def parquet_flow_results(tmp_path, sample_compounds, mock_learner_with_uncertainty, mock_oracle):
+def parquet_flow_results(
+    tmp_path, sample_compounds, mock_learner_with_uncertainty, mock_oracle
+):
     """Run a 3-cycle experiment once and reuse the results across assertions."""
     output_dir = tmp_path / 'parquet_flow'
     return run_active_learning(

@@ -45,7 +45,8 @@ def test_best_effort_on_shutdown_failure(monkeypatch, caplog):
         shutdown_featurization_pool()  # must not raise
 
     warnings = [
-        r for r in caplog.records
+        r
+        for r in caplog.records
         if r.levelno == logging.WARNING and r.name == 'learnm8.features.worker_pool'
     ]
     assert len(warnings) == 1, (
@@ -134,11 +135,13 @@ def test_teardown_called_once_per_cycle_multi_batch(tmp_path):
     cache_dir = tmp_path / 'cache'
     output_dir = tmp_path / 'out'
 
-    with patch('learnm8.api.shutdown_featurization_pool') as mock_teardown, \
-         patch(
-             'learnm8.core.batching.estimate_batch_size',
-             side_effect=lambda *a, **k: 2,
-         ):
+    with (
+        patch('learnm8.api.shutdown_featurization_pool') as mock_teardown,
+        patch(
+            'learnm8.core.batching.estimate_batch_size',
+            side_effect=lambda *a, **k: 2,
+        ),
+    ):
         run_active_learning(
             compound_pool=str(csv_path),
             oracle=str(csv_path),

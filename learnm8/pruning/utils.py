@@ -10,8 +10,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def validate_pruning_parameters(strategy_name: str,
-                               parameters: dict[str, Any]) -> tuple[bool, list[str]]:
+def validate_pruning_parameters(
+    strategy_name: str, parameters: dict[str, Any]
+) -> tuple[bool, list[str]]:
     """Validate parameters for the score-based pruning strategy.
 
     Args:
@@ -29,15 +30,15 @@ def validate_pruning_parameters(strategy_name: str,
         if 'pruning_fraction' in parameters:
             fraction = parameters['pruning_fraction']
             if not isinstance(fraction, (int, float)):
-                errors.append("pruning_fraction must be a number")
+                errors.append('pruning_fraction must be a number')
             elif not 0.0 <= fraction <= 0.9:
-                errors.append("pruning_fraction must be between 0.0 and 0.9")
+                errors.append('pruning_fraction must be between 0.0 and 0.9')
 
         # Validate score_direction
         if 'score_direction' in parameters:
             direction = parameters['score_direction']
             if not isinstance(direction, str):
-                errors.append("score_direction must be a string")
+                errors.append('score_direction must be a string')
             elif direction not in ['higher', 'lower']:
                 errors.append("score_direction must be 'higher' or 'lower'")
 
@@ -45,7 +46,7 @@ def validate_pruning_parameters(strategy_name: str,
         valid_params = {'pruning_fraction', 'score_direction'}
         unexpected_params = set(parameters.keys()) - valid_params
         if unexpected_params:
-            errors.append(f"Unexpected parameters: {', '.join(unexpected_params)}")
+            errors.append(f'Unexpected parameters: {", ".join(unexpected_params)}')
 
     else:
         errors.append(
@@ -57,8 +58,7 @@ def validate_pruning_parameters(strategy_name: str,
     return len(errors) == 0, errors
 
 
-def create_pruning_strategy(strategy_name: str,
-                           parameters: dict[str, Any]):
+def create_pruning_strategy(strategy_name: str, parameters: dict[str, Any]):
     """Factory function to create the score-based pruning strategy.
 
     Args:
@@ -82,9 +82,7 @@ def create_pruning_strategy(strategy_name: str,
     # Import strategy class
     from .score_based import ScoreBasedPruner
 
-    strategy_registry = {
-        'score': ScoreBasedPruner
-    }
+    strategy_registry = {'score': ScoreBasedPruner}
 
     if strategy_name not in strategy_registry:
         raise ValueError(

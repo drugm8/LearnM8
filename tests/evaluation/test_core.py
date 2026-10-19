@@ -15,24 +15,26 @@ from numpy.testing import assert_allclose
 from learnm8.evaluation.core import (
     evaluate_cycle,
     format_progress_output,
-    export_metrics_csv
+    export_metrics_csv,
 )
 
 
 @pytest.mark.unit
 class TestEvaluateCore:
     """Test core evaluation functionality with real molecular data."""
-    
+
     def test_evaluate_cycle_basic_functionality(self, small_real_compounds, tmp_path):
         """Test basic evaluate_cycle function with real compounds."""
         # Create test data from real compounds
         labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(10).clone()
-        
+
         # Generate realistic predictions (add noise to actual activities)
         np.random.seed(42)
-        predictions = labeled_data['Activity'].to_list() + np.random.normal(0, 0.1, len(labeled_data))
-        
+        predictions = labeled_data['Activity'].to_list() + np.random.normal(
+            0, 0.1, len(labeled_data)
+        )
+
         # Run evaluation
         result = evaluate_cycle(
             cycle=0,
@@ -40,9 +42,9 @@ class TestEvaluateCore:
             ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='Activity'
+            target_col='Activity',
         )
-        
+
         # Verify result structure
         assert isinstance(result, dict)
         assert 'cycle' in result
@@ -54,18 +56,20 @@ class TestEvaluateCore:
         assert result['cycle'] == 0
         assert result['batch_size'] >= 0
         assert result['cumulative_labeled'] >= 0
-    
+
     def test_evaluate_cycle_benchmark_mode(self, diverse_real_compounds):
         """Test evaluate_cycle in benchmark mode with ground truth data."""
         labeled_data = diverse_real_compounds.clone()
         selected_compounds = diverse_real_compounds.head(15).clone()
-        
+
         # Use actual activities as ground truth
         ground_truth_data = diverse_real_compounds[['ID', 'Activity']].clone()
-        
+
         np.random.seed(42)
-        predictions = labeled_data['Activity'].to_list() + np.random.normal(0, 0.2, len(labeled_data))
-        
+        predictions = labeled_data['Activity'].to_list() + np.random.normal(
+            0, 0.2, len(labeled_data)
+        )
+
         result = evaluate_cycle(
             cycle=1,
             predictions=predictions,
@@ -73,24 +77,28 @@ class TestEvaluateCore:
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='Activity',
-            ground_truth_data=ground_truth_data
+            ground_truth_data=ground_truth_data,
         )
-        
+
         # Should include benchmark metrics
         assert 'ground_truth_ef_0_1' in result
         assert 'ground_truth_ef_0_5' in result
         assert 'ground_truth_ef_1_0' in result
-    
+
     def test_evaluate_cycle_with_uncertainty(self, compounds_with_uncertainty):
         """Test evaluation with uncertainty estimates."""
         compounds = compounds_with_uncertainty.clone()
         labeled_data = compounds
         selected_compounds = compounds.head(8)
-        
+
         predictions = compounds['prediction'].to_list()
-        ground_truth = compounds['Activity'].to_list() if 'Activity' in compounds.columns else predictions
+        ground_truth = (
+            compounds['Activity'].to_list()
+            if 'Activity' in compounds.columns
+            else predictions
+        )
         uncertainty = compounds['uncertainty'].to_list()
-        
+
         result = evaluate_cycle(
             cycle=2,
             predictions=predictions,
@@ -98,44 +106,46 @@ class TestEvaluateCore:
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
             target_col='Activity',
-            uncertainties=uncertainty
+            uncertainties=uncertainty,
         )
-        
+
         # Should include uncertainty metrics
         assert 'uncertainty_mean' in result
         assert 'uncertainty_std' in result
         assert result['uncertainty_mean'] >= 0
         assert result['uncertainty_std'] >= 0
-    
+
     def test_evaluate_cycle_empty_selection(self, small_real_compounds):
         """Test evaluation with empty selected compounds."""
         labeled_data = small_real_compounds.clone()
-        empty_selection = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8, 'Activity': pl.Float64})
-        
+        empty_selection = pl.DataFrame(
+            schema={'ID': pl.Utf8, 'SMILES': pl.Utf8, 'Activity': pl.Float64}
+        )
+
         predictions = labeled_data['Activity'].to_list()
         ground_truth = labeled_data['Activity'].to_list()
-        
+
         result = evaluate_cycle(
             cycle=0,
             predictions=predictions,
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=empty_selection,
-            target_col='Activity'
+            target_col='Activity',
         )
-        
+
         # Should handle empty selection gracefully
         assert isinstance(result, dict)
         assert result['batch_size'] == 0
-    
+
     def test_evaluate_cycle_missing_target_col(self, small_real_compounds):
         """Test error handling when target column is missing."""
         labeled_data = small_real_compounds.drop('Activity')
         selected_compounds = small_real_compounds.head(5)
-        
+
         predictions = np.random.random(len(labeled_data))
         ground_truth = np.random.random(len(labeled_data))
-        
+
         # Function doesn't fail on missing target column - it handles gracefully
         result = evaluate_cycle(
             cycle=0,
@@ -143,7 +153,7 @@ class TestEvaluateCore:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='Activity'
+            target_col='Activity',
         )
         # Should handle gracefully and return basic metrics (not dependent on target column)
         assert isinstance(result, dict)
@@ -153,7 +163,7 @@ class TestEvaluateCore:
 @pytest.mark.unit
 class TestEvaluationIntegration:
     """Test evaluation system integration."""
-    
+
     def test_format_progress_output(self):
         """Test progress output formatting."""
         metrics = {
@@ -162,7 +172,7 @@ class TestEvaluationIntegration:
             'avg_score_selected': 1.234,
             'ground_truth_avg_score': 0.876,
             'cumulative_labeled': 150,
-            'uncertainty_mean': 0.321
+            'uncertainty_mean': 0.321,
         }
 
         output = format_progress_output(metrics)
@@ -171,21 +181,36 @@ class TestEvaluationIntegration:
         assert 'Cycle 5' in output
         assert '20' in output  # batch_size
         assert '150' in output  # cumulative_labeled
-    
+
     def test_export_metrics_csv(self, tmp_path):
         """Test CSV export functionality."""
         metrics_list = [
-            {'cycle': 0, 'batch_size': 10, 'cumulative_labeled': 10, 'avg_score_selected': 1.5},
-            {'cycle': 1, 'batch_size': 10, 'cumulative_labeled': 20, 'avg_score_selected': 1.3},
-            {'cycle': 2, 'batch_size': 10, 'cumulative_labeled': 30, 'avg_score_selected': 1.1}
+            {
+                'cycle': 0,
+                'batch_size': 10,
+                'cumulative_labeled': 10,
+                'avg_score_selected': 1.5,
+            },
+            {
+                'cycle': 1,
+                'batch_size': 10,
+                'cumulative_labeled': 20,
+                'avg_score_selected': 1.3,
+            },
+            {
+                'cycle': 2,
+                'batch_size': 10,
+                'cumulative_labeled': 30,
+                'avg_score_selected': 1.1,
+            },
         ]
-        
-        output_file = tmp_path / "test_metrics.csv"
+
+        output_file = tmp_path / 'test_metrics.csv'
         export_metrics_csv(metrics_list, str(output_file))
-        
+
         # Verify file was created
         assert output_file.exists()
-        
+
         # Read CSV content, skipping comment lines
         df = pd.read_csv(output_file, comment='#')
         assert len(df) == 3
@@ -193,22 +218,22 @@ class TestEvaluationIntegration:
         assert 'batch_size' in df.columns
         assert df['cycle'].to_list() == [0, 1, 2]
         assert df['batch_size'].to_list() == [10, 10, 10]
-    
+
     def test_evaluation_with_real_molecular_workflow(self, medium_real_compounds):
         """Test complete evaluation workflow with real molecular data."""
         # Use subset for faster testing
         compounds = medium_real_compounds.head(50).clone()
-        
+
         # Simulate active learning cycle
         labeled_data = compounds.head(30)  # Training set
         selected_compounds = compounds.tail(10)  # Newly selected
-        
+
         # Simulate model predictions (add noise to actual activities)
         np.random.seed(42)
         base_predictions = labeled_data['Activity'].to_list()
         predictions = base_predictions + np.random.normal(0, 0.2, len(base_predictions))
         ground_truth = base_predictions
-        
+
         # Run evaluation
         result = evaluate_cycle(
             cycle=3,
@@ -216,9 +241,9 @@ class TestEvaluationIntegration:
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='Activity'
+            target_col='Activity',
         )
-        
+
         # Verify realistic results
         assert isinstance(result, dict)
         assert result['cycle'] == 3
@@ -227,12 +252,12 @@ class TestEvaluationIntegration:
 
         # Check basic metrics are present
         assert 'avg_score_selected' in result or result['avg_score_selected'] is None
-    
+
     def test_evaluation_error_handling(self, small_real_compounds):
         """Test error handling in evaluation functions."""
         labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
-        
+
         # Mismatched array lengths - function handles this gracefully by setting metrics to None
         result = evaluate_cycle(
             cycle=0,
@@ -240,12 +265,12 @@ class TestEvaluationIntegration:
             ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='Activity'
+            target_col='Activity',
         )
         # Should handle gracefully and return basic metrics
         assert isinstance(result, dict)
         assert 'cycle' in result
-        
+
         # Invalid target column - function handles gracefully
         result = evaluate_cycle(
             cycle=0,
@@ -253,7 +278,7 @@ class TestEvaluationIntegration:
             ground_truth=labeled_data['Activity'].to_list(),
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='NonexistentColumn'
+            target_col='NonexistentColumn',
         )
         # Should handle gracefully and return basic metrics
         assert isinstance(result, dict)
@@ -264,19 +289,19 @@ class TestEvaluationIntegration:
 @pytest.mark.unit
 class TestEvaluationEdgeCases:
     """Test edge cases and error conditions."""
-    
+
     def test_evaluation_with_nan_predictions(self, small_real_compounds):
         """Test evaluation handling NaN predictions."""
         labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
-        
+
         # Create predictions with NaN values
         predictions = list(labeled_data['Activity'].to_list())
         predictions[0] = np.nan
         predictions[5] = np.nan
 
         ground_truth = list(labeled_data['Activity'].to_list())
-        
+
         # Should handle NaN values gracefully or raise appropriate error
         try:
             result = evaluate_cycle(
@@ -285,7 +310,7 @@ class TestEvaluationEdgeCases:
                 ground_truth=ground_truth,
                 labeled_data=labeled_data,
                 selected_compounds=selected_compounds,
-                target_col='Activity'
+                target_col='Activity',
             )
             # If it succeeds, should return valid structure
             assert isinstance(result, dict)
@@ -293,50 +318,48 @@ class TestEvaluationEdgeCases:
         except (ValueError, RuntimeError):
             # This is also acceptable behavior
             pass
-    
+
     def test_evaluation_with_constant_predictions(self, small_real_compounds):
         """Test evaluation with constant predictions."""
         labeled_data = small_real_compounds.clone()
         selected_compounds = small_real_compounds.head(5)
-        
+
         # All predictions are the same
         predictions = np.full(len(labeled_data), 0.5)
         ground_truth = labeled_data['Activity'].to_list()
-        
+
         result = evaluate_cycle(
             cycle=0,
             predictions=predictions,
             ground_truth=ground_truth,
             labeled_data=labeled_data,
             selected_compounds=selected_compounds,
-            target_col='Activity'
+            target_col='Activity',
         )
-        
+
         # Should handle constant predictions
         assert isinstance(result, dict)
         assert 'cycle' in result
         assert 'batch_size' in result
-    
+
     def test_evaluation_single_compound(self):
         """Test evaluation with single compound."""
-        single_compound = pl.DataFrame({
-            'ID': ['mol_1'],
-            'SMILES': ['CCO'],
-            'Activity': [0.5]
-        })
-        
+        single_compound = pl.DataFrame(
+            {'ID': ['mol_1'], 'SMILES': ['CCO'], 'Activity': [0.5]}
+        )
+
         predictions = np.array([0.6])
         ground_truth = np.array([0.5])
-        
+
         result = evaluate_cycle(
             cycle=0,
             predictions=predictions,
             ground_truth=ground_truth,
             labeled_data=single_compound,
             selected_compounds=single_compound,
-            target_col='Activity'
+            target_col='Activity',
         )
-        
+
         # Should handle single compound case
         assert isinstance(result, dict)
         assert result['cumulative_labeled'] == 1
@@ -348,11 +371,13 @@ class TestSpecificExceptionHandling:
     """Test that evaluation uses specific exception types, not bare except Exception."""
 
     def _make_base_args(self):
-        labeled = pl.DataFrame({
-            'ID': [f'mol_{i}' for i in range(20)],
-            'SMILES': ['CCO'] * 20,
-            'Activity': np.random.default_rng(42).random(20).tolist(),
-        })
+        labeled = pl.DataFrame(
+            {
+                'ID': [f'mol_{i}' for i in range(20)],
+                'SMILES': ['CCO'] * 20,
+                'Activity': np.random.default_rng(42).random(20).tolist(),
+            }
+        )
         selected = labeled.head(5)
         predictions = np.random.default_rng(42).random(20)
         ground_truth = labeled['Activity'].to_numpy()
@@ -363,7 +388,10 @@ class TestSpecificExceptionHandling:
         gt_data = labeled.clone()
 
         call_count = [0]
-        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+        original_fn = __import__(
+            'learnm8.evaluation.metrics.performance',
+            fromlist=['calculate_average_score'],
+        ).calculate_average_score
 
         def fail_on_second_call(*args, **kwargs):
             call_count[0] += 1
@@ -377,9 +405,13 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', ground_truth_data=gt_data,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    ground_truth_data=gt_data,
                 )
             assert result['ground_truth_avg_score'] is None
             assert 'ground_truth_avg_score' in caplog.text
@@ -389,7 +421,10 @@ class TestSpecificExceptionHandling:
         gt_data = labeled.clone()
 
         call_count = [0]
-        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+        original_fn = __import__(
+            'learnm8.evaluation.metrics.performance',
+            fromlist=['calculate_average_score'],
+        ).calculate_average_score
 
         def fail_on_second_call(*args, **kwargs):
             call_count[0] += 1
@@ -403,9 +438,13 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', ground_truth_data=gt_data,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    ground_truth_data=gt_data,
                 )
             assert result['ground_truth_avg_score'] is None
 
@@ -415,15 +454,20 @@ class TestSpecificExceptionHandling:
 
         with caplog.at_level(logging.WARNING):
             result = evaluate_cycle(
-                cycle=1, predictions=predictions, ground_truth=ground_truth,
-                labeled_data=labeled, selected_compounds=selected,
-                target_col='Activity', uncertainties=bad_uncertainties,
+                cycle=1,
+                predictions=predictions,
+                ground_truth=ground_truth,
+                labeled_data=labeled,
+                selected_compounds=selected,
+                target_col='Activity',
+                uncertainties=bad_uncertainties,
             )
         assert result['uncertainty_mean'] is None
         assert result['uncertainty_std'] is None
 
     def test_diversity_metrics_catches_runtime_error(self, caplog):
         from learnm8.evaluation.metrics.similarity import RunCache
+
         labeled, selected, predictions, ground_truth = self._make_base_args()
 
         with patch(
@@ -432,8 +476,11 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
                     target_col='Activity',
                     run_cache=RunCache(),
                 )
@@ -445,10 +492,12 @@ class TestSpecificExceptionHandling:
     def test_discovery_metrics_catches_zero_division(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()
         gt_data = labeled.clone()
-        pool_df = pl.DataFrame({
-            'ID': [f'mol_{i}' for i in range(20)],
-            'prediction': np.random.default_rng(42).random(20).tolist(),
-        })
+        pool_df = pl.DataFrame(
+            {
+                'ID': [f'mol_{i}' for i in range(20)],
+                'prediction': np.random.default_rng(42).random(20).tolist(),
+            }
+        )
         cum_ids = {f'mol_{i}' for i in range(5)}
 
         with patch(
@@ -457,10 +506,15 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', oracle_type='benchmark',
-                    ground_truth_data=gt_data, pool_df=pool_df,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    oracle_type='benchmark',
+                    ground_truth_data=gt_data,
+                    pool_df=pool_df,
                     cumulative_selected_ids=cum_ids,
                 )
             assert result.get('top_10_discovery') is None
@@ -469,10 +523,12 @@ class TestSpecificExceptionHandling:
     def test_unlabeled_ranking_catches_value_error(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()
         gt_data = labeled.clone()
-        pool_df = pl.DataFrame({
-            'ID': [f'mol_{i}' for i in range(20)],
-            'prediction': np.random.default_rng(42).random(20).tolist(),
-        })
+        pool_df = pl.DataFrame(
+            {
+                'ID': [f'mol_{i}' for i in range(20)],
+                'prediction': np.random.default_rng(42).random(20).tolist(),
+            }
+        )
         cum_ids = {f'mol_{i}' for i in range(5)}
 
         with patch(
@@ -481,14 +537,21 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', oracle_type='benchmark',
-                    ground_truth_data=gt_data, pool_df=pool_df,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    oracle_type='benchmark',
+                    ground_truth_data=gt_data,
+                    pool_df=pool_df,
                     cumulative_selected_ids=cum_ids,
                 )
             assert result.get('unlabeled_spearman_correlation') is None
-            assert 'unlabeled' in caplog.text.lower() or 'ranking' in caplog.text.lower()
+            assert (
+                'unlabeled' in caplog.text.lower() or 'ranking' in caplog.text.lower()
+            )
 
     def test_ground_truth_ef_catches_type_error(self, caplog):
         labeled, selected, predictions, ground_truth = self._make_base_args()
@@ -500,9 +563,13 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 result = evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', ground_truth_data=gt_data,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    ground_truth_data=gt_data,
                 )
             assert result.get('ground_truth_ef_5_0') is None
 
@@ -511,7 +578,10 @@ class TestSpecificExceptionHandling:
         gt_data = labeled.clone()
 
         call_count = [0]
-        original_fn = __import__('learnm8.evaluation.metrics.performance', fromlist=['calculate_average_score']).calculate_average_score
+        original_fn = __import__(
+            'learnm8.evaluation.metrics.performance',
+            fromlist=['calculate_average_score'],
+        ).calculate_average_score
 
         def fail_on_second_call(*args, **kwargs):
             call_count[0] += 1
@@ -525,9 +595,13 @@ class TestSpecificExceptionHandling:
         ):
             with caplog.at_level(logging.WARNING):
                 evaluate_cycle(
-                    cycle=1, predictions=predictions, ground_truth=ground_truth,
-                    labeled_data=labeled, selected_compounds=selected,
-                    target_col='Activity', ground_truth_data=gt_data,
+                    cycle=1,
+                    predictions=predictions,
+                    ground_truth=ground_truth,
+                    labeled_data=labeled,
+                    selected_compounds=selected,
+                    target_col='Activity',
+                    ground_truth_data=gt_data,
                 )
             assert 'ground_truth_avg_score' in caplog.text
             assert 'Check input data quality' in caplog.text
@@ -559,7 +633,9 @@ class TestEvaluateCycleRegression:
         pool_ids = [f'cmp_{i:05d}' for i in range(500, n_total)]
         pool_activity = activity[500:]
         sw = 0.6
-        pool_preds = sw * pool_activity + np.sqrt(1 - sw**2) * rng.normal(0, 1, pool_size)
+        pool_preds = sw * pool_activity + np.sqrt(1 - sw**2) * rng.normal(
+            0, 1, pool_size
+        )
         pool_df = pl.DataFrame({'ID': pool_ids, 'prediction': pool_preds.tolist()})
         return dict(
             ground_truth_data=ground_truth_data,
@@ -667,18 +743,25 @@ class TestEvaluateCycleRegression:
         pool_ids = [f'cmp_{i:05d}' for i in range(500, n_total)]
         pool_scores = score_vals[500:]
         sw = 0.6
-        pool_pred = sw * pool_scores + np.sqrt(1 - sw**2) * rng.normal(0, pool_scores.std(), pool_size)
+        pool_pred = sw * pool_scores + np.sqrt(1 - sw**2) * rng.normal(
+            0, pool_scores.std(), pool_size
+        )
         preds = score_vals[:500] + rng.normal(0, score_vals[:500].std() * 0.3, 500)
         pool_df = pl.DataFrame({'ID': pool_ids, 'prediction': pool_pred.tolist()})
 
         r = evaluate_cycle(
-            cycle=5, predictions=preds, ground_truth=score_vals[:500],
-            labeled_data=lab, selected_compounds=sel,
-            target_col='Score', oracle_type='benchmark',
+            cycle=5,
+            predictions=preds,
+            ground_truth=score_vals[:500],
+            labeled_data=lab,
+            selected_compounds=sel,
+            target_col='Score',
+            oracle_type='benchmark',
             ground_truth_data=gt_no_act,
             pool_df=pool_df,
             cumulative_selected_ids=fd['cumulative_selected_ids'],
-            score_direction='higher', disable_molecular_similarity=True,
+            score_direction='higher',
+            disable_molecular_similarity=True,
         )
         assert r['batch_ef'] is None
         assert r['batch_hit_rate'] is None

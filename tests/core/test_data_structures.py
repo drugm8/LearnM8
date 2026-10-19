@@ -1,4 +1,3 @@
-
 import polars as pl
 import pytest
 
@@ -14,7 +13,6 @@ from tests.fixtures.master_dataframe import create_initialized_master_df
 
 @pytest.mark.unit
 class TestConstants:
-
     def test_status_constants_defined(self):
         assert STATUS_LABELED == 'labeled'
         assert STATUS_UNLABELED == 'unlabeled'
@@ -32,7 +30,6 @@ class TestConstants:
 
 @pytest.mark.unit
 class TestValidateMasterDataframe:
-
     def test_valid_master_dataframe_passes(self, sample_master_df):
         result = validate_master_dataframe(sample_master_df)
 
@@ -43,7 +40,7 @@ class TestValidateMasterDataframe:
             valid_compounds=small_real_compounds,
             target_col='Activity',
             initial_labeled_ids=[],
-            initial_measurements=None
+            initial_measurements=None,
         )
 
         result = validate_master_dataframe(master_df)
@@ -54,95 +51,89 @@ class TestValidateMasterDataframe:
         master_df = sample_master_df.clone()
         master_df = master_df.drop('status')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_missing_multiple_columns_raises_error(self, small_real_compounds):
         invalid_df = small_real_compounds[['ID', 'SMILES']].clone()
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(invalid_df)
 
     def test_missing_id_column_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         master_df = master_df.drop('ID')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_missing_smiles_column_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         master_df = master_df.drop('SMILES')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_missing_labeled_cycle_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         master_df = master_df.drop('labeled_cycle')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_missing_selected_cycle_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         master_df = master_df.drop('selected_cycle')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_missing_pruned_cycle_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         master_df = master_df.drop('pruned_cycle')
 
-        with pytest.raises(ValueError, match="missing required columns"):
+        with pytest.raises(ValueError, match='missing required columns'):
             validate_master_dataframe(master_df)
 
     def test_invalid_status_values_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
 
         # Convert status to string first to bypass Polars enum validation
-        master_df = master_df.with_columns(
-            pl.col('status').cast(pl.Utf8)
-        )
+        master_df = master_df.with_columns(pl.col('status').cast(pl.Utf8))
 
         # Set first row status to invalid value
         master_df = master_df.with_columns(
             pl.when(pl.int_range(pl.len()) == 0)
-              .then(pl.lit('invalid_status'))
-              .otherwise(pl.col('status'))
-              .alias('status')
+            .then(pl.lit('invalid_status'))
+            .otherwise(pl.col('status'))
+            .alias('status')
         )
 
-        with pytest.raises(ValueError, match="Invalid status values found"):
+        with pytest.raises(ValueError, match='Invalid status values found'):
             validate_master_dataframe(master_df)
 
     def test_multiple_invalid_status_values_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
 
         # Convert status to string first to bypass Polars enum validation
-        master_df = master_df.with_columns(
-            pl.col('status').cast(pl.Utf8)
-        )
+        master_df = master_df.with_columns(pl.col('status').cast(pl.Utf8))
 
         # Set first two rows to invalid status values
         master_df = master_df.with_columns(
             pl.when(pl.int_range(pl.len()) == 0)
-              .then(pl.lit('bad_status'))
-              .when(pl.int_range(pl.len()) == 1)
-              .then(pl.lit('wrong_status'))
-              .otherwise(pl.col('status'))
-              .alias('status')
+            .then(pl.lit('bad_status'))
+            .when(pl.int_range(pl.len()) == 1)
+            .then(pl.lit('wrong_status'))
+            .otherwise(pl.col('status'))
+            .alias('status')
         )
 
-        with pytest.raises(ValueError, match="Invalid status values found"):
+        with pytest.raises(ValueError, match='Invalid status values found'):
             validate_master_dataframe(master_df)
 
     def test_status_column_validation_categorical(self, sample_master_df):
         master_df = sample_master_df.clone()
-        master_df = master_df.with_columns(
-            pl.col('status').cast(pl.Categorical)
-        )
+        master_df = master_df.with_columns(pl.col('status').cast(pl.Categorical))
 
         result = validate_master_dataframe(master_df)
 
@@ -150,9 +141,7 @@ class TestValidateMasterDataframe:
 
     def test_status_column_validation_string_type(self, sample_master_df):
         master_df = sample_master_df.clone()
-        master_df = master_df.with_columns(
-            pl.col('status').cast(pl.Utf8)
-        )
+        master_df = master_df.with_columns(pl.col('status').cast(pl.Utf8))
 
         result = validate_master_dataframe(master_df)
 
@@ -161,11 +150,11 @@ class TestValidateMasterDataframe:
     def test_invalid_status_column_dtype_raises_error(self, sample_master_df):
         master_df = sample_master_df.clone()
         status_values = [0, 1, 2] * (len(master_df) // 3) + [0] * (len(master_df) % 3)
-        master_df = master_df.with_columns(
-            pl.Series('status', status_values)
-        )
+        master_df = master_df.with_columns(pl.Series('status', status_values))
 
-        with pytest.raises(ValueError, match="Status column must be categorical, enum, or string type"):
+        with pytest.raises(
+            ValueError, match='Status column must be categorical, enum, or string type'
+        ):
             validate_master_dataframe(master_df)
 
     def test_duplicate_ids_raises_error(self, small_real_compounds):
@@ -173,14 +162,14 @@ class TestValidateMasterDataframe:
             valid_compounds=small_real_compounds,
             target_col='Activity',
             initial_labeled_ids=[],
-            initial_measurements=None
+            initial_measurements=None,
         )
 
         # Append duplicate row
         first_row = master_df[0]
         master_df = master_df.vstack(first_row)
 
-        with pytest.raises(ValueError, match="Duplicate compound IDs found"):
+        with pytest.raises(ValueError, match='Duplicate compound IDs found'):
             validate_master_dataframe(master_df)
 
     def test_many_duplicate_ids_truncated_error(self, small_real_compounds):
@@ -188,7 +177,7 @@ class TestValidateMasterDataframe:
             valid_compounds=small_real_compounds,
             target_col='Activity',
             initial_labeled_ids=[],
-            initial_measurements=None
+            initial_measurements=None,
         )
 
         # Append 10 duplicate rows
@@ -196,7 +185,7 @@ class TestValidateMasterDataframe:
             row = master_df[i]
             master_df = master_df.vstack(row)
 
-        with pytest.raises(ValueError, match="Duplicate compound IDs found"):
+        with pytest.raises(ValueError, match='Duplicate compound IDs found'):
             validate_master_dataframe(master_df)
 
     def test_prediction_columns_validation(self, master_df_with_predictions):
@@ -227,7 +216,7 @@ class TestValidateMasterDataframe:
             compound_ids=unlabeled_ids,
             new_status='pruned',
             cycle=0,
-            target_col='Activity'
+            target_col='Activity',
         )
 
         result = validate_master_dataframe(master_df)
@@ -249,7 +238,7 @@ class TestValidateMasterDataframe:
                 compound_ids=pruned_ids,
                 new_status='pruned',
                 cycle=0,
-                target_col='Activity'
+                target_col='Activity',
             )
 
         assert 'labeled' in master_df['status'].to_list()
@@ -281,7 +270,7 @@ class TestValidateMasterDataframe:
                 'status': pl.Utf8,
                 'labeled_cycle': pl.Int64,
                 'selected_cycle': pl.Int64,
-                'pruned_cycle': pl.Int64
+                'pruned_cycle': pl.Int64,
             }
         )
 
@@ -323,13 +312,13 @@ class TestValidateMasterDataframe:
 
         assert result is True
 
-    def test_status_categorical_with_wrong_categories_logs_warning(self, sample_master_df, caplog):
+    def test_status_categorical_with_wrong_categories_logs_warning(
+        self, sample_master_df, caplog
+    ):
         import logging
 
         master_df = sample_master_df.clone()
-        master_df = master_df.with_columns(
-            pl.col('status').cast(pl.Categorical)
-        )
+        master_df = master_df.with_columns(pl.col('status').cast(pl.Categorical))
 
         # Enable propagation on all learnm8 loggers
         for logger_name in ['learnm8', 'learnm8.core', 'learnm8.core.initialization']:
@@ -353,7 +342,9 @@ class TestValidateMasterDataframe:
             else:
                 # Categories are wrong but no warning was captured - this is the actual failure
                 raise AssertionError(
-                    f"Expected warning about categories {current_cats} != {expected_cats}, but got no caplog records"
+                    f'Expected warning about categories {current_cats} != {expected_cats}, but got no caplog records'
                 )
         else:
-            assert any('incorrect categories' in record.message for record in caplog.records)
+            assert any(
+                'incorrect categories' in record.message for record in caplog.records
+            )

@@ -29,11 +29,17 @@ pytestmark = pytest.mark.unit
 
 def _df_float64(n: int = 100) -> pl.DataFrame:
     """Float64-schema DataFrame mirroring the old format."""
-    return pl.DataFrame({
-        'ID': [f'M{i:06d}' for i in range(n)],
-        'prediction': pl.Series(values=[0.1 * i for i in range(n)], dtype=pl.Float64),
-        'uncertainty': pl.Series(values=[0.01 * i for i in range(n)], dtype=pl.Float64),
-    })
+    return pl.DataFrame(
+        {
+            'ID': [f'M{i:06d}' for i in range(n)],
+            'prediction': pl.Series(
+                values=[0.1 * i for i in range(n)], dtype=pl.Float64
+            ),
+            'uncertainty': pl.Series(
+                values=[0.01 * i for i in range(n)], dtype=pl.Float64
+            ),
+        }
+    )
 
 
 def test_writer_produces_float32_schema(tmp_path: Path) -> None:
@@ -48,10 +54,12 @@ def test_writer_produces_float32_schema(tmp_path: Path) -> None:
 
 def test_writer_handles_float32_input_no_recast(tmp_path: Path) -> None:
     """When input is already Float32, the writer leaves it Float32."""
-    df = _df_float64(20).with_columns([
-        pl.col('prediction').cast(pl.Float32),
-        pl.col('uncertainty').cast(pl.Float32),
-    ])
+    df = _df_float64(20).with_columns(
+        [
+            pl.col('prediction').cast(pl.Float32),
+            pl.col('uncertainty').cast(pl.Float32),
+        ]
+    )
     path = write_cycle_predictions(df, tmp_path, cycle=2)
     assert path is not None
     schema = pl.read_parquet(path).schema
@@ -107,11 +115,11 @@ def test_float64_accumulator_dtype_recovers_exact_sum() -> None:
     # of a power of two scaled by 2**24 (the float32 mantissa boundary).
     # Each value is exact, but their cumulative naive sum loses bits.
     n = 1_000_000
-    values_f32 = np.full(n, 2.0 ** 20, dtype=np.float32)
+    values_f32 = np.full(n, 2.0**20, dtype=np.float32)
     values_f32[0] = 1.0  # an outlier to test sum precision
     expected_f64 = float(np.sum(values_f32, dtype=np.float64) / n)
     actual = float(np.nanmean(values_f32, dtype=np.float64))
     assert actual == expected_f64, (
-        f"nanmean(arr_f32, dtype=float64) returned {actual}, expected {expected_f64}. "
-        f"FR-010 contract requires the float64 accumulator path."
+        f'nanmean(arr_f32, dtype=float64) returned {actual}, expected {expected_f64}. '
+        f'FR-010 contract requires the float64 accumulator path.'
     )

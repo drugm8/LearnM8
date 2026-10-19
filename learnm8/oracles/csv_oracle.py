@@ -27,8 +27,8 @@ class CSVOracle(Oracle):
 
         if not self.csv_path.exists():
             raise FileNotFoundError(
-                f"Oracle CSV file not found: {self.csv_path}. "
-                f"Verify the file path is correct and the file exists."
+                f'Oracle CSV file not found: {self.csv_path}. '
+                f'Verify the file path is correct and the file exists.'
             )
 
         # Load the ground truth data
@@ -43,7 +43,9 @@ class CSVOracle(Oracle):
                 if col_dtype == pl.Utf8:
                     # Try to convert to numeric, replacing invalid values with null
                     try:
-                        numeric_col = self.ground_truth[column].cast(pl.Float64, strict=False)
+                        numeric_col = self.ground_truth[column].cast(
+                            pl.Float64, strict=False
+                        )
                         # Only convert if we successfully converted some values to numeric
                         if not numeric_col.is_null().all():
                             self.ground_truth = self.ground_truth.with_columns(
@@ -58,8 +60,8 @@ class CSVOracle(Oracle):
             available = list(self.ground_truth.columns)
             raise ValueError(
                 f"ID column '{id_column}' not found in oracle CSV. "
-                f"Available columns: {available}. "
-                f"Specify the correct column name with id_column parameter."
+                f'Available columns: {available}. '
+                f'Specify the correct column name with id_column parameter.'
             )
 
         # Rename the specified column to 'ID' if it's not already 'ID'
@@ -77,7 +79,7 @@ class CSVOracle(Oracle):
         n_dup = self.ground_truth.height - deduped.height
         if n_dup > 0:
             warnings.warn(
-                f"Oracle CSV contained {n_dup} duplicate IDs; first occurrence kept.",
+                f'Oracle CSV contained {n_dup} duplicate IDs; first occurrence kept.',
                 LearnM8Warning,
                 stacklevel=2,
             )
@@ -101,11 +103,13 @@ class CSVOracle(Oracle):
         # Validate requested properties exist
         missing_props = [p for p in properties if p not in self.ground_truth.columns]
         if missing_props:
-            available = [c for c in self.ground_truth.columns if c not in ['ID', 'SMILES']]
+            available = [
+                c for c in self.ground_truth.columns if c not in ['ID', 'SMILES']
+            ]
             raise ValueError(
-                f"Requested properties not found in oracle CSV: {missing_props}. "
-                f"Available property columns: {available}. "
-                f"Check that target_col matches a column name in your CSV file."
+                f'Requested properties not found in oracle CSV: {missing_props}. '
+                f'Available property columns: {available}. '
+                f'Check that target_col matches a column name in your CSV file.'
             )
 
         # Determine which columns to preserve from input compounds
@@ -124,9 +128,7 @@ class CSVOracle(Oracle):
 
         # Merge with ground truth to get requested properties
         result = compound_data.join(
-            self.ground_truth.select(ground_truth_cols),
-            on='ID',
-            how='inner'
+            self.ground_truth.select(ground_truth_cols), on='ID', how='inner'
         )
 
         # Validate that no null values exist in requested properties
@@ -137,8 +139,8 @@ class CSVOracle(Oracle):
                 null_ids = result.filter(null_mask)['ID'].to_list()
                 raise ValueError(
                     f"CSVOracle cannot measure property '{prop}' for {null_count} compounds "
-                    f"(IDs: {null_ids[:5]}{'...' if len(null_ids) > 5 else ''}). "
-                    f"These compounds have invalid/null values in the ground truth data."
+                    f'(IDs: {null_ids[:5]}{"..." if len(null_ids) > 5 else ""}). '
+                    f'These compounds have invalid/null values in the ground truth data.'
                 )
 
         # Preserve input order by sorting on temporary order column, then remove it
@@ -147,6 +149,6 @@ class CSVOracle(Oracle):
         # Check if any compounds were not found
         if result.height < compounds.height:
             missing_count = compounds.height - result.height
-            logger.warning("%d compounds not found in ground truth", missing_count)
+            logger.warning('%d compounds not found in ground truth', missing_count)
 
         return result

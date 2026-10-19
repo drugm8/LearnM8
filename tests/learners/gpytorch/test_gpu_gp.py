@@ -1,4 +1,3 @@
-
 import sys
 
 import numpy as np
@@ -8,7 +7,9 @@ import torch
 from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.learners.gpytorch import GPyTorchGPLearner
 
-gauche = pytest.importorskip('gauche', reason='GAUCHE required for GPyTorchGP Tanimoto tests')
+gauche = pytest.importorskip(
+    'gauche', reason='GAUCHE required for GPyTorchGP Tanimoto tests'
+)
 
 
 @pytest.fixture
@@ -148,7 +149,7 @@ def test_train_predict_cpu(binary_features, targets):
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='CUDA not available')
 def test_gpu_train_predict(binary_features, targets):
     learner = GPyTorchGPLearner(device='auto')
     learner.train(binary_features, targets)
@@ -216,7 +217,9 @@ def test_gauche_missing_tanimoto_raises(monkeypatch, binary_features, targets):
     monkeypatch.setitem(sys.modules, 'gauche', None)
     monkeypatch.setitem(sys.modules, 'gauche.kernels', None)
     monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels', None)
-    monkeypatch.setitem(sys.modules, 'gauche.kernels.fingerprint_kernels.tanimoto_kernel', None)
+    monkeypatch.setitem(
+        sys.modules, 'gauche.kernels.fingerprint_kernels.tanimoto_kernel', None
+    )
     learner = GPyTorchGPLearner(device='cpu', kernel='tanimoto')
     with pytest.raises(ConfigurationError, match='GAUCHE'):
         learner.train(binary_features, targets)
@@ -233,6 +236,7 @@ def test_get_name_untrained():
 @pytest.mark.slow
 def test_integration_active_learning(tmp_path):
     from learnm8 import run_active_learning
+
     fixture_csv = 'tests/fixtures/sample_compounds.csv'
     results = run_active_learning(
         compound_pool=fixture_csv,
@@ -252,6 +256,7 @@ def test_integration_active_learning(tmp_path):
 @pytest.mark.slow
 def test_ucb_acquisition_with_gpu_gp(tmp_path):
     from learnm8 import run_active_learning
+
     fixture_csv = 'tests/fixtures/sample_compounds.csv'
     results = run_active_learning(
         compound_pool=fixture_csv,
@@ -273,6 +278,7 @@ def test_ucb_acquisition_with_gpu_gp(tmp_path):
 def test_api_gpu_gp_without_gpytorch(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, 'gpytorch', None)
     from learnm8 import run_active_learning
+
     with pytest.raises((ConfigurationError, ValueError)):
         run_active_learning(
             compound_pool='tests/fixtures/sample_compounds.csv',

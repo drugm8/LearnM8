@@ -89,8 +89,17 @@ class _DictOracle(Oracle):
         return pl.DataFrame({'ID': ids, self._target: [self._vals[i] for i in ids]})
 
 
-def _run_cycle(tmp_path, strategy, streaming, *, with_unc=False, pruning=None,
-               featurizer='morgan', acq_params=None, with_output_dir=True):
+def _run_cycle(
+    tmp_path,
+    strategy,
+    streaming,
+    *,
+    with_unc=False,
+    pruning=None,
+    featurizer='morgan',
+    acq_params=None,
+    with_output_dir=True,
+):
     pool = _make_pool()
     master = initialize_master_dataframe_empty(pool, 'Activity')
     # Seed cycle 0: label a few compounds so training has data.
@@ -105,34 +114,52 @@ def _run_cycle(tmp_path, strategy, streaming, *, with_unc=False, pruning=None,
     out = tmp_path / streaming
     out.mkdir(parents=True)
     config = CycleConfig(
-        strategy, n_cycles=1, batch_fraction=0.05,
+        strategy,
+        n_cycles=1,
+        batch_fraction=0.05,
         pruning_strategy=pruning,
         pruning_params={'pruning_fraction': 0.3} if pruning else None,
         acquisition_params=acq_params,
     )
     df, metrics = execute_cycle(
-        compounds_df=master, cycle=1, config=config, learner=learner, oracle=oracle,
-        target_col='Activity', featurizer=featurizer, cache_dir=tmp_path / 'cache',
-        original_pool_size=N, oracle_type='run',
+        compounds_df=master,
+        cycle=1,
+        config=config,
+        learner=learner,
+        oracle=oracle,
+        target_col='Activity',
+        featurizer=featurizer,
+        cache_dir=tmp_path / 'cache',
+        original_pool_size=N,
+        oracle_type='run',
         output_dir=out if with_output_dir else None,
-        random_state=42, n_jobs=1, streaming=streaming,
+        random_state=42,
+        n_jobs=1,
+        streaming=streaming,
     )
     return df, metrics, out
 
 
 class TestDeterministicEquivalence:
-    @pytest.mark.parametrize('strategy,with_unc,acq', [
-        ('greedy', False, None),
-        ('ucb', True, {'beta': 2.0}),
-        ('ei', True, None),
-        ('pi', True, None),
-        ('entropy', True, None),
-    ])
-    def test_streaming_matches_legacy_selection(self, tmp_path, strategy, with_unc, acq):
-        _, m_legacy, _ = _run_cycle(tmp_path / 'L', strategy, 'never',
-                                    with_unc=with_unc, acq_params=acq)
-        _, m_stream, _ = _run_cycle(tmp_path / 'S', strategy, 'always',
-                                    with_unc=with_unc, acq_params=acq)
+    @pytest.mark.parametrize(
+        'strategy,with_unc,acq',
+        [
+            ('greedy', False, None),
+            ('ucb', True, {'beta': 2.0}),
+            ('ei', True, None),
+            ('pi', True, None),
+            ('entropy', True, None),
+        ],
+    )
+    def test_streaming_matches_legacy_selection(
+        self, tmp_path, strategy, with_unc, acq
+    ):
+        _, m_legacy, _ = _run_cycle(
+            tmp_path / 'L', strategy, 'never', with_unc=with_unc, acq_params=acq
+        )
+        _, m_stream, _ = _run_cycle(
+            tmp_path / 'S', strategy, 'always', with_unc=with_unc, acq_params=acq
+        )
         assert m_legacy['selection_path'] == 'legacy'
         assert m_stream['selection_path'] == 'streaming'
         assert sorted(m_stream['selected_ids']) == sorted(m_legacy['selected_ids'])
@@ -140,8 +167,13 @@ class TestDeterministicEquivalence:
     def test_prediction_stats_parity(self, tmp_path):
         _, m_legacy, _ = _run_cycle(tmp_path / 'L', 'greedy', 'never')
         _, m_stream, _ = _run_cycle(tmp_path / 'S', 'greedy', 'always')
-        for key in ('prediction_mean', 'prediction_std', 'prediction_median',
-                    'prediction_min', 'prediction_max'):
+        for key in (
+            'prediction_mean',
+            'prediction_std',
+            'prediction_median',
+            'prediction_min',
+            'prediction_max',
+        ):
             assert m_legacy[key] == pytest.approx(m_stream[key], rel=1e-5, abs=1e-6)
 
 
@@ -165,8 +197,9 @@ class TestUncertaintyColumnDrop:
         assert m['has_uncertainty'] is False
 
     def test_uncertainty_column_present_when_used(self, tmp_path):
-        _, m, _out = _run_cycle(tmp_path, 'ucb', 'always', with_unc=True,
-                               acq_params={'beta': 1.0})
+        _, m, _out = _run_cycle(
+            tmp_path, 'ucb', 'always', with_unc=True, acq_params={'beta': 1.0}
+        )
         df = read_cycle_predictions(m['parquet_path'])
         assert 'uncertainty' in df.columns
         assert m['has_uncertainty'] is True
@@ -175,6 +208,7 @@ class TestUncertaintyColumnDrop:
 class TestEligibilityFallback:
     def test_always_without_output_dir_raises(self, tmp_path):
         from learnm8.exceptions import ConfigurationError
+
         # No output_dir → the parquet dataflow medium is missing → 'always' must raise.
         with pytest.raises(ConfigurationError):
             _run_cycle(tmp_path, 'greedy', 'always', with_output_dir=False)

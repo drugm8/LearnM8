@@ -11,7 +11,9 @@ import torch
 from learnm8.learners.torch.mlp import MLPLearner
 
 
-def _make_overfit_data(rng: np.random.RandomState, n_train: int = 10, n_features: int = 20):
+def _make_overfit_data(
+    rng: np.random.RandomState, n_train: int = 10, n_features: int = 20
+):
     X_train = rng.randn(n_train, n_features).astype(np.float32)
     y_train = rng.randn(n_train).astype(np.float32)
     X_val = rng.randn(50, n_features).astype(np.float32)
@@ -19,7 +21,9 @@ def _make_overfit_data(rng: np.random.RandomState, n_train: int = 10, n_features
     return X_train, y_train, X_val, y_val
 
 
-def _compute_val_loss(model, scaler, features: np.ndarray, targets: np.ndarray) -> float:
+def _compute_val_loss(
+    model, scaler, features: np.ndarray, targets: np.ndarray
+) -> float:
     device = next(model.parameters()).device
     X_s = scaler.transform(features)
     X_t = torch.FloatTensor(X_s).to(device)
@@ -34,12 +38,14 @@ def _compute_val_loss(model, scaler, features: np.ndarray, targets: np.ndarray) 
 # np.random.default_rng. The val subset is no longer guaranteed to give a
 # val_loss directly comparable with full-data loss, so post-training loss is
 # bounded by the range of observed history values rather than equality.
-def _assert_loss_in_history_range(current_loss: float, history: list, *, context: str) -> None:
+def _assert_loss_in_history_range(
+    current_loss: float, history: list, *, context: str
+) -> None:
     best = min(h['val_loss'] for h in history)
     worst = max(h['val_loss'] for h in history)
     assert current_loss <= worst * 5.0 + 1.0, (
-        f"{context}: current_loss={current_loss:.6f} outside tracked val-loss "
-        f"range [best={best:.6f}, worst={worst:.6f}]."
+        f'{context}: current_loss={current_loss:.6f} outside tracked val-loss '
+        f'range [best={best:.6f}, worst={worst:.6f}].'
     )
 
 
@@ -72,7 +78,9 @@ class TestTorchLearnerCheckpointing:
         last_val_loss = history[last_epoch_idx]['val_loss']
 
         X_proc = learner.scaler.transform(
-            X[:, learner._valid_feature_mask] if learner._valid_feature_mask is not None else X
+            X[:, learner._valid_feature_mask]
+            if learner._valid_feature_mask is not None
+            else X
         )
         device = next(learner.model.parameters()).device
         X_t = torch.FloatTensor(X_proc).to(device)
@@ -85,13 +93,15 @@ class TestTorchLearnerCheckpointing:
             current_loss = _compute_val_loss(
                 learner.model,
                 learner.scaler,
-                X[:, learner._valid_feature_mask] if learner._valid_feature_mask is not None else X,
+                X[:, learner._valid_feature_mask]
+                if learner._valid_feature_mask is not None
+                else X,
                 y,
             )
             _assert_loss_in_history_range(
                 current_loss,
                 history,
-                context=f"early-stopped run (best_epoch={best_epoch}, last={last_epoch_idx})",
+                context=f'early-stopped run (best_epoch={best_epoch}, last={last_epoch_idx})',
             )
 
     def test_first_epoch_checkpoint_saved_unconditionally(self):
@@ -139,7 +149,9 @@ class TestTorchLearnerCheckpointing:
         X_in = X[:, mask] if mask is not None else X
         current_loss = _compute_val_loss(learner.model, learner.scaler, X_in, y)
 
-        _assert_loss_in_history_range(current_loss, history, context="full max_epochs run")
+        _assert_loss_in_history_range(
+            current_loss, history, context='full max_epochs run'
+        )
 
     def test_model_weights_match_best_validation_loss_epoch(self):
         """SC-002: Final model weights correspond to epoch with lowest val_loss."""
@@ -164,4 +176,6 @@ class TestTorchLearnerCheckpointing:
         X_in = X[:, mask] if mask is not None else X
         final_loss = _compute_val_loss(learner.model, learner.scaler, X_in, y)
 
-        _assert_loss_in_history_range(final_loss, history, context="final-epoch model state")
+        _assert_loss_in_history_range(
+            final_loss, history, context='final-epoch model state'
+        )

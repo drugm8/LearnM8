@@ -164,7 +164,9 @@ class FastpropLearner(Learner):
             f'targets shape: {targets.shape}'
         )
 
-        warnings.filterwarnings('ignore', category=UserWarning, module='pytorch_lightning')
+        warnings.filterwarnings(
+            'ignore', category=UserWarning, module='pytorch_lightning'
+        )
         warnings.filterwarnings('ignore', category=UserWarning, module='lightning')
 
         _pl_loggers = [
@@ -285,7 +287,9 @@ class FastpropLearner(Learner):
 
             self.is_trained = True
             train_time = time.perf_counter() - start_time
-            logger.debug(f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s')
+            logger.debug(
+                f'Trained {self.get_name()} on {len(features)} samples in {train_time:.2f}s'
+            )
 
             self._cleanup_gpu_memory('after training')
 

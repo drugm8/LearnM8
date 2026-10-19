@@ -31,7 +31,9 @@ class GreedyAcquisition(AcquisitionFunction):
         """
         super().__init__(score_direction=score_direction, **kwargs)
         if score_direction not in ['higher', 'lower']:
-            raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+            raise ValueError(
+                f"score_direction must be 'higher' or 'lower', got '{score_direction}'"
+            )
         self.score_direction = score_direction
         # Keep backward compatibility
         self.maximize = score_direction == 'higher'
@@ -55,8 +57,12 @@ class GreedyAcquisition(AcquisitionFunction):
         # Get prediction scores
         scores = compounds.get_column('prediction').to_numpy()
 
-        logger.debug(f"GreedyAcquisition: selecting top {n_select} from {len(compounds)} compounds")
-        logger.debug(f"Score statistics: min={scores.min():.3f}, max={scores.max():.3f}, mean={scores.mean():.3f}")
+        logger.debug(
+            f'GreedyAcquisition: selecting top {n_select} from {len(compounds)} compounds'
+        )
+        logger.debug(
+            f'Score statistics: min={scores.min():.3f}, max={scores.max():.3f}, mean={scores.mean():.3f}'
+        )
 
         # Adjust n_select if it exceeds available compounds
         actual_n_select = min(n_select, len(compounds))
@@ -66,8 +72,10 @@ class GreedyAcquisition(AcquisitionFunction):
             compounds, scores, actual_n_select, ascending=not self.maximize
         )
 
-        logger.debug(f"GreedyAcquisition selected {len(selected)} compounds "
-                    f"({'maximizing' if self.maximize else 'minimizing'})")
+        logger.debug(
+            f'GreedyAcquisition selected {len(selected)} compounds '
+            f'({"maximizing" if self.maximize else "minimizing"})'
+        )
 
         return selected
 
@@ -88,4 +96,4 @@ class GreedyAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        return f"Greedy({self.score_direction})"
+        return f'Greedy({self.score_direction})'

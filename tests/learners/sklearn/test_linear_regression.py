@@ -33,7 +33,9 @@ class TestLinearRegressionLearner:
     def features_20(self, small_real_morgan_features):
         return small_real_morgan_features[:20]
 
-    def test_initialization_sets_linear_mode_defaults_and_uncertainty_support(self, learner):
+    def test_initialization_sets_linear_mode_defaults_and_uncertainty_support(
+        self, learner
+    ):
         """Test learner initialization with default Linear Regression mode."""
         assert learner.alpha is None
         assert learner.fit_intercept is True
@@ -53,7 +55,9 @@ class TestLinearRegressionLearner:
         assert ridge_learner.supports_uncertainty() is True
         assert ridge_learner.is_ridge is True
 
-    def test_predict_returns_finite_values_and_uncertainty_after_training(self, learner, compounds_20, features_20):
+    def test_predict_returns_finite_values_and_uncertainty_after_training(
+        self, learner, compounds_20, features_20
+    ):
         """Test training and prediction with real molecular data."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
@@ -103,7 +107,7 @@ class TestLinearRegressionLearner:
         empty_features = np.array([]).reshape(0, 10)
         empty_targets = np.array([])
 
-        with pytest.raises((ValueError, LearnerError), match="empty dataset"):
+        with pytest.raises((ValueError, LearnerError), match='empty dataset'):
             learner.train(empty_features, empty_targets)
 
     def test_train_with_mismatched_shapes(self, learner):
@@ -111,39 +115,47 @@ class TestLinearRegressionLearner:
         features = np.random.randn(10, 5)
         targets = np.random.randn(8)
 
-        with pytest.raises((ValueError, LearnerError), match="mismatched lengths"):
+        with pytest.raises((ValueError, LearnerError), match='mismatched lengths'):
             learner.train(features, targets)
 
     def test_predict_without_training(self, learner):
         """Test error when predicting without training."""
         features = np.random.randn(5, 10)
-        with pytest.raises((RuntimeError, LearnerError), match="must be trained"):
+        with pytest.raises((RuntimeError, LearnerError), match='must be trained'):
             learner.predict(features)
 
-    def test_get_name_distinguishes_linear_and_ridge_modes(self, learner, ridge_learner):
+    def test_get_name_distinguishes_linear_and_ridge_modes(
+        self, learner, ridge_learner
+    ):
         """Test name generation for both Ridge and Linear modes."""
         linear_name = learner.get_name()
-        assert "LinearRegression" in linear_name
-        assert "with_intercept" in linear_name
+        assert 'LinearRegression' in linear_name
+        assert 'with_intercept' in linear_name
 
         ridge_name = ridge_learner.get_name()
-        assert "Ridge" in ridge_name
-        assert "alpha=1.000" in ridge_name
-        assert "with_intercept" in ridge_name
+        assert 'Ridge' in ridge_name
+        assert 'alpha=1.000' in ridge_name
+        assert 'with_intercept' in ridge_name
 
     def test_get_name_no_intercept(self):
         """Test name generation when fit_intercept=False."""
-        learner = LinearRegressionLearner(alpha=None, fit_intercept=False, random_state=42)
+        learner = LinearRegressionLearner(
+            alpha=None, fit_intercept=False, random_state=42
+        )
         name = learner.get_name()
-        assert "LinearRegression" in name
-        assert "no_intercept" in name
+        assert 'LinearRegression' in name
+        assert 'no_intercept' in name
 
-    def test_supports_uncertainty_returns_true_for_linear_and_ridge_modes(self, learner, ridge_learner):
+    def test_supports_uncertainty_returns_true_for_linear_and_ridge_modes(
+        self, learner, ridge_learner
+    ):
         """Test that uncertainty is supported in both modes."""
         assert learner.supports_uncertainty() is True
         assert ridge_learner.supports_uncertainty() is True
 
-    def test_ridge_alpha_values_change_predictions_while_remaining_finite(self, compounds_20, features_20):
+    def test_ridge_alpha_values_change_predictions_while_remaining_finite(
+        self, compounds_20, features_20
+    ):
         """Test Ridge regression with different alpha values."""
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
@@ -168,15 +180,21 @@ class TestLinearRegressionLearner:
 
         assert not np.allclose(predictions_dict[0.1], predictions_dict[10.0])
 
-    def test_small_diverse_dataset_trains_and_predicts_finite_values(self, learner, tmp_path):
+    def test_small_diverse_dataset_trains_and_predicts_finite_values(
+        self, learner, tmp_path
+    ):
         """Test with small diverse dataset."""
-        small_compounds = pl.DataFrame({
-            'ID': [f'COMP_{i:03d}' for i in range(5)],
-            'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
-            'Activity': [0.5, 0.3, 0.8, 0.2, 0.6]
-        })
+        small_compounds = pl.DataFrame(
+            {
+                'ID': [f'COMP_{i:03d}' for i in range(5)],
+                'SMILES': ['CCO', 'c1ccccc1', 'CC(=O)O', 'CCN', 'C1CCNCC1'],
+                'Activity': [0.5, 0.3, 0.8, 0.2, 0.6],
+            }
+        )
 
-        features = extract_features(small_compounds['SMILES'].to_list(), 'morgan', tmp_path)
+        features = extract_features(
+            small_compounds['SMILES'].to_list(), 'morgan', tmp_path
+        )
         learner.train(features, small_compounds['Activity'].to_numpy())
         predictions, _ = learner.predict(features)
 
@@ -194,7 +212,9 @@ class TestLinearRegressionLearner:
         features = features_20
         targets = compounds['Activity'].to_numpy()
 
-        learner_parallel = LinearRegressionLearner(alpha=None, n_jobs=-1, random_state=42)
+        learner_parallel = LinearRegressionLearner(
+            alpha=None, n_jobs=-1, random_state=42
+        )
         assert learner_parallel.n_jobs == -1
         learner_parallel.train(features, targets)
         predictions, _ = learner_parallel.predict(features)
@@ -210,7 +230,9 @@ class TestLinearRegressionLearner:
         """Test that Ridge mode does not use n_jobs parameter."""
         assert ridge_learner.n_jobs is None
 
-    def test_uncertainty_shape_matches_predictions(self, learner, compounds_20, features_20):
+    def test_uncertainty_shape_matches_predictions(
+        self, learner, compounds_20, features_20
+    ):
         compounds = compounds_20.clone()
         if 'Activity' not in compounds.columns:
             compounds = compounds.with_columns(
@@ -338,7 +360,7 @@ class TestLinearRegressionLearner:
         residuals = y - learner.model.predict(preprocessed)
         sigma_hat_sq = np.sum(residuals**2) / max(n - p, 1)
 
-        leverages = np.einsum("ij,jk,ik->i", preprocessed, gram_inv, preprocessed)
+        leverages = np.einsum('ij,jk,ik->i', preprocessed, gram_inv, preprocessed)
         expected_unc = np.sqrt(sigma_hat_sq * np.maximum(1.0 + leverages, 0.0))
 
         _, actual_unc = learner.predict(X)
@@ -404,7 +426,7 @@ class TestLinearRegressionLearner:
         assert np.all(np.isfinite(unc))
         assert np.all(unc >= 0)
 
-    @pytest.mark.parametrize("alpha", [None, 0.1, 1.0, 10.0])
+    @pytest.mark.parametrize('alpha', [None, 0.1, 1.0, 10.0])
     def test_uncertainty_across_alpha_values(self, alpha):
         rng = np.random.RandomState(42)
         X = rng.randn(30, 5)

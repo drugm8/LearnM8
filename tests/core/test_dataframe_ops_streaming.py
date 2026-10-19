@@ -14,8 +14,12 @@ pytestmark = pytest.mark.unit
 
 
 def _master(n):
-    df = pl.DataFrame({'ID': [f'c{i}' for i in range(n)],
-                       'SMILES': [f'C{"C" * (i % 5)}' for i in range(n)]})
+    df = pl.DataFrame(
+        {
+            'ID': [f'c{i}' for i in range(n)],
+            'SMILES': [f'C{"C" * (i % 5)}' for i in range(n)],
+        }
+    )
     return initialize_master_dataframe_empty(df, 'Activity')
 
 
@@ -33,8 +37,14 @@ class TestIterStatusChunks:
     def test_global_offset_matches_filtered_position(self):
         df = _master(50)
         # label first 10 → unlabeled sequence starts at c10
-        df = update_status(df, [f'c{i}' for i in range(10)], 'labeled', 0, 'Activity',
-                           pl.Series([0.0] * 10))
+        df = update_status(
+            df,
+            [f'c{i}' for i in range(10)],
+            'labeled',
+            0,
+            'Activity',
+            pl.Series([0.0] * 10),
+        )
         chunks = list(iter_status_chunks(df, 'unlabeled', chunk_size=20))
         assert chunks[0][0] == 0
         assert chunks[0][1]['ID'].to_list()[0] == 'c10'  # first unlabeled
@@ -48,8 +58,14 @@ class TestIterStatusChunks:
 
     def test_empty_when_no_match(self):
         df = _master(5)
-        df = update_status(df, [f'c{i}' for i in range(5)], 'labeled', 0, 'Activity',
-                           pl.Series([0.0] * 5))
+        df = update_status(
+            df,
+            [f'c{i}' for i in range(5)],
+            'labeled',
+            0,
+            'Activity',
+            pl.Series([0.0] * 5),
+        )
         assert list(iter_status_chunks(df, 'unlabeled', 10)) == []
 
     def test_bad_chunk_size(self):

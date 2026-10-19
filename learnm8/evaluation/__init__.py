@@ -35,5 +35,5 @@ __all__ = [
     # Main evaluation functions
     'evaluate_cycle',
     'export_metrics_csv',
-    'format_progress_output'
+    'format_progress_output',
 ]

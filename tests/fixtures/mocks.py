@@ -16,7 +16,9 @@ from learnm8.core.interfaces import Learner, Oracle
 class MockLearner(Learner):
     """Mock learner implementation for testing core interfaces."""
 
-    def __init__(self, supports_uncertainty=False, fail_training=False, fail_prediction=False):
+    def __init__(
+        self, supports_uncertainty=False, fail_training=False, fail_prediction=False
+    ):
         self._trained = False
         self._supports_uncertainty = supports_uncertainty
         self._training_features = None
@@ -26,13 +28,13 @@ class MockLearner(Learner):
     def train(self, features: np.ndarray, targets: np.ndarray) -> None:
         """Mock training implementation with featurizer-agnostic interface."""
         if self._fail_training:
-            raise RuntimeError("Training failed (mock)")
+            raise RuntimeError('Training failed (mock)')
 
         if len(features) == 0:
-            raise ValueError("Cannot train on empty dataset")
+            raise ValueError('Cannot train on empty dataset')
 
         if features.shape[0] != targets.shape[0]:
-            raise ValueError("Features and targets must have same length")
+            raise ValueError('Features and targets must have same length')
 
         self._trained = True
         self._training_features = features.copy()
@@ -50,10 +52,10 @@ class MockLearner(Learner):
         honours it by returning None for the second tuple element when False.
         """
         if self._fail_prediction:
-            raise RuntimeError("Prediction failed (mock)")
+            raise RuntimeError('Prediction failed (mock)')
 
         if not self._trained:
-            raise RuntimeError("Model must be trained before prediction")
+            raise RuntimeError('Model must be trained before prediction')
 
         if len(features) == 0:
             return np.array([]), None
@@ -73,8 +75,8 @@ class MockLearner(Learner):
 
     def get_name(self) -> str:
         """Return the name of this mock learner."""
-        uncertainty_suffix = "_with_uncertainty" if self._supports_uncertainty else ""
-        return f"MockLearner{uncertainty_suffix}"
+        uncertainty_suffix = '_with_uncertainty' if self._supports_uncertainty else ''
+        return f'MockLearner{uncertainty_suffix}'
 
 
 class MockOracle(Oracle):
@@ -118,20 +120,24 @@ class MockOracle(Oracle):
 @pytest.fixture
 def make_mock_learner():
     """Factory for fresh MockLearner instances. Each call returns clean state."""
+
     def _make(supports_uncertainty=False, fail_training=False, fail_prediction=False):
         return MockLearner(
             supports_uncertainty=supports_uncertainty,
             fail_training=fail_training,
             fail_prediction=fail_prediction,
         )
+
     return _make
 
 
 @pytest.fixture
 def make_mock_oracle():
     """Factory for fresh MockOracle instances. Each call returns call_count=0."""
+
     def _make(noise=0.1):
         return MockOracle(noise_level=noise)
+
     return _make
 
 

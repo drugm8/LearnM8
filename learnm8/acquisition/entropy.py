@@ -61,7 +61,7 @@ class EntropyAcquisition(AcquisitionFunction):
     and model parameters), see future spec.
     """
 
-    def __init__(self, entropy_type: str = "uncertainty", **kwargs):
+    def __init__(self, entropy_type: str = 'uncertainty', **kwargs):
         """Initialize Entropy acquisition function.
 
         Args:
@@ -72,7 +72,7 @@ class EntropyAcquisition(AcquisitionFunction):
             **kwargs: forwarded to ``AcquisitionFunction``.
         """
         super().__init__(**kwargs)
-        if entropy_type not in {"uncertainty", "variance"}:
+        if entropy_type not in {'uncertainty', 'variance'}:
             raise ValueError("entropy_type must be 'uncertainty' or 'variance'")
         self.entropy_type = entropy_type
 
@@ -94,9 +94,9 @@ class EntropyAcquisition(AcquisitionFunction):
 
         # FR-004: defence-in-depth NaN/Inf guards. Lazy ID source — only
         # materialised on the error path inside numerical.py.
-        ids = compounds.get_column("ID")
-        assert_no_nan(predictions, ids, "predictions")
-        assert_no_nan(uncertainties, ids, "uncertainties")
+        ids = compounds.get_column('ID')
+        assert_no_nan(predictions, ids, 'predictions')
+        assert_no_nan(uncertainties, ids, 'uncertainties')
         assert_no_inf_uncertainty(uncertainties, ids)
 
         # FR-008: aggregated single warning per call when sub-floor σ values
@@ -105,7 +105,7 @@ class EntropyAcquisition(AcquisitionFunction):
         # so no `.astype(float64)` copy is needed for the count alone.
         n_clamped = int(np.sum(uncertainties < SIGMA_FLOOR))
         if n_clamped > 0:
-            msg = f"Clamped {n_clamped} σ values at 1e-9 floor"
+            msg = f'Clamped {n_clamped} σ values at 1e-9 floor'
             threshold = max(1, int(0.01 * len(uncertainties)))
             if n_clamped >= threshold:
                 warnings.warn(msg, LearnM8Warning, stacklevel=2)
@@ -117,7 +117,7 @@ class EntropyAcquisition(AcquisitionFunction):
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
-                "Entropy(nats) statistics: min=%.3f max=%.3f mean=%.3f",
+                'Entropy(nats) statistics: min=%.3f max=%.3f mean=%.3f',
                 float(entropy_scores.min()),
                 float(entropy_scores.max()),
                 float(entropy_scores.mean()),
@@ -128,7 +128,7 @@ class EntropyAcquisition(AcquisitionFunction):
         )
 
         logger.debug(
-            "EntropyAcquisition selected %d compounds using %s entropy (nats)",
+            'EntropyAcquisition selected %d compounds using %s entropy (nats)',
             len(selected),
             self.entropy_type,
         )
@@ -157,4 +157,4 @@ class EntropyAcquisition(AcquisitionFunction):
         return _entropy_scores(uncertainties, self.entropy_type)
 
     def get_name(self) -> str:
-        return f"Entropy({self.entropy_type})"
+        return f'Entropy({self.entropy_type})'

@@ -340,12 +340,12 @@ def create_parser() -> argparse.ArgumentParser:
         choices=['auto', 'always', 'never'],
         default='auto',
         help=(
-            "Memory-efficient streaming predict→select path for large pools. "
+            'Memory-efficient streaming predict→select path for large pools. '
             "'auto' (default) uses it when eligible (streamable strategy, output "
-            "dir set, pruning in {none, score}) and falls back to the legacy path "
+            'dir set, pruning in {none, score}) and falls back to the legacy path '
             "otherwise; 'always' errors if a cycle is ineligible; 'never' forces "
-            "the legacy in-memory path. Stochastic strategies (thompson/random/"
-            "topk) draw different (but equivalent) samples under streaming."
+            'the legacy in-memory path. Stochastic strategies (thompson/random/'
+            'topk) draw different (but equivalent) samples under streaming.'
         ),
     )
 

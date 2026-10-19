@@ -47,6 +47,7 @@ class CycleConfig:
         ...     pruning_params={'pruning_fraction': 0.3}
         ... )
     """
+
     strategy: str
     n_cycles: int = 1
     batch_fraction: float | None = None
@@ -58,13 +59,13 @@ class CycleConfig:
         """Validate that batch_fraction is provided."""
         if self.batch_fraction is None:
             raise ValueError(
-                "CycleConfig requires batch_fraction. "
-                "Specify the fraction of the pool to select per cycle (e.g., batch_fraction=0.01 for 1%)."
+                'CycleConfig requires batch_fraction. '
+                'Specify the fraction of the pool to select per cycle (e.g., batch_fraction=0.01 for 1%).'
             )
         if not (0 < float(self.batch_fraction) <= 1.0):
             raise ValueError(
-                f"batch_fraction must be between 0 (exclusive) and 1 (inclusive), "
-                f"got {self.batch_fraction}. Use a value like 0.01 (1%) or 0.1 (10%)."
+                f'batch_fraction must be between 0 (exclusive) and 1 (inclusive), '
+                f'got {self.batch_fraction}. Use a value like 0.01 (1%) or 0.1 (10%).'
             )
 
 
@@ -124,27 +125,29 @@ def parse_cycle_spec(spec: str) -> list[dict[str, Any]]:
 
             if not (0 < batch_fraction <= 1.0):
                 raise ValueError(
-                    f"batch_fraction must be between 0 (exclusive) and 1 (inclusive), "
+                    f'batch_fraction must be between 0 (exclusive) and 1 (inclusive), '
                     f"got {batch_fraction} in specification '{part}'. "
-                    f"Use a value like 0.01 (1%) or 0.1 (10%)."
+                    f'Use a value like 0.01 (1%) or 0.1 (10%).'
                 )
             if n_cycles < 1:
                 raise ValueError(
                     f"n_cycles must be >= 1, got {n_cycles} in specification '{part}'."
                 )
 
-            configs.append({
-                'strategy': strategy,
-                'batch_fraction': batch_fraction,
-                'n_cycles': n_cycles
-            })
+            configs.append(
+                {
+                    'strategy': strategy,
+                    'batch_fraction': batch_fraction,
+                    'n_cycles': n_cycles,
+                }
+            )
 
         except ValueError as e:
             raise ValueError(
                 f"Invalid cycle specification '{part}'. "
                 f"Expected format: 'strategy:fraction' or 'strategy:fraction*count'. "
                 f"Example: 'greedy:0.01' or 'greedy:0.01*5'. "
-                f"Error: {e}"
+                f'Error: {e}'
             ) from e
 
     return configs
@@ -202,12 +205,14 @@ def parse_cycle_schedule(
         ... ])
         >>> # Returns: 8 CycleConfig objects, each with n_cycles=1
     """
-    logger.debug(f"Parsing cycle schedule: cycles={cycles is not None}, strategy='{strategy}', n_cycles={n_cycles}")
+    logger.debug(
+        f"Parsing cycle schedule: cycles={cycles is not None}, strategy='{strategy}', n_cycles={n_cycles}"
+    )
 
     if cycles is not None:
         if not isinstance(cycles, list):
             raise ValueError(
-                f"cycles must be a list of CycleConfig objects, got {type(cycles).__name__}. "
+                f'cycles must be a list of CycleConfig objects, got {type(cycles).__name__}. '
                 f"Example: cycles=[CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)]"
             )
 
@@ -215,8 +220,8 @@ def parse_cycle_schedule(
         for config in cycles:
             if not isinstance(config, CycleConfig):
                 raise ValueError(
-                    f"Each element in cycles must be a CycleConfig instance, "
-                    f"got {type(config).__name__}. "
+                    f'Each element in cycles must be a CycleConfig instance, '
+                    f'got {type(config).__name__}. '
                     f"Example: CycleConfig('greedy', n_cycles=5, batch_fraction=0.01)"
                 )
 
@@ -245,14 +250,18 @@ def parse_cycle_schedule(
                     batch_fraction=config.batch_fraction,
                     pruning_strategy=block_pruning_strategy,
                     pruning_params=block_pruning_params,
-                    acquisition_params=block_acquisition_params
+                    acquisition_params=block_acquisition_params,
                 )
                 expanded.append(new_config)
-                logger.debug(f"Created CycleConfig(strategy='{new_config.strategy}', n_cycles={new_config.n_cycles}, "
-                            f"batch_fraction={new_config.batch_fraction}, pruning={new_config.pruning_strategy or 'disabled'})")
+                logger.debug(
+                    f"Created CycleConfig(strategy='{new_config.strategy}', n_cycles={new_config.n_cycles}, "
+                    f'batch_fraction={new_config.batch_fraction}, pruning={new_config.pruning_strategy or "disabled"})'
+                )
 
         total_cycles = len(expanded)
-        logger.debug(f"Schedule parsed: {len(cycles)} config blocks, {total_cycles} total cycles")
+        logger.debug(
+            f'Schedule parsed: {len(cycles)} config blocks, {total_cycles} total cycles'
+        )
         return expanded
 
     schedule = []
@@ -267,8 +276,10 @@ def parse_cycle_schedule(
         pruning_params=pruning_params,
     )
     schedule.append(config_0)
-    logger.debug(f"Created CycleConfig(strategy='{config_0.strategy}', n_cycles={config_0.n_cycles}, "
-                f"batch_fraction={config_0.batch_fraction}, pruning={config_0.pruning_strategy or 'disabled'})")
+    logger.debug(
+        f"Created CycleConfig(strategy='{config_0.strategy}', n_cycles={config_0.n_cycles}, "
+        f'batch_fraction={config_0.batch_fraction}, pruning={config_0.pruning_strategy or "disabled"})'
+    )
 
     # Cycles 1+: main strategy with same batch_fraction
     for _ in range(n_cycles - 1):
@@ -281,9 +292,11 @@ def parse_cycle_schedule(
             pruning_params=pruning_params,
         )
         schedule.append(config_i)
-        logger.debug(f"Created CycleConfig(strategy='{config_i.strategy}', n_cycles={config_i.n_cycles}, "
-                    f"batch_fraction={config_i.batch_fraction}, pruning={config_i.pruning_strategy or 'disabled'})")
+        logger.debug(
+            f"Created CycleConfig(strategy='{config_i.strategy}', n_cycles={config_i.n_cycles}, "
+            f'batch_fraction={config_i.batch_fraction}, pruning={config_i.pruning_strategy or "disabled"})'
+        )
 
     total_cycles = len(schedule)
-    logger.debug(f"Schedule parsed: simple API, {total_cycles} total cycles")
+    logger.debug(f'Schedule parsed: simple API, {total_cycles} total cycles')
     return schedule

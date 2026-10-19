@@ -27,12 +27,9 @@ class TestXGBEnsemble:
     @pytest.fixture
     def custom_xgb_ensemble(self):
         """Create XGBEnsemble with custom hyperparameters."""
-        return XGBEnsemble(
-            learning_rates=[0.01, 0.05, 0.1],
-            random_states=[10, 20, 30]
-        )
+        return XGBEnsemble(learning_rates=[0.01, 0.05, 0.1], random_states=[10, 20, 30])
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope='class')
     def trained_xgb(self, small_real_compounds, _small_real_morgan_features_raw):
         """Class-scoped trained XGBEnsemble — shared across read-only tests."""
         compounds = small_real_compounds.head(20).clone()
@@ -47,7 +44,9 @@ class TestXGBEnsemble:
         ensemble.train(features, targets)
         return ensemble, features, compounds
 
-    def test_initialization_sets_default_learning_rates_random_states_and_untrained_state(self, xgb_ensemble):
+    def test_initialization_sets_default_learning_rates_random_states_and_untrained_state(
+        self, xgb_ensemble
+    ):
         """Test XGBEnsemble initialization with default parameters."""
         assert len(xgb_ensemble.learners) == 3
         assert xgb_ensemble.learning_rates == [0.05, 0.1, 0.2]
@@ -81,15 +80,15 @@ class TestXGBEnsemble:
     def test_get_name_includes_model_count_and_learning_rates(self, xgb_ensemble):
         """Test name generation for XGBEnsemble."""
         name = xgb_ensemble.get_name()
-        assert name == "XGBEnsemble(3xXGB,lr=[0.05,0.10,0.20])"
-        assert "XGBEnsemble" in name
-        assert "3xXGB" in name
-        assert "lr=[" in name
+        assert name == 'XGBEnsemble(3xXGB,lr=[0.05,0.10,0.20])'
+        assert 'XGBEnsemble' in name
+        assert '3xXGB' in name
+        assert 'lr=[' in name
 
     def test_get_name_custom_params(self, custom_xgb_ensemble):
         """Test name generation with custom parameters."""
         name = custom_xgb_ensemble.get_name()
-        assert name == "XGBEnsemble(3xXGB,lr=[0.01,0.05,0.10])"
+        assert name == 'XGBEnsemble(3xXGB,lr=[0.01,0.05,0.10])'
 
     def test_consistency_across_predictions(self, trained_xgb):
         """Test that predictions are consistent across multiple calls."""

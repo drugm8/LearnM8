@@ -38,7 +38,7 @@ def _format_id_list(ids: IdSource, indices: np.ndarray) -> str:
     if not isinstance(ids, Sequence):
         ids = list(ids)
     bad_ids = [ids[i] for i in indices[:10]]
-    return "[" + ", ".join(repr(i) for i in bad_ids) + "]"
+    return '[' + ', '.join(repr(i) for i in bad_ids) + ']'
 
 
 def assert_no_nan(arr: np.ndarray, ids: IdSource, name: str) -> None:
@@ -53,13 +53,11 @@ def assert_no_nan(arr: np.ndarray, ids: IdSource, name: str) -> None:
     if n == 0:
         return
     ids_str = _format_id_list(ids, indices)
-    row_word = "row" if n == 1 else "rows"
-    raise LearnerError(f"NaN {name} detected: {n} {row_word}, first IDs: {ids_str}")
+    row_word = 'row' if n == 1 else 'rows'
+    raise LearnerError(f'NaN {name} detected: {n} {row_word}, first IDs: {ids_str}')
 
 
-def assert_no_inf_uncertainty(
-    uncertainties: np.ndarray | None, ids: IdSource
-) -> None:
+def assert_no_inf_uncertainty(uncertainties: np.ndarray | None, ids: IdSource) -> None:
     """Raise :class:`LearnerError` if ``uncertainties`` contains any ±inf entry.
 
     Spec edge case: legitimate ``inf`` σ (a learner explicitly signalling
@@ -76,7 +74,7 @@ def assert_no_inf_uncertainty(
     if n == 0:
         return
     ids_str = _format_id_list(ids, indices)
-    row_word = "row" if n == 1 else "rows"
+    row_word = 'row' if n == 1 else 'rows'
     raise LearnerError(
-        f"Inf uncertainties not supported: {n} {row_word}, first IDs: {ids_str}"
+        f'Inf uncertainties not supported: {n} {row_word}, first IDs: {ids_str}'
     )

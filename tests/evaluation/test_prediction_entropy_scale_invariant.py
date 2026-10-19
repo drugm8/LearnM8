@@ -18,10 +18,12 @@ pytestmark = pytest.mark.unit
 
 
 def _pool(preds: np.ndarray) -> pl.DataFrame:
-    return pl.DataFrame({
-        "ID": [f"C{i}" for i in range(len(preds))],
-        "prediction": preds.astype(np.float64),
-    })
+    return pl.DataFrame(
+        {
+            'ID': [f'C{i}' for i in range(len(preds))],
+            'prediction': preds.astype(np.float64),
+        }
+    )
 
 
 def test_compute_prediction_entropy_scale_invariant_factor_10() -> None:
@@ -42,7 +44,7 @@ def test_compute_prediction_entropy_scale_invariant_factor_0_001() -> None:
     assert h1 == pytest.approx(h2, abs=1e-12)
 
 
-@pytest.mark.parametrize("c", [0.001, 0.1, 1.0, 10.0, 1000.0])
+@pytest.mark.parametrize('c', [0.001, 0.1, 1.0, 10.0, 1000.0])
 def test_compute_prediction_entropy_scale_invariant_property_fast(c: float) -> None:
     rng = np.random.default_rng(RNG_SEED)
     n_iter = 200
@@ -101,5 +103,7 @@ def test_compute_prediction_entropy_units_are_nats_not_bits() -> None:
 
 
 def test_compute_prediction_entropy_empty_returns_none() -> None:
-    empty = pl.DataFrame({"ID": [], "prediction": []}, schema={"ID": pl.Utf8, "prediction": pl.Float64})
+    empty = pl.DataFrame(
+        {'ID': [], 'prediction': []}, schema={'ID': pl.Utf8, 'prediction': pl.Float64}
+    )
     assert compute_prediction_entropy(empty) is None

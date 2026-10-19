@@ -46,7 +46,9 @@ class TestRoundTrip:
         path, preds_full, unc_full = _write(tmp_path, n, chunk, with_unc)
         df = read_cycle_predictions(path)
         assert df['ID'].to_list() == [f'c{i}' for i in range(n)]
-        np.testing.assert_allclose(df['prediction'].to_numpy(), preds_full, rtol=0, atol=0)
+        np.testing.assert_allclose(
+            df['prediction'].to_numpy(), preds_full, rtol=0, atol=0
+        )
         if with_unc:
             np.testing.assert_allclose(df['uncertainty'].to_numpy(), unc_full)
         else:

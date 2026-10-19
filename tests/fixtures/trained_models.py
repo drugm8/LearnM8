@@ -18,7 +18,7 @@ from learnm8.learners.sklearn.random_forest import RandomForestLearner
 from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_rf(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained RandomForest for read-only tests.
 
@@ -32,7 +32,7 @@ def trained_rf(_small_real_morgan_features_raw, small_real_compounds):
     return learner
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_gp(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained GaussianProcess for read-only tests.
 
@@ -45,7 +45,7 @@ def trained_gp(_small_real_morgan_features_raw, small_real_compounds):
     return learner
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_xgb(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained XGBoost for read-only tests.
 
@@ -58,7 +58,7 @@ def trained_xgb(_small_real_morgan_features_raw, small_real_compounds):
     return learner
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_rf_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained RFEnsemble for read-only tests.
 
@@ -71,7 +71,7 @@ def trained_rf_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_mixed_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained MixedEnsemble for read-only tests.
 
@@ -84,7 +84,7 @@ def trained_mixed_ensemble(_small_real_morgan_features_raw, small_real_compounds
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_lr_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained LREnsemble for read-only tests.
 
@@ -97,7 +97,7 @@ def trained_lr_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_dt_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained DTEnsemble for read-only tests.
 
@@ -110,7 +110,7 @@ def trained_dt_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_xgb_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained XGBEnsemble for read-only tests.
 
@@ -123,7 +123,7 @@ def trained_xgb_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_chemprop_ensemble(small_real_compounds):
     """Pre-trained ChempropEnsemble for read-only tests.
 
@@ -141,13 +141,15 @@ def trained_chemprop_ensemble(small_real_compounds):
     return ensemble
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def trained_fastprop_ensemble(_small_real_morgan_features_raw, small_real_compounds):
     """Pre-trained FastpropEnsemble for read-only tests.
 
     Same scoping rules as ``trained_chemprop_ensemble``.
     """
-    ensemble = FastpropEnsemble(fnn_layers=1, hidden_size=64, max_epochs=3, device='cpu')
+    ensemble = FastpropEnsemble(
+        fnn_layers=1, hidden_size=64, max_epochs=3, device='cpu'
+    )
     features = _small_real_morgan_features_raw.copy()
     targets = small_real_compounds['Activity'].to_numpy()
     ensemble.train(features, targets)

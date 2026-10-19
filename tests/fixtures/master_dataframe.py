@@ -19,7 +19,7 @@ def create_initialized_master_df(
     valid_compounds: pl.DataFrame,
     target_col: str,
     initial_labeled_ids: Optional[List[str]] = None,
-    initial_measurements: Optional[dict] = None
+    initial_measurements: Optional[dict] = None,
 ) -> pl.DataFrame:
     """Helper to create master DataFrame with initial labeled compounds.
 
@@ -42,14 +42,18 @@ def create_initialized_master_df(
 
     master_df = initialize_master_dataframe_empty(valid_compounds, target_col)
 
-    if initial_labeled_ids and initial_measurements is not None and len(initial_labeled_ids) > 0:
+    if (
+        initial_labeled_ids
+        and initial_measurements is not None
+        and len(initial_labeled_ids) > 0
+    ):
         master_df = update_status(
             df=master_df,
             compound_ids=initial_labeled_ids,
             new_status='labeled',
             cycle=-1,
             target_col=target_col,
-            target_values=initial_measurements
+            target_values=initial_measurements,
         )
 
     return master_df
@@ -72,7 +76,7 @@ def sample_master_df(sample_compounds) -> pl.DataFrame:
         valid_compounds=compounds,
         target_col='Activity',
         initial_labeled_ids=initial_ids,
-        initial_measurements=initial_values
+        initial_measurements=initial_values,
     )
 
 
@@ -85,11 +89,13 @@ def _write_predictions_parquet(
     """
     from learnm8.core.persistence import write_cycle_predictions
 
-    cycle_predictions = pl.DataFrame({
-        'ID': list(compound_ids),
-        'prediction': predictions,
-        'uncertainty': uncertainties,
-    })
+    cycle_predictions = pl.DataFrame(
+        {
+            'ID': list(compound_ids),
+            'prediction': predictions,
+            'uncertainty': uncertainties,
+        }
+    )
     return write_cycle_predictions(cycle_predictions, output_dir, cycle)
 
 
@@ -136,7 +142,9 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
 
     predictions_0 = np.random.uniform(0.2, 0.8, len(unlabeled_ids))
     uncertainties_0 = np.random.uniform(0.1, 0.3, len(unlabeled_ids))
-    _write_predictions_parquet(tmp_path, 0, unlabeled_ids, predictions_0, uncertainties_0)
+    _write_predictions_parquet(
+        tmp_path, 0, unlabeled_ids, predictions_0, uncertainties_0
+    )
 
     selected_ids_0 = unlabeled_ids[:1]
     target_values_0 = dict(zip(selected_ids_0, [0.45]))
@@ -146,7 +154,7 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
         new_status='labeled',
         cycle=0,
         target_col='Activity',
-        target_values=target_values_0
+        target_values=target_values_0,
     )
 
     unlabeled = master_df.filter(pl.col('status') == 'unlabeled')
@@ -155,7 +163,9 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
     if len(unlabeled_ids) > 0:
         predictions_1 = np.random.uniform(0.3, 0.9, len(unlabeled_ids))
         uncertainties_1 = np.random.uniform(0.1, 0.25, len(unlabeled_ids))
-        _write_predictions_parquet(tmp_path, 1, unlabeled_ids, predictions_1, uncertainties_1)
+        _write_predictions_parquet(
+            tmp_path, 1, unlabeled_ids, predictions_1, uncertainties_1
+        )
 
         selected_ids_1 = unlabeled_ids[:1]
         target_values_1 = dict(zip(selected_ids_1, [0.65]))
@@ -165,7 +175,7 @@ def master_df_multi_cycle(sample_master_df, tmp_path):
             new_status='labeled',
             cycle=1,
             target_col='Activity',
-            target_values=target_values_1
+            target_values=target_values_1,
         )
 
     return master_df, tmp_path

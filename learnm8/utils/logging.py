@@ -30,6 +30,7 @@ def detect_jupyter_environment() -> bool:
 
     try:
         import IPython
+
         ipy = IPython.get_ipython()
         if ipy is not None:
             if hasattr(ipy, 'kernel'):
@@ -41,19 +42,24 @@ def detect_jupyter_environment() -> bool:
 
     try:
         import ipykernel.kernelapp
-        if hasattr(ipykernel.kernelapp, 'IPKernelApp') and ipykernel.kernelapp.IPKernelApp.initialized():
+
+        if (
+            hasattr(ipykernel.kernelapp, 'IPKernelApp')
+            and ipykernel.kernelapp.IPKernelApp.initialized()
+        ):
             return True
     except (ImportError, AttributeError):
         pass
 
     return False
 
+
 def configure_learnm8_logging(
     output_dir: Path | None = None,
-    level: str = "INFO",
+    level: str = 'INFO',
     console_type: Literal['auto', 'rich', 'simple', 'none'] = 'auto',
     show_time: bool = False,
-    force_reconfigure: bool = False
+    force_reconfigure: bool = False,
 ) -> logging.Logger:
     """
     Configure LearnM8 logging with file and console handlers.
@@ -92,7 +98,7 @@ def configure_learnm8_logging(
     logger = logging.getLogger('learnm8')
 
     if logger.handlers and not force_reconfigure:
-        logger.debug("LearnM8 logging already configured")
+        logger.debug('LearnM8 logging already configured')
         return logger
 
     logger.handlers.clear()
@@ -123,7 +129,7 @@ def configure_learnm8_logging(
                 show_time=show_time,
                 show_path=False,
                 markup=True,
-                rich_tracebacks=True
+                rich_tracebacks=True,
             )
         else:
             console_handler = logging.StreamHandler(sys.stdout)
@@ -137,11 +143,11 @@ def configure_learnm8_logging(
     return logger
 
 
-def get_logger(name: str = "learnm8") -> logging.Logger:
+def get_logger(name: str = 'learnm8') -> logging.Logger:
     """Get a logger instance for the given name."""
     return logging.getLogger(name)
 
 
 def log_warning(logger: logging.Logger, message: str) -> None:
     """Log warning message with appropriate styling."""
-    logger.warning(f"[yellow]Warning:[/yellow] {message}")
+    logger.warning(f'[yellow]Warning:[/yellow] {message}')

@@ -81,4 +81,3 @@ class TestPerformanceMetrics:
         result = calculate_average_score(scores)
         expected = float(np.mean(scores, dtype=np.float64))
         assert_allclose(result, expected, rtol=0.0, atol=1e-12)
-

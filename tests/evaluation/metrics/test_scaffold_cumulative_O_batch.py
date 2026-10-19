@@ -33,14 +33,16 @@ def _smiles_for(idx: int) -> str:
     a = (idx // 128) % 8
     b = (idx // 16) % 8
     c = idx % 16
-    return f"c1ccccc1C{'C' * a}O{'C' * b}N{'C' * c}"
+    return f'c1ccccc1C{"C" * a}O{"C" * b}N{"C" * c}'
 
 
 def _batch_df(start: int, n: int) -> pl.DataFrame:
-    return pl.DataFrame({
-        "SMILES": [_smiles_for(i) for i in range(start, start + n)],
-        "ID": [f"M{i:06d}" for i in range(start, start + n)],
-    })
+    return pl.DataFrame(
+        {
+            'SMILES': [_smiles_for(i) for i in range(start, start + n)],
+            'ID': [f'M{i:06d}' for i in range(start, start + n)],
+        }
+    )
 
 
 @pytest.mark.slow
@@ -60,17 +62,19 @@ def test_scaffold_cumulative_per_cycle_time_constant() -> None:
     run_cache = RunCache()
     times_ms: list[float] = []
 
-    cumulative_df = pl.DataFrame({"SMILES": [], "ID": []}, schema={"SMILES": pl.Utf8, "ID": pl.Utf8})
+    cumulative_df = pl.DataFrame(
+        {'SMILES': [], 'ID': []}, schema={'SMILES': pl.Utf8, 'ID': pl.Utf8}
+    )
 
     for cycle in range(100):
         new_batch = _batch_df(cycle * 10, 10)
         cumulative_df = pl.concat([cumulative_df, new_batch])
         # Disable Tanimoto + Shannon to isolate scaffold-only cost.
         disable = (
-            "mean_tanimoto_similarity_sampled_batch",
-            "mean_tanimoto_similarity_sampled_cumulative",
-            "bit_position_uniformity_entropy_batch",
-            "bit_position_uniformity_entropy_cumulative",
+            'mean_tanimoto_similarity_sampled_batch',
+            'mean_tanimoto_similarity_sampled_cumulative',
+            'bit_position_uniformity_entropy_batch',
+            'bit_position_uniformity_entropy_cumulative',
         )
         t0 = time.perf_counter()
         compute_diversity_metrics(
@@ -94,7 +98,7 @@ def test_scaffold_cumulative_per_cycle_time_constant() -> None:
     # the median). True constant-time path shows slope close to zero
     # regardless of sign — noise can scatter either way.
     assert abs(slope) < 0.005 * median, (
-        f"Spec SC-001 regression: cumulative scaffold time slope {slope:.4f} ms/cycle "
-        f"vs median {median:.3f} ms suggests linear growth in cycle index. "
-        f"times[50:100] min={float(warm.min()):.3f} max={float(warm.max()):.3f}"
+        f'Spec SC-001 regression: cumulative scaffold time slope {slope:.4f} ms/cycle '
+        f'vs median {median:.3f} ms suggests linear growth in cycle index. '
+        f'times[50:100] min={float(warm.min()):.3f} max={float(warm.max()):.3f}'
     )

@@ -79,6 +79,6 @@ def test_preprocess_uint8_skips_nan_check_no_warning(caplog):
             is_training=True,
             feature_type='binary',
         )
-    assert not any(
-        'NaN' in record.getMessage() for record in caplog.records
-    ), 'no NaN-warning expected on uint8 input'
+    assert not any('NaN' in record.getMessage() for record in caplog.records), (
+        'no NaN-warning expected on uint8 input'
+    )

@@ -18,6 +18,7 @@ pytestmark = pytest.mark.unit
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_features(n: int = 50, f: int = 10, dtype=np.float32) -> np.ndarray:
     rng = np.random.default_rng(0)
     return rng.random((n, f)).astype(dtype)
@@ -70,7 +71,10 @@ def _trained_learner(
     cuml_mock = _mock_cuml(per_tree_out)
 
     learner = RfFilLearner(n_estimators=n_trees, random_state=0)
-    with patch.dict(sys.modules, {'treelite': tl_mock, 'treelite.sklearn': tl_mock.sklearn, 'cuml': cuml_mock}):
+    with patch.dict(
+        sys.modules,
+        {'treelite': tl_mock, 'treelite.sklearn': tl_mock.sklearn, 'cuml': cuml_mock},
+    ):
         learner.train(features, targets)
 
     return learner, features, tl_mock, cuml_mock
@@ -79,6 +83,7 @@ def _trained_learner(
 # ---------------------------------------------------------------------------
 # T011 tests
 # ---------------------------------------------------------------------------
+
 
 class TestConstruction:
     def test_construction_with_valid_parameters(self):
@@ -122,7 +127,11 @@ class TestTraining:
         with (
             patch.dict(
                 sys.modules,
-                {'treelite': tl_mock, 'treelite.sklearn': tl_mock.sklearn, 'cuml': cuml_mock},
+                {
+                    'treelite': tl_mock,
+                    'treelite.sklearn': tl_mock.sklearn,
+                    'cuml': cuml_mock,
+                },
             ),
             patch.object(_ske.RandomForestRegressor, 'fit', capturing_fit),
         ):
@@ -156,10 +165,15 @@ class TestPrediction:
         n_trees = 8
         per_tree = _make_per_tree(n, n_trees)
         learner, _features, _, cuml_mock = _trained_learner(
-            n_samples=50, n_features=10, n_trees=n_trees, per_tree_out=_make_per_tree(50, n_trees)
+            n_samples=50,
+            n_features=10,
+            n_trees=n_trees,
+            per_tree_out=_make_per_tree(50, n_trees),
         )
         pred_features = _make_features(n, 10)
-        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = per_tree
+        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = (
+            per_tree
+        )
         preds, unc = learner.predict(pred_features)
         assert preds is not None
         assert unc is not None
@@ -169,8 +183,12 @@ class TestPrediction:
         n_trees = 6
         per_tree_train = _make_per_tree(50, n_trees)
         per_tree_pred = _make_per_tree(n, n_trees)
-        learner, _, _, cuml_mock = _trained_learner(n_trees=n_trees, per_tree_out=per_tree_train)
-        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = per_tree_pred
+        learner, _, _, cuml_mock = _trained_learner(
+            n_trees=n_trees, per_tree_out=per_tree_train
+        )
+        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = (
+            per_tree_pred
+        )
         features = _make_features(n, 10)
         preds, unc = learner.predict(features)
         assert preds.shape == (n,)
@@ -181,8 +199,12 @@ class TestPrediction:
         n_trees = 10
         per_tree_train = _make_per_tree(50, n_trees)
         per_tree_pred = _make_per_tree(n, n_trees)
-        learner, _, _, cuml_mock = _trained_learner(n_trees=n_trees, per_tree_out=per_tree_train)
-        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = per_tree_pred
+        learner, _, _, cuml_mock = _trained_learner(
+            n_trees=n_trees, per_tree_out=per_tree_train
+        )
+        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = (
+            per_tree_pred
+        )
         features = _make_features(n, 10)
         _, unc = learner.predict(features)
         assert np.all(np.isfinite(unc))
@@ -193,7 +215,9 @@ class TestPrediction:
         n_trees = 8
         per_tree_train = _make_per_tree(50, n_trees)
         per_tree_pred = _make_per_tree(n, n_trees)
-        learner, _, _, cuml_mock = _trained_learner(n_trees=n_trees, per_tree_out=per_tree_train)
+        learner, _, _, cuml_mock = _trained_learner(
+            n_trees=n_trees, per_tree_out=per_tree_train
+        )
         fil_instance = cuml_mock.ForestInference.load.return_value
         fil_instance.predict_per_tree.return_value = per_tree_pred
         features = _make_features(n, 10)
@@ -206,8 +230,12 @@ class TestPrediction:
         n_trees = 6
         per_tree_train = _make_per_tree(50, n_trees)
         per_tree_pred = _make_per_tree(n, n_trees)
-        learner, _, _, cuml_mock = _trained_learner(n_trees=n_trees, per_tree_out=per_tree_train)
-        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = per_tree_pred
+        learner, _, _, cuml_mock = _trained_learner(
+            n_trees=n_trees, per_tree_out=per_tree_train
+        )
+        cuml_mock.ForestInference.load.return_value.predict_per_tree.return_value = (
+            per_tree_pred
+        )
         features = _make_features(n, 10)
         preds, unc = learner.predict(features)
         expected_mean = per_tree_pred.mean(axis=1)
@@ -221,7 +249,9 @@ class TestErrorHandling:
         features = _make_features()
         targets = _make_targets()
         tl_mock = _mock_treelite()
-        tl_mock.sklearn.import_model.side_effect = RuntimeError('treelite serialisation error')
+        tl_mock.sklearn.import_model.side_effect = RuntimeError(
+            'treelite serialisation error'
+        )
         cuml_mock = _mock_cuml()
 
         learner = RfFilLearner(n_estimators=5, random_state=0)
@@ -229,7 +259,11 @@ class TestErrorHandling:
             pytest.raises(LearnerError, match='FIL conversion failed'),
             patch.dict(
                 sys.modules,
-                {'treelite': tl_mock, 'treelite.sklearn': tl_mock.sklearn, 'cuml': cuml_mock},
+                {
+                    'treelite': tl_mock,
+                    'treelite.sklearn': tl_mock.sklearn,
+                    'cuml': cuml_mock,
+                },
             ),
         ):
             learner.train(features, targets)
@@ -282,7 +316,9 @@ class TestOomRecovery:
         n = 600
         n_trees = 5
         per_tree_train = _make_per_tree(50, n_trees)
-        learner, _, _, cuml_mock = _trained_learner(n_trees=n_trees, per_tree_out=per_tree_train)
+        learner, _, _, cuml_mock = _trained_learner(
+            n_trees=n_trees, per_tree_out=per_tree_train
+        )
 
         features = _make_features(n, 10)
 

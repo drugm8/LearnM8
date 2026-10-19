@@ -5,6 +5,7 @@ from learnm8.learners.torch.mlp import MLPLearner
 
 pytestmark = pytest.mark.unit
 
+
 class TestMLPTargetNormIntegration:
     @pytest.mark.slow
     def test_predictions_in_original_scale_for_high_magnitude_targets(self):
@@ -15,8 +16,7 @@ class TestMLPTargetNormIntegration:
         targets = (rng.randn(100) * 500 + 3000).astype(np.float32)
 
         learner = MLPLearner(
-            hidden_sizes=(32, 16), max_epochs=50,
-            learning_rate=0.01, random_state=42
+            hidden_sizes=(32, 16), max_epochs=50, learning_rate=0.01, random_state=42
         )
         learner.train(features, targets)
 
@@ -33,9 +33,7 @@ class TestMLPTargetNormIntegration:
         features = rng.randn(100, 20).astype(np.float32)
         targets = rng.randn(100).astype(np.float32)  # mean~0, std~1
 
-        learner = MLPLearner(
-            hidden_sizes=(32,), max_epochs=20, random_state=42
-        )
+        learner = MLPLearner(hidden_sizes=(32,), max_epochs=20, random_state=42)
         learner.train(features, targets)
         preds, _ = learner.predict(features)
 

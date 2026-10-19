@@ -16,18 +16,20 @@ logger = logging.getLogger(__name__)
 
 class MLPLearner(TorchLearner):
     """Multi-Layer Perceptron with configurable architecture.
-    
+
     This learner provides a standard feedforward neural network with
     configurable hidden layers, activation functions, and regularization
     for molecular property prediction.
     """
 
-    def __init__(self,
-                 hidden_sizes: tuple[int, ...] = (512, 256, 128),
-                 activation: str = 'relu',
-                 dropout_rate: float = 0.2,
-                 batch_norm: bool = True,
-                 **kwargs):
+    def __init__(
+        self,
+        hidden_sizes: tuple[int, ...] = (512, 256, 128),
+        activation: str = 'relu',
+        dropout_rate: float = 0.2,
+        batch_norm: bool = True,
+        **kwargs,
+    ):
         """Initialize MLP learner.
 
         Args:
@@ -49,15 +51,15 @@ class MLPLearner(TorchLearner):
             'relu': nn.ReLU,
             'tanh': nn.Tanh,
             'gelu': nn.GELU,
-            'leaky_relu': nn.LeakyReLU
+            'leaky_relu': nn.LeakyReLU,
         }.get(activation, nn.ReLU)
 
     def _create_model(self, input_size: int) -> nn.Module:
         """Create MLP model architecture.
-        
+
         Args:
             input_size: Number of input features
-            
+
         Returns:
             PyTorch MLP model
         """
@@ -94,14 +96,16 @@ class MLPLearner(TorchLearner):
 
     def _initialize_weights(self, model: nn.Module) -> None:
         """Initialize model weights using Xavier/He initialization.
-        
+
         Args:
             model: PyTorch model to initialize
         """
         for module in model.modules():
             if isinstance(module, nn.Linear):
                 if self.activation == 'relu':
-                    nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='relu')
+                    nn.init.kaiming_normal_(
+                        module.weight, mode='fan_in', nonlinearity='relu'
+                    )
                 else:
                     nn.init.xavier_normal_(module.weight)
 
@@ -115,4 +119,4 @@ class MLPLearner(TorchLearner):
     def get_name(self) -> str:
         """Return a descriptive name for this learner."""
         hidden_str = '-'.join(map(str, self.hidden_sizes))
-        return f"MLP({hidden_str},{self.activation},dropout={self.dropout_rate})"
+        return f'MLP({hidden_str},{self.activation},dropout={self.dropout_rate})'

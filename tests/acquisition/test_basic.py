@@ -9,7 +9,9 @@ from learnm8.acquisition import RandomAcquisition
 class TestRandomAcquisition:
     """Test RandomAcquisition functionality."""
 
-    def test_random_selection_returns_requested_valid_compounds(self, small_real_compounds):
+    def test_random_selection_returns_requested_valid_compounds(
+        self, small_real_compounds
+    ):
         """Test basic random acquisition."""
         compounds = small_real_compounds.clone()
         acq = RandomAcquisition(random_state=42)
@@ -33,7 +35,9 @@ class TestRandomAcquisition:
         selected2 = acq2.select(compounds, n_select=10)
 
         # Should select identical compounds with same seed
-        assert selected1.get_column('ID').to_list() == selected2.get_column('ID').to_list()
+        assert (
+            selected1.get_column('ID').to_list() == selected2.get_column('ID').to_list()
+        )
 
     def test_random_different_seeds(self, small_real_compounds):
         """Test that different seeds produce different selections."""
@@ -45,14 +49,18 @@ class TestRandomAcquisition:
         selected2 = acq2.select(compounds, n_select=15)
 
         # Should select different compounds with different seeds
-        assert selected1.get_column('ID').to_list() != selected2.get_column('ID').to_list()
+        assert (
+            selected1.get_column('ID').to_list() != selected2.get_column('ID').to_list()
+        )
 
-    def test_different_random_seeds_cover_overlapping_but_nonidentical_regions(self, medium_real_compounds):
+    def test_different_random_seeds_cover_overlapping_but_nonidentical_regions(
+        self, medium_real_compounds
+    ):
         """Test random selection covers dataset reasonably."""
         compounds = medium_real_compounds.clone()
 
         if len(compounds) < 50:
-            pytest.skip("Insufficient compounds for coverage test")
+            pytest.skip('Insufficient compounds for coverage test')
 
         # Use different random states for different selections
         acq1 = RandomAcquisition(random_state=42)
@@ -68,13 +76,17 @@ class TestRandomAcquisition:
         overlap = len(ids1 & ids2)
         assert 0 < overlap < 20  # Some but not complete overlap
 
-    def test_random_returns_all_compounds_when_requested_batch_exceeds_pool(self, small_real_compounds):
+    def test_random_returns_all_compounds_when_requested_batch_exceeds_pool(
+        self, small_real_compounds
+    ):
         compounds = small_real_compounds.head(4).clone()
 
         selected = RandomAcquisition(random_state=42).select(compounds, n_select=10)
 
         assert len(selected) == 4
-        assert set(selected.get_column('ID').to_list()) == set(compounds.get_column('ID').to_list())
+        assert set(selected.get_column('ID').to_list()) == set(
+            compounds.get_column('ID').to_list()
+        )
 
     def test_random_rejects_empty_pool(self, empty_compounds):
         with pytest.raises(ValueError, match='compounds DataFrame is empty'):
@@ -82,7 +94,9 @@ class TestRandomAcquisition:
 
     def test_random_rejects_non_positive_batch_size(self, small_real_compounds):
         with pytest.raises(ValueError, match='n_select must be positive'):
-            RandomAcquisition(random_state=42).select(small_real_compounds.head(4).clone(), n_select=0)
+            RandomAcquisition(random_state=42).select(
+                small_real_compounds.head(4).clone(), n_select=0
+            )
 
     def test_random_get_name_includes_seed(self):
         assert RandomAcquisition(random_state=7).get_name() == 'Random(seed=7)'
@@ -97,12 +111,15 @@ class TestBasicAcquisitionIntegration:
         compounds = medium_real_compounds.clone()
 
         if len(compounds) < 20:
-            pytest.skip("Insufficient compounds for workflow test")
+            pytest.skip('Insufficient compounds for workflow test')
 
         # Simulate predictions from different models
         np.random.seed(42)
         compounds = compounds.with_columns(
-            (pl.col('Activity') + pl.Series('noise', np.random.normal(0, 2, len(compounds)))).alias('prediction')
+            (
+                pl.col('Activity')
+                + pl.Series('noise', np.random.normal(0, 2, len(compounds)))
+            ).alias('prediction')
         )
 
         random_acq = RandomAcquisition(random_state=42)
@@ -121,14 +138,19 @@ class TestBasicAcquisitionIntegration:
         compounds = diverse_real_compounds.clone()
 
         if len(compounds) == 0:
-            pytest.skip("No diverse molecular data available")
+            pytest.skip('No diverse molecular data available')
 
         # Add target-aware predictions
         compounds = compounds.with_columns(
-            (pl.col('Activity') + pl.Series('noise', np.random.normal(0, 1, len(compounds)))).alias('prediction')
+            (
+                pl.col('Activity')
+                + pl.Series('noise', np.random.normal(0, 1, len(compounds)))
+            ).alias('prediction')
         )
 
-        selected = RandomAcquisition(random_state=42).select(compounds, n_select=min(15, len(compounds)))
+        selected = RandomAcquisition(random_state=42).select(
+            compounds, n_select=min(15, len(compounds))
+        )
 
         assert len(selected) <= len(compounds)
         if 'Target' in compounds.columns:

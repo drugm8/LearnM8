@@ -19,20 +19,26 @@ class TestTanimotoKernel:
 
     @pytest.fixture
     def X_binary(self):
-        return np.array([
-            [1, 0, 1, 0, 1],
-            [0, 1, 1, 0, 0],
-            [1, 1, 0, 0, 1],
-            [0, 0, 1, 1, 0],
-        ], dtype=float)
+        return np.array(
+            [
+                [1, 0, 1, 0, 1],
+                [0, 1, 1, 0, 0],
+                [1, 1, 0, 0, 1],
+                [0, 0, 1, 1, 0],
+            ],
+            dtype=float,
+        )
 
     @pytest.fixture
     def X_with_zero(self):
-        return np.array([
-            [1, 0, 1],
-            [0, 0, 0],
-            [0, 1, 0],
-        ], dtype=float)
+        return np.array(
+            [
+                [1, 0, 1],
+                [0, 0, 0],
+                [0, 1, 0],
+            ],
+            dtype=float,
+        )
 
     def test_kernel_matrix_binary_vectors(self, kernel, X_binary):
         K = kernel(X_binary)
@@ -80,14 +86,14 @@ class TestTanimotoKernel:
         assert grad.shape == (4, 4, 1)
 
     def test_eval_gradient_fixed(self, X_binary):
-        kernel = TanimotoKernel(signal_variance_bounds="fixed")
+        kernel = TanimotoKernel(signal_variance_bounds='fixed')
         K, grad = kernel(X_binary, eval_gradient=True)
         assert K.shape == (4, 4)
         assert grad.shape == (4, 4, 0)
 
     def test_eval_gradient_y_not_none_raises(self, kernel, X_binary):
         Y = X_binary[:2]
-        with pytest.raises(ValueError, match="eval_gradient"):
+        with pytest.raises(ValueError, match='eval_gradient'):
             kernel(X_binary, Y=Y, eval_gradient=True)
 
     def test_gradient_numerical_check(self, kernel, X_binary):
@@ -122,8 +128,8 @@ class TestTanimotoKernel:
 
     def test_get_params_set_params(self, kernel):
         params = kernel.get_params()
-        assert "signal_variance" in params
-        assert params["signal_variance"] == 1.0
+        assert 'signal_variance' in params
+        assert params['signal_variance'] == 1.0
 
         cloned = clone(kernel)
         assert isinstance(cloned, TanimotoKernel)
@@ -147,7 +153,7 @@ class TestTanimotoKernel:
         assert np.all(std >= 0)
 
     def test_repr(self, kernel):
-        assert repr(kernel) == "TanimotoKernel(signal_variance=1)"
+        assert repr(kernel) == 'TanimotoKernel(signal_variance=1)'
 
     def test_is_kernel_subclass(self, kernel):
         assert isinstance(kernel, Kernel)

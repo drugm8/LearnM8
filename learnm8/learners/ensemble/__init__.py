@@ -17,5 +17,5 @@ __all__ = [
     'LREnsemble',
     'MixedEnsemble',
     'RFEnsemble',
-    'XGBEnsemble'
+    'XGBEnsemble',
 ]

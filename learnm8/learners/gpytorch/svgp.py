@@ -43,14 +43,14 @@ class SVGPLearner(Learner):
 
     def __init__(
         self,
-        kernel: str = "auto",
+        kernel: str = 'auto',
         alpha: float = 0.1,
         n_inducing: int = 512,
         batch_size: int = 256,
         n_epochs: int = 50,
         learning_rate: float = 0.01,
         early_stopping_patience: int = 10,
-        device: str = "auto",
+        device: str = 'auto',
         random_state: int = 42,
         remove_zero_variance: bool = True,
         enable_aggressive_gc: bool = True,
@@ -63,8 +63,8 @@ class SVGPLearner(Learner):
                 "GPyTorch required for 'svgp' learner. Install: pip install gpytorch"
             ) from err
 
-        if device == "auto":
-            self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device == 'auto':
+            self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self._device = torch.device(device)
 
@@ -88,7 +88,7 @@ class SVGPLearner(Learner):
         self._feature_scaler = None
         self._target_mean: float = 0.0
         self._target_std: float = 1.0
-        self._kernel_name: str = ""
+        self._kernel_name: str = ''
         self._effective_m: int = 0
         self._feature_type = 'binary'
 
@@ -102,29 +102,29 @@ class SVGPLearner(Learner):
         is_binary = self._feature_type == 'binary'
         kernel_spec = self.kernel
 
-        if kernel_spec == "auto":
-            kernel_spec = "tanimoto" if is_binary else "rbf"
+        if kernel_spec == 'auto':
+            kernel_spec = 'tanimoto' if is_binary else 'rbf'
 
-        if kernel_spec == "tanimoto":
+        if kernel_spec == 'tanimoto':
             try:
                 from gauche.kernels.fingerprint_kernels.tanimoto_kernel import (
                     TanimotoKernel,
                 )
             except ImportError as err:
                 raise ConfigurationError(
-                    "GAUCHE required for Tanimoto kernel with svgp. Install: pip install gauche"
+                    'GAUCHE required for Tanimoto kernel with svgp. Install: pip install gauche'
                 ) from err
-            return gpytorch.kernels.ScaleKernel(TanimotoKernel()), "tanimoto"
+            return gpytorch.kernels.ScaleKernel(TanimotoKernel()), 'tanimoto'
 
-        if kernel_spec == "rbf":
-            return gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel()), "rbf"
+        if kernel_spec == 'rbf':
+            return gpytorch.kernels.ScaleKernel(gpytorch.kernels.RBFKernel()), 'rbf'
 
         if isinstance(kernel_spec, gpytorch.kernels.Kernel):
             if isinstance(kernel_spec, gpytorch.kernels.ScaleKernel):
                 return kernel_spec, type(kernel_spec).__name__
             return gpytorch.kernels.ScaleKernel(kernel_spec), type(kernel_spec).__name__
 
-        raise ConfigurationError(f"Unknown kernel: {kernel_spec!r}")
+        raise ConfigurationError(f'Unknown kernel: {kernel_spec!r}')
 
     def _make_model(self, inducing_points, covar_module):
         import gpytorch
@@ -169,8 +169,8 @@ class SVGPLearner(Learner):
 
         if effective_m < self.n_inducing:
             logger.warning(
-                "Training size (%d) < n_inducing (%d). Using all training points "
-                "as inducing points — SVGP adds overhead without approximation benefit.",
+                'Training size (%d) < n_inducing (%d). Using all training points '
+                'as inducing points — SVGP adds overhead without approximation benefit.',
                 n_train,
                 self.n_inducing,
             )
@@ -178,16 +178,20 @@ class SVGPLearner(Learner):
         rng = torch.Generator()
         rng.manual_seed(self.random_state)
         indices = torch.randperm(n_train, generator=rng)[:effective_m]
-        inducing_points = train_x[indices].clone().to(dtype=torch.float64, device=target_device)
+        inducing_points = (
+            train_x[indices].clone().to(dtype=torch.float64, device=target_device)
+        )
 
         covar_module = covar_module.double().to(target_device)
         model = self._make_model(inducing_points, covar_module)
         model = model.double().to(target_device)
 
         noise_constraint = gpytorch.constraints.GreaterThan(1e-6)
-        likelihood = gpytorch.likelihoods.GaussianLikelihood(
-            noise_constraint=noise_constraint
-        ).double().to(target_device)
+        likelihood = (
+            gpytorch.likelihoods.GaussianLikelihood(noise_constraint=noise_constraint)
+            .double()
+            .to(target_device)
+        )
         with torch.no_grad():
             likelihood.noise = torch.tensor(
                 self.alpha, dtype=torch.float64, device=target_device
@@ -195,8 +199,8 @@ class SVGPLearner(Learner):
 
         optimizer = torch.optim.Adam(
             [
-                {"params": model.parameters()},
-                {"params": likelihood.parameters()},
+                {'params': model.parameters()},
+                {'params': likelihood.parameters()},
             ],
             lr=self.learning_rate,
         )
@@ -217,7 +221,7 @@ class SVGPLearner(Learner):
         likelihood.train()
 
         ema_loss: float | None = None
-        best_ema = float("inf")
+        best_ema = float('inf')
         patience_counter = 0
         initial_loss: float | None = None
         final_loss: float = 0.0
@@ -238,8 +242,8 @@ class SVGPLearner(Learner):
                     consecutive_nan += 1
                     if consecutive_nan >= 3:
                         raise LearnerError(
-                            f"SVGP training produced NaN loss for {consecutive_nan} "
-                            f"consecutive batches at epoch {epoch}."
+                            f'SVGP training produced NaN loss for {consecutive_nan} '
+                            f'consecutive batches at epoch {epoch}.'
                         )
                     continue
 
@@ -259,7 +263,7 @@ class SVGPLearner(Learner):
 
             if epoch % 10 == 0:
                 logger.debug(
-                    "SVGP epoch %d/%d — ELBO: %.4f", epoch, self.n_epochs, avg_loss
+                    'SVGP epoch %d/%d — ELBO: %.4f', epoch, self.n_epochs, avg_loss
                 )
 
             if ema_loss is None:
@@ -270,20 +274,28 @@ class SVGPLearner(Learner):
             if ema_loss < best_ema - 1e-4:
                 best_ema = ema_loss
                 patience_counter = 0
-                best_state_dict = {k: v.clone().cpu() for k, v in model.state_dict().items()}
-                best_likelihood_state_dict = {k: v.clone().cpu() for k, v in likelihood.state_dict().items()}
+                best_state_dict = {
+                    k: v.clone().cpu() for k, v in model.state_dict().items()
+                }
+                best_likelihood_state_dict = {
+                    k: v.clone().cpu() for k, v in likelihood.state_dict().items()
+                }
             else:
                 patience_counter += 1
 
             if patience_counter >= self.early_stopping_patience:
-                logger.debug("SVGP early stopping at epoch %d (patience=%d)", epoch, self.early_stopping_patience)
+                logger.debug(
+                    'SVGP early stopping at epoch %d (patience=%d)',
+                    epoch,
+                    self.early_stopping_patience,
+                )
                 break
 
         if initial_loss is not None and final_loss > initial_loss * 1.1:
             warnings.warn(
                 ConvergenceWarning(
-                    f"SVGP training loss increased: {initial_loss:.4f} -> {final_loss:.4f}. "
-                    "Consider more epochs or a different kernel."
+                    f'SVGP training loss increased: {initial_loss:.4f} -> {final_loss:.4f}. '
+                    'Consider more epochs or a different kernel.'
                 ),
                 stacklevel=2,
             )
@@ -291,7 +303,7 @@ class SVGPLearner(Learner):
         if best_state_dict is not None:
             model.load_state_dict(best_state_dict)
             likelihood.load_state_dict(best_likelihood_state_dict)
-            logger.debug("Restored best checkpoint (ELBO loss=%.6f)", best_ema)
+            logger.debug('Restored best checkpoint (ELBO loss=%.6f)', best_ema)
 
         model.eval()
         likelihood.eval()
@@ -304,26 +316,29 @@ class SVGPLearner(Learner):
         smiles: list[str] | None = None,
     ) -> None:
         if features.ndim != 2:
-            raise LearnerError(f"Features must be 2D, got shape {features.shape}")
+            raise LearnerError(f'Features must be 2D, got shape {features.shape}')
         if len(features) != len(targets):
             raise LearnerError(
-                f"Feature/target length mismatch: {len(features)} vs {len(targets)}"
+                f'Feature/target length mismatch: {len(features)} vs {len(targets)}'
             )
 
         covar_module, kernel_name = self._resolve_kernel(features)
 
         features_proc, mask, self._feature_imputer = _preprocess_features(
-            features, remove_zero_variance=self.remove_zero_variance, is_training=True,
+            features,
+            remove_zero_variance=self.remove_zero_variance,
+            is_training=True,
             feature_type=self._feature_type,
         )
         if features_proc.shape[1] == 0:
-            raise LearnerError("No valid features remain after zero-variance removal.")
+            raise LearnerError('No valid features remain after zero-variance removal.')
 
         self._valid_feature_mask = mask
         self._kernel_name = kernel_name
 
         if kernel_name == 'rbf':
             from sklearn.preprocessing import StandardScaler
+
             self._feature_scaler = StandardScaler()
             features_proc = self._feature_scaler.fit_transform(features_proc)
         else:
@@ -342,22 +357,22 @@ class SVGPLearner(Learner):
             )
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
-                "CUDA out of memory" in str(exc)
+                'CUDA out of memory' in str(exc)
             )
             if not oom:
                 raise
             logger.warning(
-                "GPU OOM during SVGP training — falling back to CPU. Error: %s", exc
+                'GPU OOM during SVGP training — falling back to CPU. Error: %s', exc
             )
             if self._model is not None:
                 del self._model
             if self._likelihood is not None:
                 del self._likelihood
-            if self._device.type == "cuda":
+            if self._device.type == 'cuda':
                 torch.cuda.empty_cache()
             gc.collect()
 
-            cpu_device = torch.device("cpu")
+            cpu_device = torch.device('cpu')
             covar_module_cpu, _ = self._resolve_kernel(features)
             model, likelihood = self._train_on_device(
                 train_x.cpu(), train_y.cpu(), covar_module_cpu, cpu_device
@@ -368,7 +383,7 @@ class SVGPLearner(Learner):
         self._likelihood = likelihood
         self.is_trained = True
 
-        if self.enable_aggressive_gc and self._device.type == "cuda":
+        if self.enable_aggressive_gc and self._device.type == 'cuda':
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -391,7 +406,7 @@ class SVGPLearner(Learner):
         del smiles
         if not self.is_trained:
             raise LearnerError(
-                "SVGPLearner must be trained before predict(). Call train() first."
+                'SVGPLearner must be trained before predict(). Call train() first.'
             )
 
         features_proc, _, _ = _preprocess_features(
@@ -426,19 +441,19 @@ class SVGPLearner(Learner):
                         all_means.append(posterior.mean.cpu().numpy())
         except RuntimeError as exc:
             oom = isinstance(exc, torch.cuda.OutOfMemoryError) or (
-                "CUDA out of memory" in str(exc)
+                'CUDA out of memory' in str(exc)
             )
             if not oom:
                 raise
             raise LearnerError(
-                "GPU out of memory during SVGP prediction. "
+                'GPU out of memory during SVGP prediction. '
                 "Set device='cpu' or reduce pool size."
             ) from exc
 
         means = np.concatenate(all_means).astype(np.float64)
         means = means * self._target_std + self._target_mean
 
-        if self.enable_aggressive_gc and self._device.type == "cuda":
+        if self.enable_aggressive_gc and self._device.type == 'cuda':
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -450,9 +465,9 @@ class SVGPLearner(Learner):
 
     def get_name(self) -> str:
         if not self.is_trained or self._likelihood is None:
-            return "SVGP(untrained)"
+            return 'SVGP(untrained)'
         noise = self._likelihood.noise.item()
-        return f"SVGP({self._kernel_name},M={self._effective_m},noise={noise:.4f})"
+        return f'SVGP({self._kernel_name},M={self._effective_m},noise={noise:.4f})'
 
     def supports_uncertainty(self) -> bool:
         return True

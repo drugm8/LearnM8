@@ -186,7 +186,10 @@ class TestRidgeCumlLearnerLInv:
         mock_instance.predict.side_effect = lambda f: sk_model.predict(f)
         mock_cuml.linear_model.Ridge = MagicMock(return_value=mock_instance)
 
-        with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
+        with patch.dict(
+            'sys.modules',
+            {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model},
+        ):
             learner.train(X, y)
 
         assert hasattr(learner, '_L_inv_cpu')
@@ -214,7 +217,10 @@ class TestRidgeCumlLearnerLInv:
         mock_instance.predict.side_effect = lambda f: sk_model.predict(f)
         mock_cuml.linear_model.Ridge = MagicMock(return_value=mock_instance)
 
-        with patch.dict('sys.modules', {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model}):
+        with patch.dict(
+            'sys.modules',
+            {'cuml': mock_cuml, 'cuml.linear_model': mock_cuml.linear_model},
+        ):
             learner.train(X, y)
 
         upper = np.triu(learner._L_inv_cpu, k=1)
@@ -235,7 +241,9 @@ class TestRidgeCumlLearnerLInv:
         y = (X @ rng.standard_normal(10)).astype(np.float32)
         alpha = 0.1
 
-        features_pp, mask, imputer = _preprocess_features(X, remove_zero_variance=True, is_training=True)
+        features_pp, mask, imputer = _preprocess_features(
+            X, remove_zero_variance=True, is_training=True
+        )
         scaler = StandardScaler()
         features_pp = scaler.fit_transform(features_pp)
         n, p = features_pp.shape
@@ -243,6 +251,7 @@ class TestRidgeCumlLearnerLInv:
         gram = Xd.T @ Xd + alpha * np.eye(p)
 
         from scipy.linalg.lapack import dtrtri
+
         L = np.linalg.cholesky(gram)
         L_inv, _ = dtrtri(L, lower=1)
 
@@ -259,7 +268,7 @@ class TestRidgeCumlLearnerLInv:
         learner._leverage_A_gpu = None
         preds = sk_model.predict(features_pp).astype(np.float64)
         residuals = y.astype(np.float64) - preds
-        learner._sigma_hat_sq = float(np.sum(residuals ** 2)) / max(n - p, 1)
+        learner._sigma_hat_sq = float(np.sum(residuals**2)) / max(n - p, 1)
         learner.is_trained = True
 
         _, unc = learner.predict(X)

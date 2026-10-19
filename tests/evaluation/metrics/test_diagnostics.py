@@ -25,6 +25,7 @@ from learnm8.evaluation.metrics.diagnostics import (
 
 # ---------- compute_selected_percentile ---------------------------------------
 
+
 @pytest.mark.unit
 class TestSelectedPercentile:
     """Unit tests for compute_selected_percentile."""
@@ -34,10 +35,10 @@ class TestSelectedPercentile:
         # higher-is-better: each selected percentile = (s >= pool).mean()
         # For s=10: 10/10 = 100; s=9: 9/10 = 90; s=8: 8/10 = 80.
         # Mean = 90.
-        gt = pl.DataFrame({'ID': [f'm{i}' for i in range(10)],
-                           'Activity': list(range(1, 11))})
-        sel = pl.DataFrame({'ID': ['m9', 'm8', 'm7'],
-                            'Activity': [10, 9, 8]})
+        gt = pl.DataFrame(
+            {'ID': [f'm{i}' for i in range(10)], 'Activity': list(range(1, 11))}
+        )
+        sel = pl.DataFrame({'ID': ['m9', 'm8', 'm7'], 'Activity': [10, 9, 8]})
         result = compute_selected_percentile(sel, gt, 'Activity', 'higher')
         assert result == pytest.approx(90.0, abs=1e-9)
 
@@ -46,17 +47,18 @@ class TestSelectedPercentile:
         # percentile for selected s = (s <= pool).mean()
         # For s=1: (1<=[1..10]).mean = 10/10 = 100; s=2: 9/10 = 90; s=3: 8/10 = 80.
         # Mean = 90.
-        gt = pl.DataFrame({'ID': [f'm{i}' for i in range(10)],
-                           'DockingScore': list(range(1, 11))})
-        sel = pl.DataFrame({'ID': ['m0', 'm1', 'm2'],
-                            'DockingScore': [1, 2, 3]})
+        gt = pl.DataFrame(
+            {'ID': [f'm{i}' for i in range(10)], 'DockingScore': list(range(1, 11))}
+        )
+        sel = pl.DataFrame({'ID': ['m0', 'm1', 'm2'], 'DockingScore': [1, 2, 3]})
         result = compute_selected_percentile(sel, gt, 'DockingScore', 'lower')
         assert result == pytest.approx(90.0, abs=1e-9)
 
     def test_random_selection_centers_on_50(self):
         # Selecting the median compound should give ~50th percentile.
-        gt = pl.DataFrame({'ID': [f'm{i}' for i in range(11)],
-                           'Activity': list(range(11))})
+        gt = pl.DataFrame(
+            {'ID': [f'm{i}' for i in range(11)], 'Activity': list(range(11))}
+        )
         sel = pl.DataFrame({'ID': ['m5'], 'Activity': [5]})
         # higher-better: (5 >= [0..10]).mean = 6/11 ≈ 54.5
         result = compute_selected_percentile(sel, gt, 'Activity', 'higher')
@@ -64,8 +66,9 @@ class TestSelectedPercentile:
 
     def test_returns_value_in_range_0_100(self):
         rng = np.random.default_rng(42)
-        gt = pl.DataFrame({'ID': [f'm{i}' for i in range(1000)],
-                           'Activity': rng.normal(size=1000)})
+        gt = pl.DataFrame(
+            {'ID': [f'm{i}' for i in range(1000)], 'Activity': rng.normal(size=1000)}
+        )
         sel = gt.sample(n=50, seed=7)
         result = compute_selected_percentile(sel, gt, 'Activity', 'higher')
         assert result is not None
@@ -92,8 +95,9 @@ class TestSelectedPercentile:
 
     def test_handles_nan_scores(self):
         # NaNs in either pool or selection are dropped; computation proceeds.
-        gt = pl.DataFrame({'ID': [f'm{i}' for i in range(5)],
-                           'Activity': [1.0, 2.0, 3.0, 4.0, 5.0]})
+        gt = pl.DataFrame(
+            {'ID': [f'm{i}' for i in range(5)], 'Activity': [1.0, 2.0, 3.0, 4.0, 5.0]}
+        )
         sel = pl.DataFrame({'ID': ['a', 'b'], 'Activity': [5.0, float('nan')]})
         # Only the 5.0 selection counts → percentile = 5/5 = 100
         result = compute_selected_percentile(sel, gt, 'Activity', 'higher')
@@ -102,6 +106,7 @@ class TestSelectedPercentile:
 
 # ---------- compute_prediction_entropy ----------------------------------------
 
+
 @pytest.mark.unit
 class TestPredictionEntropy:
     """Unit tests for compute_prediction_entropy."""
@@ -109,12 +114,15 @@ class TestPredictionEntropy:
     def test_uniform_predictions_high_entropy(self):
         # Feature 019: units changed bits → nats. Uniform predictions → entropy ≈ log(n_bins) (nats).
         rng = np.random.default_rng(0)
-        pool = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(10_000)],
-            'prediction': rng.uniform(0.0, 1.0, size=10_000),
-        })
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=set(),
-                                            n_bins=50)
+        pool = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(10_000)],
+                'prediction': rng.uniform(0.0, 1.0, size=10_000),
+            }
+        )
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=set(), n_bins=50
+        )
         assert result is not None
         # log(50) ≈ 3.91 (nats). Allow generous tolerance for sampling noise.
         assert result == pytest.approx(math.log(50), abs=0.2)
@@ -122,37 +130,48 @@ class TestPredictionEntropy:
     def test_all_identical_predictions_low_entropy(self):
         # All predictions equal → density histogram has all mass in one bin.
         # Entropy should be very small (smoothing keeps it from being exactly 0).
-        pool = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(1000)],
-            'prediction': [0.5] * 1000,
-        })
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=set(),
-                                            n_bins=50)
+        pool = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(1000)],
+                'prediction': [0.5] * 1000,
+            }
+        )
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=set(), n_bins=50
+        )
         assert result is not None
-        assert result < 0.1, f"all-identical predictions should give near-zero entropy, got {result}"
+        assert result < 0.1, (
+            f'all-identical predictions should give near-zero entropy, got {result}'
+        )
 
     def test_filters_to_unlabeled_subset(self):
         # If half the pool is "labeled" (in cumulative_selected_ids), entropy is
         # computed over the remaining half only.
-        pool = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(10)],
-            'prediction': [0.0] * 5 + [1.0] * 5,
-        })
+        pool = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(10)],
+                'prediction': [0.0] * 5 + [1.0] * 5,
+            }
+        )
         # Mark the first five (all-zero predictions) as already labeled.
         # The unlabeled subset is constant 1.0 → near-zero entropy.
         labeled_ids = {f'm{i}' for i in range(5)}
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=labeled_ids,
-                                            n_bins=50)
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=labeled_ids, n_bins=50
+        )
         assert result is not None
         assert result < 0.1
 
     def test_no_filter_when_selected_ids_none(self):
-        pool = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(100)],
-            'prediction': [0.5] * 100,
-        })
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=None,
-                                            n_bins=50)
+        pool = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(100)],
+                'prediction': [0.5] * 100,
+            }
+        )
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=None, n_bins=50
+        )
         assert result is not None
 
     def test_missing_pool_returns_none(self):
@@ -164,13 +183,16 @@ class TestPredictionEntropy:
 
     def test_all_labeled_returns_none(self):
         # Every compound in the pool is also in cumulative_selected_ids.
-        pool = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(5)],
-            'prediction': [0.1, 0.2, 0.3, 0.4, 0.5],
-        })
+        pool = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(5)],
+                'prediction': [0.1, 0.2, 0.3, 0.4, 0.5],
+            }
+        )
         all_labeled = {f'm{i}' for i in range(5)}
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=all_labeled,
-                                            n_bins=50)
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=all_labeled, n_bins=50
+        )
         assert result is None
 
     def test_missing_prediction_column_returns_none(self):
@@ -180,8 +202,9 @@ class TestPredictionEntropy:
     def test_single_compound_pool_no_crash(self):
         pool = pl.DataFrame({'ID': ['only'], 'prediction': [0.42]})
         # Should return a value (not None) and not crash.
-        result = compute_prediction_entropy(pool, cumulative_selected_ids=set(),
-                                            n_bins=50)
+        result = compute_prediction_entropy(
+            pool, cumulative_selected_ids=set(), n_bins=50
+        )
         assert result is not None
         assert result >= 0.0
 
@@ -189,9 +212,11 @@ class TestPredictionEntropy:
         rng = np.random.default_rng(123)
         for _ in range(5):
             preds = rng.normal(size=500)
-            pool = pl.DataFrame({'ID': [f'm{i}' for i in range(500)],
-                                 'prediction': preds})
-            result = compute_prediction_entropy(pool, cumulative_selected_ids=set(),
-                                                n_bins=50)
+            pool = pl.DataFrame(
+                {'ID': [f'm{i}' for i in range(500)], 'prediction': preds}
+            )
+            result = compute_prediction_entropy(
+                pool, cumulative_selected_ids=set(), n_bins=50
+            )
             assert result is not None
             assert result >= 0.0

@@ -20,17 +20,21 @@ from learnm8.evaluation.core import evaluate_cycle, export_metrics_csv
 
 def _make_pool_df(n: int = 100, seed: int = 0) -> pl.DataFrame:
     rng = np.random.default_rng(seed)
-    return pl.DataFrame({
-        'ID': [f'm{i}' for i in range(n)],
-        'prediction': rng.uniform(0.0, 1.0, size=n),
-    })
+    return pl.DataFrame(
+        {
+            'ID': [f'm{i}' for i in range(n)],
+            'prediction': rng.uniform(0.0, 1.0, size=n),
+        }
+    )
 
 
 def _make_ground_truth(n: int = 100) -> pl.DataFrame:
-    return pl.DataFrame({
-        'ID': [f'm{i}' for i in range(n)],
-        'Activity': np.linspace(0.0, 1.0, n),
-    })
+    return pl.DataFrame(
+        {
+            'ID': [f'm{i}' for i in range(n)],
+            'Activity': np.linspace(0.0, 1.0, n),
+        }
+    )
 
 
 def _make_selection(ground_truth: pl.DataFrame, top_k: int = 5) -> pl.DataFrame:
@@ -62,8 +66,12 @@ class TestEvaluateCycleDiagnosticKeys:
             score_direction='higher',
         )
 
-        for key in ('selected_percentile', 'prediction_entropy', 'pool_size_after_prune'):
-            assert key in result, f"missing key: {key}"
+        for key in (
+            'selected_percentile',
+            'prediction_entropy',
+            'pool_size_after_prune',
+        ):
+            assert key in result, f'missing key: {key}'
 
         # Selected the true top 5 of 100 → mean percentile must be high (>=95).
         assert result['selected_percentile'] is not None
@@ -77,11 +85,13 @@ class TestEvaluateCycleDiagnosticKeys:
 
     def test_run_mode_emits_keys_with_percentile_none(self):
         # Run mode = no ground_truth_data.
-        labeled = pl.DataFrame({
-            'ID': [f'm{i}' for i in range(5)],
-            'SMILES': ['C'] * 5,
-            'Activity': [0.1, 0.2, 0.3, 0.4, 0.5],
-        })
+        labeled = pl.DataFrame(
+            {
+                'ID': [f'm{i}' for i in range(5)],
+                'SMILES': ['C'] * 5,
+                'Activity': [0.1, 0.2, 0.3, 0.4, 0.5],
+            }
+        )
         sel = labeled.head(2)
         pool = _make_pool_df(50, seed=2)
 
@@ -92,22 +102,28 @@ class TestEvaluateCycleDiagnosticKeys:
             labeled_data=labeled,
             selected_compounds=sel,
             target_col='Activity',
-            ground_truth_data=None,            # run mode
+            ground_truth_data=None,  # run mode
             pool_df=pool,
             cumulative_selected_ids=set(sel['ID'].to_list()),
         )
 
-        for key in ('selected_percentile', 'prediction_entropy', 'pool_size_after_prune'):
-            assert key in result, f"missing key: {key}"
+        for key in (
+            'selected_percentile',
+            'prediction_entropy',
+            'pool_size_after_prune',
+        ):
+            assert key in result, f'missing key: {key}'
         assert result['selected_percentile'] is None
         assert result['prediction_entropy'] is not None  # pool present → still computed
         assert result['pool_size_after_prune'] == 50
 
     def test_pool_df_none_yields_entropy_and_pool_size_none(self):
-        labeled = pl.DataFrame({
-            'ID': ['a', 'b'],
-            'Activity': [0.1, 0.2],
-        })
+        labeled = pl.DataFrame(
+            {
+                'ID': ['a', 'b'],
+                'Activity': [0.1, 0.2],
+            }
+        )
         sel = labeled.head(1)
 
         result = evaluate_cycle(
@@ -141,23 +157,33 @@ class TestEvaluateCycleDiagnosticKeys:
         )
 
         csv_path = tmp_path / 'cycle_metrics.csv'
-        export_metrics_csv([cycle_metrics], str(csv_path), oracle_type='benchmark',
-                            target_col='Activity')
+        export_metrics_csv(
+            [cycle_metrics],
+            str(csv_path),
+            oracle_type='benchmark',
+            target_col='Activity',
+        )
 
         # comment_prefix='#' retained defensively; export_metrics_csv now writes a pure CSV
         df = pl.read_csv(csv_path, comment_prefix='#')
-        for col in ('selected_percentile', 'prediction_entropy', 'pool_size_after_prune'):
-            assert col in df.columns, f"CSV missing column: {col}"
+        for col in (
+            'selected_percentile',
+            'prediction_entropy',
+            'pool_size_after_prune',
+        ):
+            assert col in df.columns, f'CSV missing column: {col}'
 
         # Spot-check round-trip values match what evaluate_cycle returned (allow for
         # the 4-decimal rounding evaluate_cycle applies to floats).
         assert df['pool_size_after_prune'][0] == 50
         if cycle_metrics['selected_percentile'] is not None:
             assert df['selected_percentile'][0] == pytest.approx(
-                cycle_metrics['selected_percentile'], abs=1e-3)
+                cycle_metrics['selected_percentile'], abs=1e-3
+            )
         if cycle_metrics['prediction_entropy'] is not None:
             assert df['prediction_entropy'][0] == pytest.approx(
-                cycle_metrics['prediction_entropy'], abs=1e-3)
+                cycle_metrics['prediction_entropy'], abs=1e-3
+            )
 
 
 @pytest.mark.unit
@@ -200,11 +226,13 @@ class TestUncertaintyAwareMetrics:
     with None values when uncertainty was skipped."""
 
     def test_diagnostic_uq_metrics_return_none_when_uncertainty_is_none(self):
-        labeled = pl.DataFrame({
-            'ID': ['a', 'b', 'c'],
-            'SMILES': ['C', 'CC', 'CCC'],
-            'Activity': [0.1, 0.2, 0.3],
-        })
+        labeled = pl.DataFrame(
+            {
+                'ID': ['a', 'b', 'c'],
+                'SMILES': ['C', 'CC', 'CCC'],
+                'Activity': [0.1, 0.2, 0.3],
+            }
+        )
         sel = labeled.head(2)
         pool = _make_pool_df(20, seed=7)
 

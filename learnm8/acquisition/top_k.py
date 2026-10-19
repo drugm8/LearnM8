@@ -39,9 +39,11 @@ class TopKAcquisition(AcquisitionFunction):
         """
         super().__init__(score_direction=score_direction, **kwargs)
         if not 0.0 < k_fraction <= 1.0:
-            raise ValueError("k_fraction must be between 0 and 1")
+            raise ValueError('k_fraction must be between 0 and 1')
         if score_direction not in ['higher', 'lower']:
-            raise ValueError(f"score_direction must be 'higher' or 'lower', got '{score_direction}'")
+            raise ValueError(
+                f"score_direction must be 'higher' or 'lower', got '{score_direction}'"
+            )
 
         self.k_fraction = k_fraction
         self.score_direction = score_direction
@@ -72,7 +74,9 @@ class TopKAcquisition(AcquisitionFunction):
         k_consider = max(actual_n_select, int(len(compounds) * self.k_fraction))
         k_consider = min(k_consider, len(compounds))
 
-        logger.debug(f"TopKAcquisition: k_fraction={self.k_fraction}, candidates to consider: {k_consider}")
+        logger.debug(
+            f'TopKAcquisition: k_fraction={self.k_fraction}, candidates to consider: {k_consider}'
+        )
 
         # Sort compounds by prediction based on score direction.
         # maintain_order=True gives a deterministic, stable tie ordering.
@@ -88,17 +92,17 @@ class TopKAcquisition(AcquisitionFunction):
         if len(top_k_compounds) == actual_n_select:
             selected = top_k_compounds
         else:
-            selected = top_k_compounds.sample(
-                n=actual_n_select, seed=self.random_state
-            )
+            selected = top_k_compounds.sample(n=actual_n_select, seed=self.random_state)
 
         # Add acquisition scores (use prediction values)
         selected = selected.with_columns(
             pl.col('prediction').alias('acquisition_score')
         )
 
-        logger.debug(f"TopKAcquisition selected {len(selected)} compounds from "
-                    f"{self.score_direction} {k_consider} candidates")
+        logger.debug(
+            f'TopKAcquisition selected {len(selected)} compounds from '
+            f'{self.score_direction} {k_consider} candidates'
+        )
 
         return selected
 
@@ -138,4 +142,4 @@ class TopKAcquisition(AcquisitionFunction):
 
     def get_name(self) -> str:
         """Return a descriptive name for this acquisition function."""
-        return f"TopK({self.score_direction}_{self.k_fraction:.2f})"
+        return f'TopK({self.score_direction}_{self.k_fraction:.2f})'

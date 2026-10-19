@@ -19,13 +19,15 @@ from scipy.stats import norm
 pytestmark = [
     pytest.mark.slow,
     pytest.mark.skipif(
-        os.environ.get("LEARNM8_BENCHMARK") != "1",
-        reason="Set LEARNM8_BENCHMARK=1 to run hardware-sensitive speedup benchmark.",
+        os.environ.get('LEARNM8_BENCHMARK') != '1',
+        reason='Set LEARNM8_BENCHMARK=1 to run hardware-sensitive speedup benchmark.',
     ),
 ]
 
 
-def _inline_ei(mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0) -> np.ndarray:
+def _inline_ei(
+    mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0
+) -> np.ndarray:
     """Spec 022 inline EI form — same as the production acquisition function."""
     improvement = mu - f_best - xi
     sigma_safe = np.where(sigma > 0, sigma, 1.0)
@@ -37,10 +39,12 @@ def _inline_ei(mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0
     return np.where(sigma > 0, ei, 0.0)
 
 
-def _legacy_ei(mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0) -> np.ndarray:
+def _legacy_ei(
+    mu: np.ndarray, sigma: np.ndarray, f_best: float, xi: float = 0.0
+) -> np.ndarray:
     """The pre-022 EI form via scipy.stats.norm."""
     improvement = mu - f_best - xi
-    with np.errstate(divide="ignore", invalid="ignore"):
+    with np.errstate(divide='ignore', invalid='ignore'):
         z = improvement / sigma
     ei = improvement * norm.cdf(z) + sigma * norm.pdf(z)
     zero_mask = sigma == 0
@@ -70,6 +74,6 @@ def test_inline_ei_at_least_4x_faster_than_norm_scipy() -> None:
 
     speedup = t_legacy / max(t_inline, 1e-9)
     assert speedup >= 4.0, (
-        f"Spec SC-004: inline EI speedup is {speedup:.2f}× (legacy {t_legacy:.3f}s, "
-        f"inline {t_inline:.3f}s). Expected ≥ 4×."
+        f'Spec SC-004: inline EI speedup is {speedup:.2f}× (legacy {t_legacy:.3f}s, '
+        f'inline {t_inline:.3f}s). Expected ≥ 4×.'
     )

@@ -16,7 +16,9 @@ def test_oom_retry_succeeds_on_first_attempt():
     def predict_fn(x):
         return expected[: len(x)]
 
-    result = _predict_with_oom_retry(features, predict_fn, min_batch=256, n_output_cols=1)
+    result = _predict_with_oom_retry(
+        features, predict_fn, min_batch=256, n_output_cols=1
+    )
     assert result.shape == (100, 1)
 
 

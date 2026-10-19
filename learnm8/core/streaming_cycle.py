@@ -215,7 +215,9 @@ def _pass2_select(
     """
     import pyarrow.parquet as pq
 
-    shortlist_k = acq_func.shortlist_size(batch_size, n_unlabeled - _mask_count(pruned_mask))
+    shortlist_k = acq_func.shortlist_size(
+        batch_size, n_unlabeled - _mask_count(pruned_mask)
+    )
     shortlist_k = max(1, shortlist_k)
     select_topk = StreamingTopK(shortlist_k, descending=True)
 

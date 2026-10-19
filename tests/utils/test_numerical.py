@@ -62,13 +62,13 @@ def test_clamp_sigma_clamps_subnormal() -> None:
 
 def test_assert_no_nan_passes_clean() -> None:
     arr = np.array([1.0, 2.0, 3.0])
-    assert assert_no_nan(arr, ["a", "b", "c"], "foo") is None
+    assert assert_no_nan(arr, ['a', 'b', 'c'], 'foo') is None
 
 
 def test_assert_no_nan_message_format_singular_row() -> None:
     arr = np.array([1.0, 2.0, np.nan])
     with pytest.raises(LearnerError) as exc_info:
-        assert_no_nan(arr, ["a", "b", "c"], "foo")
+        assert_no_nan(arr, ['a', 'b', 'c'], 'foo')
     msg = str(exc_info.value)
     assert re.search(r"NaN foo detected: 1 row, first IDs: \['c'\]", msg), msg
 
@@ -76,7 +76,7 @@ def test_assert_no_nan_message_format_singular_row() -> None:
 def test_assert_no_nan_message_format_plural_rows() -> None:
     arr = np.array([1.0, np.nan, np.nan])
     with pytest.raises(LearnerError) as exc_info:
-        assert_no_nan(arr, ["a", "b", "c"], "foo")
+        assert_no_nan(arr, ['a', 'b', 'c'], 'foo')
     msg = str(exc_info.value)
     assert re.search(r"NaN foo detected: 2 rows, first IDs: \['b', 'c'\]", msg), msg
 
@@ -85,9 +85,9 @@ def test_assert_no_nan_message_handles_id_with_quote() -> None:
     arr = np.array([np.nan])
     ids = ["smiles'frag"]
     with pytest.raises(LearnerError) as exc_info:
-        assert_no_nan(arr, ids, "foo")
+        assert_no_nan(arr, ids, 'foo')
     msg = str(exc_info.value)
-    bracket = msg.split("first IDs: ", 1)[1]
+    bracket = msg.split('first IDs: ', 1)[1]
     parsed = eval(bracket)  # safe: known-shape literal list of strings
     assert parsed == ids
 
@@ -95,30 +95,30 @@ def test_assert_no_nan_message_handles_id_with_quote() -> None:
 def test_assert_no_nan_truncates_at_10() -> None:
     n = 100
     arr = np.full(n, np.nan)
-    ids = [f"ID{i}" for i in range(n)]
+    ids = [f'ID{i}' for i in range(n)]
     with pytest.raises(LearnerError) as exc_info:
-        assert_no_nan(arr, ids, "foo")
+        assert_no_nan(arr, ids, 'foo')
     msg = str(exc_info.value)
-    bracket = msg.split("first IDs: ", 1)[1]
+    bracket = msg.split('first IDs: ', 1)[1]
     parsed = eval(bracket)
     assert parsed == ids[:10]
 
 
 def test_assert_no_inf_uncertainty_passes_clean() -> None:
     arr = np.array([1.0, 2.0, 3.0])
-    assert assert_no_inf_uncertainty(arr, ["a", "b", "c"]) is None
+    assert assert_no_inf_uncertainty(arr, ['a', 'b', 'c']) is None
 
 
 def test_assert_no_inf_uncertainty_message_format() -> None:
     arr = np.array([1.0, np.inf, 2.0])
     with pytest.raises(LearnerError) as exc_info:
-        assert_no_inf_uncertainty(arr, ["a", "b", "c"])
+        assert_no_inf_uncertainty(arr, ['a', 'b', 'c'])
     msg = str(exc_info.value)
-    assert "Inf uncertainties not supported: 1 row" in msg
+    assert 'Inf uncertainties not supported: 1 row' in msg
     assert "'b'" in msg
 
 
 def test_assert_no_inf_uncertainty_negative_inf_also_caught() -> None:
     arr = np.array([1.0, -np.inf, 2.0])
     with pytest.raises(LearnerError):
-        assert_no_inf_uncertainty(arr, ["a", "b", "c"])
+        assert_no_inf_uncertainty(arr, ['a', 'b', 'c'])
