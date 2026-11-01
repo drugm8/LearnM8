@@ -597,7 +597,7 @@ class TestFastpropLearner:
         assert len(es_callbacks) == 1
         assert es_callbacks[0].monitor == 'validation_mse_scaled_loss'
 
-    def test_train_skips_validation_on_small_dataset(self, tmp_path, capsys):
+    def test_train_skips_validation_on_small_dataset(self, tmp_path, caplog):
         """Verify early stopping disabled when n_samples < min_samples_for_split."""
         small_dataset = pl.DataFrame(
             {
@@ -627,13 +627,13 @@ class TestFastpropLearner:
             val_fraction=0.1,
             random_state=42,
         )
-        learner.train(features, small_dataset['Activity'].to_numpy())
+        with caplog.at_level('WARNING', logger='learnm8'):
+            learner.train(features, small_dataset['Activity'].to_numpy())
         es_callbacks = [
             cb for cb in learner.trainer.callbacks if isinstance(cb, EarlyStopping)
         ]
         assert len(es_callbacks) == 0
-        captured = capsys.readouterr()
-        assert 'min_samples_for_split' in captured.out
+        assert 'min_samples_for_split' in caplog.text
 
     def test_val_fraction_zero_disables_validation(
         self, small_real_compounds, small_real_morgan_features
