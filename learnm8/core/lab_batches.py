@@ -73,7 +73,7 @@ def _read_one(path: Path, cycle: int, target_col: str) -> pl.DataFrame:
         df = pl.read_csv(
             io.BytesIO(text.encode('utf-8')), separator=sep, infer_schema=False
         )
-    except Exception as exc:
+    except pl.exceptions.PolarsError as exc:
         raise ValidationError(f'{path.name}: cannot parse CSV: {exc}') from exc
     df = df.rename({c: c.lstrip(_BOM) for c in df.columns})
     missing = [c for c in ('ID', target_col) if c not in df.columns]

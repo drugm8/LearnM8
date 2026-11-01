@@ -253,3 +253,22 @@ def test_cp1252_file_is_decoded(tmp_path):
     )
     led = read_batches(tmp_path, 'Aktivität')
     assert led['value'].to_list() == [1.5]
+
+
+def test_unparsable_csv_names_file(tmp_path):
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'rank,ID,IC50,SMILES\n1,A,1.0,C,extra,x\n'
+    )
+    with pytest.raises(ValidationError, match=r'batch_cycle_0\.csv: cannot parse CSV'):
+        read_batches(tmp_path, 'IC50')
+
+
+def test_non_polars_error_is_not_relabelled_as_csv_problem(tmp_path, monkeypatch):
+    (tmp_path / 'batch_cycle_0.csv').write_text('rank,ID,IC50,SMILES\n1,A,1.0,C\n')
+
+    def boom(*args, **kwargs):
+        raise MemoryError('not a CSV problem')
+
+    monkeypatch.setattr(pl, 'read_csv', boom)
+    with pytest.raises(MemoryError):
+        read_batches(tmp_path, 'IC50')
