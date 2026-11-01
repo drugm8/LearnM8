@@ -74,6 +74,14 @@ all on the `--config <yaml>` path:
   those config keys, logging each one it ignores. `cmd_run(args)` keeps its
   old behaviour for direct programmatic callers.
 
+### Fixed — `enable_chemprop_fine_tuning` ignored for `learner='chemprop'`
+
+`run_active_learning(learner='chemprop', enable_chemprop_fine_tuning=True)`
+built a plain `ChempropLearner` and silently trained from scratch every cycle;
+only `'chemprop_ensemble'` honoured the flag. The `'chemprop'` shortcut now
+passes `enable_fine_tuning=True` and the run's checkpoint directory, keeping
+the run's `random_state`.
+
 ### Fixed — GT-stats cache finalizer self-deadlock
 
 `evaluation/core.py`'s `_GT_STATS_LOCK` is now a `threading.RLock` instead of
@@ -170,9 +178,20 @@ and `--learner ensemble` now raise `ValueError: Unknown learner`. It mapped to
 the generic `EnsembleLearner`, which needs an explicit `learners=[...]` list,
 so it could never be built from a name. There is no alias.
 
-Migration: use `rf_ensemble` (three Random Forest members, uncertainty from
-member spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
+Migration: use `dt_ensemble` or `xgb_ensemble` (uncertainty from member
+spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
 `EnsembleLearner([...])` instance for custom members.
+
+### Removed — the `rf_ensemble` learner (BREAKING)
+
+`RFEnsemble` and its registry entry `'rf_ensemble'` are gone (deprecated since
+0.10.0). `learner='rf_ensemble'` and `--learner rf_ensemble` now raise
+`ValueError: Unknown learner`; `from learnm8 import RFEnsemble` fails. There is
+no alias.
+
+Migration: use `rf`, which reports uncertainty from the spread across its
+trees. For a member-spread ensemble use `dt_ensemble`, `xgb_ensemble` or
+`mixed_ensemble`.
 
 ### Added — `failed` status for compounds the oracle cannot measure
 

@@ -62,7 +62,6 @@ from .learners.ensemble import (
     EnsembleLearner,
     LREnsemble,
     MixedEnsemble,
-    RFEnsemble,
     XGBEnsemble,
 )
 
@@ -120,7 +119,6 @@ __all__ = [
     'ProbabilityImprovementAcquisition',
     'PruningError',
     'PythonOracle',
-    'RFEnsemble',
     'RandomAcquisition',
     'RandomForestLearner',
     'ScoreBasedPruner',

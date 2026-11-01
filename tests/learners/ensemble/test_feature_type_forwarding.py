@@ -7,7 +7,6 @@ import pytest
 
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
-from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 
 
 def _make(cls):
@@ -17,7 +16,7 @@ def _make(cls):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize('cls', [RFEnsemble, DTEnsemble, MixedEnsemble])
+@pytest.mark.parametrize('cls', [DTEnsemble, MixedEnsemble])
 class TestFeatureTypeForwarding:
     def test_default_is_binary_for_all_members(self, cls):
         ens = _make(cls)
@@ -39,7 +38,7 @@ class TestFeatureTypeBehaviour:
         X = rng.normal(size=(40, 6))
         X[0, 2] = np.nan
         y = rng.normal(size=40)
-        ens = _make(RFEnsemble)
+        ens = _make(DTEnsemble)
         if feature_type is not None:
             ens._feature_type = feature_type
         ens.train(X, y)

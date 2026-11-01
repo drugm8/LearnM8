@@ -176,12 +176,12 @@ def test_ensemble_outer_std_skip_does_not_invoke_calculate_uncertainty(tiny_data
 # ---------------------------------------------------------------------------
 
 
-def test_rf_ensemble_inherits_cascade(tiny_data):
-    """rf_ensemble inherits EnsembleLearner.predict cascade."""
-    from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
+def test_dt_ensemble_inherits_cascade(tiny_data):
+    """dt_ensemble inherits EnsembleLearner.predict cascade."""
+    from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 
     X, y = tiny_data
-    ensemble = RFEnsemble(n_estimators=5, random_state=42)
+    ensemble = DTEnsemble(random_state=42)
     ensemble.train(X, y)
 
     preds, sigmas = ensemble.predict(X, compute_uncertainty=False)

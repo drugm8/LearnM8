@@ -11,7 +11,6 @@ from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.ensemble.fastprop_ensemble import FastpropEnsemble
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
-from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
@@ -56,19 +55,6 @@ def trained_xgb(_small_real_morgan_features_raw, small_real_compounds):
     targets = small_real_compounds['Activity'].to_numpy()
     learner.train(features, targets)
     return learner
-
-
-@pytest.fixture(scope='session')
-def trained_rf_ensemble(_small_real_morgan_features_raw, small_real_compounds):
-    """Pre-trained RFEnsemble for read-only tests.
-
-    WARNING: Shared across session. Do NOT call train().
-    """
-    ensemble = RFEnsemble(n_estimators=10, random_state=42)
-    features = _small_real_morgan_features_raw.copy()
-    targets = small_real_compounds['Activity'].to_numpy()
-    ensemble.train(features, targets)
-    return ensemble
 
 
 @pytest.fixture(scope='session')

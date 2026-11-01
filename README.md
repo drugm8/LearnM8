@@ -125,7 +125,7 @@ See [examples/README.md](https://github.com/drugm8/LearnM8/blob/main/examples/RE
 
 | Component       | Count | Examples                                                                                                                                                                                                        |
 | --------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Learners**    | 21    | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, rf_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble, ensemble |
+| **Learners**    | 19    | rf, gp, gpu_gp, svgp, xgb, lr, dt, mlp, mc_dropout, fastprop, chemprop, rf_fil, ridge_cuml, chemprop_ensemble, lr_ensemble, xgb_ensemble, dt_ensemble, mixed_ensemble, fastprop_ensemble |
 | **Acquisition** | 8     | greedy, random, topk, ucb, ei, pi, thompson, entropy                                                                                                                                                            |
 | **Featurizers** | 39    | 30 2D + 9 3D (38 unique; see categories below)                                                                                                                                                                  |
 | **Pruning**     | 1     | score                                                                                                                                                                                                           |
@@ -150,7 +150,6 @@ Pool size reflects the total compound pool. GP is limited by labeled set growth 
 | `rf_fil`            | `RfFilLearner`              | Per-tree std dev          | —   | ✓   | —             | 1K – 10M+     |
 | `ridge_cuml`        | `RidgeCumlLearner`          | Leverage-based analytical | —   | ✓   | —             | any size      |
 | `chemprop_ensemble` | `ChempropEnsemble`          | Ensemble std dev          | ✓   | ✓   | 1K – 20K      | 1K – 200K     |
-| `rf_ensemble`       | `RFEnsemble`                | Ensemble std dev          | ✓   | —   | 1K – 10M+     | —             |
 | `lr_ensemble`       | `LREnsemble`                | Ensemble std dev          | ✓   | ✓   | any size      | any size      |
 | `xgb_ensemble`      | `XGBEnsemble`               | Ensemble std dev          | ✓   | ✓   | 1K – 10M+     | 1K – 10M+     |
 | `dt_ensemble`       | `DTEnsemble`                | Ensemble std dev          | ✓   | —   | 1K – 10M+     | —             |

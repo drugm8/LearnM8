@@ -17,7 +17,6 @@ _REGISTRY_CASES = [
     ('lr_ensemble', 'learnm8.learners.ensemble.lr_ensemble', 'LREnsemble'),
     ('dt_ensemble', 'learnm8.learners.ensemble.dt_ensemble', 'DTEnsemble'),
     ('xgb_ensemble', 'learnm8.learners.ensemble.xgb_ensemble', 'XGBEnsemble'),
-    ('rf_ensemble', 'learnm8.learners.ensemble.rf_ensemble', 'RFEnsemble'),
 ]
 
 

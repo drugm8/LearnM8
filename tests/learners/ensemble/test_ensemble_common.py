@@ -1,7 +1,7 @@
 """Common parametrized tests for all non-SMILES ensemble types.
 
 Covers 14 test patterns shared across 6 ensemble implementations:
-RFEnsemble, LREnsemble, DTEnsemble, XGBEnsemble, MixedEnsemble, EnsembleLearner.
+LREnsemble, DTEnsemble, XGBEnsemble, MixedEnsemble, EnsembleLearner.
 """
 
 import numpy as np
@@ -13,16 +13,11 @@ from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.ensemble.ensemble import EnsembleLearner
 from learnm8.learners.ensemble.lr_ensemble import LREnsemble
 from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
-from learnm8.learners.ensemble.rf_ensemble import RFEnsemble
 from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 from learnm8.learners.sklearn.gaussian_process import GaussianProcessLearner
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
 ENSEMBLE_CONFIGS = [
-    pytest.param(
-        ('rf_ensemble', lambda: RFEnsemble(n_estimators=5, random_states=[42, 123])),
-        id='rf_ensemble',
-    ),
     pytest.param(
         (
             'lr_ensemble',
@@ -99,9 +94,7 @@ FAST_ENSEMBLE_CONFIGS = [
 
 def _make_ensemble_with_kwargs(name, **kwargs):
     """Create an ensemble instance with custom kwargs (aggregation_method, uncertainty_method)."""
-    if name == 'rf_ensemble':
-        return RFEnsemble(n_estimators=5, random_states=[42, 123], **kwargs)
-    elif name == 'lr_ensemble':
+    if name == 'lr_ensemble':
         return LREnsemble(
             regularization_strengths=[0.1, 1.0], random_states=[42, 123], **kwargs
         )

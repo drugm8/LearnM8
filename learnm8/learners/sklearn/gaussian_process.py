@@ -125,7 +125,7 @@ class GaussianProcessLearner(SklearnLearner):
             raise LearnerError(
                 f'Training set size ({n_samples}) exceeds maximum ({self.max_train_size}). '
                 f'GP training is O(n^3) and impractical at this scale. '
-                f"Consider using 'rf', 'rf_ensemble', or 'xgb' learners instead, "
+                f"Consider using 'rf' or 'xgb' learners instead, "
                 f'or increase max_train_size if you have sufficient compute.'
             )
 
@@ -133,7 +133,7 @@ class GaussianProcessLearner(SklearnLearner):
         if n_samples > warn_threshold:
             logger.warning(
                 f'Training set size ({n_samples}) is large for GP (O(n^3) scaling). '
-                f"Training may be slow. Consider 'rf', 'rf_ensemble', or 'xgb' for large datasets."
+                f"Training may be slow. Consider 'rf' or 'xgb' for large datasets."
             )
 
         resolved_kernel = self._resolve_kernel(features)

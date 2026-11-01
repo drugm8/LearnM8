@@ -17,7 +17,6 @@ from .ensemble import (
     FastpropEnsemble,
     LREnsemble,
     MixedEnsemble,
-    RFEnsemble,
     XGBEnsemble,
 )
 from .gpu import RfFilLearner, RidgeCumlLearner
@@ -48,7 +47,6 @@ __all__ = [
     'MCDropoutLearner',
     'MLPLearner',
     'MixedEnsemble',
-    'RFEnsemble',
     'RandomForestLearner',
     'RfFilLearner',
     'RidgeCumlLearner',

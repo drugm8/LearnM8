@@ -87,7 +87,6 @@ from learnm8.learners import (
     MixedEnsemble,
     MLPLearner,
     RandomForestLearner,
-    RFEnsemble,
     RfFilLearner,
     RidgeCumlLearner,
     XGBEnsemble,
@@ -124,7 +123,6 @@ LEARNER_REGISTRY = {
     'chemprop': ChempropLearner,
     'chemprop_ensemble': ChempropEnsemble,
     # Ensemble learners
-    'rf_ensemble': RFEnsemble,
     'lr_ensemble': LREnsemble,
     'xgb_ensemble': XGBEnsemble,
     'dt_ensemble': DTEnsemble,
@@ -166,7 +164,6 @@ LEARNER_DISPLAY_NAMES = {
     'fastprop': 'FastProp',
     'chemprop': 'Chemprop',
     'chemprop_ensemble': 'Chemprop Ensemble',
-    'rf_ensemble': 'RF Ensemble',
     'lr_ensemble': 'LR Ensemble',
     'xgb_ensemble': 'XGBoost Ensemble',
     'dt_ensemble': 'DT Ensemble',
@@ -211,8 +208,8 @@ def _create_learner(
     - 'xgb': XGBoost
     - 'mlp': Multi-Layer Perceptron
     - 'mc_dropout': Monte Carlo Dropout
-    - 'chemprop': Chemprop Ensemble (supports fine-tuning)
-    - 'rf_ensemble': Random Forest Ensemble
+    - 'chemprop': Chemprop single model (supports fine-tuning)
+    - 'chemprop_ensemble': Chemprop Ensemble (supports fine-tuning)
     - 'lr_ensemble': Linear Regression Ensemble
     - 'xgb_ensemble': XGBoost Ensemble
     - 'dt_ensemble': Decision Tree Ensemble
@@ -265,6 +262,15 @@ def _create_learner(
             logger.debug('Creating ChempropEnsemble without fine-tuning')
             return ChempropEnsemble(device=device)
 
+    fine_tune_single_chemprop = (
+        enable_chemprop_fine_tuning and learner_class is ChempropLearner
+    )
+    if fine_tune_single_chemprop and checkpoint_dir is None:
+        raise ValueError(
+            'checkpoint_dir required when enable_chemprop_fine_tuning=True. '
+            'This should be set automatically by run_active_learning().'
+        )
+
     # Standard learner instantiation
     try:
         sig = inspect.signature(learner_class)
@@ -276,6 +282,9 @@ def _create_learner(
             kwargs['n_jobs'] = n_jobs
         if 'device' in params:
             kwargs['device'] = device
+        if fine_tune_single_chemprop:
+            kwargs['enable_fine_tuning'] = True
+            kwargs['checkpoint_dir'] = checkpoint_dir
 
         # Prefer the unified `random_state` (singular) path: ensemble constructors
         # derive their internal `random_states` list from this single seed via the

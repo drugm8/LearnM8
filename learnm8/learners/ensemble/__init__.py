@@ -6,7 +6,6 @@ from .ensemble import EnsembleLearner
 from .fastprop_ensemble import FastpropEnsemble
 from .lr_ensemble import LREnsemble
 from .mixed_ensemble import MixedEnsemble
-from .rf_ensemble import RFEnsemble
 from .xgb_ensemble import XGBEnsemble
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     'FastpropEnsemble',
     'LREnsemble',
     'MixedEnsemble',
-    'RFEnsemble',
     'XGBEnsemble',
 ]
