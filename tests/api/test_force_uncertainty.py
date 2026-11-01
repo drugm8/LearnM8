@@ -156,6 +156,4 @@ def test_force_uncertainty_with_uncertainty_required_no_double_compute(
 
     # Same uncertainty column on both paths (no double compute).
     assert 'uncertainty' in df1.columns and 'uncertainty' in df2.columns
-    assert_series_equal(
-        df1.get_column('uncertainty'), df2.get_column('uncertainty')
-    )
+    assert_series_equal(df1.get_column('uncertainty'), df2.get_column('uncertainty'))

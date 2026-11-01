@@ -58,7 +58,9 @@ def _set_file_handler(logger: logging.Logger, output_dir: Path) -> None:
     """Point the learnm8 log file at ``output_dir/learnm8.log``, closing any old one."""
     log_file = output_dir / 'learnm8.log'
     for handler in list(logger.handlers):
-        if getattr(handler, '_learnm8_file', False):
+        if isinstance(handler, logging.FileHandler) and getattr(
+            handler, '_learnm8_file', False
+        ):
             if Path(handler.baseFilename) == log_file.resolve():
                 return
             logger.removeHandler(handler)
