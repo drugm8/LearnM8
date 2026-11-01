@@ -759,7 +759,7 @@ _DENSE_EXPECTED_FEATURES_DTYPE: dict[str, Any] = {
 def _validate_cache_integrity(
     f: h5py.File, featurizer: Featurizer, cache_path: Path
 ) -> None:
-    """Check the contract invariants; on violation raise ``FeatureExtractionError``."""
+    """Check the contract invariants; on violation raise ``PersistenceError``."""
     msg_suffix = (
         f'\nDelete the cache file ({cache_path}) and retry. '
         f'This file will not be used until removed.'
@@ -767,12 +767,12 @@ def _validate_cache_integrity(
 
     for attr in REQUIRED_ATTRS:
         if attr not in f.attrs:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache missing required attr {attr!r}.' + msg_suffix
             )
 
     if int(f.attrs[ATTR_SCHEMA_VERSION]) != SCHEMA_VERSION:
-        raise FeatureExtractionError(
+        raise PersistenceError(
             f'cache schema_version mismatch (got {int(f.attrs[ATTR_SCHEMA_VERSION])}, '
             f'expected {SCHEMA_VERSION}).' + msg_suffix
         )
@@ -782,28 +782,26 @@ def _validate_cache_integrity(
 
     for dset in (DSET_HASH_INDEX, DSET_ROW_INDEX):
         if dset not in f:
-            raise FeatureExtractionError(
-                f'cache missing dataset {dset!r}.' + msg_suffix
-            )
+            raise PersistenceError(f'cache missing dataset {dset!r}.' + msg_suffix)
     hash_index = f[DSET_HASH_INDEX]
     row_index = f[DSET_ROW_INDEX]
 
     if hash_index.dtype != HASH_DTYPE:
-        raise FeatureExtractionError(
+        raise PersistenceError(
             f'cache /hash_index dtype mismatch: expected {HASH_DTYPE!r} '
             f'(128-bit BLAKE2b digests), got {hash_index.dtype!r}.' + msg_suffix
         )
 
     if layout == LAYOUT_DENSE:
         if DSET_FEATURES not in f:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache missing dataset {DSET_FEATURES!r}.' + msg_suffix
             )
         features = f[DSET_FEATURES]
 
         expected_features_dtype = _DENSE_EXPECTED_FEATURES_DTYPE[storage_dtype]
         if features.dtype != np.dtype(expected_features_dtype):
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache /features dtype mismatch: file says storage_dtype={storage_dtype!r} '
                 f'but /features.dtype={features.dtype!r}.' + msg_suffix
             )
@@ -811,7 +809,7 @@ def _validate_cache_integrity(
         bit_count = int(f.attrs[ATTR_BIT_COUNT])
         expected_width = _packed_width(bit_count, storage_dtype)
         if features.ndim != 2 or features.shape[1] != expected_width:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache /features shape mismatch: expected (*, {expected_width}) '
                 f'for bit_count={bit_count} storage_dtype={storage_dtype!r}, '
                 f'got {features.shape}.' + msg_suffix
@@ -820,13 +818,13 @@ def _validate_cache_integrity(
         if len(row_index) > 0:
             max_row = int(row_index[:].max())
             if max_row >= features.shape[0]:
-                raise FeatureExtractionError(
+                raise PersistenceError(
                     f'cache row_index points past /features rows '
                     f'(max={max_row}, /features rows={features.shape[0]}).' + msg_suffix
                 )
     elif layout == LAYOUT_CSR:
         if storage_dtype != STORAGE_CSR_UINT16:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f"cache storage_layout='csr' requires storage_dtype='csr_uint16', "
                 f'got {storage_dtype!r}.' + msg_suffix
             )
@@ -836,11 +834,9 @@ def _validate_cache_integrity(
             (DSET_CSR_INDPTR, np.uint64),
         ):
             if dset not in f:
-                raise FeatureExtractionError(
-                    f'cache missing dataset {dset!r}.' + msg_suffix
-                )
+                raise PersistenceError(f'cache missing dataset {dset!r}.' + msg_suffix)
             if f[dset].dtype != np.dtype(expected_dtype):
-                raise FeatureExtractionError(
+                raise PersistenceError(
                     f'cache {dset!r} dtype mismatch: expected {np.dtype(expected_dtype)!r}, '
                     f'got {f[dset].dtype!r}.' + msg_suffix
                 )
@@ -850,20 +846,20 @@ def _validate_cache_integrity(
         csr_indices = f[DSET_CSR_INDICES]
 
         if indptr.shape[0] != row_index.shape[0] + 1:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache csr_indptr length mismatch: expected {row_index.shape[0] + 1} '
                 f'(row_index + 1), got {indptr.shape[0]}.' + msg_suffix
             )
 
         if indptr.shape[0] >= 1 and int(indptr[0]) != 0:
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 f'cache csr_indptr[0] must be 0, got {int(indptr[0])}.' + msg_suffix
             )
 
         if indptr.shape[0] > 0:
             last = int(indptr[-1])
             if last != csr_data.shape[0] or last != csr_indices.shape[0]:
-                raise FeatureExtractionError(
+                raise PersistenceError(
                     f'cache csr_indptr[-1]={last} disagrees with csr_data '
                     f'({csr_data.shape[0]}) / csr_indices ({csr_indices.shape[0]}).'
                     + msg_suffix
@@ -872,16 +868,16 @@ def _validate_cache_integrity(
         if indptr.shape[0] > 1:
             diffs = np.diff(np.asarray(indptr[:], dtype=np.int64))
             if np.any(diffs < 0):
-                raise FeatureExtractionError(
+                raise PersistenceError(
                     'cache csr_indptr is not monotone non-decreasing.' + msg_suffix
                 )
     else:
-        raise FeatureExtractionError(
+        raise PersistenceError(
             f'cache has unknown storage_layout {layout!r}.' + msg_suffix
         )
 
     if len(hash_index) != len(row_index):
-        raise FeatureExtractionError(
+        raise PersistenceError(
             f'cache hash_index/row_index length mismatch '
             f'({len(hash_index)} vs {len(row_index)}).' + msg_suffix
         )
@@ -891,13 +887,13 @@ def _validate_cache_integrity(
         # strict-ascending invariant. np.diff() doesn't work on bytes dtypes.
         h_arr = hash_index[:]
         if np.any(h_arr[1:] <= h_arr[:-1]):
-            raise FeatureExtractionError(
+            raise PersistenceError(
                 'cache hash_index is not strictly increasing '
                 '(duplicates or out-of-order).' + msg_suffix
             )
 
     if str(f.attrs[ATTR_FEATURIZER_NAME]) != featurizer.get_name():
-        raise FeatureExtractionError(
+        raise PersistenceError(
             f'cache featurizer_name mismatch: file says '
             f'{str(f.attrs[ATTR_FEATURIZER_NAME])!r}, expected '
             f'{featurizer.get_name()!r}.' + msg_suffix

@@ -1,4 +1,4 @@
-"""Corruption detection: each invariant violation raises FeatureExtractionError."""
+"""Corruption detection: each invariant violation raises PersistenceError."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 import pytest
 
-from learnm8.exceptions import FeatureExtractionError, PersistenceError
+from learnm8.exceptions import PersistenceError
 from learnm8.features import create_featurizer
 from learnm8.features.cache import _HASH_INDEX_CACHE
 from learnm8.features.extraction import extract_features
@@ -96,7 +96,7 @@ def test_each_invariant_violation_raises(populated_cache: Path, invariant_id: in
     cache_dir = populated_cache.parent
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
-    with pytest.raises(FeatureExtractionError, match=r'[Dd]elete the cache file'):
+    with pytest.raises(PersistenceError, match=r'[Dd]elete the cache file'):
         extract_features(['XXXNEW'], feat, cache_dir=cache_dir)
 
 
@@ -120,5 +120,5 @@ def test_no_silent_fallback_on_corruption(populated_cache: Path):
     _break_invariant_4_dtype_mismatch(populated_cache)
 
     feat = create_featurizer('morgan', radius=2, fp_size=2048, n_jobs=1)
-    with pytest.raises(FeatureExtractionError):
+    with pytest.raises(PersistenceError):
         extract_features(['CCO'], feat, cache_dir=populated_cache.parent)

@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import pytest
 
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import PersistenceError
 from learnm8.features import create_featurizer
 from learnm8.features.cache import (
     _hash_index_cache_get,
@@ -66,7 +66,7 @@ def test_validate_cache_integrity_featurizer_name_mismatch(tmp_path: Path):
         f.attrs['featurizer_name'] = 'wrongname'
 
     with (
-        pytest.raises(FeatureExtractionError, match=r'featurizer_name mismatch'),
+        pytest.raises(PersistenceError, match=r'featurizer_name mismatch'),
         h5py.File(cache_path, 'r') as f,
     ):
         _validate_cache_integrity(f, feat, cache_path)
@@ -81,7 +81,7 @@ def test_validate_cache_integrity_schema_version_mismatch(tmp_path: Path):
         f.attrs['schema_version'] = np.uint8(99)
 
     with (
-        pytest.raises(FeatureExtractionError, match=r'schema_version mismatch'),
+        pytest.raises(PersistenceError, match=r'schema_version mismatch'),
         h5py.File(cache_path, 'r') as f,
     ):
         _validate_cache_integrity(f, feat, cache_path)

@@ -355,7 +355,8 @@ def extract_features(
 
 | Exception | Condition |
 |-----------|-----------|
-| `FeatureExtractionError` | Featurizer unknown, SMILES invalid, or cache corruption |
+| `FeatureExtractionError` | Featurizer unknown or SMILES invalid |
+| `PersistenceError` | Cache file corrupt, incompatible or unreadable (the file is left untouched) |
 
 ---
 
