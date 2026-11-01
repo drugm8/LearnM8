@@ -5,6 +5,7 @@ Uses in-process invocation where possible, subprocess for select integration tes
 """
 
 import argparse
+import importlib
 import io
 import json
 import subprocess
@@ -485,22 +486,17 @@ class TestRunSubcommand:
         output_dir = Path(args.output)
         assert output_dir.exists()
 
-    def test_missing_required_args(self, minimal_compounds):
-        from learnm8.cli.main import create_parser
+    def test_missing_featurizer_is_rejected(self, minimal_compounds, monkeypatch):
+        # --featurizer is optional in the parser (config-only runs may set it),
+        # so cmd_run rejects a missing featurizer for non-SMILES learners.
+        from learnm8.cli.main import cmd_run, create_parser
 
-        parser = create_parser()
-        with pytest.raises(SystemExit) as exc_info:
-            parser.parse_args(
-                [
-                    'run',
-                    str(minimal_compounds),
-                    '--target',
-                    'Activity',
-                    '--learner',
-                    'rf',
-                ]
-            )
-        assert exc_info.value.code != 0
+        args = create_parser().parse_args(
+            ['run', str(minimal_compounds), '--target', 'Activity', '--learner', 'rf']
+        )
+        result = run_cmd_inprocess(cmd_run, args, monkeypatch)
+        assert result.returncode != 0
+        assert 'featurizer is required' in result.stdout
 
     def test_invalid_file(self, tmp_path, monkeypatch):
         from learnm8.cli.main import cmd_run
@@ -616,7 +612,8 @@ class TestRunSubcommand:
         self, minimal_compounds, tmp_path, monkeypatch
     ):
         """--force-uncertainty must be forwarded to run_active_learning()."""
-        import learnm8.cli.main as cli_main_mod
+        # The package attribute `learnm8.cli.main` is the main() function.
+        cli_main_mod = importlib.import_module('learnm8.cli.main')
         from learnm8.cli.main import cmd_run
 
         captured = {}
@@ -653,7 +650,8 @@ class TestRunSubcommand:
         self, minimal_compounds, tmp_path, monkeypatch
     ):
         """Default for --force-uncertainty must be False."""
-        import learnm8.cli.main as cli_main_mod
+        # The package attribute `learnm8.cli.main` is the main() function.
+        cli_main_mod = importlib.import_module('learnm8.cli.main')
         from learnm8.cli.main import cmd_run
 
         captured = {}
