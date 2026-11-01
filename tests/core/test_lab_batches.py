@@ -126,6 +126,16 @@ def test_semicolon_dot_value_is_ambiguous(tmp_path):
         read_batches(tmp_path, 'IC50')
 
 
+def test_semicolon_unambiguous_dot_forms_are_read(tmp_path):
+    """'.5' and '1.5e3' cannot be thousands-separator misreads, so they are numbers."""
+    (tmp_path / 'batch_cycle_0.csv').write_text(
+        'rank;ID;IC50;SMILES\n1;A;.5;C\n2;B;1.5e3;CC\n3;C;2,5;CCC\n'
+    )
+    led = read_batches(tmp_path, 'IC50').sort('ID')
+    assert led['value'].to_list() == [0.5, 1500.0, 2.5]
+    assert led['state'].to_list() == ['measured'] * 3
+
+
 def test_comma_file_dot_is_decimal_and_semicolon_text_with_dot_fails(tmp_path):
     (tmp_path / 'batch_cycle_0.csv').write_text('rank,ID,IC50,SMILES\n1,A,1.234,C\n')
     (tmp_path / 'batch_cycle_1.csv').write_text('rank;ID;IC50;SMILES\n1;B;12. Mrz;C\n')
