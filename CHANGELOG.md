@@ -257,6 +257,31 @@ share one signature.
   real diversity metric keys (`bit_position_uniformity_entropy_*`), the
   `skip_validation` and `streaming` parameters, the missing CLI flags, and the
   cache design.
+- **MC Dropout memory-aware prediction batch size now runs.** A `torch.device`
+  was passed where a string was expected, the error was swallowed, and every
+  prediction used the fixed `4 * batch_size` chunk. Because the dropout RNG is
+  reseeded per chunk, MC Dropout predictions and uncertainties now differ from
+  0.11.0 by Monte Carlo noise (on 20K AmpC compounds: Spearman 0.989 for the
+  means, 87% overlap of the greedy top 1%). The chunk size now depends on the
+  free memory at prediction time; pass `predict_batch_size` for runs that must
+  reproduce exactly.
+- **`learnm8.log` is written by the CLI and by every run in one process.** The
+  CLI configured the console first, and logging setup returned early once any
+  handler existed, so `learnm8 run` / `learnm8 suggest` wrote no log file, and a
+  second run in one Python session logged into the first run's directory.
+- **`fingerprint_used` names Morgan(2, 2048) for every run.** For binary
+  featurizers it named the run featurizer (e.g. MACCS), although the diversity
+  metrics are always computed on Morgan(2, 2048). Metric values are unchanged.
+- **Failed compounds count in the cumulative diversity metrics** (they were
+  selected; they used to be left out).
+- **Cache integrity violations raise `PersistenceError`**, like every other
+  corrupt or incompatible cache file (was `FeatureExtractionError`).
+- **`learnm8 suggest` prints the batch file it wrote**, not the
+  highest-numbered file in the folder (they differed when a newer header-only
+  file existed). Batch rows with an empty SMILES cell now log a warning that
+  they skipped the pool cross-check. Only Polars parse errors are reported as
+  "cannot parse CSV". `PythonOracle` no longer logs a duplicate
+  missing-results warning.
 
 ## [0.11.0] — 2026-05-13
 

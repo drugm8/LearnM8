@@ -330,7 +330,7 @@ class MCDropoutLearner(TorchLearner):
                 self,
                 n_samples,
                 n_features,
-                device=self.device,  # type: ignore[arg-type]  # torch.device, not str: always raises -> fallback below (see A10 report)
+                device=str(self.device),
                 memory_safety_factor=0.5,
             )
         except Exception:

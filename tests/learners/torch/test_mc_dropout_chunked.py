@@ -130,6 +130,18 @@ class TestMCDropoutChunked:
             assert batch_size == 50
 
     @pytest.mark.unit
+    def test_predict_batch_size_real_estimate_is_used(self):
+        """The unmocked estimate must run (it once always raised on a torch.device)."""
+        X, y = _make_data(5000, 10)
+        learner = _make_trained_learner(X, y, predict_batch_size=None)
+        with patch(
+            'learnm8.core.batching.get_available_memory', return_value=10**12
+        ) as mem:
+            batch_size = learner._compute_predict_batch_size(5000, 10)
+        mem.assert_called_once_with(str(learner.device))
+        assert batch_size == 5000 != 4 * learner.batch_size
+
+    @pytest.mark.unit
     def test_predict_batch_size_auto_fallback_when_estimate_fails(self):
         X, y = _make_data(100, 10)
 
