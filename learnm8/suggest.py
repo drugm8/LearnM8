@@ -244,6 +244,18 @@ def suggest_next_batch(
             f'{_truncate_list(found)}. Was the pool file re-sorted or changed '
             f'since the batch was written?'
         )
+    unchecked = ledger.filter(pl.col('smiles').is_null()).sort('cycle', 'ID')
+    if unchecked.height:
+        logger.warning(
+            'Batch rows with an empty SMILES cell could not be cross-checked '
+            'against the pool (shifted or re-sorted rows go undetected): %s',
+            _truncate_list(
+                [
+                    f'{i} ({batch_path(batch_dir, c).name})'
+                    for i, c in zip(unchecked['ID'], unchecked['cycle'], strict=True)
+                ]
+            ),
+        )
     cycle = next_cycle(ledger)
 
     if ledger.height:

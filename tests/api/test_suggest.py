@@ -296,3 +296,24 @@ def test_present_id_with_zero_variant_and_empty_smiles_is_ambiguous(tmp_path):
         suggest_next_batch(
             pool_csv, d, 'Activity', 'rf', 'morgan', batch_size=2, n_jobs=1
         )
+
+
+def test_empty_smiles_cell_warns_unchecked(tmp_path, pool, truth):
+    suggest_next_batch(pool, tmp_path, **KW)
+    path = batch_path(tmp_path, 0)
+    fill(path, truth)
+    df = pl.read_csv(path, infer_schema=False, skip_rows=1)
+    blanked = df['ID'][0]
+    path.write_text(
+        'sep=,\n'
+        + df.with_columns(
+            pl.when(pl.col('ID') == blanked)
+            .then(None)
+            .otherwise(pl.col('SMILES'))
+            .alias('SMILES')
+        ).write_csv()
+    )
+    suggest_next_batch(pool, tmp_path, **KW)
+    log = (tmp_path / '.learnm8' / 'learnm8.log').read_text()
+    assert 'could not be cross-checked' in log
+    assert f'{blanked} (batch_cycle_0.csv)' in log
