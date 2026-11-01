@@ -56,3 +56,21 @@ def test_suggest_cli_batch_file_error_is_clean(tmp_path, monkeypatch):
     assert r.returncode == 1
     assert 'missing required column' in r.stdout
     assert 'Traceback' not in r.stdout and 'learnm8 validate' not in r.stdout
+
+
+def test_suggest_cli_prints_written_file_not_newest(tmp_path, monkeypatch):
+    """A newer header-only batch file must not be reported as the one written."""
+    argv = _argv(tmp_path)
+    run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
+    first = tmp_path / 'batch_cycle_0.csv'
+    lines = first.read_text().splitlines()
+    filled = [lines[0], lines[1]] + [
+        ','.join(p if i != 2 else str(float(n)) for i, p in enumerate(ln.split(',')))
+        for n, ln in enumerate(lines[2:], start=1)
+    ]
+    first.write_text('\n'.join(filled) + '\n')
+    (tmp_path / 'batch_cycle_5.csv').write_text('rank,ID,Activity,SMILES\n')
+
+    r = run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
+    assert r.returncode == 0, r.stdout
+    assert 'batch_cycle_1.csv' in r.stdout and 'batch_cycle_5.csv' not in r.stdout

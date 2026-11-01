@@ -40,16 +40,6 @@ def next_cycle(ledger: pl.DataFrame) -> int:
     return 0 if ledger.height == 0 else int(ledger['cycle'].max()) + 1  # type: ignore[arg-type]
 
 
-def latest_batch_path(batch_dir: Path) -> Path:
-    """Return the highest-numbered ``batch_cycle_N.csv`` in ``batch_dir``."""
-    cycles = [
-        int(m.group(1))
-        for p in Path(batch_dir).iterdir()
-        if (m := _BATCH_FILE_RE.match(p.name))
-    ]
-    return batch_path(Path(batch_dir), max(cycles))
-
-
 def _decode(raw_bytes: bytes) -> str:
     """Decode as UTF-8 (BOM allowed), falling back to Windows-1252."""
     try:

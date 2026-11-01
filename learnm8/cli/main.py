@@ -834,7 +834,6 @@ def cmd_validate(args: argparse.Namespace) -> None:
 
 def cmd_suggest(args: argparse.Namespace) -> None:
     """Handle suggest subcommand: write the next lab batch file."""
-    from learnm8.core.lab_batches import latest_batch_path
     from learnm8.suggest import suggest_next_batch
 
     try:
@@ -852,6 +851,8 @@ def cmd_suggest(args: argparse.Namespace) -> None:
         )
         sys.exit(1)
 
+    batch_dir = Path(args.batch_dir)
+    before = set(batch_dir.glob('batch_cycle_*.csv'))
     try:
         batch = suggest_next_batch(
             args.compound_pool,
@@ -877,7 +878,9 @@ def cmd_suggest(args: argparse.Namespace) -> None:
     except (LearnM8Error, Exception) as e:
         _print_learnm8_error(e)
 
-    path = latest_batch_path(args.batch_dir)
+    # The file this call wrote: the newest-numbered file can be a different,
+    # header-only one.
+    (path,) = set(batch_dir.glob('batch_cycle_*.csv')) - before
     console.print(
         f'[green]Wrote {batch.height} compounds to:[/green] {path}', soft_wrap=True
     )
