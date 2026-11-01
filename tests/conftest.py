@@ -30,6 +30,27 @@ pytest_plugins = [
 RNG_SEED: Final[int] = 19_2026
 
 
+@pytest.fixture(autouse=True)
+def _isolate_learnm8_logger():
+    """Give every test a propagating 'learnm8' logger and undo its changes after.
+
+    configure_learnm8_logging() (called by run_active_learning, suggest and the
+    CLI) sets propagate=False and adds handlers on the process-wide 'learnm8'
+    logger. Without this reset, every later caplog test in the same worker sees
+    no learnm8 records, so results depended on test order and xdist grouping.
+    """
+    import logging
+
+    logger = logging.getLogger('learnm8')
+    saved = (list(logger.handlers), logger.level, logger.propagate)
+    logger.propagate = True
+    yield
+    for handler in logger.handlers:
+        if handler not in saved[0]:
+            handler.close()
+    logger.handlers[:], logger.level, logger.propagate = saved
+
+
 @pytest.fixture
 def rng() -> np.random.Generator:
     """Deterministic NumPy generator seeded with RNG_SEED for property tests."""
