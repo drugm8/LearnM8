@@ -757,8 +757,10 @@ def _calculate_cycle_metrics(
                         )
                         original_pool_for_eval = original_pool
 
+                    # Diversity describes what was selected, so failed
+                    # compounds (selected but unmeasurable) count too.
                     cumulative_selected_compounds = compounds_df.filter(
-                        pl.col('status') == 'labeled'
+                        pl.col('status').is_in(['labeled', 'failed'])
                     ).select(['ID', 'SMILES'])
 
                     eval_metrics = evaluate_cycle(

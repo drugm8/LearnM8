@@ -104,3 +104,46 @@ def test_all_failed_initial_batch_raises(tmp_path):
             batch_fraction=0.2,
             output_dir=tmp_path,
         )
+
+
+@pytest.mark.parametrize('streaming', ['never', 'always'])
+def test_failed_compounds_count_in_cumulative_diversity(tmp_path, streaming):
+    from unittest.mock import patch
+
+    import learnm8.evaluation.core as eval_core
+
+    pool = _pool()
+    ids = pool['ID'].to_list()
+    oracle = _FlakyOracle(pool, nan_ids=ids[0::3], omit_ids=[])
+    seen: list[set] = []
+    real = eval_core.compute_diversity_metrics
+
+    def spy(*args, **kwargs):
+        seen.append(set(kwargs['cumulative_selected_df']['ID'].to_list()))
+        return real(*args, **kwargs)
+
+    with patch.object(eval_core, 'compute_diversity_metrics', side_effect=spy):
+        results = run_active_learning(
+            compound_pool=pool,
+            oracle=oracle,
+            target_col='Activity',
+            learner='rf',
+            featurizer='morgan',
+            strategy='greedy',
+            n_cycles=3,
+            batch_fraction=0.2,
+            random_state=1,
+            output_dir=tmp_path,
+            streaming=streaming,
+        )
+
+    df = results['compounds_df']
+    final_cycle = df['selected_cycle'].max()
+    failed_before_last = set(
+        df.filter(
+            (pl.col('status') == 'failed') & (pl.col('labeled_cycle') <= final_cycle)
+        )['ID'].to_list()
+    )
+    assert failed_before_last
+    assert seen
+    assert failed_before_last <= seen[-1]
