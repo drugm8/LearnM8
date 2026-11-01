@@ -1,468 +1,78 @@
-# Ensemble Learners
+# Ensembles
 
-Ensemble learners combine multiple machine learning models to improve prediction accuracy and provide reliable uncertainty estimates through model diversity. LearnM8 offers several ensemble strategies optimized for active learning in molecular screening.
+An ensemble trains several member learners on the same data and combines their predictions. The disagreement between members is the uncertainty estimate, which makes ensembles a way to give uncertainty to models that have none (XGBoost, Fastprop, Chemprop) and to get a different kind of uncertainty from those that do.
 
-## Why Ensembles
+## How ensemble uncertainty works
 
-Ensemble methods provide three key advantages for active learning:
+Every member predicts the full pool. For `n` members the prediction matrix has shape `(n, n_compounds)` and is reduced per compound:
 
-1. **Uncertainty Through Model Disagreement**: When multiple models disagree on a prediction, the compound is likely in a poorly understood region of chemical space. This natural uncertainty quantification requires no parameter tuning and is more robust than single-model estimates.
+| Quantity | Default | Alternatives (`EnsembleLearner` arguments) |
+|---|---|---|
+| Prediction | mean across members (`aggregation_method='mean'`, optionally weighted by `weights`) | `'median'` |
+| Uncertainty | population standard deviation, `ddof=0` (`uncertainty_method='std'`) | `'mad'` (median absolute deviation from the median prediction), `'quantile'` (half the interquartile range) |
 
-2. **No Uncertainty Parameter Tuning**: Unlike single models (e.g., Gaussian Process kernels, Monte Carlo Dropout passes), ensembles automatically produce calibrated uncertainty through variance across predictions. No hyperparameter optimization needed.
+The ensemble always reports `supports_uncertainty() == True`, regardless of whether the members do. Member uncertainties are not used; only the member predictions are.
 
-3. **Robustness to Overfitting**: Individual models may overfit different patterns in the data. Averaging their predictions reduces overfitting and improves generalization, especially critical when training sets are small (typical in early active learning cycles).
+When the acquisition strategy does not need uncertainty, `compute_uncertainty=False` is forwarded to each member and the outer reduction is skipped.
 
-## Ensemble Types
+### Member seeds
 
-LearnM8 provides seven ensemble learners organized by component diversity:
+Unless you pass an explicit `random_states` list, member `i` is seeded with `random_state + offset[i]`, where the offsets are `(0, 81, 314)`. With the default `random_state=42` the three members use seeds 42, 123 and 356. Ensembles with more than three members extend the offsets by repeatedly adding 314 to the last one, so the same base seed always yields the same member seeds.
 
-### Generic Ensemble (EnsembleLearner)
+## Type-specific ensembles
 
-The `EnsembleLearner` class accepts any combination of learner instances, providing maximum flexibility for custom ensemble configurations.
+| Registry name | Class | Members and how they differ |
+|---|---|---|
+| `lr_ensemble` | `LREnsemble` | One Ridge `LinearRegressionLearner` per `regularization_strengths` (default `[0.1, 1.0, 10.0]`) |
+| `xgb_ensemble` | `XGBEnsemble` | One `XGBoostLearner` per `learning_rates` (default `[0.05, 0.1, 0.2]`) |
+| `dt_ensemble` | `DTEnsemble` | One `DecisionTreeLearner` per `max_depths` (default `[5, 10, 15]`) |
+| `fastprop_ensemble` | `FastpropEnsemble` | 3 `FastpropLearner`, different seeds; accepts the `FastpropLearner` hyperparameters (see [Fastprop](fastprop.md)) |
+| `mixed_ensemble` | `MixedEnsemble` | RF + Ridge + XGBoost; see [Mixed Ensemble](mixed-ensemble.md) |
+| `chemprop_ensemble` | `ChempropEnsemble` | 3 `ChempropLearner`; see [Chemprop Ensemble](chemprop-ensemble.md) |
 
-**When to Use:**
+All of them take `random_state` (default `42`) or an explicit `random_states` list (not on `MixedEnsemble`), and extra keyword arguments are forwarded to `EnsembleLearner`. `lr_ensemble` and `xgb_ensemble` also take `device`; with `device='cuda'`, `lr_ensemble` uses [`ridge_cuml`](ridge-cuml.md) members and `xgb_ensemble` runs XGBoost on the GPU. `'auto'` resolves to CPU members for both.
 
-- Custom model combinations not covered by predefined ensembles
-- Heterogeneous model architectures (e.g., RF + GP + XGB)
-- Experimentation with novel ensemble strategies
-
-**Features:**
-
-- Flexible aggregation methods (mean, median, weighted)
-- Multiple uncertainty estimation methods (std, mad, quantile)
-
-### Type-Specific Ensembles
-
-Specialized ensembles combining variations of a single learner type with different random seeds for diversity:
-
-| Ensemble Class | Components | Use Case |
-|---------------|------------|----------|
-| `RFEnsemble` | 3 Random Forest models | Fast ensemble with tree-based uncertainty |
-| `LREnsemble` | 3 Linear Regression models | Ensemble for linear relationships |
-| `XGBEnsemble` | 3 XGBoost models | High-performance gradient boosting ensemble |
-| `DTEnsemble` | 3 Decision Tree models | Interpretable tree ensemble |
-| `FastpropEnsemble` | 3 FastProp models | PyTorch Lightning neural network ensemble |
-| `ChempropEnsemble` | 3 Chemprop models | Graph neural network ensemble (SMILES-based) |
-
-**When to Use:**
-
-- Leverage specific model strengths while reducing overfitting
-- Consistent model architecture with diversity from random initialization
-- Simpler configuration than mixed ensembles
-
-### Mixed Ensemble (Maximum Diversity)
-
-The `MixedEnsemble` combines Random Forest, Linear Regression, and XGBoost to maximize model diversity and capture different aspects of structure-activity relationships.
-
-**When to Use:**
-
-- Production screening where robustness matters most
-- Unknown data characteristics (linear vs non-linear relationships)
-- Maximum uncertainty coverage across chemical space
-- Small to medium datasets (< 10,000 compounds)
-
-**Components:**
-
-- Random Forest: Captures non-linear interactions, feature importance
-- Linear Regression: Captures linear trends, fast predictions
-- XGBoost: Captures complex patterns, handles feature interactions
-
-## How Ensemble Uncertainty Works
-
-Ensemble uncertainty is computed from disagreement across model predictions:
-
-**Prediction Aggregation:**
-```
-mean_prediction = mean(predictions_from_all_models)
-```
-
-**Uncertainty Estimation:**
-```
-uncertainty = std(predictions_from_all_models)
-```
-
-High uncertainty occurs when:
-
-- Models disagree significantly (large variance in predictions)
-- Compound is far from training data
-- Structural features poorly represented in training set
-
-Low uncertainty occurs when:
-
-- All models converge on similar predictions
-- Compound similar to well-represented training examples
-- Consistent structure-activity relationships
-
-**Uncertainty Methods:**
-
-| Method | Description | When to Use |
-|--------|-------------|-------------|
-| `std` (default) | Standard deviation across models | General purpose, most common |
-| `mad` | Median absolute deviation | Robust to outlier predictions |
-| `quantile` | Interquartile range / 2 | Distribution-free uncertainty |
-
-## Performance Considerations
-
-### Computational Cost
-
-Ensemble methods train and predict with **3 models** (default ensemble size), resulting in:
-
-- **3x training time** per cycle
-- **3x prediction time** per cycle
-- **3x memory usage** for stored models
-
-**Example Timing (1000 compound training set, 10k unlabeled pool):**
-
-| Learner Type | Single Model Time | Ensemble Time (3x) | Overhead |
-|--------------|------------------|-------------------|----------|
-| Random Forest | 2s train, 1s predict | 6s train, 3s predict | 3x |
-| Gaussian Process | 5s train, 3s predict | 15s train, 9s predict | 3x |
-| XGBoost | 3s train, 0.5s predict | 9s train, 1.5s predict | 3x |
-| Chemprop | 60s train, 2s predict | 180s train, 6s predict | 3x |
-
-**Note:** Current implementation trains models sequentially. Parallel training is not yet implemented but planned for future releases.
-
-### When Ensembles Are Worth the Cost
-
-**✅ Use Ensembles When:**
-
-- Uncertainty quantification is critical for acquisition strategy
-- Early cycles with small training sets (< 1000 compounds)
-- Production screening where robustness justifies computation
-- Exploration-heavy strategies (UCB, Thompson sampling, EI)
-- Budget allows 3x computational overhead
-
-**❌ Single Models May Be Better When:**
-
-- Computational budget is tight
-- Large training sets (> 10,000 compounds) where single models are stable
-- Greedy/exploitation-only acquisition (uncertainty not used)
-- Single models with native uncertainty (GP, MC Dropout) suffice
-- Rapid iteration during method development
-
-### Optimization Strategies
-
-To manage computational cost while using ensembles:
-
-1. **Start with ensembles, transition to single models** as training set grows
-2. **Use smaller ensemble size** in later cycles when training set is large
-3. **Cache features aggressively** with HDF5 (100x speedup on reuse)
-4. **Reduce individual model complexity** (fewer trees, smaller networks)
-5. **Use type-specific ensembles** instead of mixed ensembles for consistency
-
-## Examples
-
-### EnsembleLearner with Custom Base Learners (API)
-
-Build a custom ensemble combining different learner types:
-
-```python
-from learnm8 import run_active_learning
-from learnm8.learners import EnsembleLearner
-from learnm8.learners.sklearn import RandomForestLearner, GaussianProcessLearner
-from learnm8.learners.sklearn import XGBoostLearner
-
-learners = [
-    RandomForestLearner(n_estimators=100, random_state=42),
-    GaussianProcessLearner(alpha=1e-6, random_state=42),
-    XGBoostLearner(n_estimators=100, learning_rate=0.1, random_state=42)
-]
-
-ensemble = EnsembleLearner(
-    learners=learners,
-    aggregation_method='mean',
-    uncertainty_method='std'
-)
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=ensemble,
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=10,
-    batch_fraction=0.01
-)
-
-print(f"Final enrichment: {results['cycle_metrics'][-1]['enrichment_factor']:.2f}")
-print(f"Ensemble size: {len(ensemble.learners)} models")
-```
-
-**Weighted Ensemble:**
-
-```python
-ensemble = EnsembleLearner(
-    learners=learners,
-    aggregation_method='mean',
-    uncertainty_method='std',
-    weights=[0.5, 0.3, 0.2]  # Weight RF more heavily
-)
-```
-
-**Alternative Uncertainty Methods:**
-
-```python
-ensemble_mad = EnsembleLearner(
-    learners=learners,
-    uncertainty_method='mad'  # Median absolute deviation
-)
-
-ensemble_iqr = EnsembleLearner(
-    learners=learners,
-    uncertainty_method='quantile'  # Interquartile range
-)
-```
-
-### Mixed Ensemble (CLI + API)
-
-Use the predefined mixed ensemble combining RF, Linear Regression, and XGBoost:
-
-**CLI:**
+## Usage
 
 ```bash
-learnm8 run compounds.csv --target Activity \
-  --learner mixed_ensemble \
-  --featurizer morgan \
-  --n-cycles 15 \
-  --batch-fraction 0.01 \
-  --strategy ucb
+learnm8 run data.csv --target Value --learner xgb_ensemble --featurizer morgan --strategy ucb
 ```
-
-**API:**
 
 ```python
 from learnm8 import run_active_learning
-from learnm8.learners.ensemble import MixedEnsemble
-
-ensemble = MixedEnsemble(
-    random_state=42,
-    aggregation_method='mean',
-    uncertainty_method='std'
-)
+from learnm8.learners import XGBEnsemble
 
 results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=ensemble,
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[
-        ('random', 0.02),    # Initial exploration
-        ('ucb', 0.01),       # Uncertainty-guided (5 cycles)
-        ('ucb', 0.01),
-        ('ucb', 0.01),
-        ('ucb', 0.01),
-        ('ucb', 0.01),
-        ('greedy', 0.01),    # Final exploitation (4 cycles)
-        ('greedy', 0.01),
-        ('greedy', 0.01),
-        ('greedy', 0.01)
-    ]
+    compound_pool='data.csv', oracle=None, target_col='Value',
+    learner=XGBEnsemble(learning_rates=[0.05, 0.1, 0.2, 0.3], random_state=7),
+    featurizer='morgan', strategy='ucb', n_cycles=10,
 )
-
-print(f"Mixed ensemble components:")
-for learner in ensemble.learners:
-    print(f"  - {learner.get_name()}")
-
-print(f"\nFinal results:")
-print(f"  Enrichment factor: {results['cycle_metrics'][-1]['enrichment_factor']:.2f}")
-print(f"  Top-10% recall: {results['cycle_metrics'][-1]['recall_at_10']:.2%}")
 ```
 
-### Type-Specific Ensemble Examples
+## Custom ensembles
 
-**Random Forest Ensemble:**
+`EnsembleLearner` (importable from `learnm8.learners`) combines any list of `Learner` instances. It is not in the string registry, so pass the instance.
 
 ```python
-from learnm8.learners.ensemble import RFEnsemble
-
-rf_ensemble = RFEnsemble(
-    n_estimators=150,  # Trees per forest
-    random_states=[42, 123, 456]  # 3 different seeds
+from learnm8.learners import (
+    EnsembleLearner, RandomForestLearner, XGBoostLearner, GaussianProcessLearner,
 )
 
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=rf_ensemble,
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=10
+ensemble = EnsembleLearner(
+    learners=[RandomForestLearner(), XGBoostLearner(), GaussianProcessLearner()],
+    aggregation_method='median',
+    uncertainty_method='mad',
 )
 ```
 
-**XGBoost Ensemble:**
+| Parameter | Default | Description |
+|---|---|---|
+| `learners` | required | Member learners (at least one) |
+| `aggregation_method` | `'mean'` | `'mean'` or `'median'`; unknown values log a warning and use the mean |
+| `uncertainty_method` | `'std'` | `'std'`, `'mad'` or `'quantile'`; unknown values log a warning and use `std` |
+| `weights` | `None` | One weight per member, must sum to 1; applied only with `aggregation_method='mean'` |
+| `enable_parallel_training` | `False` | Accepted but not implemented; members train sequentially |
 
-```python
-from learnm8.learners.ensemble import XGBEnsemble
+If any member fails to train or predict, the whole ensemble raises `LearnerError`. Training and prediction cost scale with the number of members.
 
-xgb_ensemble = XGBEnsemble(
-    n_estimators=100,
-    learning_rate=0.1,
-    random_states=[42, 123, 456]
-)
-
-results = run_active_learning(
-    compound_pool='large_library.csv',
-    oracle='oracle.csv',
-    learner=xgb_ensemble,
-    target_col='Activity',
-    featurizer='morgan',
-    n_cycles=15
-)
-```
-
-### Chemprop Ensemble with Fine-Tuning (API)
-
-Chemprop ensembles work directly with SMILES strings (no featurizer needed) and support incremental fine-tuning for faster active learning:
-
-**Basic Chemprop Ensemble:**
-
-```python
-from learnm8 import run_active_learning
-from learnm8.learners.ensemble import ChempropEnsemble
-
-chemprop_ensemble = ChempropEnsemble(
-    message_hidden_dim=300,
-    depth=3,
-    ffn_hidden_dim=300,
-    max_epochs=50,
-    batch_size=32,
-    random_states=[42, 123, 456]
-)
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=chemprop_ensemble,
-    target_col='Activity',
-    n_cycles=10,
-    batch_fraction=0.01
-)
-```
-
-**With Incremental Fine-Tuning:**
-
-Fine-tuning enables models to load checkpoints from previous cycles and continue training, reducing computational cost in later cycles:
-
-```python
-from pathlib import Path
-
-chemprop_finetuned = ChempropEnsemble(
-    message_hidden_dim=300,
-    depth=3,
-    max_epochs=50,
-    enable_fine_tuning=True,
-    checkpoint_dir=Path('./checkpoints/chemprop_ensemble')
-)
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=chemprop_finetuned,
-    target_col='Activity',
-    n_cycles=15,
-    batch_fraction=0.01
-)
-```
-
-**Fine-Tuning Behavior:**
-
-- Cycle 0: Train from scratch, save checkpoints
-- Cycles 1+: Load previous checkpoint, fine-tune on expanded dataset
-- Each ensemble member (3 models) has separate checkpoints
-- Graceful fallback to fresh training if checkpoint loading fails
-
-**Hybrid Mode (Graph + Descriptors):**
-
-Combine graph features with molecular descriptors for improved performance:
-
-```python
-chemprop_hybrid = ChempropEnsemble(
-    message_hidden_dim=300,
-    depth=3,
-    max_epochs=50
-)
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle='oracle.csv',
-    learner=chemprop_hybrid,
-    target_col='Activity',
-    featurizer='descriptors',  # 1613-D Mordred descriptors as x_d
-    n_cycles=10
-)
-```
-
-**Custom Architecture:**
-
-```python
-chemprop_custom = ChempropEnsemble(
-    message_hidden_dim=500,    # Larger hidden dimension
-    depth=5,                   # Deeper message passing
-    ffn_hidden_dim=500,        # Larger FFN
-    ffn_num_layers=2,          # Multi-layer FFN
-    dropout=0.1,               # Regularization
-    max_epochs=100,            # More training
-    batch_size=64,             # Larger batches
-    early_stopping=True,
-    early_stopping_patience=15
-)
-```
-
-## Performance Tradeoff Tables
-
-### Accuracy vs Speed
-
-| Configuration | Accuracy (AUC) | Training Time | Prediction Time | Recommended For |
-|--------------|----------------|---------------|-----------------|-----------------|
-| Single RF | 0.78 ± 0.05 | 2s | 1s | Rapid prototyping |
-| RFEnsemble (3x) | 0.82 ± 0.03 | 6s | 3s | Improved accuracy |
-| MixedEnsemble | 0.84 ± 0.02 | 10s | 4s | Production robustness |
-| ChempropEnsemble | 0.88 ± 0.02 | 180s | 6s | State-of-the-art (GPU) |
-
-**Note:** Timings for 1000 compound training set, 10k unlabeled pool, single CPU core for non-GPU models.
-
-### Uncertainty Quality vs Cost
-
-| Learner | Uncertainty Quality | Calibration | Computational Cost | Active Learning Performance |
-|---------|-------------------|-------------|-------------------|---------------------------|
-| Single RF (no uncertainty) | N/A | N/A | 1x | Baseline (greedy only) |
-| GP | Excellent | Well-calibrated | 5x (small datasets) | Best for < 1k compounds |
-| MC Dropout | Good | Moderate | 10x (100 passes) | Good for neural networks |
-| RFEnsemble | Good | Moderate | 3x | Fast uncertainty |
-| MixedEnsemble | Very Good | Good | 3x | Robust uncertainty |
-| ChempropEnsemble | Excellent | Well-calibrated | 3x (GPU) | State-of-the-art |
-
-### Early vs Late Cycle Performance
-
-| Cycle Stage | Training Set Size | Recommended Strategy | Ensemble Advantage |
-|-------------|------------------|---------------------|-------------------|
-| Early (0-3) | < 500 | Ensemble or GP | High (unstable single models) |
-| Middle (4-7) | 500-2000 | Ensemble | Moderate (improved stability) |
-| Late (8+) | > 2000 | Single or Ensemble | Low (stable single models) |
-
-## Comparison with Single Model Uncertainty
-
-| Uncertainty Source | Advantages | Disadvantages |
-|-------------------|------------|---------------|
-| **Ensemble (Model Disagreement)** | No tuning, robust, interpretable | 3x cost, sequential training |
-| **Gaussian Process** | Mathematically rigorous, well-calibrated | Slow (O(n³)), kernel tuning |
-| **MC Dropout** | Works with neural nets, flexible | Tuning dropout/passes, slower |
-| **Built-in RF Variance** | Fast, simple | Poor calibration, underestimates |
-
-## Best Practices
-
-1. **Start with MixedEnsemble** for production screening (maximum robustness)
-2. **Use ChempropEnsemble** when GPU available (state-of-the-art performance)
-3. **Transition to single models** as training set grows (> 5000 compounds)
-4. **Enable HDF5 caching** to offset ensemble overhead (100x speedup on features)
-5. **Use weighted ensembles** if one model type clearly outperforms others
-6. **Consider fine-tuning for Chemprop** in long campaigns (> 10 cycles)
-
-## Related Documentation
-
-- [Learner Overview](overview.md) - Introduction to learner concepts
-- [Scikit-learn Models](scikit-learn.md) - Individual scikit-learn learners
-- [Graph Neural Networks](graph-neural-networks.md) - Chemprop details
-- [Uncertainty-Based Acquisition](../acquisition/uncertainty-based.md) - Using uncertainty in acquisition
+See also: [Learners overview](overview.md), [Random Forest](random-forest.md), [Customization](../../customization/extending.md).

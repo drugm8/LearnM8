@@ -1,49 +1,16 @@
 # Building Custom Cycles
 
-This tutorial explains how to design custom active learning cycles for different screening strategies.
+This tutorial explains how to control which acquisition strategy and batch size each cycle uses.
 
-## Understanding Cycle Specifications
+## Cycle numbering and batch size
 
-Active learning cycles define **what strategy** to use and **how many compounds** to select.
+Cycle 0 is the initial batch and trains no model. Cycles 1 and later train on the labeled compounds and select with the cycle's strategy. `n_cycles=10` runs cycles 0 to 9.
 
-### Tuple Format (Python API)
+`batch_fraction` is always relative to the **original** pool size, not to the compounds still unlabeled. The batch size is `min(max(1, ceil(original_pool_size * batch_fraction)), len(selection_pool))`: at least one compound, capped at the number of compounds left to select from. For a 10,000-compound pool, `batch_fraction=0.01` selects 100 compounds per cycle.
 
-Cycles are specified as tuples:
+## Simple API
 
-```python
-('strategy_name', batch_fraction)
-```
-
-**Example:**
-```python
-cycles = [
-    ('random', 0.01),   # Cycle 0: Random 1% of pool
-    ('greedy', 0.005),  # Cycle 1: Greedy 0.5% of pool
-    ('greedy', 0.005)   # Cycle 2: Greedy 0.5% of pool
-]
-```
-
-### Why Batch Fraction is Relative to Pool Size
-
-Batch fractions are **always relative to the original pool size**, not the remaining unlabeled compounds.
-
-**Example with 10,000 compound pool:**
-
-- `batch_fraction=0.01` → 100 compounds per cycle
-- `batch_fraction=0.005` → 50 compounds per cycle
-- Consistent batch sizes across all cycles
-
-**Rationale:**
-
-- Predictable total labeling budget
-- Easy to calculate total compounds: `sum(fractions) * pool_size`
-- Fair comparison across different strategies
-
-## Simple Cycle Patterns
-
-### Initial Random Sampling
-
-Always start with random sampling to get unbiased initial training data:
+The simple API uses one batch fraction for every cycle, one strategy for cycle 0 and one for cycles 1 and later:
 
 ```python
 from learnm8 import run_active_learning
@@ -54,135 +21,24 @@ results = run_active_learning(
     learner='gp',
     target_col='Activity',
     featurizer='morgan',
-    initial_strategy='random',
-    strategy='greedy',
-    n_cycles=10
+    initial_strategy='random',   # cycle 0 (default)
+    strategy='greedy',           # cycles 1+ (default)
+    n_cycles=10,
+    batch_fraction=0.01,
 )
 ```
-
-**CLI alternative:**
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --initial-strategy random --strategy greedy --n-cycles 10
+  --initial-strategy random --strategy greedy --n-cycles 10 --batch-fraction 0.01
 ```
 
-### Pure Exploitation (Greedy)
+## CycleConfig
 
-Select compounds with best predicted scores:
-
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=None,
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    strategy='greedy',
-    n_cycles=10,
-    batch_fraction=0.01
-)
-```
-
-**When to use:**
-
-- Find top hits quickly
-- After sufficient exploration
-- Production screening focused on best compounds
-
-### Pure Exploration (Random)
-
-Continue random sampling throughout:
+For different strategies, batch sizes or parameters per phase, pass a list of `CycleConfig` objects as `cycles`. When `cycles` is given, `n_cycles`, `batch_fraction`, `strategy` and `initial_strategy` are not used.
 
 ```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=None,
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    strategy='random',
-    n_cycles=10,
-    batch_fraction=0.01
-)
-```
-
-**When to use:**
-
-- Baseline comparison
-- Building representative training sets
-- Avoiding model bias
-
-## Multi-Strategy Cycles
-
-Combine different strategies for sophisticated screening:
-
-### Random → Greedy → UCB → Greedy
-
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=None,
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[
-        ('random', 0.02),      # Phase 1: Initial exploration
-        ('greedy', 0.01),      # Phase 2: Exploit best regions
-        ('greedy', 0.01),
-        ('greedy', 0.01),
-        ('greedy', 0.01),
-        ('greedy', 0.01),
-        ('ucb', 0.01),         # Phase 3: Re-widen coverage
-        ('ucb', 0.01),
-        ('greedy', 0.01),      # Phase 4: Final exploitation
-        ('greedy', 0.01)
-    ]
-)
-```
-
-**Rationale:**
-
-1. **Random (2%)**: Get unbiased initial training data
-2. **Greedy (5 cycles × 1%)**: Rapidly find top hits
-3. **UCB (2 cycles × 1%)**: Explore uncertain, uncovered regions
-4. **Greedy (2 cycles × 1%)**: Refine top hits
-
-### Exploration → Exploitation with UCB
-
-```python
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=None,
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=[
-        ('random', 0.01),                # Initial random
-        ('ucb', 0.01),                   # High exploration
-        ('ucb', 0.01),
-        ('ucb', 0.01),
-        ('greedy', 0.005),               # Pure exploitation
-        ('greedy', 0.005),
-        ('greedy', 0.005)
-    ],
-    acquisition_params={'beta': 2.0}
-)
-```
-
-**Rationale:**
-
-- UCB balances exploration (uncertainty) and exploitation (prediction)
-- Transition to pure greedy after sufficient exploration
-- `beta=2.0` emphasizes exploration early
-
-## CycleConfig Dataclass (Advanced)
-
-For **full parameter control** per cycle, use `CycleConfig`:
-
-```python
-from learnm8 import run_active_learning
-from learnm8.core.config import CycleConfig
+from learnm8 import run_active_learning, CycleConfig
 
 results = run_active_learning(
     compound_pool='compounds.csv',
@@ -192,190 +48,35 @@ results = run_active_learning(
     featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-
-        CycleConfig(
-            'greedy',
-            n_cycles=5,
-            batch_fraction=0.01,
-            pruning_strategy='score',
-            pruning_params={'pruning_fraction': 0.3}
-        ),
-
-        CycleConfig(
-            'ucb',
-            n_cycles=4,
-            batch_fraction=0.005,
-            acquisition_params={'beta': 1.5}
-        )
-    ]
+        CycleConfig('ucb', n_cycles=3, batch_fraction=0.01,
+                    acquisition_params={'beta': 3.0}),
+        CycleConfig('greedy', n_cycles=4, batch_fraction=0.005,
+                    pruning_strategy='score',
+                    pruning_params={'pruning_fraction': 0.2}),
+    ],
 )
 ```
 
-**CycleConfig Parameters:**
+This runs 8 cycles: one random cycle at 2%, three UCB cycles at 1% and four greedy cycles at 0.5%. Fields:
 
-- `strategy`: Acquisition function name
-- `n_cycles`: Number of cycles with this configuration
-- `batch_fraction`: Fraction of pool to select per cycle
-- `pruning_strategy`: Optional pruning method
-- `pruning_params`: Optional pruning parameters
-- `acquisition_params`: Optional acquisition function parameters
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `strategy` | required | Acquisition strategy name |
+| `n_cycles` | `1` | Number of consecutive cycles with this configuration |
+| `batch_fraction` | required | Fraction of the original pool to select per cycle, in (0, 1] |
+| `pruning_strategy` | `None` | Pruning strategy (`'score'`); see [Pruning](../advanced/pruning.md) |
+| `pruning_params` | `None` | Pruning parameters, e.g. `{'pruning_fraction': 0.3}` |
+| `acquisition_params` | `None` | Strategy parameters, e.g. `{'beta': 1.5}` for UCB |
 
-**When to use CycleConfig:**
+Top-level `pruning_strategy`, `pruning_fraction`, `pruning_params` and `acquisition_params` act as defaults for every `CycleConfig` that does not set its own. A value set on a `CycleConfig` wins.
 
-- Cycle-specific pruning
-- Different acquisition parameters per phase
-- Complex multi-phase strategies
-- Reproducible experiment definitions
+## CLI cycle specification
 
-### Multi-Phase with Different Parameters
-
-```python
-cycles = [
-    CycleConfig('random', n_cycles=1, batch_fraction=0.01),
-
-    CycleConfig(
-        'ucb',
-        n_cycles=3,
-        batch_fraction=0.01,
-        acquisition_params={'beta': 3.0}
-    ),
-
-    CycleConfig(
-        'ucb',
-        n_cycles=3,
-        batch_fraction=0.01,
-        acquisition_params={'beta': 1.0}
-    ),
-
-    CycleConfig(
-        'greedy',
-        n_cycles=3,
-        batch_fraction=0.005,
-        pruning_strategy='score',
-        pruning_params={'pruning_fraction': 0.2}
-    )
-]
-
-results = run_active_learning(
-    compound_pool='compounds.csv',
-    oracle=None,
-    learner='gp',
-    target_col='Activity',
-    featurizer='morgan',
-    cycles=cycles
-)
-```
-
-**Rationale:**
-
-- UCB with high exploration weight → UCB with lower weight → Greedy
-- Gradual transition from exploration to exploitation
-- Pruning only in final greedy phase
-
-## CLI Cycle Specifications
-
-Use string format with `*n` syntax for repeating strategies:
-
-### Basic String Format
+The CLI takes a space-separated string of `strategy:fraction` or `strategy:fraction*count` entries, where `count` repeats the entry:
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.01 greedy:0.01*5"
+  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4"
 ```
 
-**Format:**
-
-- `strategy:fraction` - Single cycle
-- `strategy:fraction*n` - Repeat n times
-- Space-separated for multiple phases
-
-**Equivalent to:**
-```python
-cycles = [
-    ('random', 0.01),
-    ('greedy', 0.01),
-    ('greedy', 0.01),
-    ('greedy', 0.01),
-    ('greedy', 0.01),
-    ('greedy', 0.01)
-]
-```
-
-### Complex Multi-Phase CLI
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.02 ucb:0.01*3 greedy:0.005*4 topk:0.01*2"
-```
-
-**Expanded cycles:**
-
-1. random: 2%
-2. ucb: 1% (repeated 3 times)
-3. greedy: 0.5% (repeated 4 times)
-4. topk: 1% (repeated 2 times)
-
-**Total: 10 cycles**
-
-### CLI with Acquisition Parameters
-
-```bash
-learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --cycles "random:0.01 ucb:0.01*5" \
-  --acquisition-params '{"beta": 2.0}'  # UCB beta parameter
-```
-
-**Note:** Acquisition parameters apply to all cycles that use them.
-
-> **Note:** Predefined schedules (`--schedule quick/standard/intensive`) are not available. Use the [cycles specification](#cli-cycle-specifications) section above to define custom cycle schedules instead.
-
-## Design Principles
-
-**Early Exploration:**
-
-- Start with random sampling
-- Build unbiased initial training set
-- Typical: 1-2% of pool
-
-**Mid-Phase Exploitation:**
-
-- Use greedy or low-weight UCB
-- Focus on finding best compounds
-- Typical: 5-10 cycles × 0.5-1% of pool
-
-**Late Diversification:**
-
-- Optional high-`beta` UCB or entropy cycles
-- Cover unexplored regions
-- Typical: 1-2 cycles × 1% of pool
-
-**Final Refinement:**
-
-- Return to greedy
-- Verify top hits
-- Typical: 1-2 cycles × 0.5% of pool
-
-## Calculating Total Labeling Budget
-
-**Formula:**
-```
-total_compounds = pool_size * sum(batch_fractions)
-```
-
-**Example with 10,000 compound pool:**
-
-```python
-cycles = [
-    ('random', 0.01),      # 100 compounds
-    ('greedy', 0.01),      # 100 compounds
-    ('greedy', 0.01),      # 100 compounds
-    ('greedy', 0.01),      # 100 compounds
-    ('greedy', 0.01),      # 100 compounds
-    ('ucb', 0.01)          # 100 compounds
-]
-
-total_fraction = 0.01 + 0.01 + 0.01 + 0.01 + 0.01 + 0.01
-total_compounds = 10000 * 0.06
-```
-
-**Result: 600 compounds labeled (6% of pool)**
+This is the same schedule as the `CycleConfig` example above without the per-block parameters. The string form carries no per-cycle parameters; `--acquisition-params` (a JSON string) and `--pruning-fraction` apply to every cycle that uses them. For per-cycle parameters, use a [configuration file](../advanced/configuration-files.md) with a `cycles` list. `--cycles` cannot be combined with `--config` on the command line, and `--n-cycles`, `--batch-fraction` and `--strategy` are ignored when `--cycles` is given.

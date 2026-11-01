@@ -1,6 +1,6 @@
 # Python API Reference
 
-Complete reference for LearnM8's public Python API.
+Reference for LearnM8's public Python API.
 
 **Imports:**
 
@@ -12,6 +12,8 @@ from learnm8 import (
     CycleConfig,
     ValidationResult,
 )
+from learnm8.suggest import suggest_next_batch
+from learnm8.api import list_available_learners
 ```
 
 ---
@@ -60,10 +62,10 @@ def run_active_learning(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `compound_pool` | `str \| Path \| pl.DataFrame` | — | Compound pool. CSV path (must have `ID` and `SMILES` columns) or a Polars DataFrame with the same. |
-| `oracle` | `str \| Path \| Oracle \| None` | — | Measurement oracle. `None` auto-detects from `compound_pool`. CSV path → benchmark mode. `'module.py:function'` → production mode. Pre-built `Oracle` instance. |
+| `oracle` | `str \| Path \| Oracle \| None` | — (required, may be `None`) | Measurement oracle. `None` uses `compound_pool` as a CSV oracle (benchmark mode; requires a file path). A `.csv` path → benchmark mode. `'module.py:function'` → run mode. Or an `Oracle` instance. See [Oracles](../components/oracles/overview.md). |
 | `learner` | `str \| Learner` | — | Learner shortcut string (e.g. `'rf'`, `'gp'`) or a `Learner` instance. See [Learners](../components/learners/overview.md). |
 | `target_col` | `str` | — | Column name for the target property. |
-| `featurizer` | `str \| Featurizer \| None` | `None` | Featurizer shortcut or instance. Required for feature-based learners; omit for SMILES-native learners (Chemprop). See [Featurizers](../components/featurizers/available-featurizers.md) — 39 options (38 unique). |
+| `featurizer` | `str \| Featurizer \| None` | `None` | Featurizer shortcut or instance. Required for feature-based learners; omit for SMILES-native learners (Chemprop). See [Featurizers](../components/featurizers/overview.md). |
 | `smiles_column` | `str \| None` | `None` | SMILES column name. Auto-detects `'SMILES'`, `'smiles'`, `'Smiles'` when `None`. Ignored for DataFrame input. |
 | `id_column` | `str \| None` | `None` | ID column name. Auto-detects `'ID'` or generates synthetic IDs when `None`. Ignored for DataFrame input. |
 
@@ -73,7 +75,7 @@ def run_active_learning(
 |-----------|------|---------|-------------|
 | `n_cycles` | `int` | `10` | Total cycles. Cycle 0 uses `initial_strategy`; cycles 1+ use `strategy`. |
 | `batch_fraction` | `float` | `0.01` | Fraction of the **original** pool per cycle. Floor at 1 compound; capped at remaining pool size. Must be in `(0, 1]`. |
-| `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles 1+. One of: `greedy`, `random`, `topk`, `ucb`, `ei`, `pi`, `thompson`, `entropy`. |
+| `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles 1+. One of: `greedy`, `random`, `topk`, `ucb`, `ei`, `pi`, `thompson`, `entropy`, or a name added to `ACQUISITION_REGISTRY` (see [Extending](../customization/extending.md)). |
 | `initial_strategy` | `str` | `'random'` | Acquisition strategy for cycle 0. |
 
 #### Cycle control — advanced API
@@ -93,7 +95,7 @@ def run_active_learning(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `output_dir` | `str \| Path \| None` | `None` | Output directory. Auto-generates `learnm8_results_YYYYMMDD_HHMMSS` when `None`. |
-| `cache_dir` | `str \| Path \| None` | `None` | HDF5 feature cache directory. Defaults to `{output_dir}/.cache`. Sharing across experiments gives ~100× speedup. |
+| `cache_dir` | `str \| Path \| None` | `None` | HDF5 feature cache directory. Defaults to `{output_dir}/.cache`. Share one directory across experiments on the same compounds. |
 | `output_format` | `'auto' \| 'csv' \| 'parquet'` | `'auto'` | Output file format. `'auto'` selects parquet for outputs >1M rows (constant-RAM streaming write), CSV otherwise. `cycle_metrics` is always CSV. |
 
 #### Reproducibility
@@ -106,22 +108,22 @@ def run_active_learning(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `n_jobs` | `int` | `-1` | Parallel workers for feature extraction. `-1` = all CPU cores. `1` = sequential. |
-| `device` | `str` | `'auto'` | Compute device for GPU learners. `'auto'` uses CUDA if available. Options: `'cpu'`, `'cuda'`, `'cuda:N'`. Ignored by CPU-only learners. |
-| `memory_safety_factor` | `float` | `0.7` | Fraction of available memory to target when auto-sizing GPU batches. Range `(0, 1]`. |
+| `n_jobs` | `int` | `-1` | Parallel jobs for CPU-bound operations. `-1` = all CPU cores, `0` disables parallelism. Ignored by GPU-accelerated learners (`rf_fil`, `ridge_cuml`). |
+| `device` | `str` | `'auto'` | Compute device for GPU learners. `'auto'` uses CUDA if available. Options: `'cpu'`, `'cuda'`, `'cuda:N'`, `'mps'`. Ignored by CPU-only learners. |
+| `memory_safety_factor` | `float` | `0.7` | Fraction of available memory used for prediction batching. Range `(0, 1]`. |
 
 #### Memory / large-pool guards
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `large_features_ack` | `bool` | `False` | Acknowledge large feature footprint on pools >10M compounds. Descriptor-class featurizers (>1 KB/molecule) raise `ConfigurationError` on >10M pools unless this is `True`. |
+| `large_features_ack` | `bool` | `False` | Acknowledge a large feature footprint. Descriptor-class featurizers on pools above 10M compounds raise `ConfigurationError` unless this is `True`. CLI: `--allow-large-features`. |
 
 #### Advanced
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `enable_chemprop_fine_tuning` | `bool` | `False` | Incremental fine-tuning for Chemprop learners. Saves checkpoints after each cycle; loads them on the next. Reduces training time 50–90% in later cycles. Checkpoints go to `{output_dir}/.checkpoints/chemprop/`. |
-| `pruning_fraction` | `float \| None` | `None` | Fraction of compounds to prune per cycle (range `0.0–0.9`). Pruned compounds are excluded from future selection. |
+| `enable_chemprop_fine_tuning` | `bool` | `False` | Incremental fine-tuning for Chemprop learners. Saves checkpoints after each cycle; loads them on the next. Checkpoints go to `{output_dir}/.checkpoints/chemprop/`. |
+| `pruning_fraction` | `float \| None` | `None` | Fraction of compounds to prune per cycle (range `0.0–0.9`). Pruned compounds are excluded from future selection. See [Pruning](../advanced/pruning.md). |
 | `pruning_strategy` | `str \| None` | `None` | Pruning strategy. Defaults to `'score'` when `pruning_fraction` is set. |
 | `pruning_params` | `dict \| None` | `None` | Extra pruning parameters. `pruning_fraction` is merged in automatically. |
 | `acquisition_params` | `dict \| None` | `None` | Extra acquisition parameters passed to the strategy constructor. E.g. `{'beta': 2.0}` for UCB, `{'xi': 0.05}` for EI/PI, `{'k_fraction': 0.05}` for Top-K. |
@@ -164,17 +166,19 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 
 #### cycle_metrics keys
 
-**All modes:**
+The tables below list the main keys; the dicts contain additional keys (for example `strategy`, `selection_path`, `pool_size`, prediction statistics and pruning counts).
+
+**Both modes:**
 
 | Key | Type | Description |
 |-----|------|-------------|
 | `cycle` | `int` | Cycle number (0 = initialization) |
-| `n_selected` | `int` | Compounds selected this cycle |
-| `n_labeled` | `int` | Total labeled after this cycle |
+| `batch_size` | `int` | Compounds selected this cycle |
+| `cumulative_labeled` | `int` | Total labeled after this cycle |
 | `remaining_unlabeled` | `int` | Unlabeled compounds remaining |
 | `n_failed` | `int` | Compounds selected this cycle whose oracle value was missing, null, NaN, infinite or non-numeric (status `failed`); `0` when none |
-| `avg_score_selected` | `float` | Mean oracle score of selected compounds |
-| `best_so_far` | `float` | Best oracle score found so far |
+| `avg_score_selected` | `float \| None` | Mean oracle score of selected compounds |
+| `best_so_far` | `float \| None` | Best oracle score found so far |
 | `total_time` | `float` | Total cycle time (seconds) |
 | `training_time` | `float` | Model training time (seconds) |
 | `prediction_time` | `float` | Prediction time (seconds) |
@@ -185,7 +189,7 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 | `uncertainty_std` | `float \| None` | Std dev of uncertainty; `None` when skipped |
 | `feature_extraction_time` | `float` | Feature extraction time (seconds) |
 
-**Benchmark mode only** (CSV oracle):
+**Benchmark mode only** (CSV oracle; may be `None` when undefined):
 
 | Key | Type | Description |
 |-----|------|-------------|
@@ -217,7 +221,7 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 
 | Exception | Condition |
 |-----------|-----------|
-| `ConfigurationError` | Invalid parameters; or descriptor featurizer on >10M pool without `large_features_ack=True` |
+| `ConfigurationError` | Invalid parameters; descriptor featurizer on a pool above 10M compounds without `large_features_ack=True`; `streaming='always'` with an ineligible cycle |
 | `ValidationError` | Compound pool fails SMILES validation; or `target_col` is non-numeric |
 | `FeatureExtractionError` | Feature extraction fails |
 | `LearnerError` | Model training or prediction fails |
@@ -226,9 +230,11 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 ### Oracle auto-detection
 
 - `oracle=None` + CSV `compound_pool` → same file used as benchmark oracle
-- `oracle=None` + DataFrame `compound_pool` → raises `ConfigurationError`
+- `oracle=None` + DataFrame `compound_pool` → raises `ValueError`
 - CSV oracle → benchmark mode (discovery/ranking metrics available)
-- Python-function oracle → production mode (basic metrics only)
+- Python oracle → run mode (basic metrics only)
+
+See [Benchmark mode vs run mode](../tutorials/running-experiments.md#benchmark-mode-vs-run-mode).
 
 ---
 
@@ -310,7 +316,7 @@ def validate_compound_pool(
 |-----------|------|---------|-------------|
 | `compound_pool` | `pl.DataFrame` | — | DataFrame with `ID` and `SMILES` columns. |
 | `n_jobs` | `int` | `-1` | Parallel workers. `-1` = all CPU cores. `1` = sequential. |
-| `progress` | `bool` | `True` | Show progress bar (requires tqdm). |
+| `progress` | `bool` | `True` | Show a progress bar. |
 | `target_col` | `str \| None` | `None` | If provided and the column exists in `compound_pool`, validates that it has a numeric dtype. Raises `ValidationError` if non-numeric. |
 
 ### Returns
@@ -343,11 +349,11 @@ def extract_features(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `smiles_list` | `list[str]` | — | SMILES strings to featurize. |
-| `featurizer` | `str \| Featurizer` | — | Featurizer shortcut string or instance. See [Available Featurizers](../components/featurizers/available-featurizers.md). |
-| `cache_dir` | `Path \| None` | `None` | HDF5 cache directory. Defaults to `.cache` in CWD. |
+| `featurizer` | `str \| Featurizer` | — | Featurizer shortcut string or instance. See [Featurizers](../components/featurizers/overview.md). |
+| `cache_dir` | `Path \| None` | `None` | Feature cache directory (default: `.cache`). |
 | `n_jobs` | `int` | `-1` | Parallel workers. `-1` = all CPU cores, `1` = sequential. The value is passed through unchanged. |
 | `show_progress` | `bool` | `False` | Show tqdm progress bar. |
-| `preferred_dtype` | `str` | `'float32'` | Hint to the cache layer for output dtype. Tree learners pass `'uint8'` to skip the float32 inflation step for binary fingerprints (~4× working-set reduction on Morgan 2048-bit). |
+| `preferred_dtype` | `str` | `'float32'` | Hint to the cache layer for output dtype. Tree learners pass `'uint8'` to skip the float32 inflation step for binary fingerprints (a 4× smaller working set than float32). |
 
 ### Returns
 
@@ -357,8 +363,8 @@ def extract_features(
 
 | Exception | Condition |
 |-----------|-----------|
-| `FeatureExtractionError` | Featurizer unknown or SMILES invalid |
-| `PersistenceError` | Cache file corrupt, incompatible or unreadable (the file is left untouched) |
+| `ValueError` | Unknown featurizer string |
+| `TypeError` | `featurizer` is neither a string nor a `Featurizer` |
 
 ---
 
@@ -391,7 +397,7 @@ class CycleConfig:
 |-----------|------|---------|-------------|
 | `strategy` | `str` | — | Acquisition strategy name. |
 | `n_cycles` | `int` | `1` | Number of cycles sharing this config. |
-| `batch_fraction` | `float \| None` | `None` | Fraction of original pool per cycle. Falls back to `run_active_learning`'s `batch_fraction` when `None`. |
+| `batch_fraction` | `float \| None` | `None` | Fraction of original pool per cycle, in `(0, 1]`. Required: `None` raises `ValueError`. |
 | `pruning_strategy` | `str \| None` | `None` | Pruning strategy name (e.g. `'score'`). |
 | `pruning_params` | `dict \| None` | `None` | Pruning parameters (e.g. `{'pruning_fraction': 0.3}`). |
 | `acquisition_params` | `dict \| None` | `None` | Strategy-specific parameters passed to the acquisition constructor. |
@@ -424,176 +430,28 @@ class ValidationResult:
 
 ## Acquisition Strategy Classes
 
-All strategies are importable from `learnm8.acquisition`.
+All strategies are importable from `learnm8.acquisition` and selected by name through `strategy` or `CycleConfig`. Constructor arguments are passed through `acquisition_params`.
 
-### GreedyAcquisition
+| Class | Name | Constructor parameters | Needs uncertainty |
+|-------|------|------------------------|-------------------|
+| `GreedyAcquisition` | `greedy` | `score_direction='higher'` | No |
+| `RandomAcquisition` | `random` | `random_state=42` | No |
+| `TopKAcquisition` | `topk` | `k_fraction=0.1`, `score_direction='higher'`, `random_state=42` | No |
+| `UCBAcquisition` | `ucb` | `beta=2.0` | Yes |
+| `ExpectedImprovementAcquisition` | `ei` | `xi=0.01`, `minimize=None` (deprecated, use `score_direction`), `score_direction='higher'`, `current_best=None` | Yes |
+| `ProbabilityImprovementAcquisition` | `pi` | `xi=0.01`, `minimize=None` (deprecated, use `score_direction`), `score_direction='higher'`, `current_best=None` | Yes |
+| `ThompsonSamplingAcquisition` | `thompson` | `random_state=42` | Yes |
+| `EntropyAcquisition` | `entropy` | `entropy_type='uncertainty'` (or `'variance'`) | Yes |
 
-```python
-class GreedyAcquisition(AcquisitionFunction):
-    def __init__(self, score_direction: str = 'higher', **kwargs)
-    def requires_uncertainty(self) -> bool  # False
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects the `n_select` compounds with the highest (or lowest) predicted value. Pure exploitation.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `score_direction` | `str` | `'higher'` | `'higher'` to select max predictions; `'lower'` to select min. |
-
----
-
-### RandomAcquisition
-
-```python
-class RandomAcquisition(AcquisitionFunction):
-    def __init__(self, random_state: int = 42, **kwargs)
-    def requires_uncertainty(self) -> bool  # False
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects `n_select` compounds uniformly at random. Unbiased exploration baseline.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `random_state` | `int` | `42` | Random seed. |
-
----
-
-### TopKAcquisition
-
-```python
-class TopKAcquisition(AcquisitionFunction):
-    def __init__(
-        self,
-        k_fraction: float = 0.1,
-        score_direction: str = 'higher',
-        random_state: int = 42,
-        **kwargs,
-    )
-    def requires_uncertainty(self) -> bool  # False
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Restricts the candidate set to the top `k_fraction` of compounds by predicted score, then samples `n_select` uniformly from that subset.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `k_fraction` | `float` | `0.1` | Fraction of pool to consider (e.g. `0.1` = top 10%). |
-| `score_direction` | `str` | `'higher'` | `'higher'` or `'lower'`. |
-| `random_state` | `int` | `42` | Random seed for sampling within top-K. |
-
----
-
-### UCBAcquisition
-
-```python
-class UCBAcquisition(AcquisitionFunction):
-    def __init__(self, beta: float = 2.0, **kwargs)
-    def requires_uncertainty(self) -> bool  # True
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects by upper confidence bound: `score = mean + β × uncertainty`. Higher `β` favours exploration.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `beta` | `float` | `2.0` | Exploration weight. |
-
----
-
-### ExpectedImprovementAcquisition
-
-```python
-class ExpectedImprovementAcquisition(AcquisitionFunction):
-    def __init__(
-        self,
-        xi: float = 0.01,
-        score_direction: str = 'higher',
-        current_best: float | None = None,
-        minimize: bool | None = None,  # deprecated — use score_direction
-        **kwargs,
-    )
-    def requires_uncertainty(self) -> bool  # True
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects by expected improvement over `current_best`. Uses `scipy.special.ndtr` for the CDF (z-clipped to `[-37.0, 37.0]` for numerical stability).
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `xi` | `float` | `0.01` | Exploration–exploitation trade-off. Higher values encourage more exploration. |
-| `score_direction` | `str` | `'higher'` | `'higher'` or `'lower'`. |
-| `current_best` | `float \| None` | `None` | Reference value for improvement calculation. Inferred from labeled data when `None`. |
-| `minimize` | `bool \| None` | `None` | **Deprecated.** Use `score_direction` instead. |
-
----
-
-### ProbabilityImprovementAcquisition
-
-```python
-class ProbabilityImprovementAcquisition(AcquisitionFunction):
-    def __init__(
-        self,
-        xi: float = 0.01,
-        score_direction: str = 'higher',
-        current_best: float | None = None,
-        minimize: bool | None = None,  # deprecated — use score_direction
-        **kwargs,
-    )
-    def requires_uncertainty(self) -> bool  # True
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects by probability of improving over `current_best`. More conservative than EI — selects more reliably near the current best.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `xi` | `float` | `0.01` | Jitter; higher values encourage exploration. |
-| `score_direction` | `str` | `'higher'` | `'higher'` or `'lower'`. |
-| `current_best` | `float \| None` | `None` | Reference value. Inferred from labeled data when `None`. |
-| `minimize` | `bool \| None` | `None` | **Deprecated.** Use `score_direction` instead. |
-
----
-
-### ThompsonSamplingAcquisition
-
-```python
-class ThompsonSamplingAcquisition(AcquisitionFunction):
-    def __init__(self, random_state: int = 42, **kwargs)
-    def requires_uncertainty(self) -> bool  # True
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Draws samples from the posterior predictive distribution (`N(mean, uncertainty²)`) and selects compounds with the highest sampled values.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `random_state` | `int` | `42` | Random seed for posterior sampling. |
-
----
-
-### EntropyAcquisition
-
-```python
-class EntropyAcquisition(AcquisitionFunction):
-    def __init__(self, entropy_type: str = 'uncertainty', **kwargs)
-    def requires_uncertainty(self) -> bool  # True
-    def select(self, compounds: pl.DataFrame, n_select: int) -> pl.DataFrame
-```
-
-Selects by differential entropy of the Gaussian predictive distribution. Rank-equivalent to σ-descending selection.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `entropy_type` | `str` | `'uncertainty'` | `'uncertainty'`: `H = 0.5·log(2πe·σ²)`. `'variance'`: `H = 0.5·log(2πe·σ⁴)`. Both rank identically to σ-descending. Sigma is floored at `1e-9` for numerical robustness. |
+All accept `**kwargs`. Details: [Greedy](../components/acquisition/greedy.md), [Random](../components/acquisition/random.md), [Top-K](../components/acquisition/topk.md), [UCB](../components/acquisition/ucb.md), [Expected Improvement](../components/acquisition/expected-improvement.md), [Probability of Improvement](../components/acquisition/probability-improvement.md), [Thompson Sampling](../components/acquisition/thompson-sampling.md), [Entropy](../components/acquisition/entropy.md). To add your own, see [Extending LearnM8](../customization/extending.md).
 
 ---
 
 ## See Also
 
 - [Usage Examples](examples.md)
+- [Extending LearnM8](../customization/extending.md)
 - [Learners Overview](../components/learners/overview.md)
-- [Available Featurizers](../components/featurizers/available-featurizers.md)
+- [Featurizers](../components/featurizers/overview.md)
 - [Acquisition Overview](../components/acquisition/overview.md)
 - [CLI Reference](cli-reference.md)

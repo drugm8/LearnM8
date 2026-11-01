@@ -199,7 +199,7 @@ print(results)
 ### Using Oracles in Active Learning
 
 ```python
-from learnm8 import run_active_learning
+from learnm8 import CycleConfig, run_active_learning
 from examples.oracles import SimilarityOracle
 import polars as pl
 
@@ -220,9 +220,9 @@ results = run_active_learning(
     learner='gp',                      # Gaussian Process learner
     featurizer='morgan',          # Feature type for ML model
     cycles=[
-        ('random', 0.01),              # 1% random initial sampling
-        ('ucb', 0.005),                # 0.5% exploitation (5 cycles)
-        ('greedy', 0.01)               # 1% final exploitation
+        CycleConfig('random', n_cycles=1, batch_fraction=0.01),  # cycle 0: 1% random
+        CycleConfig('ucb', n_cycles=5, batch_fraction=0.005),    # 5 cycles at 0.5%
+        CycleConfig('greedy', n_cycles=1, batch_fraction=0.01),  # final exploitation
     ],
     output_format='csv'
 )

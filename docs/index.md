@@ -13,9 +13,9 @@ The framework addresses a fundamental challenge in computational chemistry: how 
 
 **Comprehensive model suite**
 
-- 21 models spanning scikit-learn, PyTorch, Chemprop GNNs and ensembles — see [Learners](components/learners/overview.md)
-- Uncertainty quantification for 17 of the 21
-- Optional GPU acceleration via GPyTorch and RAPIDS cuML
+- 20 models spanning scikit-learn, PyTorch, Chemprop GNNs and ensembles — see [Learners](components/learners/overview.md)
+- Uncertainty quantification for 16 of the 20
+- GPU learners via GPyTorch and RAPIDS cuML
 
 **Rich acquisition strategies**
 
@@ -24,20 +24,20 @@ The framework addresses a fundamental challenge in computational chemistry: how 
 
 **Flexible featurization**
 
-- 39 registered featurizers, 2D and 3D — see [Featurizers](components/featurizers/available-featurizers.md)
-- HDF5 feature cache gives roughly 100× speedup on repeated extraction
+- 39 registered featurizers, 2D and 3D — see [Featurizers](components/featurizers/overview.md)
+- Persistent HDF5 feature cache, always on
 
 **Built for scale**
 
 - Automatic parallelization for feature extraction
 - Vectorized Polars operations throughout
-- Streaming parquet output keeps RAM constant on pools beyond 1M compounds
+- Streaming predict-and-select path and Parquet output for very large pools
 
 **Two operating modes**
 
-- **Benchmark mode** (CSV oracle): full discovery, enrichment and ranking metrics against ground truth
-- **Production mode** (Python oracle): drives real assays or docking software
-- Auto-detected from the oracle type; no manual flag required
+- **Benchmark mode** (CSV oracle): discovery, enrichment and ranking metrics against ground truth
+- **Run mode** (Python oracle): drives real assays or docking software
+- Derived from the oracle type; see [Benchmark mode vs run mode](tutorials/running-experiments.md#benchmark-mode-vs-run-mode)
 
 ## Usage Examples
 
@@ -67,7 +67,7 @@ The same run from the command line:
 learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
 ```
 
-### Production mode
+### Run mode
 
 Point LearnM8 at your own scoring function and it will call it each cycle.
 
@@ -91,7 +91,7 @@ results = run_active_learning(
 )
 ```
 
-### Custom cycle schedules
+### Custom cycles
 
 Vary the strategy, the batch size and the pruning per phase — explore first, then exploit.
 
@@ -102,7 +102,7 @@ results = run_active_learning(
     compound_pool='compounds.csv',
     oracle=None,
     target_col='Activity',
-    learner='rf_ensemble',
+    learner='rf',
     featurizer='morgan',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
@@ -123,16 +123,16 @@ results = run_active_learning(
 
 **Getting started**
 
-- **[Installation Guide](getting-started/installation.md)**: Set up LearnM8 with conda and optional dependencies
+- **[Installation Guide](getting-started/installation.md)**: Set up LearnM8 with conda
 - **[Quickstart Tutorial](getting-started/quickstart.md)**: Run your first experiment
 - **[Core Concepts](getting-started/concepts.md)**: Understand active learning and LearnM8's design
 
 **Components**
 
-- **[Learners](components/learners/overview.md)**: All 21 models, with a decision matrix by dataset size and use case
+- **[Learners](components/learners/overview.md)**: All 20 models
 - **[Acquisition Functions](components/acquisition/overview.md)**: All 8 strategies and when to reach for each
-- **[Featurizers](components/featurizers/available-featurizers.md)**: All 39 featurizers with storage formats and dimensions
-- **[Oracles](components/oracles/overview.md)**: Benchmark and production measurement sources
+- **[Featurizers](components/featurizers/overview.md)**: All 39 featurizers
+- **[Oracles](components/oracles/overview.md)**: Benchmark and run-mode measurement sources
 
 **Reference**
 

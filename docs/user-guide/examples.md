@@ -22,7 +22,7 @@ results = run_active_learning(
 
 for m in results['cycle_metrics']:
     print(f"Cycle {m['cycle']:2d} | strategy={m['strategy']:<8} | "
-          f"labeled={m['n_labeled']:4d} | r2={m['r2_score']:.3f}")
+          f"labeled={m['cumulative_labeled']:4d} | best={m['best_so_far']}")
 ```
 
 ## Multi-Stage Acquisition with CycleConfig
@@ -35,23 +35,22 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='rf_ensemble',
+    learner='rf',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
         CycleConfig('random',  n_cycles=1, batch_fraction=0.02),
         CycleConfig('ucb',     n_cycles=6, batch_fraction=0.005,
                     acquisition_params={'beta': 2.0}),
-        CycleConfig('greedy',  n_cycles=3, batch_fraction=0.005,
-                    acquisition_params={'score_direction': 'higher'}),
+        CycleConfig('greedy',  n_cycles=3, batch_fraction=0.005),
     ],
     random_state=42,
 )
 ```
 
-## Production Screening with a Custom Oracle
+## Run Mode with a Python Oracle
 
-Use a Python function as the oracle when measurements are expensive (docking, synthesis, etc.).
+Use a Python function as the oracle when measurements are expensive (docking, synthesis, etc.). The function receives a list of compound IDs and returns a DataFrame with an `ID` column and the target column. See [Python oracle](../components/oracles/python-oracle.md).
 
 ```python
 # scoring.py
@@ -67,7 +66,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='virtual_library.csv',
     oracle='scoring.py:calculate_binding',
-    learner='rf_ensemble',
+    learner='rf',
     target_col='binding_score',
     featurizer='morgan',
     cycles=[
@@ -80,7 +79,7 @@ results = run_active_learning(
 
 ## Gaussian Process with Uncertainty
 
-GP provides calibrated uncertainty estimates — pair it with UCB, EI, PI, or Thompson sampling.
+GP provides uncertainty estimates, so it can be paired with UCB, EI, PI, Thompson sampling or entropy.
 
 ```python
 from learnm8 import run_active_learning, CycleConfig
@@ -99,9 +98,9 @@ results = run_active_learning(
 )
 ```
 
-## Skipping Uncertainty for Speed
+## Skipping Uncertainty
 
-When using a greedy strategy, uncertainty computation is skipped automatically. Use `force_uncertainty=True` to always compute it (e.g., for diagnostic logging).
+When the acquisition strategy does not need uncertainty (for example greedy), learners that can skip it (including `gp`) do so automatically. Use `force_uncertainty=True` to always compute it, for example for diagnostics.
 
 ```python
 from learnm8 import run_active_learning, CycleConfig
@@ -136,7 +135,7 @@ results_diag = run_active_learning(
 
 ## Large-Scale Screening (100M Compounds)
 
-Optimise for scale with Parquet output, similarity metric disabled, and shared HDF5 cache.
+Parquet output, diversity metrics disabled, a shared feature cache and the large-feature acknowledgement.
 
 ```python
 from learnm8 import run_active_learning, CycleConfig
@@ -200,7 +199,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='rf_ensemble',
+    learner='rf',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -215,7 +214,7 @@ results = run_active_learning(
 # Inspect uncertainty estimates from final cycle
 last = results['cycle_metrics'][-1]
 print(f"Has uncertainty: {last['has_uncertainty']}")
-print(f"Mean uncertainty: {last['mean_uncertainty']}")
+print(f"Mean uncertainty: {last['uncertainty_mean']}")
 ```
 
 ## Score-Based Pruning
@@ -244,7 +243,7 @@ results = run_active_learning(
 
 ## Minimisation Campaign
 
-Set `score_direction='lower'` to target the lowest predicted values (e.g., minimise toxicity or binding energy).
+Set `score_direction='lower'` to target the lowest values (e.g., minimise toxicity or binding energy).
 
 ```python
 from learnm8 import run_active_learning, CycleConfig
@@ -257,9 +256,9 @@ results = run_active_learning(
     featurizer='descriptors',
     cycles=[
         CycleConfig('random', n_cycles=1, batch_fraction=0.02),
-        CycleConfig('greedy', n_cycles=9, batch_fraction=0.005,
-                    acquisition_params={'score_direction': 'lower'}),
+        CycleConfig('greedy', n_cycles=9, batch_fraction=0.005),
     ],
+    score_direction='lower',
 )
 ```
 
@@ -273,7 +272,7 @@ from pathlib import Path
 
 smiles = ['CCO', 'c1ccccc1', 'CC(=O)Oc1ccccc1C(=O)O']
 
-# Binary fingerprint (packed storage, ~32x smaller than float32)
+# Binary fingerprint
 morgan_fp = extract_features(smiles, featurizer='morgan', cache_dir=Path('.cache'))
 
 # Physicochemical descriptors
@@ -285,7 +284,7 @@ fp_uint8 = extract_features(smiles, featurizer='morgan',
                              preferred_dtype='uint8')
 
 print(morgan_fp.shape)    # (3, 2048)
-print(descriptors.shape)  # (3, 1613)
+print(descriptors.shape)  # (3, n_descriptors)
 ```
 
 ## Compound Pool Validation
@@ -305,12 +304,10 @@ result = validate_compound_pool(
 )
 
 print(f"Valid:   {len(result.valid_compounds)}")
-print(f"Invalid: {len(result.invalid_smiles)}")
+print(f"Invalid: {len(result.invalid_compounds)}")
 
-if result.invalid_smiles:
-    print("Invalid SMILES:")
-    for idx, smi in zip(result.invalid_indices, result.invalid_smiles):
-        print(f"  row {idx}: {smi}")
+for cid, error in result.validation_errors.items():
+    print(f"  {cid}: {error}")
 ```
 
 ## Accessing Results
@@ -324,15 +321,15 @@ df = results['compounds_df']
 
 # Per-cycle metrics
 for m in results['cycle_metrics']:
-    print(m['cycle'], m['strategy'], m['n_labeled'], m['r2_score'])
+    print(m['cycle'], m['strategy'], m['cumulative_labeled'], m['avg_score_selected'])
 
 # Aggregate summary
 agg = results['aggregate_metrics']
-print(agg['final_r2'], agg['best_r2_cycle'])
+print(agg['best_compound_value'], agg['total_labeled'])
 
 # Output files written
-for path in results['saved_files']:
-    print(path)
+for name, path in results['saved_files'].items():
+    print(name, path)
 ```
 
 ## CLI Quick Reference
@@ -341,14 +338,14 @@ for path in results['saved_files']:
 # Benchmark experiment
 learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
 
-# Production screening
-learnm8 run compounds.csv scoring.py:score --target score --learner rf_ensemble --n-cycles 20
+# Run mode (Python oracle)
+learnm8 run compounds.csv scoring.py:score --target score --learner rf --n-cycles 20
 
 # Custom strategy
 learnm8 run compounds.csv --target Activity --learner gp --featurizer ecfp6 \
   --strategy ucb --acquisition-params '{"beta": 2.0}' --n-cycles 15
 
-# Multi-stage schedule
+# Multi-stage cycles
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
   --cycles "random:0.02 ucb:0.005*7 greedy:0.005*2"
 
@@ -365,3 +362,9 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
 learnm8 run compounds.csv --target Toxicity --learner rf --featurizer descriptors \
   --strategy greedy --score-direction lower --n-cycles 10
 ```
+
+## See also
+
+- [API Reference](api-reference.md)
+- [CLI Reference](cli-reference.md)
+- [Building Custom Cycles](../tutorials/building-custom-cycles.md)

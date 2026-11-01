@@ -1,508 +1,196 @@
 # CLI Reference
 
-LearnM8 provides a command-line interface for running active learning experiments and validating compounds. The CLI has three subcommands: `run`, `validate` and `suggest`.
-
-## Getting Help
-
-Access help information at any level:
+The `learnm8` command has three subcommands: `run`, `validate` and `suggest`.
 
 ```bash
 learnm8 --help
 learnm8 run --help
-learnm8 validate --help
-learnm8 suggest --help
 ```
 
-## Command Overview
-
-LearnM8 CLI has three subcommands:
-
-| Subcommand | Purpose | Common Usage |
-|------------|---------|--------------|
-| `run` | Execute active learning experiment | Main workflow for screening |
-| `validate` | Validate compound pool | Pre-flight check before experiments |
-| `suggest` | Write the next batch for a slow lab assay | One round per call, see [Lab Campaigns](../tutorials/lab-campaigns.md) |
+| Subcommand | Purpose |
+|------------|---------|
+| `run` | Execute an active learning experiment |
+| `validate` | Check a compound pool before running |
+| `suggest` | Write the next batch for a slow lab assay, see [Lab Campaigns](../tutorials/lab-campaigns.md) |
 
 ## learnm8 run
 
-Run an active learning experiment with specified configuration.
+```bash
+learnm8 run [COMPOUND_POOL] [ORACLE] --target COLUMN --featurizer TYPE --learner MODEL [OPTIONS]
+```
 
-### Basic Syntax
+### Positional arguments
+
+| Argument | Description |
+|----------|-------------|
+| `COMPOUND_POOL` | Compound file (`.csv`, `.sdf`, `.smi`) with ID and SMILES. May instead be set in `--config` |
+| `ORACLE` | Oracle specification. If omitted, the pool file is used as a CSV oracle (benchmark mode) |
+
+`ORACLE` is either a CSV file (benchmark mode) or `module.py:function` (run mode). See [Benchmark mode vs run mode](../tutorials/running-experiments.md#benchmark-mode-vs-run-mode).
+
+### Core configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--target COLUMN`, `--target-column COLUMN` | none | Target property column. Required unless `target_col` is set in `--config` |
+| `--featurizer TYPE` | none | Featurizer name, see [Featurizers](../components/featurizers/overview.md). Required unless the learner works on SMILES directly (`chemprop`, `chemprop_ensemble`) |
+| `--learner MODEL` | `rf` | Learner name, see [Learners](../components/learners/overview.md) |
+| `--score-direction {higher,lower}` | `higher` | Optimization direction |
+| `--smiles-col NAME` | auto-detect | SMILES column in the pool |
+| `--id-col NAME` | auto-detect | ID column in the pool |
+
+The valid `--learner` values depend on what is importable in your environment (`gpu_gp`, `svgp`, `rf_fil` and `ridge_cuml` need their GPU libraries). List them with:
 
 ```bash
-learnm8 run COMPOUND_POOL [ORACLE] --target COLUMN --featurizer TYPE --learner MODEL [OPTIONS]
+python -c "from learnm8.api import list_available_learners; print(list_available_learners())"
 ```
 
-### Positional Arguments
+### Cycle control
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `COMPOUND_POOL` | Yes | CSV file with compound library (must have ID and SMILES columns) |
-| `ORACLE` | No | Oracle specification (auto-detected if omitted) |
+`--cycles` and `--config` are mutually exclusive. Without either, the simple parameters below are used.
 
-**Oracle Formats:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--cycles SPEC` | none | Cycle specification string, e.g. `"random:0.02 greedy:0.01*5"` |
+| `--config PATH` | none | YAML or JSON config file, see [Configuration Files](../advanced/configuration-files.md) |
+| `--n-cycles N` | 10 | Number of cycles, including cycle 0 |
+| `--batch-fraction F` | 0.01 | Fraction of the original pool selected per cycle |
+| `--strategy NAME` | `greedy` | Acquisition strategy for cycles 1 and later |
+| `--initial-strategy NAME` | `random` | Acquisition strategy for cycle 0 |
 
-- **CSV file**: `oracle.csv` (benchmark mode with ground truth)
-- **Python module**: `module.py:function` (production mode with custom scoring)
-- **Auto-detect**: Omit to use `COMPOUND_POOL` as oracle (benchmark mode)
+A `--cycles` specification is whitespace-separated `strategy:fraction` entries. Append `*n` to repeat an entry `n` times: `greedy:0.01*5` is five greedy cycles at batch fraction 0.01.
 
-### Required Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `--target COLUMN` / `--target-column COLUMN` | string | Target property column name in CSV |
-| `--featurizer TYPE` | choice | Molecular featurizer. Required unless using chemprop or chemprop_ensemble (see Available Featurizers for the full list of 39 options) |
-
-**Featurizer Choices:** See [Available Featurizers](../components/featurizers/available-featurizers.md) for the full list of 39 options. Common choices: `morgan`, `maccs`, `ecfp6`, `descriptors`, `morgan_feat`.
-
-### Core Configuration
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--learner MODEL` | choice | `rf` | Machine learning model (see learner choices) |
-| `--score-direction DIR` | choice | `higher` | Optimization direction: `higher` or `lower` |
-| `--smiles-col NAME` | string | auto-detect | SMILES column in the pool |
-| `--id-col NAME` | string | auto-detect | ID column in the pool |
-
-**Learner Choices** (availability depends on installed dependencies):
-
-- Scikit-learn and XGBoost: `rf`, `gp`, `xgb`, `dt`, `lr`
-- PyTorch: `mlp`, `mc_dropout`, `fastprop`
-- Graph neural networks: `chemprop`, `chemprop_ensemble`
-- GPU (GPyTorch, RAPIDS cuML): `gpu_gp`, `svgp`, `rf_fil`, `ridge_cuml`
-- Ensembles: `mixed_ensemble`, `rf_ensemble`, `lr_ensemble`, `xgb_ensemble`, `dt_ensemble`, `fastprop_ensemble`, `chemprop_ensemble`
-
-Use `from learnm8.api import list_available_learners; list_available_learners()` (Python) to see all available learners in your environment.
-
-### Cycle Control (Mutually Exclusive)
-
-Only one of these options can be used:
-
-#### Option 1: Custom Cycle Specification (Recommended)
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `--cycles SPEC` | string | Explicit cycle specification with strategy and batch fractions |
-
-**Cycle Specification Format:**
-```
-"strategy1:fraction1 strategy2:fraction2*n ..."
-```
-
-**Examples:**
-```bash
---cycles "random:0.02 greedy:0.01*5"
---cycles "random:0.01 ucb:0.005*8 greedy:0.01*2"
---cycles "random:0.02 greedy:0.01 ucb:0.01 greedy:0.01"
-```
-
-**Strategy Multiplier:** Use `*n` to repeat a strategy n times:
-
-- `greedy:0.01*5` = 5 cycles of greedy with 0.01 batch fraction
-- Equivalent to: `greedy:0.01 greedy:0.01 greedy:0.01 greedy:0.01 greedy:0.01`
-
-#### Option 2: Configuration File
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `--config PATH` | file | YAML or JSON configuration file |
-
-**Example:**
-```bash
-learnm8 run --config experiment.yaml
-```
-
-Configuration files can specify all parameters including cycles. See [Configuration Files](configuration-files.md) for details.
-
-#### Option 3: Simple Mode (Default)
-
-If no cycle control option is specified, simple mode is used with these parameters:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--n-cycles N` | integer | 10 | Number of active learning cycles |
-| `--batch-fraction F` | float | 0.01 | Fraction of pool to select per cycle (1%) |
-| `--strategy NAME` | string | `greedy` | Main acquisition strategy |
-| `--initial-strategy NAME` | string | `random` | First cycle strategy |
-
-**Example:**
-```bash
-learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
-  --n-cycles 15 --batch-fraction 0.005 --strategy greedy --initial-strategy random
-```
-
-### Pruning Options
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--pruning-fraction F` | float | None | Fraction of pool to prune each cycle (0.0-0.9) |
-| `--pruning-strategy NAME` | string | `score` when `--pruning-fraction` is set | Pruning strategy |
-
-**Pruning Strategy:**
-
-- `score` - Remove lowest-scoring compounds based on model predictions
-
-**Pruning Parameters:**
-
-- `pruning_fraction` (float, 0.0-0.9): Fraction of pool to prune each cycle
-
-**Example:**
-```bash
-learnm8 run large_library.csv --target Activity --featurizer morgan --learner rf \
-  --pruning-fraction 0.3 --pruning-strategy score
-```
-
-### Acquisition Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `--acquisition-params JSON` | string | JSON string of acquisition function parameters |
-
-**Example (UCB with custom beta):**
-```bash
-learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
-  --cycles "ucb:0.01*10" \
-  --acquisition-params '{"beta": 2.5}'
-```
-
-**Example (TopK with fraction):**
 ```bash
 learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf \
-  --cycles "topk:0.01*8" \
-  --acquisition-params '{"k_fraction": 0.1}'
+  --cycles "random:0.02 ucb:0.01*5 greedy:0.01*3"
 ```
 
-### Output Options
+See [Building Custom Cycles](../tutorials/building-custom-cycles.md).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `-o PATH` / `--output PATH` | directory | Auto-generated | Output directory for results |
-| `--cache-dir PATH` | directory | `{output}/.cache` | HDF5 feature cache directory |
-| `--quiet` | flag | False | Suppress progress output |
+### Pruning
 
-**Output Directory Structure:**
-```
-output_dir/
-├── compounds_final.csv          # Final compound status
-├── cycle_metrics.csv            # Per-cycle metrics
-├── selection_history.csv        # Compound selection history
-├── validation_report.csv        # SMILES validation results
-├── experiment_config.json       # Complete configuration
-└── .cache/                      # Feature cache (if cache-dir not specified)
-    └── features_morgan_2048_packed_uint8.h5   # Cached molecular features
-```
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--pruning-fraction F` | none | Fraction of the pool to prune per cycle (0.0 to 0.9) |
+| `--pruning-strategy NAME` | `score` if `--pruning-fraction` is set | Pruning strategy |
 
-**Cache Directory:** The feature cache persists across runs, providing 100x speedup when reusing the same compounds and featurizer. Share cache across experiments by specifying a common `--cache-dir`.
+See [Pruning](../advanced/pruning.md).
 
-### Advanced Options
+### Acquisition parameters
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `--random-state SEED` | integer | 42 | Random seed for reproducibility |
-| `--n-jobs N` | integer | -1 | CPU parallelism. `-1` = all cores |
-| `--device DEVICE` | string | `auto` | Compute device: `auto`, `cpu`, `cuda`, `cuda:N`, `mps` |
-| `--memory-safety-factor F` | float | 0.7 | Fraction of available memory to use for prediction batching |
-| `--output-format FORMAT` | choice | `auto` | Output format: `auto`, `csv`, `parquet`. Auto selects parquet for >1M rows |
-| `--allow-large-features` | flag | False | Bypass the large-feature guard that blocks descriptor featurizers on pools >10M compounds |
-| `--force-uncertainty` | flag | False | Force uncertainty computation every cycle, even for greedy/random/topk. Useful for diagnostics |
-| `--skip-validation` | flag | False | Skip SMILES validation, duplicate-ID checks and target-type checks. Use when the dataset was already checked (for example with `learnm8 validate`). Oracle-pool reconciliation is still performed |
-| `--streaming MODE` | choice | `auto` | Memory-efficient streaming predict-then-select path for large pools: `auto`, `always`, `never`. `auto` uses it when a cycle is eligible (streamable strategy, which every built-in strategy is, and pruning none or `score`) and falls back to the in-memory path otherwise. `always` fails if a cycle is ineligible. `never` forces the in-memory path. Stochastic strategies (`thompson`, `random`, `topk`) draw different but equivalent samples under streaming |
-
-**Mode auto-detection (not overridable via CLI):**
-
-- CSV oracle → benchmark mode (comprehensive discovery and ranking metrics)
-- Python oracle → run mode (basic metrics only)
-
-## learnm8 validate
-
-Validate compound pool using datamol SMILES validation before running experiments.
-
-### Syntax
+`--acquisition-params JSON` passes a JSON object to the acquisition function.
 
 ```bash
-learnm8 validate COMPOUND_POOL [OPTIONS]
+learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
+  --cycles "ucb:0.01*10" --acquisition-params '{"beta": 2.5}'
 ```
-
-### Parameters
-
-| Parameter | Required | Type | Description |
-|-----------|----------|------|-------------|
-| `COMPOUND_POOL` | Yes | file | CSV file with compounds (must have ID and SMILES columns) |
-| `--smiles-col NAME` | No | string | SMILES column (default: auto-detect) |
-| `--id-col NAME` | No | string | ID column (default: auto-detect) |
-| `--n-jobs N` | No | integer | Parallel CPU jobs. -1 uses all cores (default: -1) |
-| `-o PATH` / `--output PATH` | No | directory | Output directory for validation report |
-
-### Validation Process
-
-The validation command:
-
-1. Reads compound CSV file
-2. Validates each SMILES string using datamol
-3. Identifies valid and invalid compounds
-4. Reports success rate and sample errors
-5. Optionally saves detailed validation report
 
 ### Output
 
-**Console Output:**
-```
-Validating: compounds.csv
-Total compounds: 1000
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o PATH`, `--output PATH` | auto-generated | Output directory |
+| `--cache-dir PATH` | `{output}/.cache` | Feature cache directory. Share one across experiments on the same compounds |
+| `--output-format {auto,csv,parquet}` | `auto` | `auto` writes Parquet for pools of 1M or more compounds, CSV otherwise |
+| `--quiet` | off | Suppress progress output |
 
-✓ Validation complete
-Valid compounds: 987 (98.7%)
-Invalid compounds: 13
+The output directory contains `compounds_final` (`.csv` or `.parquet`), `cycle_metrics.csv`, `selection_history` (`.csv` or `.parquet`), `config.json`, `validation_report.csv` (when invalid compounds were found), and one `prediction_cycle_N.parquet` per cycle.
 
-Sample errors:
-  comp_123: Invalid SMILES syntax
-  comp_456: Aromatic bonds on sp3 atoms
-  comp_789: Valence error for atom C
-  ... and 10 more
-```
+### Resources and advanced options
 
-**Validation Report (if `-o` specified):**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--n-jobs N` | -1 | Parallel CPU jobs. `-1` uses all cores |
+| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N` or `mps` |
+| `--random-state SEED` | 42 | Random seed |
+| `--memory-safety-factor F` | 0.7 | Fraction of available memory used for prediction batching |
+| `--allow-large-features` | off | Bypass the guard that blocks descriptor-based featurizers on pools above 10M compounds |
+| `--force-uncertainty` | off | Compute uncertainty every cycle even if the acquisition function does not need it. No effect for learners without uncertainty support |
+| `--skip-validation` | off | Skip SMILES validation, duplicate-ID checks and target-type checks. Oracle-pool reconciliation still runs |
+| `--streaming {auto,always,never}` | `auto` | Streaming predict-then-select path. `auto` uses it when a cycle is eligible (streamable strategy, an output directory, pruning none or `score`) and otherwise falls back to the in-memory path. `always` errors if a cycle is ineligible. `never` forces the in-memory path. Stochastic strategies (`thompson`, `random`, `topk`) draw different but equivalent samples under streaming |
 
-File: `{output_dir}/validation_report.csv`
+## learnm8 validate
 
-| Column | Description |
-|--------|-------------|
-| ID | Compound identifier |
-| SMILES | Invalid SMILES string |
-| error | Validation error message |
+Validates SMILES with datamol and reports the valid fraction.
 
-### Examples
-
-**Basic Validation:**
 ```bash
-learnm8 validate compounds.csv
+learnm8 validate COMPOUND_POOL [--smiles-col NAME] [--id-col NAME] [--n-jobs N] [-o DIR]
 ```
 
-**Save Validation Report:**
-```bash
-learnm8 validate compounds.csv -o validation_results/
-```
+| Option | Default | Description |
+|--------|---------|-------------|
+| `COMPOUND_POOL` | required | Compound file (`.csv`, `.sdf`, `.smi`) |
+| `--smiles-col NAME` | auto-detect | SMILES column |
+| `--id-col NAME` | auto-detect | ID column |
+| `--n-jobs N` | -1 | Parallel CPU jobs |
+| `-o PATH`, `--output PATH` | none | Write `validation_report.csv` (invalid compounds with an `error` column) to this directory |
 
-**Recommended Workflow:**
+The console output lists the number of valid and invalid compounds and the first five errors.
+
 ```bash
 learnm8 validate compounds.csv -o validation/
-
-learnm8 run compounds.csv --target Activity --featurizer morgan --learner rf --n-cycles 10
 ```
 
 ## learnm8 suggest
 
-Train on the results entered so far and write the next batch file for a lab assay, then exit. See the [Lab Campaigns tutorial](../tutorials/lab-campaigns.md) for the full workflow.
-
-### Syntax
+Trains on the results entered so far, writes the next batch file and exits. See the [Lab Campaigns tutorial](../tutorials/lab-campaigns.md) for the workflow and file format.
 
 ```bash
-learnm8 suggest COMPOUND_POOL BATCH_DIR --target COLUMN [--learner MODEL] [--featurizer TYPE] [OPTIONS]
+learnm8 suggest COMPOUND_POOL BATCH_DIR --target COLUMN [OPTIONS]
 ```
 
-### Parameters
+| Option | Default | Description |
+|--------|---------|-------------|
+| `COMPOUND_POOL` | required | Compound file (`.csv`, `.sdf`, `.smi`) |
+| `BATCH_DIR` | required | Folder holding the `batch_cycle_N.csv` files |
+| `--target COLUMN`, `--target-column COLUMN` | required | Column the lab fills in |
+| `--learner MODEL` | `rf` | Learner name |
+| `--featurizer TYPE` | none | Featurizer name. Required unless the learner works on SMILES directly |
+| `--batch-size N` | 96 | Compounds in the new batch |
+| `--strategy NAME` | `greedy` | Acquisition strategy for rounds 1 and later. Round 0 is always random |
+| `--score-direction {higher,lower}` | `higher` | Optimization direction |
+| `--acquisition-params JSON` | none | JSON object of strategy parameters |
+| `--smiles-col NAME`, `--id-col NAME` | auto-detect | Column names in the pool |
+| `--cache-dir PATH` | `BATCH_DIR/.learnm8/cache` | Feature cache directory |
+| `--n-jobs N` | -1 | Parallel CPU jobs |
+| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N` or `mps` |
+| `--random-state N` | 42 | Random seed |
 
-| Parameter | Required | Type | Default | Description |
-|-----------|----------|------|---------|-------------|
-| `COMPOUND_POOL` | Yes | file | | Compound file (`.csv`, `.sdf`, `.smi`) with ID and SMILES |
-| `BATCH_DIR` | Yes | directory | | Folder holding `batch_cycle_N.csv` files. Created if missing. New batches are written here |
-| `--target COLUMN` / `--target-column COLUMN` | Yes | string | | Column the lab fills in |
-| `--learner MODEL` | No | choice | `rf` | Machine learning model |
-| `--featurizer TYPE` | No | choice | none | Molecular featurizer. Required unless the learner works on SMILES directly (chemprop, chemprop_ensemble) |
-| `--batch-size N` | No | integer | 96 | Compounds in the new batch, clipped to the remaining pool |
-| `--strategy NAME` | No | string | `greedy` | Acquisition strategy for rounds 1 and later. Round 0 is always random |
-| `--score-direction DIR` | No | choice | `higher` | `higher` or `lower` |
-| `--acquisition-params JSON` | No | string | none | JSON object of strategy parameters |
-| `--smiles-col NAME` | No | string | auto-detect | SMILES column in the pool |
-| `--id-col NAME` | No | string | auto-detect | ID column in the pool |
-| `--cache-dir PATH` | No | directory | `BATCH_DIR/.learnm8/cache` | Feature cache location |
-| `--n-jobs N` | No | integer | -1 | Parallel CPU jobs. -1 uses all cores |
-| `--device DEVICE` | No | string | `auto` | `auto`, `cpu`, `cuda`, `cuda:N`, `mps` |
-| `--random-state N` | No | integer | 42 | Random seed |
+Settings are not stored between calls; pass the same flags every round.
 
-Settings are not stored between calls. Pass the same flags every round.
+## Examples
 
-### Output
-
-The command writes `BATCH_DIR/batch_cycle_N.csv` with the columns `rank, ID, <target>, SMILES` and, in rounds that trained a model, `prediction` (plus `uncertainty` when computed). Round 0 and the random fallback after an all-failed batch have neither. `N` is the highest existing number plus one, or 0 for an empty folder. Existing batch files are never modified. Batch files start with a `sep=,` spreadsheet hint line before the header; a spreadsheet may drop it on re-save, so scripts that read them with pandas or polars should skip that line when present.
-
-```
-Wrote 5 compounds to: campaign/batch_cycle_1.csv
-Next step: fill column Activity and re-run this command.
-```
-
-Errors use the standard error path and exit codes (see [Exit Codes](#exit-codes)). For example, re-running before any result is entered exits with code 2:
-
-```
-Configuration error: batch_cycle_0.csv has no results entered yet; enter the
-measured values (or delete the file) before suggesting the next batch.
-```
-
-### Examples
-
-**Round 0 (random batch):**
-```bash
-learnm8 suggest compounds.csv campaign/ --target Activity --featurizer morgan --batch-size 96
-```
-
-**Later rounds (same flags, after the lab has filled in the last file):**
-```bash
-learnm8 suggest compounds.csv campaign/ --target Activity --featurizer morgan --batch-size 96
-```
-
-**Uncertainty-based strategy, lower is better:**
-```bash
-learnm8 suggest compounds.csv campaign/ --target IC50 --featurizer morgan \
-  --learner gp --strategy ucb --score-direction lower
-```
-
-## Complete Examples
-
-### Example 1: Simple Benchmark Experiment
+Benchmark experiment, pool file used as the oracle:
 
 ```bash
-learnm8 run ESSENCE_benchmark_input/ADA.csv \
-  --target Activity \
-  --featurizer morgan \
-  --learner rf \
-  --n-cycles 15
+learnm8 run ADA.csv --target Activity --featurizer morgan --learner rf --n-cycles 15
 ```
 
-**What this does:**
-
-- Uses CSV file as both compound pool and oracle (benchmark mode)
-- Random Forest model with Morgan fingerprints
-- 15 cycles (1 random + 14 greedy by default)
-- Auto-generated output directory
-
-### Example 2: Production Screening with Custom Oracle
+Run mode with a Python oracle, a shared cache and an explicit output directory:
 
 ```bash
 learnm8 run compound_library.csv docking_module.py:calculate_binding \
-  --target binding_score \
-  --featurizer morgan \
-  --learner mc_dropout \
+  --target binding_score --featurizer morgan --learner mc_dropout \
   --cycles "random:0.01 ucb:0.005*10 greedy:0.01*5" \
-  --cache-dir .shared_cache \
-  -o screening_results/
+  --cache-dir .shared_cache -o screening_results/
 ```
 
-**What this does:**
-
-- Custom Python oracle for docking calculations
-- MC Dropout for uncertainty quantification
-- Multi-strategy cycles: random → UCB (10 cycles) → greedy (5 cycles)
-- Shared feature cache for speed
-- Explicit output directory
-
-### Example 3: Large Library with Pruning
+Large library with score pruning:
 
 ```bash
-learnm8 run large_library.csv oracle.py:score \
-  --target Activity \
-  --featurizer descriptors \
-  --learner rf_ensemble \
+learnm8 run large_library.csv oracle.py:score --target Activity \
+  --featurizer descriptors --learner rf \
   --cycles "random:0.01 greedy:0.005*19" \
-  --pruning-fraction 0.3 \
-  --pruning-strategy score \
-  -o large_screen/
+  --pruning-fraction 0.3 --pruning-strategy score -o large_screen/
 ```
 
-**What this does:**
-
-- Ensemble learner for robustness
-- 20 cycles (1 random + 19 greedy)
-- Prune bottom 30% each cycle to reduce library size
-- Mordred descriptors for rich chemical features
-
-### Example 4: Uncertainty-Based Exploration
+Chemprop works directly on SMILES, so no featurizer is needed. Adding `--featurizer` switches it to hybrid mode, where the features are used as extra descriptors alongside the graph:
 
 ```bash
-learnm8 run compounds.csv --target Activity \
-  --featurizer morgan \
-  --learner gp \
-  --cycles "random:0.02 ucb:0.01*5 ei:0.01*3 greedy:0.01*2" \
-  --acquisition-params '{"beta": 3.0}' \
-  --random-state 12345
+learnm8 run compounds.csv --target Activity --learner chemprop --n-cycles 10
 ```
 
-**What this does:**
-
-- Gaussian Process for uncertainty estimation
-- Mixed acquisition: random → UCB → Expected Improvement → greedy
-- Custom UCB beta parameter (more exploration)
-- Explicit random seed for reproducibility
-
-### Example 5: Graph Neural Network Screening
-
-```bash
-learnm8 run compounds.csv --target Activity \
-  --learner chemprop \
-  --n-cycles 10 \
-  -o chemprop_results/
-```
-
-**What this does:**
-
-- Chemprop works directly with SMILES, so no featurizer is needed. Adding `--featurizer descriptors` (or another featurizer) switches it to hybrid mode, where the features are used as extra descriptors alongside the graph
-- Graph neural network for state-of-the-art predictions
-
-### Example 6: Configuration File Workflow
-
-```bash
-learnm8 validate compounds.csv -o validation/
-
-learnm8 run --config experiment.yaml
-```
-
-**experiment.yaml:**
-```yaml
-compound_pool: compounds.csv
-oracle: oracle.csv
-target_col: Activity
-featurizer: morgan
-learner: rf_ensemble
-cycles:
-  - strategy: random
-    batch_fraction: 0.02
-    n_cycles: 1
-  - strategy: greedy
-    batch_fraction: 0.01
-    n_cycles: 9
-output_dir: results/
-random_state: 42
-```
-
-## Global Behavior
-
-### Reproducibility
-
-All experiments use a random seed for reproducibility. Set explicitly with:
-```bash
---random-state 42
-```
-
-Default seed is 42. Change for independent runs.
-
-### Progress Output
-
-By default, LearnM8 shows rich console output with progress bars and result tables. Suppress with:
-```bash
---quiet
-```
-
-Useful for automated workflows or logging to files.
-
-### Error Handling
-
-LearnM8 provides clear error messages with suggestions:
-
-- Missing files → Check path
-- Invalid parameters → Show valid choices
-- Dependency errors → Installation instructions
-- SMILES validation errors → Use `validate` subcommand first
-
-### Exit Codes
+## Exit codes
 
 | Code | Meaning |
 |------|---------|
@@ -510,49 +198,8 @@ LearnM8 provides clear error messages with suggestions:
 | 1 | Error (file not found, invalid input data, feature extraction or learner failure, etc.) |
 | 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered. Command-line usage errors reported by argparse (unknown flag, missing argument) also exit with 2 |
 
-## Best Practices
+## See also
 
-1. **Validate compounds first**: Always run `learnm8 validate` before experiments
-2. **Use explicit cycles**: Prefer `--cycles` over simple mode for precise control
-3. **Share cache**: Specify `--cache-dir` for experiments using same compounds
-4. **Name outputs**: Use `-o` with descriptive directory names
-5. **Set random state**: Specify `--random-state` for reproducible experiments
-6. **Configuration files**: Use YAML configs for complex experiments and reproducibility
-
-## Performance Tips
-
-1. **Feature caching**: First run computes features, subsequent runs are 100x faster with cache
-2. **Shared cache**: Reuse cache across experiments: `--cache-dir .shared_cache`
-3. **Batch fractions**: Smaller batches (0.005-0.01) balance cost vs performance
-4. **Pruning**: Use `--pruning-fraction` for libraries >100k compounds
-5. **Fast models**: Use `rf` or `xgb` for rapid iteration
-6. **GPU acceleration**: Use `chemprop` or `mlp` with GPU for large datasets
-
-## Troubleshooting
-
-**Problem:** "Compound pool file not found"
-```bash
-learnm8 run nonexistent.csv --target Activity --featurizer morgan --learner rf
-```
-**Solution:** Check file path is correct and file exists
-
-**Problem:** "Invalid SMILES" errors during experiment
-```bash
-learnm8 validate compounds.csv -o validation/
-```
-**Solution:** Fix invalid SMILES before running experiment
-
-**Problem:** "Learner 'chemprop' not available"
-```bash
-pip install chemprop
-python -c "from learnm8.api import list_available_learners; print(list_available_learners())"
-```
-**Solution:** Install optional dependency
-
-
-## See Also
-
-- [API Reference](api-reference.md) - Python API documentation
-- [Configuration Files](configuration-files.md) - YAML/JSON configuration format
-- [Running Experiments Tutorial](../tutorials/running-experiments.md) - Step-by-step guide
-- [Building Custom Cycles](../tutorials/building-custom-cycles.md) - Cycle specification guide
+- [API Reference](api-reference.md)
+- [Configuration Files](../advanced/configuration-files.md)
+- [Running Experiments](../tutorials/running-experiments.md)
