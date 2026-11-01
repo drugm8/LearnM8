@@ -172,16 +172,8 @@ class PythonOracle(Oracle):
                 f"Ensure your oracle function returns a DataFrame with 'ID' matching the input compound IDs."
             )
 
-        # Check that all requested compounds have results
-        result_ids = set(result.get_column('ID').to_list())
-        request_ids = set(compound_ids)
-        missing_ids = request_ids - result_ids
-
-        if missing_ids:
-            logger.warning(
-                'Oracle did not return results for %d compounds', len(missing_ids)
-            )
-
+        # Omitted IDs are not an error here: the cycle marks them 'failed'
+        # and run_active_learning warns once per cycle.
         if result.height == 0:
             return result
 

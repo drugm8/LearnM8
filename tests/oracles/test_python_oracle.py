@@ -173,7 +173,7 @@ class TestPythonOracleMeasure:
         with pytest.raises(OracleError, match='must return'):
             oracle.measure(compounds, ['score'])
 
-    def test_measure_missing_compound_in_result(self, tmp_path, caplog):
+    def test_measure_missing_compound_in_result(self, tmp_path):
         f = _write_oracle_file(
             tmp_path,
             'import polars as pl\n'
@@ -184,13 +184,9 @@ class TestPythonOracleMeasure:
         compounds = pl.DataFrame(
             {'ID': ['COMP_001', 'COMP_002'], 'SMILES': ['CCO', 'CCC']}
         )
-        import logging
-
-        logging.getLogger('learnm8').propagate = True
-        with caplog.at_level('WARNING', logger='learnm8.oracles.python_oracle'):
-            result = oracle.measure(compounds, ['score'])
-        assert any('did not return results' in rec.message for rec in caplog.records)
+        result = oracle.measure(compounds, ['score'])
         assert result.height == 1
+        assert result['ID'].to_list() == ['COMP_001']
 
     def test_measure_empty_compounds(self, simple_oracle):
         compounds = pl.DataFrame(schema={'ID': pl.Utf8, 'SMILES': pl.Utf8})
