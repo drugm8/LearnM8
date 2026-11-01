@@ -207,9 +207,9 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 | `scaffold_diversity_index_cumulative` | `float \| None` | Same, all compounds selected so far |
 | `bit_position_uniformity_entropy_batch` | `float \| None` | Entropy (bits) of the normalised bit-position activation distribution, newly selected batch. Higher means fingerprint bits are activated more uniformly |
 | `bit_position_uniformity_entropy_cumulative` | `float \| None` | Same, all compounds selected so far |
-| `fingerprint_used` | `str` | Featurizer used for diversity computation |
+| `fingerprint_used` | `str` | Fingerprint used for diversity computation: always Morgan(2, 2048), e.g. `morgan_2_2048_uint8packed` (the suffix is the run featurizer's storage dtype; `_fallback` marks a non-binary run featurizer) |
 
-> Diversity metrics depend on the featurizer. Comparing across runs with different featurizers is invalid. Verify consistency via `fingerprint_used`.
+> Diversity metrics are always computed on Morgan(2, 2048) fingerprints, independent of the run featurizer, so they are comparable across runs.
 
 ### Raises
 

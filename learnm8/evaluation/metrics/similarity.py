@@ -514,14 +514,11 @@ def _get_or_build_fps(
             values; the caller uses this to update the online Shannon
             accumulator.
         fingerprint_used_label: provenance string written to the
-            ``fingerprint_used`` column of cycle_metrics.csv. Either
-            ``"morgan_2_2048"`` (Morgan fall-back path; we always use the
-            local Morgan generator for the pair-sample work even when the
-            run featurizer is binary, since the featurizer's HDF5-cached
-            ndarray is a less convenient input than ExplicitBitVect for
-            BulkTanimotoSimilarity. The label distinguishes whether the
-            run's featurizer was already binary (reuse-eligible label)
-            or non-binary (fallback label).
+            ``fingerprint_used`` column of cycle_metrics.csv. Always
+            ``"morgan_2_2048_<dtype>"``: the pair-sample work always uses the
+            local Morgan(2, 2048) generator, whatever the run featurizer is.
+            ``<dtype>`` is the run featurizer's storage dtype token, and a
+            ``_fallback`` suffix marks a non-binary run featurizer.
         valid_idx: indices into ``smiles_list`` whose fingerprint was
             successfully built (used by the caller to filter parallel
             arrays for downstream computation).
@@ -550,15 +547,10 @@ def _get_or_build_fps(
     }
     dtype_token = _DTYPE_TOKEN_BY_STORAGE.get(storage_dtype, 'float32')
 
+    # The pair-sample work always runs on the local Morgan(2, 2048) generator,
+    # so the label always names Morgan, whatever the run featurizer is.
     label_base = 'morgan_2_2048'
-    if featurizer is not None and is_binary_featurizer:
-        try:
-            fp_name = featurizer.get_name()
-        except Exception:  # pragma: no cover - defensive
-            fp_name = 'morgan'
-        head = f'{fp_name}_2_2048' if fp_name == 'morgan' else f'{fp_name}'
-        fingerprint_used_label = f'{head}_{dtype_token}'
-    elif featurizer is not None and not is_binary_featurizer:
+    if featurizer is not None and not is_binary_featurizer:
         fingerprint_used_label = f'{label_base}_{dtype_token}_fallback'
     else:
         fingerprint_used_label = f'{label_base}_{dtype_token}'

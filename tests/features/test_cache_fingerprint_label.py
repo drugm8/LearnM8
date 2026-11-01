@@ -72,3 +72,15 @@ def test_physiochemical_label_has_csruint16_suffix():
     fp_cache: dict = {}
     _, _, label, _ = _get_or_build_fps(['CCO'], feat, None, fp_cache)
     assert '_csruint16' in label, f'got {label!r}'
+
+
+@pytest.mark.unit
+def test_binary_non_morgan_featurizer_label_names_morgan():
+    """Diversity always runs on Morgan(2, 2048), so a MACCS run must not be labelled MACCS."""
+    from learnm8.evaluation.metrics.similarity import _get_or_build_fps
+    from learnm8.features import create_featurizer
+
+    feat = create_featurizer('maccs', n_jobs=1)
+    fp_cache: dict = {}
+    _, _, label, _ = _get_or_build_fps(['CCO', 'CCC'], feat, None, fp_cache)
+    assert label.startswith('morgan_2_2048_'), f'got {label!r}'
