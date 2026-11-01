@@ -118,9 +118,11 @@ def _initial_pool_top_ids() -> tuple[set[str], int, int]:
         raise ValueError('initial AmpC pool contains null dockscore values')
 
     top_k = max(1, int(n_total * TOP_FRACTION))
+    # Polars' sort is not stable: break dockscore ties on ID so the reference
+    # set (and the pruned counts) are the same on every run, as in the poster.
     top = (
         source.select(['ID', 'dockscore'])
-        .sort('dockscore', nulls_last=True)
+        .sort(['dockscore', 'ID'], nulls_last=True)
         .head(top_k)
         .collect(engine='streaming')
     )
