@@ -13,8 +13,8 @@ Three scenarios:
 
 from __future__ import annotations
 
-import polars as pl
 import pytest
+from polars.testing import assert_series_equal
 
 from learnm8.api import run_active_learning
 from learnm8.core.persistence import read_cycle_predictions
@@ -156,6 +156,6 @@ def test_force_uncertainty_with_uncertainty_required_no_double_compute(
 
     # Same uncertainty column on both paths (no double compute).
     assert 'uncertainty' in df1.columns and 'uncertainty' in df2.columns
-    pl.testing.assert_series_equal(
+    assert_series_equal(
         df1.get_column('uncertainty'), df2.get_column('uncertainty')
     )
