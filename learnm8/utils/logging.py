@@ -54,6 +54,23 @@ def detect_jupyter_environment() -> bool:
     return False
 
 
+def _set_file_handler(logger: logging.Logger, output_dir: Path) -> None:
+    """Point the learnm8 log file at ``output_dir/learnm8.log``, closing any old one."""
+    log_file = output_dir / 'learnm8.log'
+    for handler in list(logger.handlers):
+        if getattr(handler, '_learnm8_file', False):
+            if Path(handler.baseFilename) == log_file.resolve():
+                return
+            logger.removeHandler(handler)
+            handler.close()
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
+    file_handler._learnm8_file = True  # type: ignore[attr-defined]
+    logger.addHandler(file_handler)
+
+
 def configure_learnm8_logging(
     output_dir: Path | None = None,
     level: str = 'INFO',
@@ -98,21 +115,22 @@ def configure_learnm8_logging(
     logger = logging.getLogger('learnm8')
 
     if logger.handlers and not force_reconfigure:
+        # Console setup is kept, but the log file always follows the current
+        # output_dir (e.g. the CLI configures the console before any run, and
+        # a second run in one process must not log into the first run's dir).
+        if output_dir:
+            _set_file_handler(logger, output_dir)
         logger.debug('LearnM8 logging already configured')
         return logger
 
+    for handler in logger.handlers:
+        handler.close()
     logger.handlers.clear()
 
     logger.setLevel(getattr(logging, level.upper()))
 
     if output_dir:
-        log_file = output_dir / 'learnm8.log'
-        file_handler = logging.FileHandler(log_file)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+        _set_file_handler(logger, output_dir)
 
     if console_type != 'none':
         if console_type == 'auto':
