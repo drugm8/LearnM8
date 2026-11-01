@@ -40,19 +40,15 @@ def test_mc_dropout_runs_n_stochastic_passes_even_when_compute_uncertainty_false
     )
     learner.train(X, y)
 
-    # Mock the underlying model forward to count invocations and verify the
-    # loop still runs n_dropout_samples times per chunk.
+    # Count the stochastic forward passes: each one goes through _mc_forward.
     call_count = {'n': 0}
-
-    # Patch `forward`, not `__call__`: `model(x)` looks `__call__` up on the
-    # class, so an instance-level `__call__` patch is never invoked.
-    original_forward = learner.model.forward
+    original_forward = learner._mc_forward
 
     def counting_forward(*args, **kwargs):
         call_count['n'] += 1
         return original_forward(*args, **kwargs)
 
-    with patch.object(learner.model, 'forward', side_effect=counting_forward):
+    with patch.object(learner, '_mc_forward', side_effect=counting_forward):
         _preds, sigmas = learner.predict(X, compute_uncertainty=False)
 
     # Skip path: sigmas suppressed.

@@ -76,6 +76,46 @@ class TestMCDropoutChunked:
         np.testing.assert_array_equal(unc_a, unc_b)
 
     @pytest.mark.unit
+    @pytest.mark.parametrize('chunk', [1, 7, 13, 64])
+    def test_predictions_do_not_depend_on_chunk_size(self, chunk):
+        X, y = _make_data(100, 10)
+        learner = _make_trained_learner(X, y)
+
+        learner.predict_batch_size = 200
+        preds_full, unc_full = learner.predict(X)
+        learner.predict_batch_size = chunk
+        preds, unc = learner.predict(X)
+
+        # Equal up to float32 matmul rounding, not Monte Carlo noise.
+        np.testing.assert_allclose(preds, preds_full, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(unc, unc_full, rtol=1e-4, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_predictions_do_not_depend_on_row_order_or_pool(self):
+        X, y = _make_data(100, 10)
+        learner = _make_trained_learner(X, y)
+        preds_full, unc_full = learner.predict(X)
+
+        perm = np.random.RandomState(0).permutation(100)
+        preds_perm, unc_perm = learner.predict(X[perm])
+        np.testing.assert_allclose(preds_perm, preds_full[perm], rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(unc_perm, unc_full[perm], rtol=1e-4, atol=1e-6)
+
+        # A compound predicted inside a smaller pool gets the same value.
+        preds_sub, unc_sub = learner.predict(X[40:45])
+        np.testing.assert_allclose(preds_sub, preds_full[40:45], rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(unc_sub, unc_full[40:45], rtol=1e-4, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_different_seeds_give_different_masks(self):
+        X, y = _make_data(100, 10)
+        learner = _make_trained_learner(X, y)
+        _, unc_a = learner.predict(X)
+        learner.random_state = learner.random_state + 1
+        _, unc_b = learner.predict(X)
+        assert not np.allclose(unc_a, unc_b)
+
+    @pytest.mark.unit
     def test_predict_does_not_perturb_global_rng(self):
         import torch
 
@@ -283,3 +323,57 @@ class TestMCDropoutChunked:
         msg = str(exc_info.value)
         assert '3 retries' in msg
         assert 'minimum size' not in msg
+
+
+class TestMaskGenerator:
+    @pytest.mark.unit
+    def test_mix32_matches_uint64_reference(self):
+        import torch
+
+        from learnm8.learners.torch.mc_dropout import _mix32
+
+        def ref(x):
+            m = np.uint64(0xFFFFFFFF)
+            x = x ^ (x >> np.uint64(16))
+            x = (x * np.uint64(0x7FEB352D)) & m
+            x = x ^ (x >> np.uint64(15))
+            x = (x * np.uint64(0x846CA68B)) & m
+            return x ^ (x >> np.uint64(16))
+
+        vals = np.array(
+            [0, 1, 2, 12345, 0x7FFFFFFF, 0x80000000, 0xDEADBEEF, 0xFFFFFFFF],
+            dtype=np.uint64,
+        )
+        as_i32 = torch.from_numpy(vals.astype(np.uint32).view(np.int32))
+        got = _mix32(as_i32).numpy().view(np.uint32).astype(np.uint64)
+        np.testing.assert_array_equal(got, ref(vals))
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize('p', [0.1, 0.2, 0.5])
+    def test_keep_rate_matches_dropout_rate(self, p):
+        import torch
+
+        from learnm8.learners.torch.mc_dropout import _dropout_mask, _row_keys
+
+        X = np.random.RandomState(1).randn(2000, 10)
+        lo, hi = (torch.from_numpy(k) for k in _row_keys(X))
+        mask = _dropout_mask(lo, hi, seed=42, layer=0, sample=3, width=256, p=p)
+        keep = (mask > 0).float().mean().item()
+        assert abs(keep - (1 - p)) < 0.01
+        # Kept units are rescaled by 1 / (1 - p), as in nn.Dropout.
+        np.testing.assert_allclose(mask[mask > 0].numpy(), 1 / (1 - p), rtol=1e-6)
+
+    @pytest.mark.unit
+    def test_masks_identical_on_cpu_and_cuda(self):
+        import torch
+
+        if not torch.cuda.is_available():
+            pytest.skip('CUDA not available')
+        from learnm8.learners.torch.mc_dropout import _dropout_mask, _row_keys
+
+        X = np.random.RandomState(2).randn(500, 10)
+        lo, hi = (torch.from_numpy(k) for k in _row_keys(X))
+        kw = dict(seed=7, layer=1, sample=42, width=128, p=0.2)
+        cpu = _dropout_mask(lo, hi, **kw)
+        gpu = _dropout_mask(lo.cuda(), hi.cuda(), **kw).cpu()
+        assert torch.equal(cpu, gpu)

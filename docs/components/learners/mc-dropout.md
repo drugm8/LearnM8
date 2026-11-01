@@ -43,7 +43,7 @@ results = run_active_learning(
 ## Notes
 
 - The stochastic passes always run, even when the acquisition strategy does not need uncertainty: the mean prediction is itself the average over dropout samples, so skipping them would change the prediction. Only the standard deviation is discarded.
-- Prediction is chunked and retried with smaller chunks on GPU out-of-memory errors.
+- Prediction is chunked and retried with smaller chunks on GPU out-of-memory errors. Dropout masks are derived from `random_state` and each feature row's content, so results do not depend on chunk size, row order or free memory.
 - Cost per prediction grows linearly with `n_dropout_samples`.
 
 See also: [Learners overview](overview.md), [MLP](mlp.md).

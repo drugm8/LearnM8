@@ -21,6 +21,84 @@ logger = logging.getLogger(__name__)
 MCDROPOUT_EFFECTIVE_MIN = 256
 MCDROPOUT_MAX_RETRIES = 3
 
+_ROW_HASH_BLOCK = 256
+
+
+def _i32(value: int) -> int:
+    """The 32-bit pattern of ``value`` as a signed int32."""
+    value &= 0xFFFFFFFF
+    return value - (1 << 32) if value >= 1 << 31 else value
+
+
+_GOLDEN = _i32(0x9E3779B9)
+_STREAM = _i32(0x85EBCA6B)
+_MUL1 = _i32(0x7FEB352D)
+_MUL2 = _i32(0x846CA68B)
+_INT32_MIN = -(1 << 31)
+
+
+def _mix32(x: torch.Tensor) -> torch.Tensor:
+    """lowbias32 integer finalizer on int32 tensors (bit patterns, wrapping).
+
+    The shifts are masked to act as logical (unsigned) shifts.
+    """
+    x = x ^ ((x >> 16) & 0xFFFF)
+    x = x * _MUL1
+    x = x ^ ((x >> 15) & 0x1FFFF)
+    x = x * _MUL2
+    return x ^ ((x >> 16) & 0xFFFF)
+
+
+def _row_keys(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """64-bit content hash of each float32 feature row, as int32 (low, high) halves.
+
+    The key depends only on the row's values, so a compound draws the same
+    dropout masks whatever chunk, pool or position it is predicted in.
+    """
+    words = np.ascontiguousarray(X, dtype=np.float32).view(np.uint32)
+    coeffs = np.random.default_rng(0x5EED).integers(
+        1, 2**63, size=words.shape[1], dtype=np.uint64
+    ) | np.uint64(1)
+    h = np.zeros(len(words), dtype=np.uint64)
+    for start in range(0, words.shape[1], _ROW_HASH_BLOCK):
+        block = words[:, start : start + _ROW_HASH_BLOCK].astype(np.uint64)
+        h += (block * coeffs[start : start + _ROW_HASH_BLOCK]).sum(
+            axis=1, dtype=np.uint64
+        )
+    halves = h.view(np.uint32).reshape(-1, 2).view(np.int32)
+    return np.ascontiguousarray(halves[:, 0]), np.ascontiguousarray(halves[:, 1])
+
+
+def _dropout_mask(
+    row_low: torch.Tensor,
+    row_high: torch.Tensor,
+    *,
+    seed: int,
+    layer: int,
+    sample: int,
+    width: int,
+    p: float,
+) -> torch.Tensor:
+    """Scaled Bernoulli(1 - p) dropout mask, a pure function of its arguments.
+
+    Matches ``nn.Dropout``: kept units are scaled by ``1 / (1 - p)``.
+    """
+    device = row_low.device
+    if p >= 1.0:
+        return torch.zeros(len(row_low), width, device=device)
+    stream = torch.tensor(
+        _i32(seed + layer * 0x9E3779B9 + sample * 0x85EBCA6B),
+        dtype=torch.int32,
+        device=device,
+    )
+    base = _mix32(row_low ^ _mix32(row_high ^ _mix32(stream)))
+    units = torch.arange(width, dtype=torch.int32, device=device) * _GOLDEN
+    bits = _mix32(base[:, None] + units[None, :])
+    # Unsigned comparison bits >= p * 2**32, done on signed int32 by flipping
+    # the sign bit of both sides.
+    keep = (bits ^ _INT32_MIN) >= round(p * 2**32) + _INT32_MIN
+    return keep.float() / (1.0 - p)
+
 
 class MCDropoutLearner(TorchLearner):
     """MLP with Monte Carlo Dropout for uncertainty estimation.
@@ -128,28 +206,48 @@ class MCDropoutLearner(TorchLearner):
                 nn.init.constant_(module.weight, 1)
                 nn.init.constant_(module.bias, 0)
 
+    def _mc_forward(
+        self,
+        X: torch.Tensor,
+        row_low: torch.Tensor,
+        row_high: torch.Tensor,
+        sample: int,
+    ) -> torch.Tensor:
+        seed = self.random_state or 0
+        h = X
+        layer = 0
+        for module in self.model:
+            if isinstance(module, nn.Dropout):
+                h = h * _dropout_mask(
+                    row_low,
+                    row_high,
+                    seed=seed,
+                    layer=layer,
+                    sample=sample,
+                    width=h.shape[1],
+                    p=module.p,
+                )
+                layer += 1
+            else:
+                h = module(h)
+        return h
+
     def _predict_chunk(self, X_chunk: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         X_gpu = torch.FloatTensor(X_chunk).to(self.device)
 
-        self.model.train()
-        for m in self.model.modules():
-            if isinstance(m, nn.BatchNorm1d):
-                m.eval()
-
-        # Reseed before every chunk's T-sample loop so the chunk loop is
-        # deterministic: with a fixed predict_batch_size, repeated predict()
-        # calls — and OOM-split sub-chunks — draw the identical dropout-mask
-        # sequence. Combined with the snapshot/restore in predict(), this makes
-        # MC-Dropout uncertainty reproducible across calls.
-        torch.manual_seed(self.random_state)
-        if 'cuda' in str(self.device):
-            torch.cuda.manual_seed_all(self.random_state)
+        # Eval mode keeps BatchNorm on its running statistics; dropout is applied
+        # explicitly in _mc_forward with masks keyed on each row's content, so
+        # results do not depend on chunking, row order or the global torch RNG.
+        self.model.eval()
+        low, high = _row_keys(X_chunk)
+        row_low = torch.from_numpy(low).to(self.device)
+        row_high = torch.from_numpy(high).to(self.device)
 
         predictions_list = []
         with torch.no_grad():
-            for _ in range(self.n_dropout_samples):
-                pred = self.model(X_gpu).cpu().numpy().squeeze()
-                predictions_list.append(pred)
+            for sample in range(self.n_dropout_samples):
+                pred = self._mc_forward(X_gpu, row_low, row_high, sample)
+                predictions_list.append(pred.cpu().numpy().squeeze())
 
         predictions_array = np.array(predictions_list)
         mean_predictions = np.mean(predictions_array, axis=0)
@@ -263,26 +361,13 @@ class MCDropoutLearner(TorchLearner):
                 len(X_scaled), X_scaled.shape[1]
             )
 
-            # Snapshot the global torch RNG state so MC-Dropout prediction does
-            # not perturb RNG for downstream consumers; _predict_chunk reseeds
-            # deterministically per chunk, so this also keeps repeated predict()
-            # calls reproducible.
-            cpu_rng_state = torch.get_rng_state()
-            cuda_rng_state = (
-                torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
-            )
-            try:
-                all_means = []
-                all_stds = []
-                for start_idx in range(0, len(X_scaled), batch_size):
-                    chunk = X_scaled[start_idx : start_idx + batch_size]
-                    mean_chunk, std_chunk = self._predict_chunk_with_oom_retry(chunk)
-                    all_means.append(mean_chunk)
-                    all_stds.append(std_chunk)
-            finally:
-                torch.set_rng_state(cpu_rng_state)
-                if cuda_rng_state is not None:
-                    torch.cuda.set_rng_state_all(cuda_rng_state)
+            all_means = []
+            all_stds = []
+            for start_idx in range(0, len(X_scaled), batch_size):
+                chunk = X_scaled[start_idx : start_idx + batch_size]
+                mean_chunk, std_chunk = self._predict_chunk_with_oom_retry(chunk)
+                all_means.append(mean_chunk)
+                all_stds.append(std_chunk)
 
             mean_predictions = np.concatenate(all_means)
             uncertainties = np.concatenate(all_stds)

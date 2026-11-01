@@ -276,14 +276,22 @@ share one signature.
   real diversity metric keys (`bit_position_uniformity_entropy_*`), the
   `skip_validation` and `streaming` parameters, the missing CLI flags, and the
   cache design.
-- **MC Dropout memory-aware prediction batch size now runs.** A `torch.device`
-  was passed where a string was expected, the error was swallowed, and every
-  prediction used the fixed `4 * batch_size` chunk. Because the dropout RNG is
-  reseeded per chunk, MC Dropout predictions and uncertainties now differ from
-  0.11.0 by Monte Carlo noise (on 20K AmpC compounds: Spearman 0.989 for the
-  means, 87% overlap of the greedy top 1%). The chunk size now depends on the
-  free memory at prediction time; pass `predict_batch_size` for runs that must
-  reproduce exactly.
+- **MC Dropout predictions no longer depend on chunking or free memory.**
+  Dropout was reseeded at the start of every prediction chunk, so a compound's
+  dropout masks depended on where it fell in a chunk, and chunk sizes depend on
+  free memory (the outer `predict_with_batching` split, and, once a
+  `torch.device`-for-`str` bug that silently disabled it was fixed, the
+  learner's own memory-aware chunking). The same seed could therefore give
+  different results on different machines. Masks are now a pure function of
+  `(random_state, feature-row content, layer, pass, unit)`, generated with a
+  counter-based integer hash on the device, with the same Bernoulli(1 − p)
+  keep probability and 1 / (1 − p) scaling as `nn.Dropout`. Predictions are
+  identical, up to float32 rounding, whatever the chunk size, row order or
+  pool, on CPU or GPU, and prediction no longer touches the global torch RNG.
+  Outputs differ from 0.11.0 by Monte Carlo noise (synthetic 20K × 2048
+  benchmark, same trained weights: Spearman 0.986 for the means, 84% overlap
+  of the top 1%). GPU prediction is about 2× slower for small MLPs (mask
+  hashing outweighs the matrix multiplies); CPU prediction is slightly faster.
 - **`learnm8.log` is written by the CLI and by every run in one process.** The
   CLI configured the console first, and logging setup returned early once any
   handler existed, so `learnm8 run` / `learnm8 suggest` wrote no log file, and a
