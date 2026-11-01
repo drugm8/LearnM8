@@ -674,6 +674,11 @@ def calculate_multiple_unlabeled_top_k_overlaps(
     CRITICAL: unlabeled_predictions_df MUST exclude all labeled/training compounds
     to avoid training data contamination.
 
+    In the cycle this also excludes the batch just selected, so the metric
+    measures ranking quality on the remaining pool, not the quality of this
+    cycle's picks. Under greedy selection the model's top predictions have
+    just been removed, so values are typically low even for a good model.
+
     Ranking overlap = model's predicted top-K ∩ true top-K (within unlabeled pool)
 
     Args:

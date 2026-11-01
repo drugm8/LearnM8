@@ -197,6 +197,8 @@ Per-cycle predictions are stored as `prediction_cycle_N.parquet` files, not as c
 | `unlabeled_top_100_overlap` | `float` | Top-100 overlap on unlabeled set |
 | `unlabeled_ef_1_0` | `float` | Enrichment factor at 1% on unlabeled set |
 
+> The `unlabeled_*` metrics score the model on the **remaining pool**: every compound labeled so far, including the batch selected in this cycle, is excluded. They answer "how well does the model rank what is left?", not "were this cycle's picks good?" (use `top_*_discovery` and `batch_*` for that). Under greedy selection the model's own best predictions have just been removed, so `unlabeled_top_*_overlap` is effectively measured on its next-best predictions and is typically low even for a good model.
+
 **Diversity metrics** (when not disabled):
 
 | Key | Type | Description |
