@@ -44,22 +44,23 @@ def test_mc_dropout_runs_n_stochastic_passes_even_when_compute_uncertainty_false
     # loop still runs n_dropout_samples times per chunk.
     call_count = {'n': 0}
 
-    original_forward = learner.model.__call__
+    # Patch `forward`, not `__call__`: `model(x)` looks `__call__` up on the
+    # class, so an instance-level `__call__` patch is never invoked.
+    original_forward = learner.model.forward
 
     def counting_forward(*args, **kwargs):
         call_count['n'] += 1
         return original_forward(*args, **kwargs)
 
-    with patch.object(learner.model, '__call__', side_effect=counting_forward):
+    with patch.object(learner.model, 'forward', side_effect=counting_forward):
         _preds, sigmas = learner.predict(X, compute_uncertainty=False)
 
     # Skip path: sigmas suppressed.
     assert sigmas is None
 
-    # But N stochastic forward passes still ran. With one chunk, we
-    # expect exactly n_dropout_samples calls — not 1 (single deterministic).
-    # We assert "at least 2" as a safety margin in case of internal padding.
-    assert call_count['n'] >= 2, (
+    # But N stochastic forward passes still ran: one chunk of 16 rows, so
+    # exactly n_dropout_samples calls, not 1 (single deterministic pass).
+    assert call_count['n'] == learner.n_dropout_samples, (
         f'mc_dropout collapsed to a single deterministic forward pass '
         f'(n_calls={call_count["n"]}). The N stochastic passes '
         f'must still execute — mean semantics must not change.'
