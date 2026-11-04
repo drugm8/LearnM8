@@ -10,7 +10,13 @@ import polars as pl
 import pytest
 
 from learnm8.acquisition import GreedyAcquisition, get_acquisition_function
-from learnm8.exceptions import FeatureExtractionError, OracleError
+from learnm8.exceptions import (
+    AcquisitionError,
+    ConfigurationError,
+    FeatureExtractionError,
+    OracleError,
+    ValidationError,
+)
 from learnm8.features import extract_features
 from learnm8.oracles.csv_oracle import CSVOracle
 from learnm8.oracles.python_oracle import PythonOracle
@@ -148,7 +154,7 @@ class TestAcquisitionErrors:
 
         ucb_acq = get_acquisition_function('ucb')()
 
-        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+        with pytest.raises(AcquisitionError, match="requires an 'uncertainty' column"):
             ucb_acq.select(compounds, n_select=3)
 
     def test_acquisition_function_not_found(self):
@@ -204,10 +210,10 @@ class TestOracleErrors:
             # If creation succeeds, measurement should fail
             compounds = pl.DataFrame({'ID': ['mol_1'], 'SMILES': ['CCO']})
 
-            with pytest.raises((KeyError, ValueError)):
+            with pytest.raises(OracleError):
                 oracle.measure(compounds, ['Activity'])
 
-        except (KeyError, ValueError):
+        except ValidationError:
             # Failing at creation is also acceptable
             pass
 
@@ -257,7 +263,7 @@ class TestFeatureExtractionErrors:
         """Test feature extraction with unsupported featurizer."""
         smiles_list = ['CCO']
 
-        with pytest.raises((ValueError, KeyError)):
+        with pytest.raises(ConfigurationError):
             extract_features(smiles_list, 'unsupported_featurizer', tmp_path)
 
     @pytest.mark.slow

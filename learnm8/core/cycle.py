@@ -122,7 +122,7 @@ def execute_cycle(
 
     This function handles both run and benchmark modes with a single execution path.
     The ONLY difference is the prediction pool selection:
-    - Run mode: predict on unlabeled compounds only (efficient for production)
+    - Run mode: predict on unlabeled compounds only (efficient)
     - Benchmark mode: predict on full original pool (for scientifically correct metrics)
 
     All other logic (training, pruning, selection, measurement, updates) is identical.
@@ -154,7 +154,7 @@ def execute_cycle(
         RuntimeError: Training, prediction, or selection failures
 
     Examples:
-        # Run mode (production)
+        # Run mode
         updated_df, metrics = execute_cycle(
             compounds_df, 0, config, learner, oracle,
             'Activity', 'morgan', cache_dir, 1000,

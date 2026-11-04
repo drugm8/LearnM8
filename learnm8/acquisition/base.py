@@ -177,10 +177,10 @@ class AcquisitionFunction(ABC):
         # Check uncertainty column if required
         if self.requires_uncertainty() and 'uncertainty' not in compounds.columns:
             uncertainty_strategies = ['greedy', 'random', 'topk']
-            raise ValueError(
+            raise AcquisitionError(
                 f"{self.get_name()} requires an 'uncertainty' column, but the learner did not "
                 f'provide uncertainty estimates. Use a learner that supports uncertainty '
-                f'(gp, mc_dropout, or ensemble variants), or switch to an acquisition '
+                f'(every learner except xgb, mlp, fastprop and chemprop), or switch to an acquisition '
                 f"strategy that doesn't require uncertainty (e.g., {', '.join(uncertainty_strategies)})."
             )
 
@@ -346,7 +346,7 @@ def validate_uncertainty_inputs(
         raise AcquisitionError(
             f"Compounds DataFrame is missing required 'uncertainty' column for "
             f'uncertainty-based acquisition. Available columns: {list(compounds.columns)}. '
-            f'Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants), '
+            f'Use a learner that supports uncertainty (every learner except xgb, mlp, fastprop and chemprop), '
             f"or switch to an acquisition strategy that doesn't require uncertainty "
             f'(greedy, random, topk).'
         )

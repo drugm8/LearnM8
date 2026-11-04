@@ -6,7 +6,7 @@ import pytest
 
 from learnm8.api import _create_learner, list_available_learners
 from learnm8.core.interfaces import Learner
-from learnm8.exceptions import LearnerError
+from learnm8.exceptions import ConfigurationError, LearnerError
 from learnm8.learners.ensemble.dt_ensemble import DTEnsemble
 from learnm8.learners.sklearn.random_forest import RandomForestLearner
 
@@ -67,18 +67,18 @@ class TestLearnerCreation:
     def test_bare_ensemble_shortcut_removed(self):
         """The bare 'ensemble' shortcut is no longer a registered learner."""
         assert 'ensemble' not in list_available_learners()
-        with pytest.raises(ValueError, match='Unknown learner'):
+        with pytest.raises(ConfigurationError, match='Unknown learner'):
             _create_learner('ensemble', random_state=42)
 
     def test_rf_ensemble_removed(self):
         """The deprecated 'rf_ensemble' learner was removed in 1.0."""
         assert 'rf_ensemble' not in list_available_learners()
-        with pytest.raises(ValueError, match='Unknown learner'):
+        with pytest.raises(ConfigurationError, match='Unknown learner'):
             _create_learner('rf_ensemble', random_state=42)
 
     def test_unknown_learner_raises_error(self):
         """Test error handling for unknown learner string."""
-        with pytest.raises(ValueError, match='Unknown learner'):
+        with pytest.raises(ConfigurationError, match='Unknown learner'):
             _create_learner('nonexistent_learner', random_state=42)
 
     def test_chemprop_fine_tuning_flag_honoured(self, tmp_path):
@@ -97,7 +97,7 @@ class TestLearnerCreation:
         assert learner.random_state == 7
 
     def test_chemprop_fine_tuning_requires_checkpoint_dir(self):
-        with pytest.raises(ValueError, match='checkpoint_dir required'):
+        with pytest.raises(ConfigurationError, match='checkpoint_dir required'):
             _create_learner(
                 'chemprop', random_state=42, enable_chemprop_fine_tuning=True
             )

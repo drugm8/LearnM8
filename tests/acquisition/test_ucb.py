@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 
 from learnm8.acquisition import UCBAcquisition
+from learnm8.exceptions import AcquisitionError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -96,7 +97,7 @@ class TestUCBAcquisition:
             .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
         )
 
-        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+        with pytest.raises(AcquisitionError, match="requires an 'uncertainty' column"):
             UCBAcquisition().select(compounds, n_select=2)
 
     def test_ucb_rejects_negative_uncertainty_values(self, small_real_compounds):

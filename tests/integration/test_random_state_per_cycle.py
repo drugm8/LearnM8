@@ -60,7 +60,6 @@ def _run(csv: Path, output_dir: Path, *, random_state: int = 42, n_cycles: int =
         target_col='Activity',
         learner='lr',
         strategy='random',
-        initial_strategy='random',
         featurizer='morgan',
         n_cycles=n_cycles,
         batch_fraction=0.1,

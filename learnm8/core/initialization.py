@@ -443,7 +443,7 @@ def validate_master_dataframe(master_df: 'pl.DataFrame') -> bool:
     Validates core columns required for compound tracking. Does not validate:
     - Target column name (varies by experiment)
     - Prediction columns (added dynamically per cycle)
-    - Deprecated columns (last_prediction, last_uncertainty removed in v0.5.0)
+    - Legacy columns (last_prediction, last_uncertainty), which no longer exist
 
     Args:
         master_df: Master DataFrame to validate

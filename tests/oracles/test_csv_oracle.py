@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from learnm8.exceptions import OracleError
+from learnm8.exceptions import OracleError, ValidationError
 from learnm8.oracles.csv_oracle import CSVOracle
 
 
@@ -27,7 +27,7 @@ class TestCSVOracleInit:
     def test_init_missing_id_column(self, tmp_path):
         csv_file = tmp_path / 'oracle.csv'
         csv_file.write_text('Name,Activity\nCOMP_001,1.5\n')
-        with pytest.raises(ValueError, match='ID column'):
+        with pytest.raises(ValidationError, match='ID column'):
             CSVOracle(str(csv_file))
 
     def test_init_keeps_null_target_rows(self, tmp_path):
@@ -89,7 +89,7 @@ class TestCSVOracleInit:
                 'SMILES': ['CCO', 'CCC', 'CCCC'],
             }
         )
-        with pytest.raises(ValueError, match='null'):
+        with pytest.raises(OracleError, match='null'):
             oracle.measure(with_null, ['Activity'])
 
     def test_init_with_smiles_column(self, tmp_path):
@@ -165,7 +165,7 @@ class TestCSVOracleMeasure:
 
     def test_measure_wrong_property_name(self, oracle_with_data):
         compounds = pl.DataFrame({'ID': ['COMP_001'], 'SMILES': ['CCO']})
-        with pytest.raises(ValueError, match='Requested properties not found'):
+        with pytest.raises(OracleError, match='Requested properties not found'):
             oracle_with_data.measure(compounds, ['NonExistentProp'])
 
     def test_measure_multiple_properties(self, tmp_path):
@@ -198,3 +198,19 @@ class TestCSVOracleMeasure:
         assert result.height == 5
         assert 'Activity' in result.columns
         assert result['Activity'].is_null().sum() == 0
+
+
+@pytest.mark.unit
+class TestUnmeasurableIds:
+    def test_reports_empty_nan_and_inf_targets(self, tmp_path):
+        csv_file = tmp_path / 'oracle.csv'
+        csv_file.write_text('ID,Activity\nA,1.0\nB,\nC,nan\nD,inf\nE,-inf\nF,2.0\n')
+        oracle = CSVOracle(str(csv_file))
+        assert oracle.unmeasurable_ids('Activity') == ['B', 'C', 'D', 'E']
+
+    def test_clean_and_unknown_columns_are_empty(self, tmp_path):
+        csv_file = tmp_path / 'oracle.csv'
+        csv_file.write_text('ID,Activity\nA,1.0\nB,2.0\n')
+        oracle = CSVOracle(str(csv_file))
+        assert oracle.unmeasurable_ids('Activity') == []
+        assert oracle.unmeasurable_ids('Other') == []

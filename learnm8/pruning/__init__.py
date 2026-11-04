@@ -4,7 +4,7 @@ This package provides a single, straightforward pruning strategy that removes
 compounds based on their predicted scores, making it easy to focus the search
 on the most promising regions of chemical space.
 
-Simplified Architecture (v0.6.0):
+Simplified Architecture:
 - Single score-based pruning strategy
 - No uncertainty dependencies
 - Simple fraction-based removal

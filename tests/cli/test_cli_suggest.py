@@ -43,7 +43,7 @@ def test_suggest_cli_missing_pool_one_line_error(tmp_path, monkeypatch):
     argv = _argv(tmp_path)
     argv[1] = str(tmp_path / 'missing.csv')
     r = run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
-    assert r.returncode == 1
+    assert r.returncode == 2
     assert 'not found' in r.stdout and 'Traceback' not in r.stdout
     assert len(r.stdout.strip().splitlines()) == 1
 
@@ -74,3 +74,35 @@ def test_suggest_cli_prints_written_file_not_newest(tmp_path, monkeypatch):
     r = run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
     assert r.returncode == 0, r.stdout
     assert 'batch_cycle_1.csv' in r.stdout and 'batch_cycle_5.csv' not in r.stdout
+
+
+def test_suggest_cli_pruning_defaults_off(tmp_path):
+    args = create_parser().parse_args(_argv(tmp_path))
+    assert (args.pruning_fraction, args.pruning_start) == (0.0, 3)
+
+
+def test_suggest_cli_pruning_flags_reach_api(tmp_path, monkeypatch):
+    import learnm8.suggest as suggest_mod
+    from tests.api.test_suggest import fill
+
+    real = suggest_mod.suggest_next_batch
+    seen: dict = {}
+
+    def spy(*a, **k):
+        seen.update(k)
+        return real(*a, **k)
+
+    monkeypatch.setattr(suggest_mod, 'suggest_next_batch', spy)
+    argv = [*_argv(tmp_path), '--pruning-fraction', '0.3', '--pruning-start', '1']
+    run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
+    pool = pl.read_csv('tests/data/small_molecules.csv')
+    fill(
+        tmp_path / 'batch_cycle_0.csv',
+        dict(zip(pool['ID'], pool['Activity'], strict=True)),
+    )
+
+    r = run_cmd_inprocess(cmd_suggest, create_parser().parse_args(argv), monkeypatch)
+    assert r.returncode == 0, r.stdout
+    assert (seen['pruning_fraction'], seen['pruning_start']) == (0.3, 1)
+    assert 'batch_cycle_1.csv' in r.stdout
+    assert (tmp_path / 'pruned_cycle_1.parquet').exists()

@@ -138,7 +138,8 @@ class DesignSpacePruner(ABC):
         if self.requires_uncertainty() and uncertainties is None:
             raise PruningError(
                 f'{self.get_name()} requires uncertainty estimates, but none were provided. '
-                f'Use a learner that supports uncertainty (gp, mc_dropout, or ensemble variants).'
+                f'Use a learner that supports uncertainty (every learner except xgb, mlp, '
+                f'fastprop and chemprop).'
             )
 
     def _calculate_pruning_fraction(

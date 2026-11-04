@@ -25,6 +25,7 @@ import pytest
 
 from learnm8.api import run_active_learning
 from learnm8.core.config import CycleConfig
+from learnm8.exceptions import ConfigurationError, ValidationError
 
 
 @pytest.mark.slow
@@ -319,7 +320,7 @@ class TestAPIPruning:
         """Test that invalid pruning_fraction raises error."""
         output_dir = tmp_path / 'pruning_validation_test'
 
-        with pytest.raises(ValueError, match='pruning_fraction must be in'):
+        with pytest.raises(ConfigurationError, match='pruning_fraction must be in'):
             run_active_learning(
                 compound_pool=sample_compounds,
                 oracle=mock_oracle,
@@ -404,7 +405,8 @@ class TestAPIModeDetection:
         output_dir = tmp_path / 'no_oracle_df_test'
 
         with pytest.raises(
-            ValueError, match='Oracle is required when compound_pool is a DataFrame'
+            ConfigurationError,
+            match='Oracle is required when compound_pool is a DataFrame',
         ):
             run_active_learning(
                 compound_pool=sample_compounds,
@@ -728,7 +730,7 @@ class TestAPILearnerIntegration:
         """Test that invalid learner string raises error."""
         output_dir = tmp_path / 'invalid_learner_test'
 
-        with pytest.raises(ValueError, match='Unknown learner'):
+        with pytest.raises(ConfigurationError, match='Unknown learner'):
             run_active_learning(
                 compound_pool=sample_compounds,
                 oracle=mock_oracle,
@@ -755,7 +757,7 @@ class TestAPIErrorHandling:
 
         output_dir = tmp_path / 'missing_columns_test'
 
-        with pytest.raises(ValueError, match='missing required column'):
+        with pytest.raises(ValidationError, match='missing required column'):
             run_active_learning(
                 compound_pool=invalid_compounds,
                 oracle=mock_oracle,
@@ -774,7 +776,8 @@ class TestAPIErrorHandling:
         output_dir = tmp_path / 'invalid_type_test'
 
         with pytest.raises(
-            TypeError, match=r'compound_pool must be str, Path, or pl.DataFrame'
+            ConfigurationError,
+            match=r'compound_pool must be str, Path, or pl.DataFrame',
         ):
             run_active_learning(
                 compound_pool={'invalid': 'type'},
@@ -790,10 +793,10 @@ class TestAPIErrorHandling:
             )
 
     def test_nonexistent_csv_file(self, tmp_path, mock_learner, mock_oracle):
-        """Test that nonexistent CSV file raises FileNotFoundError."""
+        """Test that nonexistent CSV file raises ConfigurationError."""
         output_dir = tmp_path / 'nonexistent_file_test'
 
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(ConfigurationError, match='not found'):
             run_active_learning(
                 compound_pool='/nonexistent/path/to/file.csv',
                 oracle=mock_oracle,
@@ -813,7 +816,7 @@ class TestAPIErrorHandling:
         """Test that empty cycle schedule raises error."""
         output_dir = tmp_path / 'empty_schedule_test'
 
-        with pytest.raises(ValueError, match='Cycle schedule is empty'):
+        with pytest.raises(ConfigurationError, match='Cycle schedule is empty'):
             run_active_learning(
                 compound_pool=sample_compounds,
                 oracle=mock_oracle,

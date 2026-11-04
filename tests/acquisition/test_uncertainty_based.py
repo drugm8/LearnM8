@@ -8,6 +8,7 @@ from learnm8.acquisition import (
     ThompsonSamplingAcquisition,
     UCBAcquisition,
 )
+from learnm8.exceptions import AcquisitionError
 
 
 @pytest.mark.unit
@@ -97,7 +98,7 @@ class TestUncertaintyBasedIntegration:
 
         acq = UCBAcquisition(beta=1.0)
 
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises((KeyError, AcquisitionError)):
             acq.select(compounds, n_select=5)
 
         # Test with NaN uncertainty

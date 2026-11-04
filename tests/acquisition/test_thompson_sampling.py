@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 
 from learnm8.acquisition import ThompsonSamplingAcquisition
+from learnm8.exceptions import AcquisitionError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -103,7 +104,7 @@ class TestThompsonSamplingAcquisition:
             .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
         )
 
-        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+        with pytest.raises(AcquisitionError, match="requires an 'uncertainty' column"):
             ThompsonSamplingAcquisition(random_state=42).select(compounds, n_select=2)
 
     def test_thompson_sampling_distribution_uses_uncertainty_as_standard_deviation(

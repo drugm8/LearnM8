@@ -1,7 +1,8 @@
 """Comprehensive CLI for LearnM8 active learning.
 
-Provides two subcommands:
+Provides three subcommands:
 - run: Execute active learning experiment
+- suggest: Write the next batch for a slow lab-in-the-loop assay
 - validate: Validate compound pool before running
 
 Supports multiple input modes:
@@ -30,7 +31,13 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from rich.traceback import install
 
-from learnm8.api import SMILES_NATIVE_LEARNERS, run_active_learning
+import learnm8
+from learnm8.acquisition import list_acquisition_functions
+from learnm8.api import (
+    NO_UNCERTAINTY_LEARNERS,
+    SMILES_NATIVE_LEARNERS,
+    run_active_learning,
+)
 from learnm8.core.config import CycleConfig, parse_cycle_spec
 from learnm8.core.validation import validate_compound_pool
 from learnm8.exceptions import (
@@ -66,7 +73,7 @@ Examples:
   learnm8 run --config experiment.yaml
 
   # Validate compounds
-  learnm8 validate compounds.csv --featurizer morgan -o validation_results/
+  learnm8 validate compounds.csv -o validation_results/
 
 Oracle Auto-Detection:
   - When oracle is omitted, the compound_pool CSV file is used as the oracle (benchmark mode)
@@ -96,6 +103,17 @@ CONFIG_KEY_ALIASES = {
     'id_column': 'id_col',
     'large_features_ack': 'allow_large_features',
 }
+
+
+def _run_config_dests() -> set[str]:
+    """Return the `run` argparse dests a config file may set."""
+    parser = create_parser()
+    subparsers = next(
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    )
+    dests = {a.dest for a in subparsers.choices['run']._actions}
+    # `pruning_params` has no flag; _build_run_kwargs reads it from the config.
+    return (dests - {'help'}) | {'pruning_params'}
 
 
 def load_config_file(config_path: Path) -> dict:
@@ -136,10 +154,11 @@ def load_config_file(config_path: Path) -> dict:
 
 
 def create_parser() -> argparse.ArgumentParser:
-    """Create argument parser with two subcommands.
+    """Create argument parser with three subcommands.
 
     Subcommands:
     - run: Execute active learning experiment
+    - suggest: Suggest the next lab batch
     - validate: Validate compound pool
 
     Returns:
@@ -150,6 +169,10 @@ def create_parser() -> argparse.ArgumentParser:
         description='LearnM8: Active Learning for Molecular Screening',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=EPILOG_TEXT,
+    )
+
+    parser.add_argument(
+        '--version', action='version', version=f'%(prog)s {learnm8.__version__}'
     )
 
     subparsers = parser.add_subparsers(dest='command', help='Command to run')
@@ -245,13 +268,9 @@ def create_parser() -> argparse.ArgumentParser:
         '--strategy',
         type=str,
         default='greedy',
-        help='Acquisition strategy (default: greedy)',
-    )
-    simple_group.add_argument(
-        '--initial-strategy',
-        type=str,
-        default='random',
-        help='First cycle strategy (default: random)',
+        choices=list_acquisition_functions(),
+        help='Acquisition strategy for cycles 1+; cycle 0 is always random '
+        '(default: greedy)',
     )
     pruning_group = run_parser.add_argument_group('Pruning')
     pruning_group.add_argument(
@@ -261,7 +280,8 @@ def create_parser() -> argparse.ArgumentParser:
         '--pruning-strategy',
         type=str,
         default=None,
-        help='Pruning strategy (default: None)',
+        choices=['score'],
+        help='Pruning strategy (default: score when --pruning-fraction is set)',
     )
 
     acquisition_group = run_parser.add_argument_group('Acquisition Parameters')
@@ -297,7 +317,7 @@ def create_parser() -> argparse.ArgumentParser:
         '--device',
         type=str,
         default='auto',
-        help='Compute device: auto, cpu, cuda, cuda:N, mps (default: auto)',
+        help='Compute device: auto, cpu, cuda, cuda:N (default: auto)',
     )
 
     advanced_group = run_parser.add_argument_group('Advanced')
@@ -324,7 +344,7 @@ def create_parser() -> argparse.ArgumentParser:
             'Force uncertainty computation every cycle, even when the acquisition '
             'function (e.g. greedy/random/topk) does not require it. Useful for '
             'diagnostic / calibration analyses. Silent no-op for learners that '
-            'do not support uncertainty (chemprop, fastprop, mlp). Default: off.'
+            f'do not support uncertainty ({", ".join(NO_UNCERTAINTY_LEARNERS)}). Default: off.'
         ),
     )
     advanced_group.add_argument(
@@ -332,8 +352,8 @@ def create_parser() -> argparse.ArgumentParser:
         action='store_true',
         default=False,
         help='Skip SMILES validation, duplicate-ID checks, and target-type checks. '
-        'Use when re-running the same dataset repeatedly and integrity is '
-        'already verified (e.g., via prior learnm8 validate). '
+        'Use when re-running the same dataset repeatedly and its SMILES and IDs '
+        'are already known to be clean (what learnm8 validate checks). '
         'Oracle-pool reconciliation is still performed. Default: off.',
     )
     advanced_group.add_argument(
@@ -348,6 +368,22 @@ def create_parser() -> argparse.ArgumentParser:
             'the legacy in-memory path. Stochastic strategies (thompson/random/'
             'topk) draw different (but equivalent) samples under streaming.'
         ),
+    )
+
+    advanced_group.add_argument(
+        '--enable-chemprop-fine-tuning',
+        action='store_true',
+        default=False,
+        help='Fine-tune Chemprop models from the previous cycle checkpoint instead '
+        'of retraining from scratch (chemprop and chemprop_ensemble only). Default: off.',
+    )
+    advanced_group.add_argument(
+        '--disable-molecular-similarity',
+        nargs='*',
+        default=False,
+        metavar='METRIC',
+        help='Skip diversity metrics. With no value, skip all of them; with metric '
+        'names, skip only those (e.g. scaffold_diversity_index_batch). Default: off.',
     )
 
     suggest_parser = subparsers.add_parser(
@@ -438,6 +474,19 @@ def create_parser() -> argparse.ArgumentParser:
     suggest_parser.add_argument(
         '--random-state', type=int, default=42, help='Random seed (default: 42)'
     )
+    suggest_parser.add_argument(
+        '--pruning-fraction',
+        type=float,
+        default=0.0,
+        help='Fraction of the unlabeled pool to remove for good each round '
+        '(0.0-0.9; default: 0.0 = off)',
+    )
+    suggest_parser.add_argument(
+        '--pruning-start',
+        type=int,
+        default=3,
+        help='First round (cycle number) that may prune (default: 3)',
+    )
 
     validate_parser = subparsers.add_parser(
         'validate', help='Validate compound pool using datamol SMILES validation'
@@ -497,6 +546,14 @@ def _print_learnm8_error(error: Exception) -> None:
         sys.exit(1)
 
 
+def _disable_similarity_arg(args: argparse.Namespace) -> bool | list[str]:
+    # `--disable-molecular-similarity` with no names parses to [] and means all.
+    value = getattr(args, 'disable_molecular_similarity', False)
+    if isinstance(value, list) and not value:
+        return True
+    return cast('bool | list[str]', value)
+
+
 def _build_run_kwargs(
     args: argparse.Namespace, acquisition_params: dict | None, cycles: list | None
 ) -> dict:
@@ -512,7 +569,6 @@ def _build_run_kwargs(
         n_cycles=args.n_cycles,
         batch_fraction=args.batch_fraction,
         strategy=args.strategy,
-        initial_strategy=args.initial_strategy,
         score_direction=args.score_direction,
         output_dir=args.output,
         cache_dir=getattr(args, 'cache_dir', None),
@@ -529,6 +585,8 @@ def _build_run_kwargs(
         force_uncertainty=getattr(args, 'force_uncertainty', False),
         skip_validation=getattr(args, 'skip_validation', False),
         streaming=getattr(args, 'streaming', 'auto'),
+        enable_chemprop_fine_tuning=getattr(args, 'enable_chemprop_fine_tuning', False),
+        disable_molecular_similarity=_disable_similarity_arg(args),
     )
 
 
@@ -550,8 +608,15 @@ def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None) -> N
             )
             config = load_config_file(args.config)
 
+            known_dests = _run_config_dests()
             for key, value in config.items():
                 dest = CONFIG_KEY_ALIASES.get(key, key)
+                if dest not in known_dests:
+                    console.print(
+                        f'[yellow]Warning:[/yellow] Config key "{key}" is not a '
+                        'known option and was not applied (check for a typo)'
+                    )
+                    continue
                 if dest in cli_provided:
                     console.print(
                         f'[dim]Config key "{key}" ignored: overridden by an explicit CLI flag[/dim]'
@@ -566,11 +631,11 @@ def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None) -> N
             console.print(
                 '[red]Error:[/red] compound_pool is required (provide positional file or via config)'
             )
-            sys.exit(1)
+            sys.exit(2)
 
         if args.compound_pool is None:
             console.print('[red]Error:[/red] compound_pool not found in config')
-            sys.exit(1)
+            sys.exit(2)
 
         if isinstance(args.compound_pool, str):
             args.compound_pool = Path(args.compound_pool)
@@ -579,14 +644,14 @@ def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None) -> N
             console.print(
                 f'[red]Error:[/red] Compound pool file not found: {args.compound_pool}'
             )
-            sys.exit(1)
+            sys.exit(2)
 
         if not getattr(args, 'target_col', None):
             console.print(
                 '[red]Error:[/red] target column is required '
                 '(provide --target/--target-column or set "target_col" in --config)'
             )
-            sys.exit(1)
+            sys.exit(2)
 
         learner = getattr(args, 'learner', None)
         if not getattr(args, 'featurizer', None):
@@ -595,7 +660,7 @@ def cmd_run(args: argparse.Namespace, cli_provided: set[str] | None = None) -> N
                     f"[red]Error:[/red] featurizer is required for learner '{learner}' "
                     '(provide --featurizer or set "featurizer" in --config)'
                 )
-                sys.exit(1)
+                sys.exit(2)
             console.print(
                 f'[cyan]No featurizer:[/cyan] {learner} learns directly from SMILES'
             )
@@ -747,7 +812,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
             console.print(
                 f'[red]Error:[/red] Compound pool file not found: {args.compound_pool}'
             )
-            sys.exit(1)
+            sys.exit(2)
 
         console.print(f'[cyan]Validating:[/cyan] {args.compound_pool}')
         compounds = load_compound_file(
@@ -810,7 +875,7 @@ def cmd_validate(args: argparse.Namespace) -> None:
                 # Use index if ID not available - create index column first
                 error_dict = result.validation_errors
                 invalid_df = (
-                    invalid_df.with_row_count('__index__')
+                    invalid_df.with_row_index('__index__')
                     .with_columns(
                         pl.col('__index__')
                         .cast(pl.Utf8)
@@ -849,7 +914,7 @@ def cmd_suggest(args: argparse.Namespace) -> None:
             f'[red]Error:[/red] Compound pool file not found: {args.compound_pool}',
             soft_wrap=True,
         )
-        sys.exit(1)
+        sys.exit(2)
 
     batch_dir = Path(args.batch_dir)
     before = set(batch_dir.glob('batch_cycle_*.csv'))
@@ -870,6 +935,8 @@ def cmd_suggest(args: argparse.Namespace) -> None:
             cache_dir=args.cache_dir,
             n_jobs=args.n_jobs,
             device=args.device,
+            pruning_fraction=args.pruning_fraction,
+            pruning_start=args.pruning_start,
         )
     except ValidationError as e:
         # Batch-file problems: the 'run learnm8 validate' hint would mislead.

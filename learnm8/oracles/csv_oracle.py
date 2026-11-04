@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 
 from learnm8.core.interfaces import Oracle
-from learnm8.exceptions import LearnM8Warning, OracleError
+from learnm8.exceptions import LearnM8Warning, OracleError, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class CSVOracle(Oracle):
         # Validate the ID column exists
         if id_column not in self.ground_truth.columns:
             available = list(self.ground_truth.columns)
-            raise ValueError(
+            raise ValidationError(
                 f"ID column '{id_column}' not found in oracle CSV. "
                 f'Available columns: {available}. '
                 f'Specify the correct column name with id_column parameter.'
@@ -75,7 +75,9 @@ class CSVOracle(Oracle):
         # against a right-side with duplicate keys fan out non-deterministically;
         # keeping only the first occurrence eliminates that source of run-to-run
         # divergence and matches the documented oracle contract (one value per ID).
-        deduped = self.ground_truth.unique(subset='ID', keep='first')
+        deduped = self.ground_truth.unique(
+            subset='ID', keep='first', maintain_order=True
+        )
         n_dup = self.ground_truth.height - deduped.height
         if n_dup > 0:
             warnings.warn(
@@ -88,6 +90,21 @@ class CSVOracle(Oracle):
     def known_ids(self) -> set:
         """Return the set of IDs present in the oracle CSV."""
         return set(self.ground_truth['ID'].to_list())
+
+    def unmeasurable_ids(self, target_col: str) -> list:
+        """Return IDs whose ``target_col`` value is null, NaN or infinite.
+
+        Returns an empty list if ``target_col`` is not an oracle column
+        (:meth:`measure` reports that case).
+        """
+        if target_col not in self.ground_truth.columns:
+            return []
+        col = self.ground_truth[target_col]
+        if col.dtype.is_numeric():
+            bad = col.is_null() | ~col.is_finite().fill_null(False)
+        else:
+            bad = col.is_null()
+        return self.ground_truth.filter(bad)['ID'].to_list()
 
     def measure(self, compounds: pl.DataFrame, properties: list[str]) -> pl.DataFrame:
         """
@@ -106,7 +123,7 @@ class CSVOracle(Oracle):
             available = [
                 c for c in self.ground_truth.columns if c not in ['ID', 'SMILES']
             ]
-            raise ValueError(
+            raise OracleError(
                 f'Requested properties not found in oracle CSV: {missing_props}. '
                 f'Available property columns: {available}. '
                 f'Check that target_col matches a column name in your CSV file.'
@@ -137,7 +154,7 @@ class CSVOracle(Oracle):
             if null_mask.any():
                 null_count = null_mask.sum()
                 null_ids = result.filter(null_mask)['ID'].to_list()
-                raise ValueError(
+                raise OracleError(
                     f"CSVOracle cannot measure property '{prop}' for {null_count} compounds "
                     f'(IDs: {null_ids[:5]}{"..." if len(null_ids) > 5 else ""}). '
                     f'These compounds have invalid/null values in the ground truth data.'

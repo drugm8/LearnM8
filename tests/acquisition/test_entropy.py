@@ -5,6 +5,7 @@ import polars as pl
 import pytest
 
 from learnm8.acquisition import EntropyAcquisition
+from learnm8.exceptions import AcquisitionError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -118,7 +119,7 @@ class TestEntropyAcquisition:
             .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
         )
 
-        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+        with pytest.raises(AcquisitionError, match="requires an 'uncertainty' column"):
             EntropyAcquisition().select(compounds, n_select=2)
 
     def test_entropy_rejects_non_positive_batch_size(self, small_real_compounds):

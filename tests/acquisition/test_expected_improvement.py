@@ -6,7 +6,7 @@ import pytest
 from scipy.stats import norm
 
 from learnm8.acquisition import ExpectedImprovementAcquisition
-from learnm8.exceptions import LearnerError
+from learnm8.exceptions import AcquisitionError, LearnerError
 
 
 def _pool_with_predictions_and_uncertainty(
@@ -155,7 +155,7 @@ class TestExpectedImprovementAcquisition:
             .with_columns(pl.Series('prediction', np.linspace(0.1, 0.5, 5)))
         )
 
-        with pytest.raises(ValueError, match="requires an 'uncertainty' column"):
+        with pytest.raises(AcquisitionError, match="requires an 'uncertainty' column"):
             ExpectedImprovementAcquisition(current_best=0.5).select(
                 compounds, n_select=2
             )

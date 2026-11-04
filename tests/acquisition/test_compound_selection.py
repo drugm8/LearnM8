@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 
 from learnm8.acquisition import get_acquisition_function, list_acquisition_functions
+from learnm8.exceptions import AcquisitionError
 
 
 @pytest.mark.unit
@@ -220,11 +221,11 @@ class TestSelectCompoundsByStrategy:
         pool = compounds.clone()
         pool = pool.with_columns(pl.Series('prediction', predictions))
 
-        # Should raise ValueError when uncertainties are required but not provided
+        # Should raise AcquisitionError when uncertainties are required but not provided
         acq_class = get_acquisition_function('ucb')
         acq = acq_class(score_direction='higher')
 
-        with pytest.raises(ValueError, match='uncertainty'):
+        with pytest.raises(AcquisitionError, match='uncertainty'):
             acq.select(pool, n_select=3)
 
     def test_greedy_selects_from_dataframe_with_prediction_column(

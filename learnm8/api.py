@@ -27,9 +27,9 @@ Examples:
 
     # Advanced API with custom featurizer
     from learnm8.core.config import CycleConfig
-    from learnm8.features import MorganFeaturizer
+    from learnm8.features import create_featurizer
 
-    custom_featurizer = MorganFeaturizer(radius=3, fp_size=4096)
+    custom_featurizer = create_featurizer('morgan', radius=3, fp_size=4096)
     results = run_active_learning(
         compound_pool=df,
         oracle=my_oracle,
@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import math
 import time
 from collections.abc import Iterable
 from datetime import datetime
@@ -58,6 +59,7 @@ from typing import Any, Literal, cast
 import datamol as dm  # type: ignore[import-untyped]
 import polars as pl
 
+from learnm8.acquisition import ACQUISITION_REGISTRY
 from learnm8.core.config import CycleConfig, parse_cycle_schedule
 from learnm8.core.cycle import execute_cycle
 from learnm8.core.initialization import (
@@ -72,8 +74,14 @@ from learnm8.core.validation import (
     canonicalize_for_cache,
     validate_compound_pool,
 )
-from learnm8.evaluation.metrics.similarity import RunCache
-from learnm8.exceptions import ConfigurationError, LearnM8Error, OracleError
+from learnm8.evaluation.metrics.similarity import DIVERSITY_KEYS, RunCache
+from learnm8.exceptions import (
+    ConfigurationError,
+    LearnM8Error,
+    OracleError,
+    ValidationError,
+    _truncate_list,
+)
 from learnm8.features.worker_pool import shutdown_featurization_pool
 from learnm8.learners import (
     DecisionTreeLearner,
@@ -153,25 +161,11 @@ except ImportError:
 SMILES_NATIVE_LEARNERS = frozenset({'chemprop', 'chemprop_ensemble'})
 
 
-LEARNER_DISPLAY_NAMES = {
-    'rf': 'Random Forest',
-    'gp': 'Gaussian Process',
-    'xgb': 'XGBoost',
-    'rf_fil': 'RF FIL (GPU)',
-    'ridge_cuml': 'Ridge cuML (GPU)',
-    'mlp': 'MLP',
-    'mc_dropout': 'MC Dropout',
-    'fastprop': 'FastProp',
-    'chemprop': 'Chemprop',
-    'chemprop_ensemble': 'Chemprop Ensemble',
-    'lr_ensemble': 'LR Ensemble',
-    'xgb_ensemble': 'XGBoost Ensemble',
-    'dt_ensemble': 'DT Ensemble',
-    'mixed_ensemble': 'Mixed Ensemble',
-    'fastprop_ensemble': 'FastProp Ensemble',
-    'gpu_gp': 'GPyTorch GPU GP',
-    'svgp': 'SVGP (Sparse Variational GP)',
-}
+# Registry names whose learners do not support uncertainty
+# (``supports_uncertainty()`` is False); every other registered learner does.
+# Uncertainty-based acquisition strategies (ucb, ei, pi, thompson, entropy)
+# need one of the others.
+NO_UNCERTAINTY_LEARNERS = ('xgb', 'mlp', 'fastprop', 'chemprop')
 
 
 def list_available_learners() -> list[str]:
@@ -202,31 +196,24 @@ def _create_learner(
     member-seed list from `random_state` via the unified offset scheme
     `[base, base+81, base+314, ...]` (see `_derive_random_states`).
 
-    Supported learner shortcuts:
-    - 'rf': Random Forest
-    - 'gp': Gaussian Process
-    - 'xgb': XGBoost
-    - 'mlp': Multi-Layer Perceptron
-    - 'mc_dropout': Monte Carlo Dropout
-    - 'chemprop': Chemprop single model (supports fine-tuning)
-    - 'chemprop_ensemble': Chemprop Ensemble (supports fine-tuning)
-    - 'lr_ensemble': Linear Regression Ensemble
-    - 'xgb_ensemble': XGBoost Ensemble
-    - 'dt_ensemble': Decision Tree Ensemble
-    - 'mixed_ensemble': Mixed Model Ensemble
+    Supported learner shortcuts are the keys of ``LEARNER_REGISTRY`` (see
+    ``list_available_learners()``). 'chemprop' and 'chemprop_ensemble' support
+    fine-tuning.
 
     Args:
         learner_str: Learner shortcut string
         random_state: Random seed for reproducibility
         enable_chemprop_fine_tuning: Enable fine-tuning for Chemprop (default: False)
         checkpoint_dir: Checkpoint directory for Chemprop fine-tuning
+        n_jobs: Parallel CPU jobs for learners that accept it
+        device: Compute device for learners that accept it
 
     Returns:
         Instantiated Learner object
 
     Raises:
-        ValueError: If learner_str not recognized
-        RuntimeError: If learner instantiation fails
+        ConfigurationError: If learner_str is not recognized, fine-tuning lacks
+            a checkpoint_dir, or the learner cannot be instantiated
 
     Notes:
         Ensemble learners automatically receive random_states derived from
@@ -235,10 +222,13 @@ def _create_learner(
     """
     if learner_str not in LEARNER_REGISTRY:
         available = ', '.join(sorted(LEARNER_REGISTRY.keys()))
-        raise ValueError(
+        with_uncertainty = ', '.join(
+            n for n in sorted(LEARNER_REGISTRY) if n not in NO_UNCERTAINTY_LEARNERS
+        )
+        raise ConfigurationError(
             f"Unknown learner '{learner_str}'. "
             f'Available learners: {available}. '
-            f'Uncertainty-capable: gp, mc_dropout, *_ensemble. '
+            f'Uncertainty-capable: {with_uncertainty}. '
             f'SMILES-native (no featurizer needed): chemprop, chemprop_ensemble.'
         )
 
@@ -248,7 +238,7 @@ def _create_learner(
     if learner_class == ChempropEnsemble:
         if enable_chemprop_fine_tuning:
             if checkpoint_dir is None:
-                raise ValueError(
+                raise ConfigurationError(
                     'checkpoint_dir required when enable_chemprop_fine_tuning=True. '
                     'This should be set automatically by run_active_learning().'
                 )
@@ -256,17 +246,20 @@ def _create_learner(
                 f'Creating ChempropEnsemble with fine-tuning enabled (checkpoint_dir={checkpoint_dir})'
             )
             return ChempropEnsemble(
-                enable_fine_tuning=True, checkpoint_dir=checkpoint_dir, device=device
+                enable_fine_tuning=True,
+                checkpoint_dir=checkpoint_dir,
+                device=device,
+                random_state=random_state,
             )
         else:
             logger.debug('Creating ChempropEnsemble without fine-tuning')
-            return ChempropEnsemble(device=device)
+            return ChempropEnsemble(device=device, random_state=random_state)
 
     fine_tune_single_chemprop = (
         enable_chemprop_fine_tuning and learner_class is ChempropLearner
     )
     if fine_tune_single_chemprop and checkpoint_dir is None:
-        raise ValueError(
+        raise ConfigurationError(
             'checkpoint_dir required when enable_chemprop_fine_tuning=True. '
             'This should be set automatically by run_active_learning().'
         )
@@ -338,7 +331,7 @@ def _validate_pool(
         if n_unmeasurable > 0:
             unmeasurable = valid_pool.filter(~keep_mask)
             kept = valid_pool.filter(keep_mask)
-            reason = 'Not present in oracle ground truth (missing target value)'
+            reason = 'Not present in oracle ground truth'
             for cid in unmeasurable['ID'].to_list():
                 validation_result.validation_errors[str(cid)] = reason
             if len(validation_result.invalid_compounds) > 0:
@@ -350,7 +343,7 @@ def _validate_pool(
             validation_result.valid_compounds = kept
             logger.warning(
                 f'Reconciled pool with oracle: dropped {n_unmeasurable} compounds '
-                f'missing from oracle ground truth (e.g. invalid/non-numeric target). '
+                f'not present in the oracle ground truth. '
                 f'Pool size: {len(kept)} measurable compounds.'
             )
 
@@ -376,7 +369,6 @@ def _build_cycle_schedule(
     strategy: str,
     n_cycles: int,
     batch_fraction: float,
-    initial_strategy: str,
     acquisition_params: dict | None,
     pruning_strategy: str | None,
     pruning_params: dict | None,
@@ -384,14 +376,14 @@ def _build_cycle_schedule(
 ) -> list[CycleConfig]:
     if pruning_fraction is not None or pruning_strategy is not None:
         if pruning_fraction is not None and not (0.0 <= pruning_fraction <= 0.9):
-            raise ValueError(
+            raise ConfigurationError(
                 f'pruning_fraction must be in [0.0, 0.9], got {pruning_fraction}'
             )
 
         if pruning_strategy is None:
             pruning_strategy = 'score'
-        if pruning_params is None:
-            pruning_params = {}
+        # Copy: never mutate the caller's dict.
+        pruning_params = dict(pruning_params or {})
 
         if pruning_fraction is not None:
             pruning_params['pruning_fraction'] = pruning_fraction
@@ -410,18 +402,91 @@ def _build_cycle_schedule(
         strategy=strategy,
         n_cycles=n_cycles,
         batch_fraction=batch_fraction,
-        initial_strategy=initial_strategy,
         acquisition_params=acquisition_params,
         pruning_strategy=pruning_strategy,
         pruning_params=pruning_params,
     )
 
     if len(cycle_schedule) == 0:
-        raise ValueError(
+        raise ConfigurationError(
             'Cycle schedule is empty - cannot determine initialization strategy'
         )
 
     return cycle_schedule
+
+
+def _check_run_options(
+    streaming: str,
+    output_format: str,
+    disable_molecular_similarity: bool | Iterable[str],
+) -> None:
+    if streaming not in ('auto', 'always', 'never'):
+        raise ConfigurationError(
+            f"streaming must be one of 'auto', 'always', 'never', got {streaming!r}."
+        )
+    if output_format not in ('auto', 'csv', 'parquet'):
+        raise ConfigurationError(
+            f"output_format must be one of 'auto', 'csv', 'parquet', got "
+            f'{output_format!r}.'
+        )
+    if not isinstance(disable_molecular_similarity, bool):
+        if isinstance(disable_molecular_similarity, str):
+            raise ConfigurationError(
+                'disable_molecular_similarity must be a bool or an iterable of '
+                f'metric names, got the string {disable_molecular_similarity!r}.'
+            )
+        unknown = sorted(set(disable_molecular_similarity) - set(DIVERSITY_KEYS))
+        if unknown:
+            raise ConfigurationError(
+                f'Unknown diversity metric(s) in disable_molecular_similarity: '
+                f'{unknown}. Valid names: {", ".join(DIVERSITY_KEYS)}.'
+            )
+
+
+def _check_strategies(cycle_schedule: list[CycleConfig], learner: Learner) -> None:
+    """Fail before cycle 0 on unknown strategies or learner/strategy mismatch.
+
+    Cycle 0 is always random, so only cycles 1+ are checked for uncertainty.
+    """
+    from learnm8.core.cycle import _build_acquisition_function
+
+    for cycle_num, config in enumerate(cycle_schedule):
+        if config.strategy not in ACQUISITION_REGISTRY:
+            raise ConfigurationError(
+                f"Unknown acquisition strategy '{config.strategy}'. "
+                f'Valid strategies: {", ".join(sorted(ACQUISITION_REGISTRY))}.'
+            )
+        if cycle_num == 0 or learner.supports_uncertainty():
+            continue
+        acq_func = _build_acquisition_function(
+            strategy=config.strategy,
+            score_direction='higher',
+            acquisition_params=dict(config.acquisition_params or {}),
+        )
+        if acq_func.requires_uncertainty():
+            raise ConfigurationError(
+                f"Strategy '{config.strategy}' needs uncertainty estimates, but "
+                f'learner {learner.get_name()} does not support uncertainty. '
+                f'Use an uncertainty-capable learner (e.g. rf, gp, or an ensemble) '
+                f'or a basic strategy (greedy, random, topk).'
+            )
+
+
+def _check_csv_oracle_targets(
+    oracle: Oracle, valid_compounds: pl.DataFrame, target_col: str
+) -> None:
+    """Reject empty/NaN/inf CSV-oracle targets for pool compounds before cycle 0."""
+    if not isinstance(oracle, CSVOracle):
+        return
+    pool_ids = set(valid_compounds['ID'].to_list())
+    bad_ids = [i for i in oracle.unmeasurable_ids(target_col) if i in pool_ids]
+    if bad_ids:
+        raise ValidationError(
+            f'Oracle CSV has {len(bad_ids)} compound(s) with an empty, NaN or '
+            f"infinite value in target column '{target_col}' (IDs: "
+            f'{_truncate_list(bad_ids)}). Fill in or remove these rows; the CSV '
+            f'oracle needs a finite target for every compound in the pool.'
+        )
 
 
 def _warn_failed_compounds(cycle: int, metrics: dict[str, Any]) -> None:
@@ -807,7 +872,6 @@ def run_active_learning(
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
     strategy: str = 'greedy',
-    initial_strategy: str = 'random',
     # Common parameters
     score_direction: str = 'higher',
     output_dir: str | Path | None = None,
@@ -854,8 +918,7 @@ def run_active_learning(
             featurizer='morgan',
             n_cycles=10,
             batch_fraction=0.01,       # 1% per cycle (ALL cycles)
-            initial_strategy='random',  # Strategy for cycle 0
-            strategy='greedy'          # Strategy for cycles 1-9
+            strategy='greedy'          # Strategy for cycles 1-9 (cycle 0 is random)
         )
 
     **Advanced API** - Provide CycleConfig list for full control:
@@ -895,10 +958,11 @@ def run_active_learning(
               Ordinal uncertainty (not calibrated). Requires RAPIDS cuML >= 25.04.
 
             Ensemble learners with device parameter support (lr_ensemble, xgb_ensemble,
-            mixed_ensemble accept device='cpu', 'cuda', or 'auto'):
-            - device='auto' resolves to CPU member types for all ensembles.
-            - device='cuda' activates GPU members (RfFilLearner, RidgeCumlLearner, or
-              XGBoostLearner with device='cuda').
+            mixed_ensemble accept device='cpu', 'cuda', 'cuda:N' or 'auto'):
+            - device='auto' uses GPU members when CUDA is available (and, for
+              lr_ensemble and mixed_ensemble, RAPIDS cuML is installed), else CPU.
+            - device='cuda' or 'cuda:N' activates GPU members (RfFilLearner,
+              RidgeCumlLearner, or XGBoostLearner on that device).
 
         target_col: Target property column name
 
@@ -911,7 +975,7 @@ def run_active_learning(
 
             Examples:
                 featurizer='morgan'  # Default Morgan fingerprints
-                featurizer=MorganFeaturizer(radius=3, fp_size=4096)  # Custom config
+                featurizer=create_featurizer('morgan', radius=3, fp_size=4096)
 
         smiles_column: Column name for SMILES in the input file (CSV only).
             If None, auto-detects from common names ('SMILES', 'smiles', 'Smiles').
@@ -928,9 +992,10 @@ def run_active_learning(
 
         batch_fraction: Simple API - Fraction per cycle for ALL cycles (default: 0.01)
 
-        strategy: Simple API - Acquisition strategy for cycles 1+ (default: 'greedy')
-
-        initial_strategy: Simple API - Acquisition strategy for cycle 0 (default: 'random')
+        strategy: Simple API - Acquisition strategy for cycles 1+ (default: 'greedy').
+            Cycle 0 is always a random selection (no model yet). Strategies that
+            need uncertainty (ucb, ei, pi, thompson, entropy) require a learner
+            that supports it; both are checked before cycle 0.
 
         score_direction: Optimization direction ('higher' or 'lower')
 
@@ -961,14 +1026,12 @@ def run_active_learning(
             batching (0.0, 1.0]. Default 0.7. Higher values use more memory for
             larger batches. Use 0.85 on dedicated hardware, 0.5 on shared clusters.
 
-        **kwargs: Additional parameters passed to cycle execution
-
         n_jobs: Number of parallel jobs for CPU-bound operations.
-            -1 uses all available cores. 0 disables parallelism.
-            Ignored for GPU-accelerated learners (rf_fil, ridge_cuml).
+            -1 uses all available cores, or give a positive integer (0 raises
+            ConfigurationError). Ignored for GPU-accelerated learners
+            (rf_fil, ridge_cuml).
 
-        device: Device to use for GPU-accelerated learners.
-            Options: 'auto' (detect), 'cpu', or 'cuda'/'gpu'.
+        device: Compute device: 'auto' (detect), 'cpu', 'cuda' or 'cuda:N'.
             Ignored for CPU-only learners.
 
         large_features_ack: Acknowledge large-feature runs on big pools.
@@ -978,9 +1041,16 @@ def run_active_learning(
             and the guard triggers. CLI equivalent: --allow-large-features.
 
         output_format: Output file format for results.
-            'auto' uses CSV for <1M compounds, Parquet for >=1M.
+            'auto' uses CSV for up to 1,000,000 rows and Parquet above that.
             'csv' or 'parquet' force a specific format regardless of pool size.
             Parquet uses zstd-3 compression and streaming writes for scale.
+            cycle_metrics is always written as CSV.
+
+        disable_molecular_similarity: Skip the diversity metrics. True skips
+            all of them; an iterable of metric names (see ``DIVERSITY_KEYS`` in
+            ``learnm8.evaluation.metrics.similarity``) skips only those.
+            Unknown names raise ConfigurationError. Default False.
+            CLI equivalent: ``--disable-molecular-similarity [NAME ...]``.
 
         force_uncertainty: When True, learners always compute uncertainty even
             if the acquisition function does not require it (e.g., 'greedy').
@@ -991,18 +1061,26 @@ def run_active_learning(
             resolves ``compute_uncertainty = force_uncertainty OR
             acq_func.requires_uncertainty()`` once per cycle. CLI equivalent:
             ``--force-uncertainty``. Silent no-op for learners that do not
-            support uncertainty at all (chemprop, fastprop, mlp).
+            support uncertainty at all (xgb, mlp, fastprop, chemprop).
 
         skip_validation: When True, skip SMILES validation, duplicate-ID checks,
             and target-column dtype validation. All compounds are treated as
             valid. Useful when re-running the same dataset repeatedly and you
-            have already verified its integrity (e.g., via ``learnm8 validate``
-            or a prior run). The oracle-vs-pool reconciliation step is still
+            know its SMILES and IDs are clean (``learnm8 validate`` checks
+            exactly that). The oracle-vs-pool reconciliation step is still
             performed. Default False. CLI equivalent: ``--skip-validation``.
+
+        streaming: Predict-then-select execution path: 'auto' (default) streams
+            when eligible (streamable strategy, output_dir set, pruning in
+            {None, 'score'}) and falls back to the in-memory path otherwise;
+            'always' raises ConfigurationError for an ineligible cycle; 'never'
+            forces the in-memory path. Any other value raises
+            ConfigurationError. CLI equivalent: ``--streaming``.
 
     Returns:
         Dictionary with:
-            - compounds_df: Final master DataFrame (narrow: 7 base columns + target)
+            - compounds_df: Final master DataFrame (7 columns: ID, SMILES, status,
+              labeled_cycle, selected_cycle, pruned_cycle, and the target column)
             - cycle_metrics: List of metrics per cycle
             - aggregate_metrics: Aggregated metrics across cycles
             - validation_result: ValidationResult object
@@ -1013,10 +1091,16 @@ def run_active_learning(
             - unlabeled_count: int, count of remaining unlabeled compounds
 
     Raises:
-        FileNotFoundError: If compound_pool file not found
-        ValueError: If validation fails or invalid parameters
-        TypeError: If invalid input types
-        RuntimeError: If cycle execution fails
+        ConfigurationError: Bad parameters or configuration (unknown learner,
+            featurizer or strategy, learner without uncertainty for an
+            uncertainty-based strategy, invalid n_jobs/device/streaming/
+            output_format, missing compound_pool file, no oracle for a DataFrame
+            pool, ...)
+        ValidationError: Bad input data (missing ID/SMILES columns, no valid
+            compounds, empty/NaN/infinite CSV-oracle targets)
+        OracleError: The oracle cannot measure the selected compounds
+        PersistenceError: Results cannot be written
+        LearnerError: Training or prediction fails
 
     Notes:
         **Oracle Auto-Detection:**
@@ -1028,7 +1112,7 @@ def run_active_learning(
         **Other Notes:**
         - Pruning is enabled automatically if pruning_fraction is provided
         - Featurizer instances are used for feature extraction and caching
-        - Results are automatically saved to CSV files in output_dir
+        - Results are saved in output_dir (CSV, or Parquet for large pools; see output_format)
     """
 
     start_time = time.perf_counter()
@@ -1039,6 +1123,7 @@ def run_active_learning(
     run_cache = RunCache()
 
     try:
+        _check_run_options(streaming, output_format, disable_molecular_similarity)
         n_jobs = validate_n_jobs(n_jobs)
         device = validate_device(device)
 
@@ -1078,7 +1163,7 @@ def run_active_learning(
             compound_pool_path = Path(compound_pool)
             original_compound_pool_path = compound_pool_path
             if not compound_pool_path.exists():
-                raise FileNotFoundError(
+                raise ConfigurationError(
                     f'Compound pool file not found: {compound_pool_path}. '
                     f'Verify the file path and ensure the file exists. '
                     f'Supported formats: CSV, SDF, SMI.'
@@ -1095,14 +1180,14 @@ def run_active_learning(
         elif isinstance(compound_pool, pl.DataFrame):
             logger.debug('Using provided DataFrame as compound pool')
         else:
-            raise TypeError(
+            raise ConfigurationError(
                 f'compound_pool must be str, Path, or pl.DataFrame, got {type(compound_pool).__name__}. '
                 f"Pass a file path (CSV/SDF/SMI) or a Polars DataFrame with 'ID' and 'SMILES' columns."
             )
 
         if 'ID' not in compound_pool.columns or 'SMILES' not in compound_pool.columns:
             missing = {'ID', 'SMILES'} - set(compound_pool.columns)
-            raise ValueError(
+            raise ValidationError(
                 f'Compound pool missing required column(s): {missing}. '
                 f'Found columns: {list(compound_pool.columns)}. '
                 f"Ensure your data has 'ID' (unique identifier) and 'SMILES' (molecular structure) columns."
@@ -1118,7 +1203,7 @@ def run_active_learning(
                 )
                 logger.debug('Auto-detected CSV oracle from compound pool')
             else:
-                raise ValueError(
+                raise ConfigurationError(
                     'Oracle is required when compound_pool is a DataFrame. '
                     'Provide an oracle parameter: a CSV path (benchmark mode), '
                     "'module.py:function' (run mode), or an Oracle instance. "
@@ -1131,7 +1216,7 @@ def run_active_learning(
                 logger.debug(f'Using CSV oracle: {oracle_path}')
             else:
                 if ':' not in str(oracle):
-                    raise ValueError(
+                    raise ConfigurationError(
                         f"Non-CSV oracle path must use 'module.py:function' format, got: '{oracle}'. "
                         f"Example: oracle='my_oracle.py:measure_activity'. "
                         f'For CSV-based oracles, use a .csv file extension.'
@@ -1210,7 +1295,7 @@ def run_active_learning(
 
                 available = list_available_featurizers()
                 featurizer_options = ', '.join(sorted(available['all']))
-                raise ValueError(
+                raise ConfigurationError(
                     f'{learner.get_name()} requires a featurizer because it is a feature-based '
                     f"learner. Specify featurizer parameter (e.g., featurizer='morgan'). "
                     f'Valid options: {featurizer_options}. '
@@ -1228,10 +1313,9 @@ def run_active_learning(
 
                     available = list_available_featurizers()
                     featurizer_options = ', '.join(sorted(available['all']))
-                    raise ValueError(
+                    raise ConfigurationError(
                         f"Unknown featurizer '{featurizer}'. "
-                        f'Valid options: {featurizer_options}. '
-                        f"Use 'learnm8 list featurizers' to see all available featurizers."
+                        f'Valid options: {featurizer_options}.'
                     )
                 from learnm8.features import create_featurizer
 
@@ -1269,6 +1353,20 @@ def run_active_learning(
                 f'Use 0.7 (default) for most cases, 0.85 for dedicated hardware, '
                 f'0.5 for shared clusters.'
             )
+
+        # Resolve and check the schedule before any pool validation or oracle call.
+        cycle_schedule = _build_cycle_schedule(
+            cycles=cycles,
+            strategy=strategy,
+            n_cycles=n_cycles,
+            batch_fraction=batch_fraction,
+            acquisition_params=acquisition_params,
+            pruning_strategy=pruning_strategy,
+            pruning_params=pruning_params,
+            pruning_fraction=pruning_fraction,
+        )
+
+        _check_strategies(cycle_schedule, learner)
 
         oracle_desc = f'{oracle.__class__.__name__}'
         if hasattr(oracle, 'source_file'):
@@ -1320,14 +1418,14 @@ def run_active_learning(
                 if n_unmeasurable > 0:
                     unmeasurable = valid_pool.filter(~keep_mask)
                     kept = valid_pool.filter(keep_mask)
-                    reason = 'Not present in oracle ground truth (missing target value)'
+                    reason = 'Not present in oracle ground truth'
                     for cid in unmeasurable['ID'].to_list():
                         validation_result.validation_errors[str(cid)] = reason
                     validation_result.invalid_compounds = unmeasurable
                     validation_result.valid_compounds = kept
                     logger.warning(
                         f'Reconciled pool with oracle: dropped {n_unmeasurable} compounds '
-                        f'missing from oracle ground truth (e.g. invalid/non-numeric target). '
+                        f'not present in the oracle ground truth. '
                         f'Pool size: {len(kept)} measurable compounds.'
                     )
 
@@ -1337,28 +1435,18 @@ def run_active_learning(
                 f'Total: {len(compound_pool)}, '
                 f'Invalid: {len(validation_result.invalid_compounds)}'
             )
-            raise ValueError(
+            raise ValidationError(
                 f'No valid compounds after validation. All {len(compound_pool)} compounds failed '
                 f"SMILES validation. Run 'learnm8 validate <file>' to identify invalid compounds, "
                 f'or check that SMILES strings are valid molecular structures.'
             )
 
+        _check_csv_oracle_targets(oracle, validation_result.valid_compounds, target_col)
+
         if len(validation_result.invalid_compounds) > 0:
             logger.warning(
                 f'Found {len(validation_result.invalid_compounds)} invalid compounds'
             )
-
-        cycle_schedule = _build_cycle_schedule(
-            cycles=cycles,
-            strategy=strategy,
-            n_cycles=n_cycles,
-            batch_fraction=batch_fraction,
-            initial_strategy=initial_strategy,
-            acquisition_params=acquisition_params,
-            pruning_strategy=pruning_strategy,
-            pruning_params=pruning_params,
-            pruning_fraction=pruning_fraction,
-        )
 
         logger.info('═══════════════════════════════════════════════════════════════')
         logger.info('Phase 2: Initializing master DataFrame (all compounds unlabeled)')
@@ -1395,10 +1483,18 @@ def run_active_learning(
             logger.info(schedule_msg)
 
         total_cycles = len(cycle_schedule)
-        total_compounds_to_label = sum(
-            int(original_pool_size * cast(float, c.batch_fraction)) * c.n_cycles
-            for c in cycle_schedule
-        )
+        total_compounds_to_label = 0
+        remaining_pool = original_pool_size
+        for c in cycle_schedule:
+            for _ in range(c.n_cycles):
+                batch = min(
+                    max(
+                        1, math.ceil(original_pool_size * cast(float, c.batch_fraction))
+                    ),
+                    remaining_pool,
+                )
+                total_compounds_to_label += batch
+                remaining_pool -= batch
         logger.info(
             f'Total: {total_cycles} cycles, {total_compounds_to_label} compounds to be labeled'
         )
@@ -1492,6 +1588,10 @@ def run_active_learning(
             ),
         }
 
+    except (ConfigurationError, ValidationError) as e:
+        # User errors: the message says it all, a traceback only adds noise.
+        logger.error(f'Active learning failed: {e}')
+        raise
     except Exception as e:
         logger.error(f'Active learning failed: {e}', exc_info=True)
         raise

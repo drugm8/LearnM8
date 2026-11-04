@@ -1,6 +1,8 @@
 import logging
 import re
 
+from learnm8.exceptions import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ def validate_n_jobs(n_jobs: int) -> int:
 
     Raises:
         TypeError: If n_jobs is not an integer.
-        ValueError: If n_jobs is 0 or less than -1.
+        ConfigurationError: If n_jobs is 0 or less than -1.
     """
     if not isinstance(n_jobs, int):
         raise TypeError(
@@ -24,9 +26,11 @@ def validate_n_jobs(n_jobs: int) -> int:
             f'Use -1 for all cores or a positive integer for a specific number of workers.'
         )
     if n_jobs == 0:
-        raise ValueError('n_jobs must be -1 (all cores) or a positive integer, got 0')
+        raise ConfigurationError(
+            'n_jobs must be -1 (all cores) or a positive integer, got 0'
+        )
     if n_jobs < -1:
-        raise ValueError(
+        raise ConfigurationError(
             f'n_jobs must be -1 (all cores) or a positive integer, got {n_jobs}'
         )
     return n_jobs
@@ -44,7 +48,7 @@ def validate_device(device: str) -> str:
 
     Raises:
         TypeError: If device is not a string.
-        ValueError: If device is unknown or the requested hardware
+        ConfigurationError: If device is unknown or the requested hardware
             is not available.
     """
     if not isinstance(device, str):
@@ -61,7 +65,7 @@ def validate_device(device: str) -> str:
             import torch
 
             if not torch.cuda.is_available():
-                raise ValueError(
+                raise ConfigurationError(
                     "CUDA device requested but no GPU available. Use 'cpu' or 'auto'."
                 )
         elif device == 'mps':
@@ -70,7 +74,7 @@ def validate_device(device: str) -> str:
             if not (
                 hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
             ):
-                raise ValueError(
+                raise ConfigurationError(
                     "MPS device requested but not available. Use 'cpu' or 'auto'."
                 )
         return device
@@ -79,19 +83,19 @@ def validate_device(device: str) -> str:
         import torch
 
         if not torch.cuda.is_available():
-            raise ValueError(
+            raise ConfigurationError(
                 "CUDA device requested but no GPU available. Use 'cpu' or 'auto'."
             )
         device_index = int(device.split(':')[1])
         gpu_count = torch.cuda.device_count()
         if device_index >= gpu_count:
-            raise ValueError(
+            raise ConfigurationError(
                 f'CUDA device {device_index} requested but only {gpu_count} '
                 f'GPUs available (indices 0-{gpu_count - 1})'
             )
         return device
 
-    raise ValueError(
+    raise ConfigurationError(
         f"Unknown device '{device}'. Valid: 'auto', 'cpu', 'cuda', 'cuda:N', 'mps'"
     )
 
