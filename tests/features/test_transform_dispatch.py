@@ -52,9 +52,8 @@ def _takes_fast_path(name: str) -> bool:
 
     ``transform`` branches on ``requires_3d()`` (i.e. the skfp instance's
     ``requires_conformers`` attribute), which does not always agree with the
-    FEATURIZERS_3D set: ``autocorr`` is listed as 3D but reports
-    ``requires_conformers=False``, so it actually takes the fast path. Deriving
-    the sweep from the registry sets would silently skip it.
+    FEATURIZERS_3D set. Deriving the sweep from the registry sets would
+    silently skip any featurizer where the two disagree.
     """
     if name in SMILES_CONSUMING_NAMES:
         return False
@@ -191,15 +190,10 @@ def test_every_registry_featurizer_lands_in_exactly_one_branch() -> None:
 
 
 @pytest.mark.unit
-def test_autocorr_is_swept_despite_being_registered_3d() -> None:
-    """Regression pin for the registry/runtime mismatch the sweep uncovered.
-
-    ``autocorr`` is in FEATURIZERS_3D but its skfp instance reports
-    ``requires_conformers=False``, so it reaches the fast path. A sweep
-    built from FEATURIZERS_2D would not have covered it.
-    """
-    assert 'autocorr' in FEATURIZERS_3D
-    assert 'autocorr' not in FEATURIZERS_2D
+def test_autocorr_is_a_2d_featurizer() -> None:
+    """autocorr runs skfp with use_3D=False, so it is registered as 2D."""
+    assert 'autocorr' in FEATURIZERS_2D
+    assert 'autocorr' not in FEATURIZERS_3D
     assert not create_featurizer('autocorr', n_jobs=1).requires_3d()
     assert 'autocorr' in FAST_PATH_NAMES
 

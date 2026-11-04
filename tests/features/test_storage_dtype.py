@@ -44,11 +44,12 @@ BINARY_FEATURIZER_NAMES = {
 }
 
 # mqns moves out of CONTINUOUS into UINT8 (raw uint8 storage; observed max 26 ≤ 255).
-# pharmacophore + physiochemical move out of CONTINUOUS into SPARSE_BINARY (CSR storage; ≤2% density).
+# pharmacophore + physicochemical move out of CONTINUOUS into SPARSE_BINARY (CSR storage; ≤2% density).
 CONTINUOUS_FEATURIZER_NAMES = {
     'mordred',
     'descriptors',
     'rdkit_2d_descriptors',
+    'autocorr',
     'estate',
     'ghose_crippen',
     'vsa',
@@ -59,7 +60,7 @@ CONTINUOUS_FEATURIZER_NAMES = {
 
 UINT8_FEATURIZER_NAMES = {'mqns'}
 
-SPARSE_BINARY_FEATURIZER_NAMES = {'pharmacophore', 'physiochemical'}
+SPARSE_BINARY_FEATURIZER_NAMES = {'pharmacophore', 'physicochemical'}
 
 THREE_D_FEATURIZER_NAMES = {
     'whim',
@@ -68,7 +69,6 @@ THREE_D_FEATURIZER_NAMES = {
     'getaway',
     'morse',
     'rdf',
-    'autocorr',
     'electroshape',
 }
 

@@ -177,7 +177,7 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'feature_type': 'binary',
             'requires_conformers': False,
             'count_override': {'storage_dtype': 'uint8', 'feature_type': 'continuous'},
-            'description': 'MACCS structural keys (167 predefined patterns)',
+            'description': 'MACCS structural keys (166 predefined patterns)',
         },
         'pubchem': {
             'cls': PubChemFingerprint,
@@ -393,13 +393,13 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'requires_conformers': False,
             'description': 'BCUT2D Burden-CAS-UT descriptors',
         },
-        'physiochemical': {
+        'physicochemical': {
             'cls': PhysiochemicalPropertiesFingerprint,
             'defaults': _simple_2d_defaults(),
             'storage_dtype': 'csr_uint16',
             'feature_type': 'continuous',
             'requires_conformers': False,
-            'description': 'Physiochemical molecular properties',
+            'description': 'Physicochemical molecular properties',
         },
         'pharmacophore': {
             'cls': PharmacophoreFingerprint,
@@ -416,6 +416,14 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'feature_type': 'continuous',
             'requires_conformers': False,
             'description': 'Functional group presence patterns',
+        },
+        'autocorr': {
+            'cls': AutocorrFingerprint,
+            'defaults': _simple_2d_defaults(),
+            'storage_dtype': 'float32',
+            'feature_type': 'continuous',
+            'requires_conformers': False,
+            'description': 'Autocorr 2D autocorrelation descriptors',
         },
         # ── 3D fingerprints ────────────────────────────────────────────────
         'whim': {
@@ -474,14 +482,6 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
             'requires_conformers': True,
             'description': 'RDF 3D radial distribution function descriptors',
         },
-        'autocorr': {
-            'cls': AutocorrFingerprint,
-            'defaults': _3d_defaults(),
-            'storage_dtype': 'float32',
-            'feature_type': 'continuous',
-            'requires_conformers': True,
-            'description': 'Autocorr 3D autocorrelation descriptors',
-        },
         'electroshape': {
             'cls': ElectroShapeFingerprint,
             'defaults': _3d_defaults(),
@@ -503,7 +503,6 @@ FEATURIZERS_3D: list[str] = [
     'getaway',
     'morse',
     'rdf',
-    'autocorr',
     'electroshape',
 ]
 
@@ -530,7 +529,6 @@ def create_featurizer(name: str, **overrides: Any) -> SkfpFeaturizer:
             f"Unknown featurizer: '{name}'. "
             f'Available: {", ".join(available[:10])}... '
             f'{"Did you mean: " + ", ".join(suggestions) + "?" if suggestions else ""}'
-            f"Use 'learnm8 list featurizers' to see all options."
         )
 
     config = _FEATURIZER_CONFIG[name]

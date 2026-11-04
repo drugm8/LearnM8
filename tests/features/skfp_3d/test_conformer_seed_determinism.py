@@ -69,8 +69,7 @@ def test_byte_identical_with_fixed_seed(name: str) -> None:
 
     GETAWAY is excluded (rdkit#7264 non-determinism,
     see the GETAWAY cache-key tests below).
-    autocorr is excluded (pre-existing use_3D=False bug; treated as
-    2D-equivalent for this test).
+    autocorr is excluded (it is a 2D featurizer).
     """
     f1 = create_featurizer(name, random_state=42, n_jobs=1)
     f2 = create_featurizer(name, random_state=42, n_jobs=1)

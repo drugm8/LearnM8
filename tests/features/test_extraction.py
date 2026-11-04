@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import ConfigurationError, FeatureExtractionError
 from learnm8.features.extraction import extract_features
 
 
@@ -55,7 +55,7 @@ class TestExtractFeatures:
         assert features.shape[0] == 2
 
     def test_unknown_featurizer_raises_error(self, tmp_path):
-        with pytest.raises(ValueError, match='Unknown featurizer'):
+        with pytest.raises(ConfigurationError, match='Unknown featurizer'):
             extract_features(['CCO'], 'unknown_featurizer', tmp_path)
 
     def test_empty_smiles_list(self, tmp_path):
@@ -158,3 +158,10 @@ class TestExtractFeatures:
 
         with pytest.raises((ValueError, RuntimeError, FeatureExtractionError)):
             extract_features(smiles_list, 'morgan', cache_dir=tmp_path)
+
+
+@pytest.mark.unit
+def test_unknown_featurizer_empty_input_raises_configuration_error():
+    with pytest.raises(ConfigurationError, match='Unknown featurizer') as exc:
+        extract_features([], 'unknown_featurizer')
+    assert 'list featurizers' not in str(exc.value)

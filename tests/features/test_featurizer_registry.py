@@ -80,9 +80,29 @@ def test_featurizer_requires_3d_matches_config(name: str):
 
     featurizer = create_featurizer(name)
     expected = name in FEATURIZERS_3D
-    actual = featurizer.requires_3d()
-    if actual != expected:
-        pytest.skip(
-            f'{name}: requires_3d()={actual} but FEATURIZERS_3D '
-            f'membership={expected} (skfp fingerprint attribute mismatch)'
-        )
+    assert featurizer.requires_3d() == expected, (
+        f'{name}: requires_3d() disagrees with FEATURIZERS_3D'
+    )
+
+
+@pytest.mark.unit
+def test_2d_3d_split_counts():
+    from learnm8.features import FEATURIZERS_2D, FEATURIZERS_3D
+
+    assert len(FEATURIZERS_2D) == 31
+    assert len(FEATURIZERS_3D) == 8
+    assert len(FEATURIZER_REGISTRY) == 39
+
+
+@pytest.mark.unit
+def test_autocorr_is_2d_with_192_columns():
+    featurizer = create_featurizer('autocorr', n_jobs=1)
+    assert not featurizer.requires_3d()
+    assert featurizer.get_dimension() == 192
+    assert featurizer.transform(['CCO']).shape == (1, 192)
+
+
+@pytest.mark.unit
+def test_maccs_has_166_keys():
+    featurizer = create_featurizer('maccs', n_jobs=1)
+    assert featurizer.get_dimension() == 166

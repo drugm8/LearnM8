@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from learnm8.core.interfaces import Featurizer
-from learnm8.exceptions import FeatureExtractionError
+from learnm8.exceptions import ConfigurationError, FeatureExtractionError
 
 from .base import SkfpFeaturizer
 from .cache import cache_features
@@ -124,7 +124,7 @@ def extract_features(
         Array of features with shape (n_compounds, n_features)
 
     Raises:
-        ValueError: If featurizer string is unknown
+        ConfigurationError: If featurizer string is unknown
         TypeError: If featurizer is neither str nor Featurizer
 
     Example:
@@ -134,8 +134,8 @@ def extract_features(
         (2, 2048)
 
         >>> # Class API (custom parameters)
-        >>> from learnm8.features import MorganFeaturizer
-        >>> my_featurizer = MorganFeaturizer(radius=3, fp_size=4096)
+        >>> from learnm8.features import create_featurizer
+        >>> my_featurizer = create_featurizer('morgan', radius=3, fp_size=4096)
         >>> features = extract_features(['CCO', 'CCC'], my_featurizer)
         >>> features.shape
         (2, 4096)
@@ -149,10 +149,9 @@ def extract_features(
 
                 available = list_available_featurizers()
                 all_featurizers = ', '.join(sorted(available['all']))
-                raise ValueError(
+                raise ConfigurationError(
                     f"Unknown featurizer: '{featurizer}'. "
-                    f'Available featurizers: {all_featurizers}. '
-                    f"Run 'learnm8 list featurizers' to see all options."
+                    f'Available featurizers: {all_featurizers}.'
                 )
             featurizer_obj: Featurizer = create_featurizer(featurizer, n_jobs=1)
         else:
@@ -168,10 +167,9 @@ def extract_features(
 
             available = list_available_featurizers()
             all_featurizers = ', '.join(sorted(available['all']))
-            raise ValueError(
+            raise ConfigurationError(
                 f"Unknown featurizer: '{featurizer}'. "
-                f'Available featurizers: {all_featurizers}. '
-                f"Run 'learnm8 list featurizers' to see all options."
+                f'Available featurizers: {all_featurizers}.'
             )
 
         featurizer_obj = create_featurizer(featurizer, n_jobs=n_jobs)

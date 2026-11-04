@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from learnm8 import run_active_learning
+from learnm8.exceptions import ConfigurationError
 from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 from learnm8.features.extraction import extract_features
 
@@ -213,7 +214,7 @@ class TestFeaturizerErrorHandling:
         """extract_features() raises error for invalid string."""
         smiles = small_real_compounds.get_column('SMILES').to_list()[:5]
 
-        with pytest.raises(ValueError, match='Unknown featurizer'):
+        with pytest.raises(ConfigurationError, match='Unknown featurizer'):
             extract_features(smiles, 'invalid_name', tmp_path, n_jobs=1)
 
     def test_extract_features_with_none_featurizer(
@@ -234,7 +235,7 @@ class TestFeaturizerErrorHandling:
             [compounds.get_column('Activity').alias('target')]
         )
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ConfigurationError):
             run_active_learning(
                 compound_pool=compounds,
                 oracle=compounds,

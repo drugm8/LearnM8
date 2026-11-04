@@ -5,7 +5,7 @@ from learnm8.features import FEATURIZER_REGISTRY, create_featurizer
 pytestmark = pytest.mark.unit
 
 # These partitions reflect the `feature_type` property only. `feature_type` no longer
-# determines on-disk storage for mqns / pharmacophore / physiochemical:
+# determines on-disk storage for mqns / pharmacophore / physicochemical:
 # they override `get_storage_dtype()` (see test_storage_dtype.py)
 # while keeping `feature_type='continuous'` here. Storage routing is the
 # featurizer's `get_storage_dtype()` contract; the test below stays consistent
@@ -41,7 +41,7 @@ CONTINUOUS_FEATURIZERS = [
     'mqns',
     'vsa',
     'bcut2d',
-    'physiochemical',
+    'physicochemical',
     'pharmacophore',
     'functional_groups',
     'erg',

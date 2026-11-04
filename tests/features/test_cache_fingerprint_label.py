@@ -63,12 +63,12 @@ def test_pharmacophore_label_has_csruint16_suffix():
 
 
 @pytest.mark.unit
-def test_physiochemical_label_has_csruint16_suffix():
-    """physiochemical featurizer emits the csruint16 dtype token."""
+def test_physicochemical_label_has_csruint16_suffix():
+    """physicochemical featurizer emits the csruint16 dtype token."""
     from learnm8.evaluation.metrics.similarity import _get_or_build_fps
     from learnm8.features import create_featurizer
 
-    feat = create_featurizer('physiochemical', n_jobs=1)
+    feat = create_featurizer('physicochemical', n_jobs=1)
     fp_cache: dict = {}
     _, _, label, _ = _get_or_build_fps(['CCO'], feat, None, fp_cache)
     assert '_csruint16' in label, f'got {label!r}'
