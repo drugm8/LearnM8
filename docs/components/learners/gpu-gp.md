@@ -6,7 +6,7 @@ Exact Gaussian process regression in GPyTorch, with optional CUDA acceleration. 
 - **Class:** `learnm8.learners.gpytorch.GPyTorchGPLearner`
 - **Uncertainty:** yes. Predictive standard deviation of the GP posterior, rescaled to target units. Targets are standardized internally.
 - **Requires SMILES:** no
-- **Requirements:** GPyTorch; GAUCHE for the Tanimoto kernel. A GPU is optional (`device='auto'` uses CUDA when available, else CPU). The learner is only registered if its module imports.
+- **Requirements:** GPyTorch; GAUCHE for the Tanimoto kernel. A GPU is optional (`device='auto'` uses CUDA when available, else CPU). The learner is always listed, but creating it without GPyTorch raises `ConfigurationError`.
 
 ## Parameters
 

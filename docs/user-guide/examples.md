@@ -191,7 +191,7 @@ results_hybrid = run_active_learning(
 
 ## Ensemble with Uncertainty
 
-Ensembles estimate uncertainty via member disagreement (std dev across predictions).
+Ensembles estimate uncertainty via member disagreement (std dev across predictions). `xgb_ensemble` adds uncertainty to XGBoost, which has none of its own, so uncertainty strategies such as UCB and Thompson sampling can be used with it.
 
 ```python
 from learnm8 import run_active_learning, CycleConfig
@@ -199,7 +199,7 @@ from learnm8 import run_active_learning, CycleConfig
 results = run_active_learning(
     compound_pool='compounds.csv',
     oracle='oracle.csv',
-    learner='rf',
+    learner='xgb_ensemble',
     target_col='Activity',
     featurizer='morgan',
     cycles=[
@@ -275,7 +275,7 @@ smiles = ['CCO', 'c1ccccc1', 'CC(=O)Oc1ccccc1C(=O)O']
 # Binary fingerprint
 morgan_fp = extract_features(smiles, featurizer='morgan', cache_dir=Path('.cache'))
 
-# Physicochemical descriptors
+# Mordred descriptors
 descriptors = extract_features(smiles, featurizer='descriptors',
                                cache_dir=Path('.cache'), show_progress=True)
 
@@ -339,7 +339,7 @@ for name, path in results['saved_files'].items():
 learnm8 run compounds.csv --target Activity --learner rf --featurizer morgan --n-cycles 10
 
 # Run mode (Python oracle)
-learnm8 run compounds.csv scoring.py:score --target score --learner rf --n-cycles 20
+learnm8 run compounds.csv scoring.py:score --target score --learner rf --featurizer morgan --n-cycles 20
 
 # Custom strategy
 learnm8 run compounds.csv --target Activity --learner gp --featurizer ecfp6 \

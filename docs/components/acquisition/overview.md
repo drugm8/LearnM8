@@ -38,7 +38,7 @@ results = run_active_learning(..., strategy='greedy', score_direction='lower')
 
 ## Passing parameters
 
-Strategy parameters are passed as a dict (`acquisition_params`) in the API, or as a JSON string with `--acquisition-params` on the CLI. The strategy is chosen with `strategy=` / `--strategy` (default `greedy`); the first cycle uses `initial_strategy` (default `random`).
+Strategy parameters are passed as a dict (`acquisition_params`) in the API, or as a JSON string with `--acquisition-params` on the CLI. The strategy is chosen with `strategy=` / `--strategy` (default `greedy`); cycle 0 is always a random batch. A strategy that needs uncertainty (`ucb`, `ei`, `pi`, `thompson`, `entropy`) with a learner that has none (`xgb`, `mlp`, `fastprop`, `chemprop`) raises `ConfigurationError` before cycle 0.
 
 ## Multi-strategy cycles
 

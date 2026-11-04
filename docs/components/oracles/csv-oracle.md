@@ -15,9 +15,11 @@ comp3,CCCC,0.91
 
 Behaviour verified in the loader:
 
-- String columns that hold numbers mixed with text (for example `no_score`) are converted to numeric, with the text becoming null.
+- The ID column must exist (`ValidationError` otherwise).
+- String columns that hold numbers mixed with text (for example `no_score`) are converted to numeric, with the text becoming null. A null (or NaN, or infinite) target is then an error, not a skipped compound: `run_active_learning` raises `ValidationError` before cycle 0 for every pool ID whose target is empty, NaN or infinite. When the CSV pool is also the oracle, a text value such as `no_score` in the target column fails pool validation (`ValidationError`) before that check. Fill in or remove those rows, or use a [Python oracle](python-oracle.md) if some compounds cannot be measured.
+- Pool IDs that are absent from the oracle file are dropped from the run with a warning.
 - Duplicate IDs are reduced to the first occurrence, with a `LearnM8Warning`.
-- It is strict: every requested compound must have a row, and a null in a requested target column raises an error (use a [Python oracle](python-oracle.md) if some compounds cannot be measured).
+- `CSVOracle.measure` itself is strict and raises `OracleError` for null values, for requested properties that are not columns of the file, and for requested IDs without a row.
 
 ## Parameters
 

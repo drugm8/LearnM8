@@ -30,7 +30,7 @@ jupyter notebook
 
 **Prerequisites:** None
 
-**Outcome:** Working active learning experiment in 5 lines of code
+**Outcome:** A working active learning experiment from a single `run_active_learning()` call
 
 ---
 
@@ -55,7 +55,7 @@ jupyter notebook
 **What you'll learn:**
 - Configuring custom learners (Chemprop with custom parameters)
 - Designing multi-stage cycles (explore → exploit → diversify)
-- Comparing acquisition functions (UCB, EI, Thompson, Greedy)
+- Comparing acquisition schedules (greedy, and UCB with different `beta` values)
 - Analyzing selection quality (not enrichment)
 
 **Prerequisites:** 01_quickstart.ipynb, 02_custom_oracles.ipynb
@@ -65,18 +65,18 @@ jupyter notebook
 ---
 
 ### 04_production_screening.ipynb (20 minutes)
-**Goal:** Deploy LearnM8 for real-world screening
+**Goal:** Structure a two-stage screening campaign in run mode
 
 **What you'll learn:**
 - Hierarchical screening (fast → slow oracles)
-- Design space pruning
-- Caching for 100x speedup
-- Checkpointing and recovery
-- Production best practices
+- Narrowing the library between stages using model predictions
+- Reusing the feature cache between runs
+- Reading per-cycle predictions from `prediction_cycle_N.parquet`
+- Exporting and analysing results
 
 **Prerequisites:** All previous notebooks
 
-**Outcome:** Production-ready screening workflow
+**Outcome:** A template for a multi-stage run-mode screening workflow
 
 ---
 
@@ -91,9 +91,9 @@ jupyter notebook
 ### Intermediate Users (Total: ~30 minutes)
 1. Review 02_custom_oracles.ipynb (oracle patterns)
 2. Deep dive 03_advanced_configuration.ipynb (custom learners and cycle design)
-3. Study 04_production_screening.ipynb (deployment)
+3. Study 04_production_screening.ipynb (multi-stage workflow)
 
-### Production Deployment (Focus on 04)
+### Multi-Stage Screening (Focus on 04)
 1. Run 04_production_screening.ipynb
 2. Adapt workflow to your use case
 3. Reference docs for advanced configuration
@@ -106,7 +106,7 @@ Notebooks use curated real molecular datasets from `../data/`:
 |---------|------|---------|---------|-------------|
 | `ampc_1k_with_scores.csv` | 1,000 | ID, SMILES, dockscore | Notebook 1 | AmpC compounds with docking scores (CSVOracle) |
 | `ampc_1k_no_scores.csv` | 1,000 | ID, SMILES | Notebooks 2, 3 | AmpC compounds for custom oracle testing |
-| `ampc_30k_no_scores.csv` | 29,054 | ID, SMILES | Notebook 4 | Full AmpC library for production workflow |
+| `ampc_30k_no_scores.csv` | 29,054 | ID, SMILES | Notebook 4 | Full AmpC library for the multi-stage workflow |
 
 **Source:** All datasets derived from AmpC beta-lactamase docking screens, randomly sampled to maintain chemical diversity.
 
@@ -126,7 +126,7 @@ sys.path.insert(0, str(Path().resolve().parent.parent))
 ```
 
 ### Slow Execution
-- Enable caching: `cache_dir='.cache'`
+- Reuse the feature cache: `cache_dir='.cache'`
 - Use smaller datasets: `compounds.head(1000)`
 - Reduce cycles: `n_cycles=3`
 
@@ -152,7 +152,7 @@ jupyter nbconvert --to notebook --execute 04_production_screening.ipynb
 
 ## Expected Outputs
 
-Each notebook includes pre-run outputs so you can review results before executing. To clear outputs:
+Some cells contain saved outputs from an earlier run, and cells edited since then have none. To clear all outputs:
 
 ```bash
 jupyter nbconvert --clear-output --inplace *.ipynb

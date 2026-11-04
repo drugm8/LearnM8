@@ -26,7 +26,7 @@ This pulls the core dependencies from PyPI. The GPU learners (`gpu_gp`, `svgp`, 
 
 ## GPU learners
 
-`gpu_gp` and `svgp` need GPyTorch and GAUCHE; `rf_fil` and `ridge_cuml` need RAPIDS cuML. If a package is missing, the learner raises `LearnerError` when it trains.
+`gpu_gp` and `svgp` need GPyTorch and GAUCHE; `rf_fil` and `ridge_cuml` need RAPIDS cuML. All 19 learners are always listed. If GPyTorch is missing, creating `gpu_gp` or `svgp` raises `ConfigurationError`; if RAPIDS cuML is missing, `rf_fil` and `ridge_cuml` raise `LearnerError` when they train.
 
 ## Verify the installation
 

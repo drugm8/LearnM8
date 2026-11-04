@@ -11,8 +11,8 @@ An ensemble of three different model families: Random Forest, Ridge regression a
 
 | Device | Random forest | Linear | Boosting |
 |---|---|---|---|
-| `'cpu'` (default) and `'auto'` | `RandomForestLearner(n_estimators=100)` | `LinearRegressionLearner(alpha=1.0)` | `XGBoostLearner(learning_rate=0.1)` |
-| `'cuda'` | [`RfFilLearner`](rf-fil.md)`(n_estimators=100)` | [`RidgeCumlLearner`](ridge-cuml.md)`(alpha=1.0)` | `XGBoostLearner(learning_rate=0.1, device='cuda')` |
+| `'cpu'` | `RandomForestLearner(n_estimators=100)` | `LinearRegressionLearner(alpha=1.0)` | `XGBoostLearner(learning_rate=0.1)` |
+| `'cuda'` or `'cuda:N'` | [`RfFilLearner`](rf-fil.md)`(n_estimators=100)` | [`RidgeCumlLearner`](ridge-cuml.md)`(alpha=1.0)` | `XGBoostLearner(learning_rate=0.1, device='cuda')` |
 
 Member seeds are `random_state + (0, 81, 314)` for RF, Ridge and XGBoost respectively.
 
@@ -21,7 +21,7 @@ Member seeds are `random_state + (0, 81, 314)` for RF, Ridge and XGBoost respect
 | Parameter | Default | Description |
 |---|---|---|
 | `random_state` | `42` | Base seed for the member seeds |
-| `device` | `'cpu'` | `'cpu'`, `'cuda'` or `'auto'` (`'auto'` selects the CPU members) |
+| `device` | `'cpu'` | `'cpu'`, `'cuda'`, `'cuda:N'` or `'auto'`. `'auto'` selects the GPU members when CUDA is available and RAPIDS cuML is importable, and the CPU members otherwise. `run_active_learning` passes its own `device` (default `'auto'`) when the ensemble is selected by name |
 | `**kwargs` | | Forwarded to `EnsembleLearner` (`aggregation_method`, `uncertainty_method`, `weights`) |
 
 ## Usage

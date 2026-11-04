@@ -6,7 +6,7 @@ Practical examples and tutorials for using LearnM8 in molecular screening workfl
 
 - **[Notebooks](notebooks/)**: Step-by-step tutorials
 - **[Oracles](oracles/)**: Ready-to-use scoring functions
-- **[Documentation](../docs/)**: Full API reference
+- **[Documentation](https://drugm8.github.io/LearnM8/)**: Full API reference
 
 ## 📓 Notebooks
 
@@ -15,9 +15,9 @@ Learn LearnM8 through hands-on examples:
 | Notebook | Time | Description |
 |----------|------|-------------|
 | [01_quickstart.ipynb](notebooks/01_quickstart.ipynb) | 10 min | Your first active learning experiment (benchmark mode) |
-| [02_custom_oracles.ipynb](notebooks/02_custom_oracles.ipynb) | 15 min | Custom oracles in production (run mode) |
+| [02_custom_oracles.ipynb](notebooks/02_custom_oracles.ipynb) | 15 min | Custom oracles (run mode) |
 | [03_advanced_configuration.ipynb](notebooks/03_advanced_configuration.ipynb) | 15 min | Custom learners and multi-stage workflows |
-| [04_production_screening.ipynb](notebooks/04_production_screening.ipynb) | 20 min | Real-world deployment workflow |
+| [04_production_screening.ipynb](notebooks/04_production_screening.ipynb) | 20 min | Two-stage screening workflow with a Python oracle (run mode) |
 
 **Learning Path:** Start with 01 → 02 → 03 → 04 for comprehensive introduction.
 
@@ -27,12 +27,12 @@ See [notebooks/README.md](notebooks/README.md) for detailed notebook guide.
 
 Ready-to-use scoring functions for common screening tasks:
 
-| Oracle | Speed | Use Case |
-|--------|-------|----------|
-| **SimilarityOracle** | ~0.001s/mol | Scaffold hopping, analog finding |
-| **Pharmacophore2DOracle** | ~0.01s/mol | Feature-based screening |
-| **CDPKitPharmacophoreOracle** | ~1-5s/mol | 3D pharmacophore alignment |
-| **VinaOracle** | ~10-60s/mol | Molecular docking |
+| Oracle | Use Case |
+|--------|----------|
+| **SimilarityOracle** | Scaffold hopping, analog finding (2D fingerprint similarity) |
+| **Pharmacophore2DOracle** | Feature-based screening (functional group patterns) |
+| **CDPKitPharmacophoreOracle** | 3D pharmacophore alignment (requires CDPKit) |
+| **VinaOracle** | Molecular docking (requires Vina) |
 
 See [oracles/README.md](oracles/README.md) for complete oracle documentation.
 
@@ -55,7 +55,6 @@ jupyter notebook examples/notebooks/01_quickstart.ipynb
 ```python
 from examples.oracles import SimilarityOracle
 from learnm8 import run_active_learning
-import polars as pl
 
 # Create oracle
 oracle = SimilarityOracle(
@@ -76,7 +75,7 @@ results = run_active_learning(
 
 ## 📚 Additional Resources
 
-- **[Documentation](../docs/)**: Full API reference and guides
+- **[Documentation](https://drugm8.github.io/LearnM8/)**: Full API reference and guides
 - **[Tests](../tests/oracles/)**: Oracle test suite
 
 ## 🤝 Contributing Examples
@@ -91,11 +90,11 @@ To contribute new examples:
 
 ## 💡 Tips
 
-- **Notebooks run faster** with feature caching enabled
+- **Feature caching** is always on; pass `cache_dir` to reuse features between runs
 - **Use small datasets** for learning (validation subsets available)
 - **Check notebook outputs** before running to see expected results
 - **Refer to docs** for advanced customization
 
 ---
 
-**Questions?** See [documentation](../docs/) or open an issue.
+**Questions?** See the [documentation](https://drugm8.github.io/LearnM8/) or open an issue.

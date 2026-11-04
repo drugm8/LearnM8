@@ -65,7 +65,7 @@ results = run_active_learning(
 
 ## Hybrid mode
 
-If you also pass a featurizer, its feature vectors are used as extra descriptors (`x_d`) and concatenated to the graph representation before the feed-forward head (`ffn_hidden_dim` input = `message_hidden_dim` + number of features).
+If you also pass a featurizer, its feature vectors are used as extra descriptors (`x_d`) and concatenated to the graph representation before the feed-forward head. The input dimension of the feed-forward head grows to `message_hidden_dim` plus the number of features; `ffn_hidden_dim` (the hidden width) is unchanged.
 
 ```bash
 learnm8 run data.csv --target Value --learner chemprop --featurizer rdkit_2d_descriptors --strategy greedy

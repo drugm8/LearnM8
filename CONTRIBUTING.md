@@ -46,12 +46,12 @@ pytest tests/ --cov=learnm8 --cov-report=html   # HTML report in htmlcov/index.h
 
 ## Documentation
 
-The docs in `docs/` are built with [zensical](https://zensical.org) and configured in `zensical.toml` (navigation, theme, extensions). CI runs the strict build.
+The docs in `docs/` are built with [zensical](https://zensical.org) and configured in `zensical.toml` (navigation, theme, extensions). Run the strict build before opening a pull request.
 
 ```bash
 pip install zensical
 zensical serve -f zensical.toml                 # live preview
-zensical build -f zensical.toml --clean --strict   # as in CI
+zensical build -f zensical.toml --clean --strict   # fails on broken links and warnings
 ```
 
 Update the relevant page in `docs/` and the docstrings when you change user-visible behaviour. Docs must match the code: check every parameter and default against the source.
@@ -135,7 +135,7 @@ packed-bits corruption bug. Continuous descriptors use `'float32'`. See
 
 - **No comments** unless the WHY is non-obvious (hidden constraint, workaround for a specific bug).
 - **No print statements** — use `logging.getLogger(__name__)`.
-- **Polars only** for internal DataFrames. All public API accepts pandas but auto-converts.
+- **Polars only** for DataFrames. `run_active_learning` takes a file path or a Polars DataFrame; convert pandas input with `pl.from_pandas()` first.
 - **Pure functions** — never mutate input DataFrames (use `with_columns()` which returns a new DataFrame).
 - Follow `ruff` rules as configured in `pyproject.toml`.
 - All public functions and classes need type annotations.
@@ -143,8 +143,8 @@ packed-bits corruption bug. Continuous descriptors use `'float32'`. See
 ## Architecture Notes
 
 - `learnm8/api.py` is the only public entry point. Do not add public symbols elsewhere without discussion.
-- `learnm8/exceptions.py` is the only place to define exceptions. Raise `LearnM8Error` subclasses, never built-in exceptions from library internals.
-- HDF5 cache schema is versioned. If you change cache layout, bump `schema_version` and add a migration path. See `learnm8/features/cache.py`.
+- `learnm8/exceptions.py` is the only place to define exceptions. The public API raises `LearnM8Error` subclasses for bad input and bad configuration (`ConfigurationError`, `ValidationError`, ...) rather than bare `ValueError`, `TypeError` or `FileNotFoundError`; a built-in exception is acceptable only for programmer errors such as a wrong argument type.
+- HDF5 cache schema is versioned. If you change cache layout, bump `schema_version`. The cache never migrates, renames or deletes a file: one with another schema raises `PersistenceError` and is left untouched. See `learnm8/features/cache.py`.
 - The master DataFrame stays at exactly 7 columns. Per-cycle predictions go to separate parquet files.
 
 ## Commit Style

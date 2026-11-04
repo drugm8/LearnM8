@@ -33,7 +33,6 @@ def run_active_learning(
     n_cycles: int = 10,
     batch_fraction: float = 0.01,
     strategy: str = 'greedy',
-    initial_strategy: str = 'random',
     score_direction: str = 'higher',
     output_dir: str | Path | None = None,
     cache_dir: str | Path | None = None,
@@ -73,10 +72,9 @@ def run_active_learning(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `n_cycles` | `int` | `10` | Total cycles. Cycle 0 uses `initial_strategy`; cycles 1+ use `strategy`. |
+| `n_cycles` | `int` | `10` | Total cycles. Cycle 0 is always a random batch (no model); cycles 1+ use `strategy`. |
 | `batch_fraction` | `float` | `0.01` | Fraction of the **original** pool per cycle. Floor at 1 compound; capped at remaining pool size. Must be in `(0, 1]`. |
 | `strategy` | `str` | `'greedy'` | Acquisition strategy for cycles 1+. One of: `greedy`, `random`, `topk`, `ucb`, `ei`, `pi`, `thompson`, `entropy`, or a name added to `ACQUISITION_REGISTRY` (see [Extending](../customization/extending.md)). |
-| `initial_strategy` | `str` | `'random'` | Acquisition strategy for cycle 0. |
 
 #### Cycle control — advanced API
 
@@ -108,8 +106,8 @@ def run_active_learning(
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `n_jobs` | `int` | `-1` | Parallel jobs for CPU-bound operations. `-1` = all CPU cores, `0` disables parallelism. Ignored by GPU-accelerated learners (`rf_fil`, `ridge_cuml`). |
-| `device` | `str` | `'auto'` | Compute device for GPU learners. `'auto'` uses CUDA if available. Options: `'cpu'`, `'cuda'`, `'cuda:N'`, `'mps'`. Ignored by CPU-only learners. |
+| `n_jobs` | `int` | `-1` | Parallel jobs for CPU-bound operations. `-1` = all CPU cores, or a positive integer (`0` and values below `-1` raise `ConfigurationError`). Ignored by GPU-accelerated learners (`rf_fil`, `ridge_cuml`). |
+| `device` | `str` | `'auto'` | Compute device for GPU learners. `'auto'` uses CUDA if available. Options: `'cpu'`, `'cuda'`, `'cuda:N'`. Ignored by CPU-only learners. |
 | `memory_safety_factor` | `float` | `0.7` | Fraction of available memory used for prediction batching. Range `(0, 1]`. |
 
 #### Memory / large-pool guards
@@ -193,8 +191,8 @@ The tables below list the main keys; the dicts contain additional keys (for exam
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `top_10_discovery` | `float` | Fraction of true top-10 compounds found |
-| `top_100_discovery` | `float` | Fraction of true top-100 compounds found |
+| `top_10_discovery` | `float` | Percentage (0-100) of the true top-10 compounds found so far |
+| `top_100_discovery` | `float` | Percentage (0-100) of the true top-100 compounds found so far |
 | `cumulative_ef` | `float` | Cumulative enrichment factor |
 | `batch_score_improvement_ratio` | `float` | Signed improvement of batch mean over population mean |
 | `unlabeled_spearman_correlation` | `float \| None` | Spearman rank correlation on unlabeled set; `None` when undefined |
@@ -221,16 +219,20 @@ The tables below list the main keys; the dicts contain additional keys (for exam
 
 | Exception | Condition |
 |-----------|-----------|
-| `ConfigurationError` | Invalid parameters; descriptor featurizer on a pool above 10M compounds without `large_features_ack=True`; `streaming='always'` with an ineligible cycle |
-| `ValidationError` | Compound pool fails SMILES validation; or `target_col` is non-numeric |
+| `ConfigurationError` | Bad parameters or configuration: unknown learner, featurizer or strategy; a feature-based learner without a featurizer; an uncertainty strategy (`ucb`, `ei`, `pi`, `thompson`, `entropy`) with a learner that has no uncertainty (checked before cycle 0); `pruning_fraction` out of range; compound pool file not found or `compound_pool` of the wrong type; invalid `n_jobs` or `device`; invalid `streaming` or `output_format`; unknown `disable_molecular_similarity` names; `oracle=None` with a DataFrame pool; descriptor featurizer on a pool above 10M compounds without `large_features_ack=True`; `streaming='always'` with an ineligible cycle |
+| `ValidationError` | Missing `ID`/`SMILES` columns; no valid compounds; `target_col` non-numeric; with a CSV oracle, a pool compound whose target is empty, NaN or infinite |
+| `OracleError` | The oracle cannot measure the selected compounds |
 | `FeatureExtractionError` | Feature extraction fails |
 | `LearnerError` | Model training or prediction fails |
-| `FileNotFoundError` | Input CSV not found |
+| `PersistenceError` | Results cannot be written |
+| `TypeError` | `oracle`, `learner` or `featurizer` is of an unsupported type; `n_jobs` is not an integer; `device` is not a string |
+
+Learners without uncertainty are `xgb`, `mlp`, `fastprop` and `chemprop`; the other 15 provide it.
 
 ### Oracle auto-detection
 
 - `oracle=None` + CSV `compound_pool` → same file used as benchmark oracle
-- `oracle=None` + DataFrame `compound_pool` → raises `ValueError`
+- `oracle=None` + DataFrame `compound_pool` → raises `ConfigurationError`
 - CSV oracle → benchmark mode (discovery/ranking metrics available)
 - Python oracle → run mode (basic metrics only)
 
@@ -260,6 +262,8 @@ def suggest_next_batch(
     cache_dir: str | Path | None = None,
     n_jobs: int = -1,
     device: str = 'auto',
+    pruning_fraction: float = 0.0,
+    pruning_start: int = 3,
 ) -> pl.DataFrame
 ```
 
@@ -268,7 +272,7 @@ def suggest_next_batch(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `compound_pool` | `str \| Path` | — | Compound file (`.csv`, `.sdf`, `.smi`) with ID and SMILES. |
-| `batch_dir` | `str \| Path` | — | Folder with `batch_cycle_N.csv` files. Created if missing; `.learnm8/` working data is kept inside it. |
+| `batch_dir` | `str \| Path` | — | Folder with `batch_cycle_N.csv` files (and `pruned_cycle_N.parquet` prune records). Created if missing; `.learnm8/` working data is kept inside it. |
 | `target_col` | `str` | — | Column the lab fills in. |
 | `learner` | `str` | — | Learner name (see `list_available_learners()`). |
 | `featurizer` | `str \| None` | `None` | Featurizer name. Required unless the learner works on SMILES directly. |
@@ -281,20 +285,22 @@ def suggest_next_batch(
 | `id_column` | `str \| None` | `None` | ID column in the pool (auto-detect). |
 | `cache_dir` | `str \| Path \| None` | `None` | Feature cache location. Default `batch_dir/.learnm8/cache`. |
 | `n_jobs` | `int` | `-1` | Parallel workers. `-1` = all CPU cores. |
-| `device` | `str` | `'auto'` | `'auto'`, `'cpu'`, `'cuda'`, `'cuda:N'`, `'mps'`. |
+| `device` | `str` | `'auto'` | `'auto'`, `'cpu'`, `'cuda'`, `'cuda:N'`. |
+| `pruning_fraction` | `float` | `0.0` | Fraction of the unlabeled pool removed for good in each pruning round (`0.0`–`0.9`; a real number, not a bool). `0.0` = off. Lowered automatically (or pruning skipped for that round) so that at least `batch_size` unlabeled compounds remain; this cap is specific to `suggest_next_batch`, `run_active_learning` pruning does not cap. See [Pruning](../tutorials/lab-campaigns.md#pruning). |
+| `pruning_start` | `int` | `3` | First cycle that may prune (an integer >= 1). Rounds without a trained model never prune. |
 
 ### Returns
 
 `pl.DataFrame` with the batch just written to `batch_dir/batch_cycle_N.csv`, in this column order: `rank`, `ID`, `<target_col>` (null), `SMILES`, then, in rounds that trained a model (not round 0, and not the random fallback after an all-failed batch), `prediction` and `uncertainty` (when computed). `N` is the highest existing batch number plus one, or 0 when the folder has no batch files. Batch files start with a `sep=,` spreadsheet hint line before the header; a spreadsheet may drop it on re-save, so scripts that read them with pandas or polars should skip that line when present.
 
-Value cells in earlier batch files: empty is pending, a finite number is measured, anything else is failed. Pending and failed compounds are never selected again; only measured compounds are used for training. When no compound is measured yet but the newest batch has results, a fresh random batch is drawn that excludes every compound already in a batch file.
+Value cells in earlier batch files: empty is pending, a finite number is measured, anything else is failed. Pending and failed compounds, and compounds in `pruned_cycle_K.parquet` files (`ID`, `SMILES`) from earlier rounds, are never selected again; only measured compounds are used for training. A compound that is both pruned and measured is trained on (with a warning). When no compound is measured yet but the newest batch has results, a fresh random batch is drawn that excludes every compound already in a batch file.
 
 ### Raises
 
 | Exception | Condition |
 |-----------|-----------|
-| `ConfigurationError` | The newest batch has no results entered; no selectable compounds remain; `batch_size < 1`; unknown strategy; feature-based learner without a featurizer; target batch file already exists; compound pool file not found; `score_direction` not `higher`/`lower`; `acquisition_params` not a dict |
-| `ValidationError` | Pool fails validation; batch file empty, unparsable or missing `ID`/`<target_col>`; row with a value but no ID; duplicate IDs; batch IDs not in the pool; changed SMILES cell; ambiguous number (possible thousands separator) |
+| `ConfigurationError` | The newest batch has no results entered; no selectable compounds remain; `batch_size < 1`; unknown strategy; feature-based learner without a featurizer; target batch file already exists; compound pool file not found; `score_direction` not `higher`/`lower`; `acquisition_params` not a dict; `pruning_fraction` not a number or outside `[0.0, 0.9]`; `pruning_start` not an integer or `< 1` |
+| `ValidationError` | Pool fails validation; batch file empty, unparsable or missing `ID`/`<target_col>`; row with a value but no ID; duplicate IDs; batch IDs not in the pool; changed SMILES cell; ambiguous number (possible thousands separator); unreadable `pruned_cycle_N.parquet`; prune-file IDs not in the pool or changed SMILES |
 | `LearnerError` | Model training or prediction fails |
 
 ---
@@ -363,7 +369,7 @@ def extract_features(
 
 | Exception | Condition |
 |-----------|-----------|
-| `ValueError` | Unknown featurizer string |
+| `ConfigurationError` | Unknown featurizer string |
 | `TypeError` | `featurizer` is neither a string nor a `Featurizer` |
 
 ---
@@ -374,7 +380,7 @@ def extract_features(
 def list_available_learners() -> list[str]
 ```
 
-Returns all learner shortcut strings whose imports succeeded. GPU learners (`gpu_gp`, `svgp`) appear only when GPyTorch is importable. `rf_fil` and `ridge_cuml` appear only when RAPIDS cuML is importable.
+Returns all 19 learner shortcut strings, sorted alphabetically. The list does not depend on which optional packages are installed. Creating `gpu_gp` or `svgp` without GPyTorch raises `ConfigurationError`; `rf_fil` and `ridge_cuml` without RAPIDS cuML raise `LearnerError` when they are trained.
 
 ---
 
@@ -397,7 +403,7 @@ class CycleConfig:
 |-----------|------|---------|-------------|
 | `strategy` | `str` | — | Acquisition strategy name. |
 | `n_cycles` | `int` | `1` | Number of cycles sharing this config. |
-| `batch_fraction` | `float \| None` | `None` | Fraction of original pool per cycle, in `(0, 1]`. Required: `None` raises `ValueError`. |
+| `batch_fraction` | `float \| None` | `None` | Fraction of original pool per cycle, in `(0, 1]`. Required: `None` raises `ValueError`; so does a value outside `(0, 1]`. |
 | `pruning_strategy` | `str \| None` | `None` | Pruning strategy name (e.g. `'score'`). |
 | `pruning_params` | `dict \| None` | `None` | Pruning parameters (e.g. `{'pruning_fraction': 0.3}`). |
 | `acquisition_params` | `dict \| None` | `None` | Strategy-specific parameters passed to the acquisition constructor. |

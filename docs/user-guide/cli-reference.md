@@ -4,6 +4,7 @@ The `learnm8` command has three subcommands: `run`, `validate` and `suggest`.
 
 ```bash
 learnm8 --help
+learnm8 --version
 learnm8 run --help
 ```
 
@@ -39,7 +40,7 @@ learnm8 run [COMPOUND_POOL] [ORACLE] --target COLUMN --featurizer TYPE --learner
 | `--smiles-col NAME` | auto-detect | SMILES column in the pool |
 | `--id-col NAME` | auto-detect | ID column in the pool |
 
-The valid `--learner` values depend on what is importable in your environment (`gpu_gp`, `svgp`, `rf_fil` and `ridge_cuml` need their GPU libraries). List them with:
+`--learner` accepts all 19 learner names; `--featurizer` accepts every featurizer name. `gpu_gp` and `svgp` need GPyTorch (`ConfigurationError` when the learner is created without it) and `rf_fil` and `ridge_cuml` need RAPIDS cuML (`LearnerError` at train time). List the learner names with:
 
 ```bash
 python -c "from learnm8.api import list_available_learners; print(list_available_learners())"
@@ -55,8 +56,9 @@ python -c "from learnm8.api import list_available_learners; print(list_available
 | `--config PATH` | none | YAML or JSON config file, see [Configuration Files](../advanced/configuration-files.md) |
 | `--n-cycles N` | 10 | Number of cycles, including cycle 0 |
 | `--batch-fraction F` | 0.01 | Fraction of the original pool selected per cycle |
-| `--strategy NAME` | `greedy` | Acquisition strategy for cycles 1 and later |
-| `--initial-strategy NAME` | `random` | Acquisition strategy for cycle 0 |
+| `--strategy {greedy,random,topk,ucb,ei,pi,thompson,entropy}` | `greedy` | Acquisition strategy for cycles 1 and later |
+
+Cycle 0 is always a random batch; there is no option to change it. An uncertainty strategy (`ucb`, `ei`, `pi`, `thompson`, `entropy`) with a learner that has no uncertainty (`xgb`, `mlp`, `fastprop`, `chemprop`) is rejected before cycle 0.
 
 A `--cycles` specification is whitespace-separated `strategy:fraction` entries. Append `*n` to repeat an entry `n` times: `greedy:0.01*5` is five greedy cycles at batch fraction 0.01.
 
@@ -72,7 +74,7 @@ See [Building Custom Cycles](../tutorials/building-custom-cycles.md).
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--pruning-fraction F` | none | Fraction of the pool to prune per cycle (0.0 to 0.9) |
-| `--pruning-strategy NAME` | `score` if `--pruning-fraction` is set | Pruning strategy |
+| `--pruning-strategy {score}` | `score` if `--pruning-fraction` is set | Pruning strategy |
 
 See [Pruning](../advanced/pruning.md).
 
@@ -91,7 +93,7 @@ learnm8 run compounds.csv --target Activity --featurizer morgan --learner gp \
 |--------|---------|-------------|
 | `-o PATH`, `--output PATH` | auto-generated | Output directory |
 | `--cache-dir PATH` | `{output}/.cache` | Feature cache directory. Share one across experiments on the same compounds |
-| `--output-format {auto,csv,parquet}` | `auto` | `auto` writes Parquet for pools of 1M or more compounds, CSV otherwise |
+| `--output-format {auto,csv,parquet}` | `auto` | `auto` writes Parquet for more than 1,000,000 rows, CSV otherwise |
 | `--quiet` | off | Suppress progress output |
 
 The output directory contains `compounds_final` (`.csv` or `.parquet`), `cycle_metrics.csv`, `selection_history` (`.csv` or `.parquet`), `config.json`, `validation_report.csv` (when invalid compounds were found), and one `prediction_cycle_N.parquet` per cycle.
@@ -101,12 +103,14 @@ The output directory contains `compounds_final` (`.csv` or `.parquet`), `cycle_m
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--n-jobs N` | -1 | Parallel CPU jobs. `-1` uses all cores |
-| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N` or `mps` |
+| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda` or `cuda:N` |
 | `--random-state SEED` | 42 | Random seed |
 | `--memory-safety-factor F` | 0.7 | Fraction of available memory used for prediction batching |
 | `--allow-large-features` | off | Bypass the guard that blocks descriptor-based featurizers on pools above 10M compounds |
 | `--force-uncertainty` | off | Compute uncertainty every cycle even if the acquisition function does not need it. No effect for learners without uncertainty support |
 | `--skip-validation` | off | Skip SMILES validation, duplicate-ID checks and target-type checks. Oracle-pool reconciliation still runs |
+| `--enable-chemprop-fine-tuning` | off | Fine-tune Chemprop from the previous cycle's checkpoint instead of retraining from scratch (`chemprop` and `chemprop_ensemble` only). See [Chemprop Fine-Tuning](../advanced/chemprop-fine-tuning.md) |
+| `--disable-molecular-similarity [METRIC ...]` | off | Skip the diversity metrics. With no names, all of them are skipped; with names (e.g. `scaffold_diversity_index_batch`), only those. Unknown names are a configuration error |
 | `--streaming {auto,always,never}` | `auto` | Streaming predict-then-select path. `auto` uses it when a cycle is eligible (streamable strategy, an output directory, pruning none or `score`) and otherwise falls back to the in-memory path. `always` errors if a cycle is ineligible. `never` forces the in-memory path. Stochastic strategies (`thompson`, `random`, `topk`) draw different but equivalent samples under streaming |
 
 ## learnm8 validate
@@ -153,8 +157,10 @@ learnm8 suggest COMPOUND_POOL BATCH_DIR --target COLUMN [OPTIONS]
 | `--smiles-col NAME`, `--id-col NAME` | auto-detect | Column names in the pool |
 | `--cache-dir PATH` | `BATCH_DIR/.learnm8/cache` | Feature cache directory |
 | `--n-jobs N` | -1 | Parallel CPU jobs |
-| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda`, `cuda:N` or `mps` |
+| `--device DEVICE` | `auto` | `auto`, `cpu`, `cuda` or `cuda:N` |
 | `--random-state N` | 42 | Random seed |
+| `--pruning-fraction F` | 0.0 | Fraction of the unlabeled pool removed for good in each pruning round, 0.0 to 0.9. 0 = off. Capped so at least `--batch-size` unlabeled compounds remain; this cap is specific to `learnm8 suggest` (`learnm8 run` pruning does not cap). See [Pruning](../tutorials/lab-campaigns.md#pruning) |
+| `--pruning-start N` | 3 | First round (cycle number) that may prune |
 
 Settings are not stored between calls; pass the same flags every round.
 
@@ -195,8 +201,8 @@ learnm8 run compounds.csv --target Activity --learner chemprop --n-cycles 10
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Error (file not found, invalid input data, feature extraction or learner failure, etc.) |
-| 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered. Command-line usage errors reported by argparse (unknown flag, missing argument) also exit with 2 |
+| 1 | Data or runtime error: invalid input data (`ValidationError`), feature extraction, oracle, learner or persistence failure, malformed `--cycles` or `--acquisition-params`, any other unexpected exception |
+| 2 | Configuration error (`ConfigurationError`), for example `suggest` re-run before any result is entered; compound pool file not found; missing `--target`; missing `--featurizer` for a learner that needs one; unknown strategy, learner or featurizer. Command-line usage errors reported by argparse (unknown flag, invalid choice, missing argument) also exit with 2 |
 
 ## See also
 

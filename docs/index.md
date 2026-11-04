@@ -13,8 +13,8 @@ The framework addresses a fundamental challenge in computational chemistry: how 
 
 **Comprehensive model suite**
 
-- 20 models spanning scikit-learn, PyTorch, Chemprop GNNs and ensembles — see [Learners](components/learners/overview.md)
-- Uncertainty quantification for 16 of the 20
+- 19 models spanning scikit-learn, PyTorch, Chemprop GNNs and ensembles — see [Learners](components/learners/overview.md)
+- Uncertainty quantification for 15 of the 19
 - GPU learners via GPyTorch and RAPIDS cuML
 
 **Rich acquisition strategies**
@@ -58,7 +58,7 @@ results = run_active_learning(
 )
 
 print(f"Best compound: {results['aggregate_metrics']['best_compound_value']:.3f}")
-print(f"Top-10 discovery rate: {results['aggregate_metrics']['final_top_10_discovery']:.1%}")
+print(f"Top-10 discovery rate: {results['aggregate_metrics']['final_top_10_discovery']:.1f}%")
 ```
 
 The same run from the command line:
@@ -129,7 +129,7 @@ results = run_active_learning(
 
 **Components**
 
-- **[Learners](components/learners/overview.md)**: All 20 models
+- **[Learners](components/learners/overview.md)**: All 19 models
 - **[Acquisition Functions](components/acquisition/overview.md)**: All 8 strategies and when to reach for each
 - **[Featurizers](components/featurizers/overview.md)**: All 39 featurizers
 - **[Oracles](components/oracles/overview.md)**: Benchmark and run-mode measurement sources

@@ -6,7 +6,7 @@ Stochastic variational Gaussian process (GPyTorch `ApproximateGP`). It approxima
 - **Class:** `learnm8.learners.gpytorch.SVGPLearner`
 - **Uncertainty:** yes. Predictive standard deviation of the variational posterior, rescaled to target units. The variational posterior systematically underestimates uncertainty.
 - **Requires SMILES:** no
-- **Requirements:** GPyTorch; GAUCHE for the Tanimoto kernel. A GPU is optional (`device='auto'`). The learner is only registered if its module imports.
+- **Requirements:** GPyTorch; GAUCHE for the Tanimoto kernel. A GPU is optional (`device='auto'`). The learner is always listed, but creating it without GPyTorch raises `ConfigurationError`.
 
 ## Parameters
 

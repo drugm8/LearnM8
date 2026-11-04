@@ -53,7 +53,7 @@ learnm8_results_20250118_143022/
 └── .cache/                      # feature cache (unless cache_dir is set)
 ```
 
-`output_format` (`'auto'`, `'csv'`, `'parquet'`) selects the file format; `'auto'` uses Parquet for pools of 1M compounds or more. Pass `cache_dir` to share the feature cache between runs.
+`output_format` (`'auto'`, `'csv'`, `'parquet'`) selects the file format; `'auto'` uses Parquet for more than 1,000,000 rows. Pass `cache_dir` to share the feature cache between runs.
 
 ## Basic CLI Workflow
 
@@ -93,11 +93,11 @@ All learners are selected by name via `learner=` (CLI `--learner`). "Uncertainty
 | [`mixed_ensemble`](../components/learners/mixed-ensemble.md) | Yes | Yes | Optional | RF, linear and XGBoost members combined |
 | [`chemprop_ensemble`](../components/learners/chemprop-ensemble.md) | Yes | Optional (hybrid mode) | Optional (CUDA) | Chemprop with uncertainty |
 
-`gpu_gp` and `svgp` need GPyTorch and GAUCHE; `rf_fil` and `ridge_cuml` need RAPIDS cuML (a missing package raises `LearnerError` when the model trains). See the [learner overview](../components/learners/overview.md) for details.
+`gpu_gp` and `svgp` need GPyTorch and GAUCHE; `rf_fil` and `ridge_cuml` need RAPIDS cuML (without GPyTorch, creating `gpu_gp` or `svgp` raises `ConfigurationError`; without cuML, `rf_fil` and `ridge_cuml` raise `LearnerError` when the model trains). See the [learner overview](../components/learners/overview.md) for details.
 
 ## Choosing an acquisition strategy
 
-Set `strategy=` for cycles 1 and later, and `initial_strategy=` (default `'random'`) for cycle 0.
+Set `strategy=` for cycles 1 and later. Cycle 0 is always a random batch.
 
 ```python
 results = run_active_learning(
@@ -112,7 +112,7 @@ learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
   --strategy ucb --acquisition-params '{"beta": 2.0}'
 ```
 
-`greedy` and `topk` exploit predictions, `random` ignores the model, and `ucb`, `ei`, `pi`, `thompson` and `entropy` use uncertainty. See [Acquisition](../components/acquisition/overview.md) for each strategy and its parameters.
+`greedy` and `topk` exploit predictions, `random` ignores the model, and `ucb`, `ei`, `pi`, `thompson` and `entropy` use uncertainty, so they need a learner that has it (not `xgb`, `mlp`, `fastprop` or `chemprop`); the combination is rejected with a `ConfigurationError` before cycle 0. See [Acquisition](../components/acquisition/overview.md) for each strategy and its parameters.
 
 ## Benchmark mode vs run mode
 

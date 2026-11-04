@@ -42,7 +42,7 @@ Run it with:
 learnm8 run --config experiment.yaml
 ```
 
-Each entry under `cycles` takes the fields of `CycleConfig` (`strategy`, `n_cycles`, `batch_fraction`, `acquisition_params`, `pruning_strategy`, `pruning_params`); see [Building Custom Cycles](../tutorials/building-custom-cycles.md). To use the simple API instead, replace `cycles` with `n_cycles`, `batch_fraction`, `strategy` and `initial_strategy`.
+Each entry under `cycles` takes the fields of `CycleConfig` (`strategy`, `n_cycles`, `batch_fraction`, `acquisition_params`, `pruning_strategy`, `pruning_params`); see [Building Custom Cycles](../tutorials/building-custom-cycles.md). To use the simple API instead, replace `cycles` with `n_cycles`, `batch_fraction` and `strategy`. Cycle 0 is always a random batch.
 
 ## Parameters
 
@@ -58,7 +58,6 @@ Each entry under `cycles` takes the fields of `CycleConfig` (`strategy`, `n_cycl
 | `n_cycles` | `10` | Number of cycles (simple API) |
 | `batch_fraction` | `0.01` | Fraction of the original pool per cycle (simple API) |
 | `strategy` | `greedy` | Acquisition strategy for cycles 1+ (simple API) |
-| `initial_strategy` | `random` | Strategy for cycle 0 (simple API) |
 | `cycles` | none | List of cycle blocks; takes precedence over the simple-API keys |
 | `acquisition_params` | none | Mapping of strategy parameters |
 | `pruning_fraction`, `pruning_strategy`, `pruning_params` | none | See [Pruning](pruning.md) |
@@ -72,9 +71,11 @@ Each entry under `cycles` takes the fields of `CycleConfig` (`strategy`, `n_cycl
 | `force_uncertainty` | `false` | Always compute uncertainty |
 | `skip_validation` | `false` | Skip input validation |
 | `streaming` | `auto` | `auto`, `always` or `never` |
+| `enable_chemprop_fine_tuning` | `false` | Fine-tune Chemprop from the previous cycle's checkpoint, see [Chemprop Fine-Tuning](chemprop-fine-tuning.md) |
+| `disable_molecular_similarity` | `false` | `true` skips all diversity metrics; a list of metric names skips only those (an empty list skips all) |
 | `quiet` | `false` | Suppress progress output |
 
-Defaults are those of `learnm8 run`; see the [CLI Reference](../user-guide/cli-reference.md) for the full flag descriptions. Keys the CLI does not recognize are not rejected, so check spelling against this table. Chemprop fine-tuning ([Chemprop Fine-Tuning](chemprop-fine-tuning.md)) is not configurable from a file.
+Defaults are those of `learnm8 run`; see the [CLI Reference](../user-guide/cli-reference.md) for the full flag descriptions. A key the CLI does not recognize prints a warning and is not applied, so a typo does not stop the run: check spelling against this table and watch for the warning.
 
 ## Precedence
 

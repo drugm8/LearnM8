@@ -30,7 +30,7 @@ Unless you pass an explicit `random_states` list, member `i` is seeded with `ran
 | `mixed_ensemble` | `MixedEnsemble` | RF + Ridge + XGBoost; see [Mixed Ensemble](mixed-ensemble.md) |
 | `chemprop_ensemble` | `ChempropEnsemble` | 3 `ChempropLearner`; see [Chemprop Ensemble](chemprop-ensemble.md) |
 
-All of them take `random_state` (default `42`) or an explicit `random_states` list (not on `MixedEnsemble`), and extra keyword arguments are forwarded to `EnsembleLearner`. `lr_ensemble` and `xgb_ensemble` also take `device`; with `device='cuda'`, `lr_ensemble` uses [`ridge_cuml`](ridge-cuml.md) members and `xgb_ensemble` runs XGBoost on the GPU. `'auto'` resolves to CPU members for both.
+All of them take `random_state` (default `42`) or an explicit `random_states` list (not on `MixedEnsemble`), and extra keyword arguments are forwarded to `EnsembleLearner`. `lr_ensemble` and `xgb_ensemble` also take `device`; with `device='cuda'` (or `'cuda:N'`), `lr_ensemble` uses [`ridge_cuml`](ridge-cuml.md) members and `xgb_ensemble` runs XGBoost on the GPU. `'auto'` selects the GPU members when CUDA is available (for `lr_ensemble` also only if RAPIDS cuML is importable) and CPU members otherwise; it never raises. `run_active_learning` passes its own `device` (default `'auto'`) to these ensembles when you select them by name.
 
 ## Usage
 

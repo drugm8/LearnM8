@@ -42,7 +42,7 @@ results = run_active_learning(
 )
 ```
 
-The first cycle (cycle 0) is always a random draw controlled by `initial_strategy` (default `'random'`); see [Running experiments](../../tutorials/running-experiments.md).
+The first cycle (cycle 0) is always a random draw, whatever `strategy` is set to; see [Running experiments](../../tutorials/running-experiments.md).
 
 ## See also
 

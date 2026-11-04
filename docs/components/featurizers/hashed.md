@@ -7,8 +7,8 @@ Fingerprints computed from hashed string or shingle representations, or from red
 | `map4` | MAP4 MinHashed atom-pair fingerprint | `fp_size=2048`, `radius=2` | `packed_uint8` |
 | `mhfp` | MHFP MinHashed fingerprint | `fp_size=2048`, `radius=3` | `packed_uint8` |
 | `secfp` | SECFP, SMILES extended connectivity fingerprint | `fp_size=2048`, `radius=3` | `packed_uint8` |
-| `lingo` | Lingo SMILES substring fingerprint | scikit-fingerprints defaults | `packed_uint8` |
-| `erg` | ERG extended reduced graph (continuous) | scikit-fingerprints defaults | `float32` |
+| `lingo` | Lingo SMILES substring fingerprint | 1024 bits | `packed_uint8` |
+| `erg` | ERG extended reduced graph (continuous) | 315 values | `float32` |
 
 None requires conformers. `erg` is the only continuous featurizer in this group.
 

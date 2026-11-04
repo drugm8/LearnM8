@@ -15,7 +15,7 @@ Subclass `Learner` from `learnm8.core.interfaces`. Three methods are abstract:
 Two optional methods have defaults:
 
 - `supports_uncertainty()` returns `False` by default. Override it to return `True` if `predict()` returns uncertainties.
-- `requires_smiles()` returns `False` by default. Override it to return `True` for learners that work from SMILES (Chemprop, Fastprop). The SMILES are then passed in the `smiles` argument.
+- `requires_smiles()` returns `False` by default. Override it to return `True` for learners that work from SMILES (the built-in Chemprop learners do; Fastprop does not). The SMILES are then passed in the `smiles` argument.
 
 The cycle sets `compute_uncertainty = force_uncertainty OR acquisition.requires_uncertainty()` once per cycle and passes it to `predict()`. When it is `False` you may skip uncertainty work and return `None` as the second element. A `predict()` without the `compute_uncertainty` keyword raises `TypeError` on the first cycle.
 
@@ -108,7 +108,7 @@ results = run_active_learning(
 )
 ```
 
-Strategies are looked up by name in `ACQUISITION_REGISTRY` (`learnm8/acquisition/__init__.py`), so register the class before calling `run_active_learning()`. The name is then valid in `strategy`, `initial_strategy` and `CycleConfig`.
+Strategies are looked up by name in `ACQUISITION_REGISTRY` (`learnm8/acquisition/__init__.py`), so register the class before calling `run_active_learning()`. The name is then valid in `strategy` and `CycleConfig` (cycle 0 is always random).
 
 ### Optional streaming tier
 

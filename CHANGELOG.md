@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.0] — 2026-10-19
+## [1.0.0] — Unreleased
 
 ### Added — `learnm8 suggest` / `suggest_next_batch()` for slow lab assays
 
@@ -14,8 +14,30 @@ encoding automatically, recovers IDs whose leading zeros a spreadsheet dropped
 when the match is unique, and rejects ambiguous numbers with an error naming the
 file, ID and cell. New files only: existing batch files are never edited.
 Re-running before any result is entered raises `ConfigurationError` (CLI exit
-code 2). No pruning, multi-stage schedules or censored values. See
+code 2). No multi-stage schedules or censored values. See
 `docs/tutorials/lab-campaigns.md`.
+
+### Added — pruning in `learnm8 suggest` / `suggest_next_batch()`
+
+New keyword-only `pruning_fraction` (default `0.0`, off) and `pruning_start`
+(default `3`), CLI `--pruning-fraction` / `--pruning-start`. From cycle
+`pruning_start` on, a round that trains a model removes that fraction of the
+unlabeled pool with the worst predictions (`'score'` pruning) before selecting.
+Pruning is irreversible. Each round that prunes writes
+`batch_dir/pruned_cycle_N.parquet` (`ID` and `SMILES` columns) before its batch
+file; these files are state, and later rounds exclude their IDs. They are
+checked against the compound pool like batch files: an unknown ID or a changed
+SMILES raises `ValidationError`. Files for the current round or later are
+ignored with a warning and the current round's is rewritten, so deleting the
+newest batch file and re-running still reproduces it. With pruning off, no new
+files are written and batches are unchanged.
+
+Lab mode only: pruning never leaves fewer unlabeled compounds than
+`batch_size`, so every plate is full while the pool allows. When the requested
+fraction would cut deeper, the fraction actually used is logged; when no
+compound can be spared, the round does not prune. `run_active_learning`
+pruning has no such cap. A compound the lab measured after an earlier round
+pruned it is used for training (with a warning) rather than dropped.
 
 ### Removed — the `simulated_annealing` acquisition strategy (BREAKING)
 
@@ -105,7 +127,7 @@ Python/numpy allocation (measured); the streaming path eliminates them.
   legacy path otherwise; ``'always'`` raises ``ConfigurationError`` on an
   ineligible cycle; ``'never'`` forces the legacy in-memory path.
 - **Eligibility**: a streamable acquisition strategy (greedy, ucb, ei, pi,
-  entropy, thompson, random, topk — all but simulated_annealing), an
+  entropy, thompson, random, topk — every built-in strategy), an
   ``output_dir`` (the per-cycle parquet is the dataflow medium), and a pruning
   strategy in ``{None, 'score'}``.
 - **Pass 1** predicts the unlabeled pool chunk-by-chunk into
@@ -174,7 +196,7 @@ component; removal does not affect standard API or CLI usage.
 ### Removed — the bare `ensemble` learner name (BREAKING)
 
 `'ensemble'` is no longer a key of `LEARNER_REGISTRY`, so `learner='ensemble'`
-and `--learner ensemble` now raise `ValueError: Unknown learner`. It mapped to
+and `--learner ensemble` now raise `ConfigurationError: Unknown learner`. It mapped to
 the generic `EnsembleLearner`, which needs an explicit `learners=[...]` list,
 so it could never be built from a name. There is no alias.
 
@@ -186,12 +208,87 @@ spread) or `mixed_ensemble` (RF + LR + XGBoost), or pass an
 
 `RFEnsemble` and its registry entry `'rf_ensemble'` are gone (deprecated since
 0.10.0). `learner='rf_ensemble'` and `--learner rf_ensemble` now raise
-`ValueError: Unknown learner`; `from learnm8 import RFEnsemble` fails. There is
+`ConfigurationError: Unknown learner`; `from learnm8 import RFEnsemble` fails. There is
 no alias.
 
 Migration: use `rf`, which reports uncertainty from the spread across its
 trees. For a member-spread ensemble use `dt_ensemble`, `xgb_ensemble` or
 `mixed_ensemble`.
+
+### Changed (BREAKING) — featurizer `physiochemical` renamed `physicochemical`
+
+The registry key is now spelled correctly. `featurizer='physiochemical'` and
+`--featurizer physiochemical` raise `ConfigurationError` (with a "did you mean"
+hint); there is no alias. The name is part of the cache file name and of every
+cache row key, so existing `features_physiochemical_*.h5` caches are not reused
+and rebuild once. Delete the old file; renaming it does not work.
+
+### Removed (BREAKING) — `initial_strategy` / `--initial-strategy`
+
+Cycle 0 is always a random batch. The parameter only ever accepted `'random'`
+(any other value was replaced with a warning), so it is gone from
+`run_active_learning` and the CLI. Remove it from calls and config files; a
+config file that still has it gets the unknown-key warning.
+
+### Changed (BREAKING) — input errors raise LearnM8 exceptions, before cycle 0
+
+`run_active_learning` used bare `ValueError`, `FileNotFoundError` and
+`TypeError` for bad input, so the CLI printed two tracebacks instead of a
+one-line error. Now:
+
+- `ConfigurationError`: unknown learner, featurizer or strategy; a missing
+  featurizer; a `pruning_fraction` out of range; a missing compound pool file or
+  a wrong `compound_pool` type; invalid `n_jobs` or `device`; invalid
+  `streaming` or `output_format` values (a YAML `streaming: off` used to run
+  silently as `'auto'`); no oracle with a DataFrame pool.
+- `ValidationError`: missing ID or SMILES columns; no valid compounds.
+- Every strategy in the schedule is checked before cycle 0, and an
+  uncertainty strategy (`ucb`, `ei`, `pi`, `thompson`, `entropy`) with a learner
+  that has no uncertainty (`xgb`, `mlp`, `fastprop`, `chemprop`) raises
+  `ConfigurationError` before anything is measured. Both used to fail only
+  after cycle 0 had been selected and measured.
+- `extract_features` raises `ConfigurationError` for an unknown featurizer, and
+  `AcquisitionFunction.select` raises `AcquisitionError` (was `ValueError`)
+  when an uncertainty strategy gets no uncertainty column, as the streaming
+  path already did.
+- The CLI exits with code 2 for configuration errors, now including a missing
+  compound pool file, a missing `--target` or required `--featurizer`, and an
+  unknown strategy. Configuration and validation errors are no longer logged
+  with a traceback.
+
+### Changed — `autocorr` is a 2D featurizer
+
+`autocorr` computed the 2D autocorrelation descriptors (192 values) but sat in
+the 3D group, so it generated and force-field-optimised a conformer for every
+molecule and then ignored it. It no longer generates conformers; its values are
+unchanged, and its cache rebuilds once (the configuration hash changed). The
+featurizers are now 31 2D + 8 3D (39 names, 37 distinct plus 2 aliases).
+
+### Changed — ensemble learners use the GPU with `device='auto'` and `'cuda:N'`
+
+`lr_ensemble`, `xgb_ensemble` and `mixed_ensemble` used GPU members only for
+`device='cuda'` exactly; `'auto'` and `'cuda:0'` silently gave CPU members,
+while a single `xgb` used the GPU under `'auto'`. `'auto'` now picks GPU members
+when CUDA is available (and, for LR and mixed members, RAPIDS cuML is
+installed), otherwise CPU; `'cuda'` and `'cuda:N'` select GPU members.
+XGBoost members run on the given device index; the cuML members (`rf_fil`,
+`ridge_cuml`) use the default CUDA device. Results on a GPU machine can differ
+from 0.11.0 for these three learners under the default `'auto'`.
+
+### Added — CLI and config-file options
+
+- `learnm8 run --enable-chemprop-fine-tuning` and
+  `--disable-molecular-similarity [METRIC ...]` (no names disables every
+  diversity metric). Both are also config-file keys, so every
+  `run_active_learning` option can now be set from the CLI or a config file.
+- Config-file keys that match no option print a warning and are not applied
+  (they used to be ignored silently, so a typo went unnoticed).
+- `learnm8 --version`.
+- `--strategy` and `--pruning-strategy` accept only registered names.
+- Every learner class in `LEARNER_REGISTRY` can be imported from `learnm8`
+  (`DecisionTreeLearner`, `LinearRegressionLearner`, `FastpropLearner`,
+  `ChempropLearner`, `RfFilLearner`, `RidgeCumlLearner`, the ensembles and, when
+  GPyTorch imports, `GPyTorchGPLearner` / `SVGPLearner`).
 
 ### Added — `failed` status for compounds the oracle cannot measure
 
@@ -206,15 +303,19 @@ the run no longer aborts with `OracleError: Oracle did not return measurements
 whole initial batch fails, `run_active_learning` raises `OracleError` before
 any model is trained. `VALID_STATUSES` now has a fourth value, `failed`, which
 also appears in `compounds_final`; the master DataFrame still has 7 columns.
-See `docs/components/oracles/custom-oracles.md`.
+See `docs/components/oracles/python-oracle.md`.
 
 ### Changed — `CSVOracle` raises for IDs missing from its ground truth
 
 `CSVOracle.measure` used to log a warning and return a partial result when a
 requested ID was absent from the oracle CSV. It now raises `OracleError`
 (listing up to five IDs), so benchmark mode stays strict: every compound in the
-pool must have a ground-truth value. Null target values still raise
-`ValueError`.
+pool must have a ground-truth value. Pool compounds whose target is empty, NaN
+or infinite now raise `ValidationError` before cycle 0, listing the IDs. Before,
+an empty target crashed the run in whichever cycle first selected it, and a
+NaN target was silently marked `failed`. `CSVOracle` itself raises
+`ValidationError` for a missing ID column and `OracleError` for null or missing
+target values (both were `ValueError`).
 
 ### Changed (BREAKING) — feature cache file names and safety
 
@@ -252,9 +353,25 @@ share one signature.
   `pip install --no-deps -e .`.
 - `mypy learnm8/` passes with no ignored modules, and the code is formatted
   with `ruff format`.
+- `psutil` is a runtime dependency (prediction batch sizing reads free memory
+  with it; without it the size silently assumed 2 GiB). The sdist no longer
+  ships a stray handful of test files. `environment.yml` now lists `lightning`
+  and `psutil`, matches the pyproject `scipy>=1.11` floor, and drops the unused
+  `statsmodels`.
 
 ### Fixed
 
+- **`chemprop_ensemble` honours `random_state`.** Its members always used seeds
+  42/123/356, so seed replicates were identical models. The default
+  `random_state=42` still gives 42/123/356.
+- **`run_active_learning` no longer writes into the caller's `pruning_params`
+  dict**, which carried one run's `pruning_fraction` into the next when the
+  dict was reused.
+- **XGBoost's "CUDA training failed" error** now also covers `device='cuda:N'`.
+- **Error messages no longer point to a `learnm8 list featurizers` command**,
+  which does not exist, and list the learners without uncertainty correctly.
+  The cycle-0 and schedule log lines report the batch size the cycle actually
+  uses.
 - **Ensemble learners now forward `feature_type` to their members.** Members
   stayed on the binary NaN path for continuous featurizers (descriptors, count
   fingerprints) instead of using median imputation.

@@ -4,13 +4,13 @@ This tutorial explains how to control which acquisition strategy and batch size 
 
 ## Cycle numbering and batch size
 
-Cycle 0 is the initial batch and trains no model. Cycles 1 and later train on the labeled compounds and select with the cycle's strategy. `n_cycles=10` runs cycles 0 to 9.
+Cycle 0 is a random batch and trains no model. Cycles 1 and later train on the labeled compounds and select with the cycle's strategy. `n_cycles=10` runs cycles 0 to 9.
 
 `batch_fraction` is always relative to the **original** pool size, not to the compounds still unlabeled. The batch size is `min(max(1, ceil(original_pool_size * batch_fraction)), len(selection_pool))`: at least one compound, capped at the number of compounds left to select from. For a 10,000-compound pool, `batch_fraction=0.01` selects 100 compounds per cycle.
 
 ## Simple API
 
-The simple API uses one batch fraction for every cycle, one strategy for cycle 0 and one for cycles 1 and later:
+The simple API uses one batch fraction for every cycle and one strategy for cycles 1 and later. Cycle 0 is always random:
 
 ```python
 from learnm8 import run_active_learning
@@ -21,7 +21,6 @@ results = run_active_learning(
     learner='gp',
     target_col='Activity',
     featurizer='morgan',
-    initial_strategy='random',   # cycle 0 (default)
     strategy='greedy',           # cycles 1+ (default)
     n_cycles=10,
     batch_fraction=0.01,
@@ -30,12 +29,12 @@ results = run_active_learning(
 
 ```bash
 learnm8 run compounds.csv --target Activity --learner gp --featurizer morgan \
-  --initial-strategy random --strategy greedy --n-cycles 10 --batch-fraction 0.01
+  --strategy greedy --n-cycles 10 --batch-fraction 0.01
 ```
 
 ## CycleConfig
 
-For different strategies, batch sizes or parameters per phase, pass a list of `CycleConfig` objects as `cycles`. When `cycles` is given, `n_cycles`, `batch_fraction`, `strategy` and `initial_strategy` are not used.
+For different strategies, batch sizes or parameters per phase, pass a list of `CycleConfig` objects as `cycles`. When `cycles` is given, `n_cycles`, `batch_fraction` and `strategy` are not used. The first cycle in the list is cycle 0: it supplies the batch size of the random initial batch, so start the list with `'random'`.
 
 ```python
 from learnm8 import run_active_learning, CycleConfig

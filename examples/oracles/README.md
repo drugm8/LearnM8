@@ -294,14 +294,16 @@ weighted_oracle = WeightedOracle([
 
 ## Performance Considerations
 
-### Computational Cost (per molecule)
+### Relative cost (cheapest to most expensive per molecule)
 
-| Oracle | Speed | Use Case |
-|--------|-------|----------|
-| **SimilarityOracle** | ~0.001s | Large libraries (>100K compounds) |
-| **Pharmacophore2DOracle** | ~0.01s | Medium libraries (10K-100K) |
-| **CDPKitPharmacophoreOracle** | ~1-5s | Focused libraries (<10K) |
-| **VinaOracle** | ~10-60s | Final screening (<1K compounds) |
+| Oracle | Cost | Typical use |
+|--------|------|-------------|
+| **SimilarityOracle** | Lowest (2D fingerprint comparison) | Large libraries |
+| **Pharmacophore2DOracle** | Low (2D substructure matching) | Medium libraries |
+| **CDPKitPharmacophoreOracle** | High (3D embedding and alignment) | Focused libraries |
+| **VinaOracle** | Highest (docking) | Final screening of a short list |
+
+Measure the per-molecule time on your own hardware before planning a campaign.
 
 ### Optimization Strategies
 

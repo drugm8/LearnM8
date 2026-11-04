@@ -28,9 +28,9 @@ Learners are either **feature-based** (they receive the matrix produced by a [fe
 | [`mixed_ensemble`](mixed-ensemble.md) | RF + Ridge + XGBoost | yes (std across members) | no | optional |
 | [`chemprop_ensemble`](chemprop-ensemble.md) | 3 Chemprop models | yes (std across members) | yes | optional |
 
-"Optional" means the learner uses a GPU when `device` selects one (`'auto'` picks CUDA if available). "Required" means the learner needs a CUDA GPU and RAPIDS cuML. `gpu_gp` and `svgp` are registered only if their GPyTorch module imports.
+"Optional" means the learner uses a GPU when `device` selects one (`'auto'` picks CUDA if available; for `lr_ensemble` and `mixed_ensemble` that also requires RAPIDS cuML, otherwise they use CPU members). "Required" means the learner needs a CUDA GPU and RAPIDS cuML. All 19 learners are always listed; without GPyTorch, creating `gpu_gp` or `svgp` raises `ConfigurationError`, and without RAPIDS cuML, `rf_fil` and `ridge_cuml` raise `LearnerError` when trained.
 
-Uncertainty-based acquisition strategies (`ucb`, `ei`, `pi`, `thompson`, `entropy`) need a learner with uncertainty. Learners without it work with `greedy`, `topk` and `random`. If the strategy does not need uncertainty, most learners skip computing it (`mc_dropout` still runs its sampling passes). Override with `--force-uncertainty` / `force_uncertainty=True`.
+Uncertainty-based acquisition strategies (`ucb`, `ei`, `pi`, `thompson`, `entropy`) need a learner with uncertainty. Learners without it (`xgb`, `mlp`, `fastprop`, `chemprop`) work with `greedy`, `topk` and `random`; pairing them with an uncertainty strategy raises `ConfigurationError` before cycle 0. If the strategy does not need uncertainty, most learners skip computing it (`mc_dropout` still runs its sampling passes). Override with `--force-uncertainty` / `force_uncertainty=True`.
 
 ## Choosing a learner by string or by instance
 

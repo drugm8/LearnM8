@@ -46,6 +46,6 @@ results = run_active_learning(
 
 - Binary featurizers are loaded as `uint8` (`preferred_feature_dtype()`).
 - If CUDA training fails with `device='cuda'`, a `LearnerError` is raised rather than silently falling back to CPU.
-- Uncertainty-based strategies (`ucb`, `ei`, `pi`, `thompson`, `entropy`) need uncertainty and fail when the learner provides none; see [Acquisition](../acquisition/overview.md).
+- Uncertainty-based strategies (`ucb`, `ei`, `pi`, `thompson`, `entropy`) need uncertainty; with `xgb` they raise `ConfigurationError` before cycle 0, so use `xgb_ensemble` instead; see [Acquisition](../acquisition/overview.md).
 
 See also: [Learners overview](overview.md), [Ensembles](ensembles.md).

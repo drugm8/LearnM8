@@ -18,8 +18,10 @@ learnm8 run compounds.csv --target Activity --learner chemprop --featurizer desc
 | [Structural keys](keys.md) | `maccs`, `pubchem`, `klekota_roth`, `laggner` |
 | [Topological](topological.md) | `avalon`, `atom_pair`, `topological_torsion`, `rdkit`, `pattern`, `layered` |
 | [Hashed](hashed.md) | `map4`, `mhfp`, `lingo`, `erg`, `secfp` |
-| [2D descriptors](descriptors.md) | `mordred`, `descriptors`, `rdkit_2d_descriptors`, `estate`, `ghose_crippen`, `mqns`, `vsa`, `bcut2d`, `physiochemical`, `pharmacophore`, `functional_groups` |
-| [3D](3d.md) | `whim`, `usr`, `usrcat`, `e3fp`, `getaway`, `morse`, `rdf`, `autocorr`, `electroshape` |
+| [2D descriptors](descriptors.md) | `mordred`, `descriptors`, `rdkit_2d_descriptors`, `estate`, `ghose_crippen`, `mqns`, `vsa`, `bcut2d`, `physicochemical`, `pharmacophore`, `functional_groups`, `autocorr` |
+| [3D](3d.md) | `whim`, `usr`, `usrcat`, `e3fp`, `getaway`, `morse`, `rdf`, `electroshape` |
+
+That is 39 names: 31 2D and 8 3D (37 distinct featurizers plus the aliases `ecfp` and `descriptors`).
 
 List the names from Python:
 
