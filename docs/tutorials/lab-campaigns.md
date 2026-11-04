@@ -9,7 +9,7 @@ Use `learnm8 suggest` when the measurements come from a wet lab and each round t
 `suggest_next_batch()` (CLI: `learnm8 suggest`) fits that situation instead:
 
 - Each call reads the batch files from earlier rounds, trains on every measured value so far, and writes the next batch file.
-- The folder of batch files is the only state. No model, session or database is kept between calls.
+- The folder of batch files, plus the `pruned_cycle_N.parquet` files if you [prune](#pruning), is the only state. No model, session or database is kept between calls.
 - LearnM8 only creates new files. It never edits a batch file the lab has touched.
 
 ## The Round Trip
@@ -19,17 +19,20 @@ Use `learnm8 suggest` when the measurements come from a wet lab and each round t
 3. The lab types the measured values into the target column (for example `Activity`) and saves the file in the same folder.
 4. Repeat from step 1.
 
-After three rounds the `batch_dir` folder looks like this:
+After four rounds (with pruning on, which can first happen in round 3) the `batch_dir` folder looks like this:
 
 ```text
 campaign/
 ├── batch_cycle_0.csv
 ├── batch_cycle_1.csv
 ├── batch_cycle_2.csv
+├── batch_cycle_3.csv
+├── pruned_cycle_3.parquet        # only when pruning, see Pruning
 └── .learnm8/
     ├── cache/                    # feature cache
     ├── prediction_cycle_1.parquet
-    └── prediction_cycle_2.parquet
+    ├── prediction_cycle_2.parquet
+    └── prediction_cycle_3.parquet
 ```
 
 `.learnm8/` is working data. Keep it, but the lab never needs to see it. Deleting it only costs recomputation.
@@ -186,6 +189,23 @@ print(batch)
 
 The return value is the batch that was just written to `batch_dir/batch_cycle_N.csv`, as a Polars DataFrame with the same columns (the target column is null). Call it again after the lab has returned the filled-in file. See the [API reference](../user-guide/api-reference.md#suggest_next_batch) for all parameters.
 
+## Pruning
+
+Pruning removes compounds from the pool for good. In a pruning round the model predicts the unlabeled pool, the fraction with the worst predictions (lowest for `--score-direction higher`) is removed, and the batch is chosen from the rest. Pruned compounds are never suggested again. Pruning is off by default and is irreversible: lowering or turning off `--pruning-fraction` later does not bring pruned compounds back. See [Pruning](../advanced/pruning.md) for the strategy itself.
+
+```bash
+learnm8 suggest small_molecules.csv campaign/ \
+  --target Activity --learner rf --featurizer morgan --batch-size 5 \
+  --pruning-fraction 0.3 --pruning-start 3
+```
+
+- `--pruning-fraction` (`pruning_fraction=`): fraction of the unlabeled pool removed in each pruning round, 0.0 to 0.9. The default 0 turns pruning off.
+- `--pruning-start` (`pruning_start=`): first round, by cycle number, that may prune (default 3). Early models are trained on few measurements, and pruning on their predictions removes hits. Rounds without a trained model (round 0, or the random fallback after an all-failed batch) never prune.
+
+**Full-batch cap (`learnm8 suggest` only).** A pruning round never prunes so far that fewer than `--batch-size` unlabeled compounds remain, so the plate stays full. If the requested fraction would remove too many, a lower fraction is used and an INFO line in the log says which; if no compound can be removed while keeping a full batch, the round does not prune and writes no prune file. This cap belongs to `learnm8 suggest` / `suggest_next_batch`: pruning in `run_active_learning` does not cap, and only guarantees one surviving compound.
+
+Each round that prunes writes `pruned_cycle_N.parquet` into the batch folder, before `batch_cycle_N.csv`. It has an `ID` and a `SMILES` column: the compounds removed in round N and their pool SMILES. Like batch files, prune files are checked against the compound pool on every call: an unknown ID or a changed SMILES raises a `ValidationError`. If a pruned compound later has a measured value in a batch file, the measurement wins: it is used for training and a warning names the ID. Like the batch files, these files are state. Do not delete them, or the pruned compounds return to the pool. The lab never needs to open them. Deleting the newest batch file and re-running still reproduces it: prune files for that round or later are ignored, and the round's prune file is rewritten.
+
 ## Rules and Safeguards
 
 - **No duplicate plates.** If the newest batch file has no results at all, the call raises `ConfigurationError` (CLI exit code 2). Enter the values first.
@@ -200,7 +220,6 @@ The return value is the batch that was just written to `batch_dir/batch_cycle_N.
 
 ## Limitations
 
-- **No pruning.** There is no design-space reduction. Use `run_active_learning()` with a simulated or automated oracle if you need it.
 - **No multi-stage schedules.** Every round uses one strategy, `--strategy`. To change strategy part-way, pass a different `--strategy` for that round.
 - **Censored values count as failed.** A value like `<0.1` or `>10` is text, so the compound is treated as failed. Enter a numeric stand-in (for example the detection limit) if the compound should be used for training.
 - **Replicates.** Enter one value per compound, for example the mean. Keep the individual readings in extra columns. Two rows with the same ID raise a duplicate-ID error.

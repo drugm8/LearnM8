@@ -5,6 +5,7 @@ values, selects the next batch and writes it as a new batch file.
 """
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
@@ -19,7 +20,15 @@ from learnm8.core.initialization import (
     select_initial_batch,
 )
 from learnm8.core.interfaces import Oracle
-from learnm8.core.lab_batches import batch_path, next_cycle, read_batches, write_batch
+from learnm8.core.lab_batches import (
+    batch_path,
+    next_cycle,
+    pruned_path,
+    read_batches,
+    read_pruned,
+    write_batch,
+    write_pruned,
+)
 from learnm8.core.resources import validate_device, validate_n_jobs
 from learnm8.core.validation import canonicalize_for_cache, validate_compound_pool
 from learnm8.exceptions import (
@@ -138,6 +147,46 @@ def _recover_leading_zeros(
     return ledger
 
 
+def _check_against_pool(
+    rows: pl.DataFrame,
+    pool: pl.DataFrame,
+    file_name: Callable[[int], str],
+    label: str,
+    plural: str,
+    unknown_hint: str,
+    mismatch_hint: str,
+) -> None:
+    """Raise ValidationError for rows (ID, cycle, smiles) missing from or differing from the pool."""
+    unknown = rows.filter(~pl.col('ID').is_in(pool['ID'].implode())).sort('cycle', 'ID')
+    if unknown.height:
+        found = [
+            f'{i} ({file_name(c)})'
+            for i, c in zip(unknown['ID'], unknown['cycle'], strict=True)
+        ]
+        raise ValidationError(
+            f'{label} IDs not found in the validated compound pool: '
+            f'{_truncate_list(found)}. {unknown_hint}'
+        )
+    mismatch = (
+        rows.filter(pl.col('smiles').is_not_null())
+        .join(pool.select('ID', pl.col('SMILES').alias('_pool_smiles')), on='ID')
+        .filter(
+            pl.col('smiles').map_elements(canonicalize_for_cache, return_dtype=pl.Utf8)
+            != pl.col('_pool_smiles')
+        )
+        .sort('cycle', 'ID')
+    )
+    if mismatch.height:
+        found = [
+            f'{i} ({file_name(c)})'
+            for i, c in zip(mismatch['ID'], mismatch['cycle'], strict=True)
+        ]
+        raise ValidationError(
+            f'SMILES in {plural} differ from the compound pool for: '
+            f'{_truncate_list(found)}. {mismatch_hint}'
+        )
+
+
 def suggest_next_batch(
     compound_pool: str | Path,
     batch_dir: str | Path,
@@ -155,12 +204,18 @@ def suggest_next_batch(
     cache_dir: str | Path | None = None,
     n_jobs: int = -1,
     device: str = 'auto',
+    pruning_fraction: float = 0.0,
+    pruning_start: int = 3,
 ) -> pl.DataFrame:
     """Train on the measured batch results and write the next batch file.
 
     Cycle 0 (no batch files yet) is a random batch; later cycles train
     ``learner`` on all measured values and select with ``strategy``. Pending
     (empty) and failed (non-numeric) compounds are never selected again.
+
+    With ``pruning_fraction > 0``, rounds from cycle ``pruning_start`` on that
+    train a model first remove that fraction of the worst-predicted unlabeled
+    compounds for good, recorded in ``batch_dir/pruned_cycle_N.parquet``.
 
     Returns:
         The new batch with columns ``rank, ID, <target_col>, SMILES`` plus
@@ -185,6 +240,22 @@ def suggest_next_batch(
         raise ConfigurationError(
             f'acquisition_params must be a dict, got {type(acquisition_params).__name__}'
         )
+    if isinstance(pruning_fraction, bool) or not isinstance(
+        pruning_fraction, (int, float)
+    ):
+        raise ConfigurationError(
+            f'pruning_fraction must be a number, got {pruning_fraction!r}'
+        )
+    if not 0.0 <= pruning_fraction <= 0.9:
+        raise ConfigurationError(
+            f'pruning_fraction must be between 0.0 and 0.9, got {pruning_fraction}'
+        )
+    if isinstance(pruning_start, bool) or not isinstance(pruning_start, int):
+        raise ConfigurationError(
+            f'pruning_start must be an integer, got {pruning_start!r}'
+        )
+    if pruning_start < 1:
+        raise ConfigurationError(f'pruning_start must be >= 1, got {pruning_start}')
     compound_pool = Path(compound_pool)
     if not compound_pool.exists():
         raise ConfigurationError(f'Compound pool file not found: {compound_pool}')
@@ -212,38 +283,16 @@ def suggest_next_batch(
     ledger = _recover_leading_zeros(
         read_batches(batch_dir, target_col), pool, batch_dir
     )
-    unknown = ledger.filter(~pl.col('ID').is_in(pool['ID'].implode())).sort(
-        'cycle', 'ID'
+    _check_against_pool(
+        ledger,
+        pool,
+        lambda c: batch_path(batch_dir, c).name,
+        'Batch file',
+        'batch files',
+        'Either the ID is not in the pool, a leading-zero match was ambiguous, '
+        'or its SMILES differ.',
+        'Was the pool file re-sorted or changed since the batch was written?',
     )
-    if unknown.height:
-        found = [
-            f'{i} ({batch_path(batch_dir, c).name})'
-            for i, c in zip(unknown['ID'], unknown['cycle'], strict=True)
-        ]
-        raise ValidationError(
-            f'Batch file IDs not found in the validated compound pool: '
-            f'{_truncate_list(found)}. Either the ID is not in the pool, a '
-            f'leading-zero match was ambiguous, or its SMILES differ.'
-        )
-    mismatch = (
-        ledger.filter(pl.col('smiles').is_not_null())
-        .join(pool.select('ID', pl.col('SMILES').alias('_pool_smiles')), on='ID')
-        .filter(
-            pl.col('smiles').map_elements(canonicalize_for_cache, return_dtype=pl.Utf8)
-            != pl.col('_pool_smiles')
-        )
-        .sort('cycle', 'ID')
-    )
-    if mismatch.height:
-        found = [
-            f'{i} ({batch_path(batch_dir, c).name})'
-            for i, c in zip(mismatch['ID'], mismatch['cycle'], strict=True)
-        ]
-        raise ValidationError(
-            f'SMILES in batch files differ from the compound pool for: '
-            f'{_truncate_list(found)}. Was the pool file re-sorted or changed '
-            f'since the batch was written?'
-        )
     unchecked = ledger.filter(pl.col('smiles').is_null()).sort('cycle', 'ID')
     if unchecked.height:
         logger.warning(
@@ -268,8 +317,31 @@ def suggest_next_batch(
                 f'the next batch.'
             )
 
+    pruned_rows = read_pruned(batch_dir, cycle)
+    _check_against_pool(
+        pruned_rows,
+        pool,
+        lambda c: pruned_path(batch_dir, c).name,
+        'Prune file',
+        'prune files',
+        'Either the ID is not in the pool or its SMILES differ.',
+        'Was the pool file re-sorted or changed since the round was pruned?',
+    )
+    pruned_before = pruned_rows['ID']
+    # A measured value wins over an earlier prune record: train on it.
+    measured_ids = ledger.filter(pl.col('state') == 'measured')['ID']
+    revived = pruned_before.filter(pruned_before.is_in(measured_ids.implode()))
+    if revived.len():
+        logger.warning(
+            'Compounds with a measured value are also in a prune record; their '
+            'measurements are used for training: %s',
+            _truncate_list(revived.to_list()),
+        )
+        pruned_before = pruned_before.filter(~pruned_before.is_in(revived.implode()))
     master = initialize_master_dataframe_empty(pool, target_col)
-    unselectable = ledger.filter(pl.col('state') != 'measured')['ID']
+    unselectable = pl.concat(
+        [ledger.filter(pl.col('state') != 'measured')['ID'], pruned_before]
+    )
     master = master.filter(~pl.col('ID').is_in(unselectable.implode()))
     measured = ledger.filter(pl.col('state') == 'measured')
     for (c,), group in measured.group_by('cycle', maintain_order=True):
@@ -283,8 +355,28 @@ def suggest_next_batch(
             dict(zip(ids, group['value'].to_list(), strict=True)),
         )
     n_measured = measured.height
-    if master.filter(pl.col('status') == 'unlabeled').height == 0:
+    n_unlabeled = master.filter(pl.col('status') == 'unlabeled').height
+    if n_unlabeled == 0:
         raise ConfigurationError('no selectable compounds remain in the pool')
+    prune = pruning_fraction > 0 and cycle >= pruning_start and n_measured > 0
+    if prune:
+        # Lab mode only: keep at least batch_size unlabeled compounds so the plate
+        # is full. The pruners remove int(n * fraction); the +0.5 keeps float
+        # rounding from undercutting the exact count.
+        requested = int(n_unlabeled * pruning_fraction)
+        n_remove = max(0, min(requested, n_unlabeled - batch_size))
+        if n_remove < requested:
+            pruning_fraction = (n_remove + 0.5) / n_unlabeled if n_remove else 0.0
+            prune = n_remove > 0
+            logger.info(
+                'Pruning fraction lowered to %.4f in cycle %d (%s) so that at '
+                'least batch_size=%d of the %d unlabeled compounds remain',
+                pruning_fraction,
+                cycle,
+                'pruning skipped' if not prune else f'{n_remove} removed',
+                batch_size,
+                n_unlabeled,
+            )
 
     learner_obj = _create_learner(learner, random_state, n_jobs=n_jobs, device=device)
     if featurizer is None and not learner_obj.requires_smiles():
@@ -316,7 +408,7 @@ def suggest_next_batch(
             )
             metrics: dict = {}
         else:
-            _, metrics = execute_cycle(
+            master, metrics = execute_cycle(
                 master,
                 cycle,
                 CycleConfig(
@@ -324,6 +416,10 @@ def suggest_next_batch(
                     n_cycles=1,
                     batch_fraction=1.0,
                     acquisition_params=acquisition_params,
+                    pruning_strategy='score' if prune else None,
+                    pruning_params={'pruning_fraction': pruning_fraction}
+                    if prune
+                    else None,
                 ),
                 learner_obj,
                 oracle,
@@ -355,6 +451,20 @@ def suggest_next_batch(
             on='ID',
             how='left',
             maintain_order='left',
+        )
+    # Written before the batch file, so a batch never exists without its record.
+    # Not metrics['pruned_ids']: the streaming path leaves it empty.
+    pruned_now = master.filter(
+        pl.col('status') == 'pruned', pl.col('pruned_cycle') == cycle
+    ).select('ID', 'SMILES')
+    pruned_file = write_pruned(pruned_now, batch_dir, cycle)
+    if prune:
+        logger.info(
+            'Pruned %d compounds in cycle %d (%d pruned so far)%s',
+            pruned_now.height,
+            cycle,
+            pruned_before.len() + pruned_now.height,
+            f'; recorded in {pruned_file}' if pruned_file else '',
         )
     path = write_batch(batch, batch_dir, cycle, target_col)
     counts = ledger['state'].value_counts()

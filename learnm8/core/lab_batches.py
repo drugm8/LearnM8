@@ -1,6 +1,7 @@
 """Batch-file I/O for lab-in-the-loop suggestion rounds.
 
-The CSV batch files in a directory are the only state between rounds.
+The CSV batch files and the ``pruned_cycle_N.parquet`` prune records in a
+directory are the only state between rounds.
 """
 
 import io
@@ -16,6 +17,7 @@ from learnm8.exceptions import ConfigurationError, ValidationError, _truncate_li
 logger = logging.getLogger(__name__)
 
 _BATCH_FILE_RE = re.compile(r'^batch_cycle_(\d+)\.csv$')
+_PRUNED_FILE_RE = re.compile(r'^pruned_cycle_(\d+)\.parquet$')
 _BOM = '﻿'
 _LEDGER_SCHEMA = {
     'ID': pl.Utf8,
@@ -34,6 +36,10 @@ _SEP_LINE_RE = re.compile(r'^\s*"?sep=.[,;\t]*"?\s*$', re.IGNORECASE)
 
 def batch_path(batch_dir: Path, cycle: int) -> Path:
     return batch_dir / f'batch_cycle_{cycle}.csv'
+
+
+def pruned_path(batch_dir: Path, cycle: int) -> Path:
+    return batch_dir / f'pruned_cycle_{cycle}.parquet'
 
 
 def next_cycle(ledger: pl.DataFrame) -> int:
@@ -222,5 +228,62 @@ def write_batch(
     tmp = path.with_name(path.name + '.tmp')
     # 'sep=,' makes Excel split columns correctly in every locale.
     tmp.write_text('sep=,\n' + out.write_csv(), encoding='utf-8', newline='')
+    os.replace(tmp, path)
+    return path
+
+
+def read_pruned(batch_dir: Path, cycle: int) -> pl.DataFrame:
+    """Compounds pruned in rounds before ``cycle``, from ``pruned_cycle_K.parquet`` (K < cycle).
+
+    Columns ``ID``, ``smiles`` and ``cycle`` (K), like the batch ledger, so the
+    caller can run the same pool checks.
+
+    A file with K >= cycle belongs to a round whose batch file is gone (deleted
+    to redo it, or a crash before the batch was written) and is ignored.
+    """
+    frames = [
+        pl.DataFrame(
+            schema={'ID': pl.Utf8, 'smiles': pl.Utf8, 'cycle': pl.Int64},
+        )
+    ]
+    ignored = []
+    for path in sorted(Path(batch_dir).iterdir()):
+        match = _PRUNED_FILE_RE.match(path.name)
+        if match is None:
+            continue
+        if int(match.group(1)) >= cycle:
+            ignored.append(path.name)
+            continue
+        try:
+            df = pl.read_parquet(path, columns=['ID', 'SMILES'])
+        except pl.exceptions.PolarsError as exc:
+            raise ValidationError(
+                f'{path.name}: cannot read pruned IDs and SMILES: {exc}'
+            ) from exc
+        frames.append(
+            df.select(
+                pl.col('ID').cast(pl.Utf8),
+                pl.col('SMILES').cast(pl.Utf8).alias('smiles'),
+                pl.lit(int(match.group(1)), dtype=pl.Int64).alias('cycle'),
+            )
+        )
+    if ignored:
+        logger.warning(
+            'Ignoring prune record(s) for round %d or later, whose batch file '
+            'is missing or empty: %s',
+            cycle,
+            _truncate_list(ignored),
+        )
+    return pl.concat(frames)
+
+
+def write_pruned(pruned: pl.DataFrame, batch_dir: Path, cycle: int) -> Path | None:
+    """Record the pruned ``ID``/``SMILES`` rows of ``cycle``; with none, remove a stale record."""
+    path = pruned_path(Path(batch_dir), cycle)
+    if pruned.height == 0:
+        path.unlink(missing_ok=True)
+        return None
+    tmp = path.with_name(path.name + '.tmp')
+    pruned.select(pl.col('ID').cast(pl.Utf8), pl.col('SMILES')).write_parquet(tmp)
     os.replace(tmp, path)
     return path
