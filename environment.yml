@@ -14,7 +14,7 @@ dependencies:
   # two files in step — the container installs the package with --no-deps, so
   # pip will NOT catch a 1.x numpy resolved here.
   - numpy>=2.0,<3.0
-  - scipy>=1.10,<2.0
+  - scipy>=1.11,<2.0
   - pandas>=1.5,<3.0
   - polars>=1.0
   - pyarrow>=15.0
@@ -23,8 +23,8 @@ dependencies:
   # scikit-learn 1.4 is the first release with full py3.12 wheels on conda-forge.
   - scikit-learn>=1.4,<1.8
   - xgboost>=2.0,<4.0
-  - statsmodels>=0.14
   - joblib>=1.2
+  - psutil>=5.9
 
   # --- Chemistry ---
   - rdkit>=2024.03
@@ -36,6 +36,7 @@ dependencies:
   # cuda-version pin keeps RAPIDS + pytorch on the same CUDA 12.x family.
   - pytorch>=2.4,<3.0=*cuda12*
   - pytorch-lightning>=2.0,<3.0
+  - lightning>=2.0,<3.0
   - cuda-version>=12.4,<13
 
   # --- GPU acceleration (RAPIDS, CUDA 12) ---

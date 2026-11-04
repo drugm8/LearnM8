@@ -16,8 +16,9 @@ FROM tonylac77/learnm8-base:${BASE_TAG}
 WORKDIR /app
 
 # Package metadata and source only. tests/ is deliberately copied AFTER the
-# install so setuptools' `packages = {find = {}}` discovers just `learnm8` and
-# does not install `tests` as a top-level package.
+# install so the `[tool.setuptools.packages.find] include = ["learnm8*"]` rule
+# in pyproject.toml discovers just `learnm8` and does not install `tests` as a
+# top-level package.
 COPY pyproject.toml README.md LICENSE ./
 COPY learnm8/ ./learnm8/
 

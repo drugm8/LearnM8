@@ -1,0 +1,2 @@
+# setuptools auto-includes tests/test_*.py in the sdist; keep tests out.
+prune tests

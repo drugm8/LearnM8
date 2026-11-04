@@ -52,6 +52,8 @@ dependencies = [
     "chemprop>=2.2",
     "fastprop>=1.2",
     "mordredcommunity>=2.0.0",
+    # core/batching.py sizes chunks from available memory.
+    "psutil>=5.9.0",
 ]
 
 [project.optional-dependencies]
