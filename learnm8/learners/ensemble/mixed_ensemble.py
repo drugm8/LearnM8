@@ -5,7 +5,12 @@ from typing import Any
 from ..sklearn.linear_regression import LinearRegressionLearner
 from ..sklearn.random_forest import RandomForestLearner
 from ..sklearn.xgboost_learner import XGBoostLearner
-from .ensemble import EnsembleLearner, _derive_random_states
+from .ensemble import (
+    EnsembleLearner,
+    _derive_random_states,
+    _is_cuda,
+    _resolve_member_device,
+)
 
 
 class MixedEnsemble(EnsembleLearner):
@@ -20,22 +25,25 @@ class MixedEnsemble(EnsembleLearner):
             random_state: Base seed for member-seed derivation (default: 42).
                 Each of the 3 members gets a distinct seed via the unified
                 offset scheme ``[base, base+81, base+314]``.
-            device: Compute device for GPU-accelerated members ('cpu', 'cuda', or 'auto').
-                'cuda' replaces RF with RfFilLearner, LR with RidgeCumlLearner (alpha=1.0),
-                and uses XGBoostLearner with device='cuda'.
-                'auto' resolves to CPU member types.
+            device: Compute device for GPU-accelerated members ('cpu', 'cuda',
+                'cuda:N' or 'auto'). 'cuda' / 'cuda:N' replace RF with
+                RfFilLearner, LR with RidgeCumlLearner (alpha=1.0), and use
+                XGBoostLearner with the same device (the cuML members always
+                use the current CUDA device). 'auto' resolves to 'cuda' when
+                CUDA is available and cuML is importable, else CPU members.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         rs_rf, rs_lr, rs_xgb = _derive_random_states(random_state, 3)
 
-        if device == 'cuda':
+        device = _resolve_member_device(device, needs_cuml=True)
+        if _is_cuda(device):
             from learnm8.learners.gpu.rf_fil import RfFilLearner
             from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
 
             learners = [
                 RfFilLearner(n_estimators=100, random_state=rs_rf),
                 RidgeCumlLearner(alpha=1.0, random_state=rs_lr),
-                XGBoostLearner(learning_rate=0.1, random_state=rs_xgb, device='cuda'),
+                XGBoostLearner(learning_rate=0.1, random_state=rs_xgb, device=device),
             ]
         else:
             learners = [

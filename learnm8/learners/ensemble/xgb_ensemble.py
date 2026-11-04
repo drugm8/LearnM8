@@ -4,7 +4,7 @@ from typing import Any
 
 from ...core.interfaces import Learner
 from ..sklearn.xgboost_learner import XGBoostLearner
-from .ensemble import EnsembleLearner, _derive_random_states
+from .ensemble import EnsembleLearner, _derive_random_states, _resolve_member_device
 
 
 class XGBEnsemble(EnsembleLearner):
@@ -27,8 +27,9 @@ class XGBEnsemble(EnsembleLearner):
                 scheme ``[base, base+81, base+314, ...]``.
             random_state: Base seed for member-seed derivation (default: 42).
                 Ignored when ``random_states`` is provided explicitly.
-            device: Compute device for XGBoost members ('cpu', 'cuda', or 'auto').
-                'auto' resolves to 'cpu' — explicit GPU selection requires 'cuda'.
+            device: Compute device for XGBoost members ('cpu', 'cuda', 'cuda:N'
+                or 'auto'). 'auto' resolves to 'cuda' when CUDA is available,
+                else 'cpu'.
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if learning_rates is None:
@@ -37,7 +38,7 @@ class XGBEnsemble(EnsembleLearner):
             random_state, len(learning_rates), override=random_states
         )
 
-        resolved_device = 'cpu' if device == 'auto' else device
+        resolved_device = _resolve_member_device(device, needs_cuml=False)
 
         learners: list[Learner] = []
         for lr, rs in zip(learning_rates, random_states):  # noqa: B905

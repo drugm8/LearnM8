@@ -5,6 +5,7 @@ learners to improve prediction accuracy and provide uncertainty estimates
 through model diversity.
 """
 
+import importlib.util
 import logging
 import time
 from typing import cast
@@ -44,6 +45,33 @@ def _derive_random_states(
     while len(offsets) < n_members:
         offsets.append(offsets[-1] + ENSEMBLE_SEED_OFFSETS[-1])
     return [base_seed + off for off in offsets]
+
+
+def _cuml_available() -> bool:
+    return importlib.util.find_spec('cuml') is not None
+
+
+def _resolve_member_device(device: str, *, needs_cuml: bool) -> str:
+    """Resolve an ensemble ``device`` argument to a concrete member device.
+
+    ``'auto'`` becomes ``'cuda'`` only when CUDA is available and, if
+    ``needs_cuml``, cuML is importable; otherwise ``'cpu'`` (never raises).
+    ``'cuda'`` and ``'cuda:N'`` are returned unchanged (explicit request); any
+    other value (e.g. ``'cpu'``) is returned unchanged.
+    """
+    if device != 'auto':
+        return device
+    import torch
+
+    use_gpu = torch.cuda.is_available() and (not needs_cuml or _cuml_available())
+    resolved = 'cuda' if use_gpu else 'cpu'
+    logger.info("Ensemble device='auto' resolved to '%s'", resolved)
+    return resolved
+
+
+def _is_cuda(device: str) -> bool:
+    """True for 'cuda' and 'cuda:N'."""
+    return device == 'cuda' or device.startswith('cuda:')
 
 
 class EnsembleLearner(Learner):

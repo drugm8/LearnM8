@@ -137,14 +137,14 @@ class XGBoostLearner(SklearnLearner):
         try:
             super().train(features, targets)
         except LearnerError as e:
-            if self.device == 'cuda' and e.__cause__ is not None:
+            if self.device.startswith('cuda') and e.__cause__ is not None:
                 raise LearnerError(
                     f'XGBoost CUDA training failed: {e.__cause__}. '
                     f'Ensure CUDA drivers are installed and XGBoost was built with GPU support.'
                 ) from e.__cause__
             raise
         except Exception as e:
-            if self.device == 'cuda':
+            if self.device.startswith('cuda'):
                 raise LearnerError(
                     f'XGBoost CUDA training failed: {e}. '
                     f'Ensure CUDA drivers are installed and XGBoost was built with GPU support.'

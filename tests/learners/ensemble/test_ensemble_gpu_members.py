@@ -7,6 +7,20 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+_CUML_PROBE = 'learnm8.learners.ensemble.ensemble._cuml_available'
+
+
+def _fake_ridge_module():
+    from learnm8.core.interfaces import Learner
+
+    ridge_cls = MagicMock()
+    member = MagicMock(spec=Learner)
+    member.get_name.return_value = 'ridge_cuml'
+    ridge_cls.return_value = member
+    fake = MagicMock()
+    fake.RidgeCumlLearner = ridge_cls
+    return ridge_cls, fake
+
 
 class TestLREnsembleDeviceSelection:
     """Tests for LREnsemble device-based member selection."""
@@ -101,12 +115,40 @@ class TestLREnsembleDeviceSelection:
         ):
             LREnsemble(device='cuda', regularization_strengths=[None, None, None])
 
-    def test_lr_ensemble_device_auto_resolves_to_cpu(self):
+    def test_lr_ensemble_device_auto_resolves_to_cpu_without_cuda(self):
         from learnm8.learners.ensemble.lr_ensemble import LREnsemble
         from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
 
-        ensemble = LREnsemble(device='auto')
+        with patch('torch.cuda.is_available', return_value=False):
+            ensemble = LREnsemble(device='auto')
         assert all(isinstance(m, LinearRegressionLearner) for m in ensemble.learners)
+
+    def test_lr_ensemble_device_auto_resolves_to_cpu_without_cuml(self):
+        from learnm8.learners.ensemble.lr_ensemble import LREnsemble
+        from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
+
+        with (
+            patch('torch.cuda.is_available', return_value=True),
+            patch(_CUML_PROBE, return_value=False),
+        ):
+            ensemble = LREnsemble(device='auto')
+        assert all(isinstance(m, LinearRegressionLearner) for m in ensemble.learners)
+
+    @pytest.mark.parametrize('device', ['auto', 'cuda:0', 'cuda:1'])
+    def test_lr_ensemble_gpu_devices_create_ridge_cuml_members(self, device):
+        from learnm8.learners.ensemble.lr_ensemble import LREnsemble
+
+        ridge_cls, _fake = _fake_ridge_module()
+        with (
+            patch('torch.cuda.is_available', return_value=True),
+            patch(_CUML_PROBE, return_value=True),
+            patch.dict('sys.modules', {'learnm8.learners.gpu.ridge_cuml': _fake}),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
+            LREnsemble(device=device)
+        assert ridge_cls.call_count == 3
 
 
 class TestXGBEnsembleDeviceSelection:
@@ -118,11 +160,25 @@ class TestXGBEnsembleDeviceSelection:
         ensemble = XGBEnsemble(device='cuda')
         assert all(m.device == 'cuda' for m in ensemble.learners)
 
-    def test_xgb_ensemble_device_auto_resolves_to_cpu(self):
+    def test_xgb_ensemble_device_auto_resolves_to_cpu_without_cuda(self):
         from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
 
-        ensemble = XGBEnsemble(device='auto')
+        with patch('torch.cuda.is_available', return_value=False):
+            ensemble = XGBEnsemble(device='auto')
         assert all(m.device == 'cpu' for m in ensemble.learners)
+
+    def test_xgb_ensemble_device_auto_resolves_to_cuda_with_cuda(self):
+        from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
+
+        with patch('torch.cuda.is_available', return_value=True):
+            ensemble = XGBEnsemble(device='auto')
+        assert all(m.device == 'cuda' for m in ensemble.learners)
+
+    def test_xgb_ensemble_device_cuda_index_propagates_to_members(self):
+        from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
+
+        ensemble = XGBEnsemble(device='cuda:1')
+        assert all(m.device == 'cuda:1' for m in ensemble.learners)
 
     def test_xgb_ensemble_device_cpu_default(self):
         from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
@@ -220,13 +276,48 @@ class TestMixedEnsembleDeviceSelection:
         assert len(xgb_members) == 1
         assert xgb_members[0].device == 'cuda'
 
+    @pytest.mark.parametrize('device', ['auto', 'cuda:0'])
+    def test_mixed_ensemble_gpu_devices_use_gpu_members(self, device):
+        from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
+        from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
+
+        mock_rf_fil_cls, mock_ridge_cls, fake_fil, fake_ridge = (
+            self._make_mixed_cuda_mocks()
+        )
+        with (
+            patch('torch.cuda.is_available', return_value=True),
+            patch(_CUML_PROBE, return_value=True),
+            self._patch_cuda_modules(fake_fil, fake_ridge),
+            patch(
+                'learnm8.learners.ensemble.ensemble.EnsembleLearner._validate_learners'
+            ),
+        ):
+            ensemble = MixedEnsemble(device=device)
+
+        assert mock_rf_fil_cls.called
+        assert mock_ridge_cls.called
+        xgb = next(m for m in ensemble.learners if isinstance(m, XGBoostLearner))
+        assert xgb.device == ('cuda' if device == 'auto' else device)
+
+    def test_mixed_ensemble_device_auto_resolves_to_cpu_without_cuml(self):
+        from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
+        from learnm8.learners.sklearn.random_forest import RandomForestLearner
+
+        with (
+            patch('torch.cuda.is_available', return_value=True),
+            patch(_CUML_PROBE, return_value=False),
+        ):
+            ensemble = MixedEnsemble(device='auto')
+        assert isinstance(ensemble.learners[0], RandomForestLearner)
+
     def test_mixed_ensemble_device_auto_resolves_to_cpu(self):
         from learnm8.learners.ensemble.mixed_ensemble import MixedEnsemble
         from learnm8.learners.sklearn.linear_regression import LinearRegressionLearner
         from learnm8.learners.sklearn.random_forest import RandomForestLearner
         from learnm8.learners.sklearn.xgboost_learner import XGBoostLearner
 
-        ensemble = MixedEnsemble(device='auto')
+        with patch('torch.cuda.is_available', return_value=False):
+            ensemble = MixedEnsemble(device='auto')
         assert isinstance(ensemble.learners[0], RandomForestLearner)
         assert isinstance(ensemble.learners[1], LinearRegressionLearner)
         assert isinstance(ensemble.learners[2], XGBoostLearner)
@@ -273,3 +364,20 @@ class TestEnsembleDocstring:
 
         for _cls in (LREnsemble, XGBEnsemble, MixedEnsemble):
             assert True
+
+
+class TestRealGpuAuto:
+    """Real-hardware check: 'auto' must pick GPU members when CUDA+cuML exist."""
+
+    def test_xgb_ensemble_auto_trains_on_real_device(self):
+        import torch
+
+        from learnm8.learners.ensemble.xgb_ensemble import XGBEnsemble
+
+        ensemble = XGBEnsemble(device='auto')
+        expected = 'cuda' if torch.cuda.is_available() else 'cpu'
+        assert all(m.device == expected for m in ensemble.learners)
+        rng = np.random.default_rng(0)
+        ensemble.train(rng.random((30, 8)), rng.random(30))
+        preds, _ = ensemble.predict(rng.random((5, 8)))
+        assert preds.shape == (5,)

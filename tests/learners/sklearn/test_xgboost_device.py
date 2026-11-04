@@ -68,6 +68,14 @@ class TestXGBoostDeviceCuda:
         ):
             learner.train(features, targets)
 
+    def test_cuda_index_failure_at_train_raises_learner_error(self, features, targets):
+        learner = XGBoostLearner(device='cuda:0', n_estimators=5)
+        with (
+            patch.object(learner.model, 'fit', side_effect=RuntimeError('boom')),
+            pytest.raises(LearnerError, match='XGBoost CUDA training failed'),
+        ):
+            learner.train(features, targets)
+
     def test_no_silent_cpu_substitution_on_cuda_failure(self, features, targets):
         learner = XGBoostLearner(device='cuda', n_estimators=5)
         cuda_err = RuntimeError('CUDA: device not available')

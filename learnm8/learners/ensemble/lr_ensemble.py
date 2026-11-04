@@ -4,7 +4,12 @@ from typing import Any
 
 from ...core.interfaces import Learner
 from ..sklearn.linear_regression import LinearRegressionLearner
-from .ensemble import EnsembleLearner, _derive_random_states
+from .ensemble import (
+    EnsembleLearner,
+    _derive_random_states,
+    _is_cuda,
+    _resolve_member_device,
+)
 
 
 class LREnsemble(EnsembleLearner):
@@ -27,9 +32,11 @@ class LREnsemble(EnsembleLearner):
                 scheme ``[base, base+81, base+314, ...]``.
             random_state: Base seed for member-seed derivation (default: 42).
                 Ignored when ``random_states`` is provided explicitly.
-            device: Compute device for members ('cpu', 'cuda', or 'auto').
-                'auto' resolves to CPU (LinearRegressionLearner).
-                'cuda' creates RidgeCumlLearner members with GPU acceleration.
+            device: Compute device for members ('cpu', 'cuda', 'cuda:N' or 'auto').
+                'auto' resolves to 'cuda' when CUDA is available and cuML is
+                importable, else CPU (LinearRegressionLearner).
+                'cuda' / 'cuda:N' create RidgeCumlLearner members with GPU
+                acceleration (cuML members always use the current CUDA device).
             **kwargs: Additional arguments passed to EnsembleLearner
         """
         if regularization_strengths is None:
@@ -38,8 +45,9 @@ class LREnsemble(EnsembleLearner):
             random_state, len(regularization_strengths), override=random_states
         )
 
+        device = _resolve_member_device(device, needs_cuml=True)
         learners: list[Learner] = []
-        if device == 'cuda':
+        if _is_cuda(device):
             from learnm8.learners.gpu.ridge_cuml import RidgeCumlLearner
 
             for alpha, rs in zip(regularization_strengths, random_states):  # noqa: B905
