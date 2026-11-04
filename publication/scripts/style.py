@@ -72,6 +72,9 @@ STRATEGY_COLOR = {
     'thompson': ACCENT_GREEN,
     'pi': ACCENT_ORANGE,
     'entropy': ACCENT_PINK,
+    # Lighter shade of greedy: topk is greedy's shortlist with a random draw, and the
+    # seven-colour categorical palette is fully used by the strategies above.
+    'topk': LIGHT,
     # Composite schedules (EXP-C), never plotted alongside the standalone set.
     'ucb-greedy': ACCENT_ORANGE,
 }

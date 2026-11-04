@@ -3,7 +3,7 @@
     python publication/scripts/make_all.py [--rebuild-data]
 
 Figures read benchmark_tidy.parquet, so pass --rebuild-data only when the run
-directories have changed (e.g. after the 100M run lands).
+directories have changed (e.g. after new runs are added).
 
 The fig*.py list is globbed from this directory, so a fresh clone renders
 exactly the tracked figure scripts. Scripts whose status is still undecided
@@ -28,8 +28,9 @@ from style import EXIT_RAW_DATA_MISSING
 HERE = Path(__file__).resolve().parent
 
 # Scripts that render once per cycle-0 seed design. Everything else is rendered
-# once: fig05, fig08 and fig09 restrict to the 1% batch, where the two designs
-# are the same run, so a second variant would be a byte-identical duplicate.
+# once, either for the matched design or (fig05) at the 1% batch, where the two
+# designs are the same runs, so a second variant would be a byte-identical
+# duplicate.
 DESIGN_AWARE = {
     'fig02_learners.py',
     'fig03_acquisition.py',
