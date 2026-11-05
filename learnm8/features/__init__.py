@@ -456,7 +456,7 @@ _FEATURIZER_CONFIG: MappingProxyType[str, Any] = MappingProxyType(
         },
         'autocorr': {
             'cls': AutocorrFingerprint,
-            'defaults': _3d_defaults(),
+            'defaults': _3d_defaults(use_3D=True),
             'storage_dtype': 'float32',
             'feature_type': 'continuous',
             'requires_conformers': True,
