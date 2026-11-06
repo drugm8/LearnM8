@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import style
-from matplotlib.lines import Line2D
 
 from learnm8.visualization.style import style_axes
 
@@ -61,7 +60,6 @@ TOP_FRACTION = 0.001
 # In-plot batch-fraction labels, 20% down from the 7 pt used for axis-adjacent
 # annotation: they sit inside the data area and must not compete with the curves.
 FRACTION_LABEL_SIZE = 5.6
-MARKER_CYCLE_STRIDE = 4
 # Row identity. `matched` seeds cycle 0 with one acquisition batch, `fixed`
 # always with 1% of the pool; the ladders are never pooled into one curve. Both
 # rows are the 10M pool, so the pool goes unnamed here and in the Methods only.
@@ -299,35 +297,6 @@ def _same_cycle_rank_records(
     return pl.concat(rows, how='vertical') if rows else pl.DataFrame()
 
 
-def _marker_indices(n_cycles: int) -> list[int]:
-    """Mark every MARKER_CYCLE_STRIDE-th cycle, always including the last.
-
-    A fixed marker count per arm gave a 50-cycle 0.1% arm and a 2-cycle 2.5%
-    arm identical glyph density, hiding the one quantity the ladder is about.
-    Marking on a cycle stride instead makes the glyph count the retrain count.
-    """
-    indices = list(range(0, n_cycles, MARKER_CYCLE_STRIDE))
-    if indices[-1] != n_cycles - 1:
-        indices.append(n_cycles - 1)
-    return indices
-
-
-def _pool_percent_ticks(pool_size: int, x_max: float) -> list[float]:
-    """Label the ladder x axis at whole percents of the pool.
-
-    Every arm runs a fixed cycle count, so the union of their cycle boundaries
-    is as many distinct x positions as the longest arm has cycles - 125 on the
-    0.04% one. Labelling actual positions turned that union into a solid comb of
-    minor ticks, and snapped the five majors onto whichever boundaries happened
-    to sit near the fifths of the range, which is how the panel came to be
-    labelled "130k (1.3%)" and "375k (3.8%)". Whole percents of the pool are the
-    unit the budget is set in, fall on the same five positions in both rows, and
-    label without rounding.
-    """
-    step = pool_size / 100
-    return [step * index for index in range(1, int(x_max // step) + 1)]
-
-
 def _label_sides(points: list[dict]) -> list[bool]:
     """Choose above/below per point: the far side from its nearest neighbour.
 
@@ -360,59 +329,12 @@ def _label_sides(points: list[dict]) -> list[bool]:
 
 def _draw_ladder(
     axd: dict,
-    letters: str,
+    letter: str,
     batch: pl.DataFrame,
     colors: dict[float, str],
     title: str,
 ) -> None:
-    """Draw one seed design's two batch-ladder panels into ``letters``."""
-    fractions = sorted(batch['batch_fraction'].unique().to_list())
-    pool_size = int(batch['pool_size'].unique().item())
-
-    ax = axd[letters[0]]
-    curves = data.curve(batch, ['batch_fraction'], X, Y)
-    for frac in fractions:
-        color = colors[frac]
-        s = curves.filter(pl.col('batch_fraction') == frac)
-        ax.plot(
-            s[X],
-            s['mean'],
-            color=color,
-            marker='o',
-            markevery=_marker_indices(s.height),
-            markersize=2.4,
-            label=f'{frac:g}%',
-            linewidth=style.DATA_LINEWIDTH,
-        )
-        style.band(ax, s[X], s['lo'], s['hi'], color, alpha=0.09)
-    ax.set(xlabel=style.LABELS[X], ylabel=style.LABELS[Y])
-    ax.set_title(title, loc='left')
-    style.compact_axis(ax)
-    # Upright stacked labels: five one-line "100k (1%)" labels butt against each
-    # other across a panel this wide, and rotating them to fit costs a
-    # centimetre of height per row and strands the axis label below them.
-    style.set_compound_axis(
-        ax,
-        pool_size,
-        ticks=_pool_percent_ticks(pool_size, curves[X].max()),
-        rotation=0,
-        stacked=True,
-    )
-    ax.margins(x=0.05, y=0.10)
-
-    # Bands are min-max over replicates, so a single-replicate arm draws no band at
-    # all. Without the count stated that reads as a perfectly reproducible arm
-    # rather than an arm still waiting on the cluster.
-    ax.text(
-        0.03,
-        0.97,
-        data.replicate_note(curves, 'batch_fraction'),
-        transform=ax.transAxes,
-        ha='left',
-        va='top',
-        fontsize=6,
-        color=style.MUTED,
-    )
+    """Draw one seed design's recovery-vs-time frontier into panel ``letter``."""
 
     summary = data.final(batch, ['batch_fraction'], [Y, 'cum_ml_time']).sort(
         'batch_fraction'
@@ -422,7 +344,8 @@ def _draw_ladder(
     # its own point is unambiguous and needs no leader line. The previous fan to
     # a shared label column needed one leader per arm, and those five near-
     # horizontal rules read as data in a panel whose data is five dots.
-    ax = axd[letters[1]]
+    ax = axd[letter]
+    ax.set_title(title, loc='left')
     points = list(summary.iter_rows(named=True))
     label_above = _label_sides(points)
     for index, row in enumerate(points):
@@ -497,50 +420,11 @@ def make_batch_figure(frames: dict[str, pl.DataFrame]) -> None:
             }
         )
     )
-    fig, axd = style.mosaic('AB\nCD', panel_h_mm=PANEL_H_MM)
-    for design, letters in (('matched', 'AB'), ('fixed', 'CD')):
-        _draw_ladder(axd, letters, ladders[design], colors, DESIGN_TITLES[design])
+    fig, axd = style.mosaic('A\nB', panel_h_mm=PANEL_H_MM, width=style.SINGLE_COL)
+    for design, letter in (('matched', 'A'), ('fixed', 'B')):
+        _draw_ladder(axd, letter, ladders[design], colors, DESIGN_TITLES[design])
 
     style.label_panels(axd)
-    # All arms finish within a few points of 100%, so end labels in panels A/C
-    # would have to fan far wider than their anchors are apart, which detaches
-    # every label from its curve. A figure-level key covers no data, and matches
-    # how F2 and F3 identify their series. Panels B/D keep end labels: their
-    # points are genuinely separated.
-    #
-    # The key is built from `colors` rather than from one row's handles: neither
-    # row holds every fraction, and only the union names the whole colour ramp.
-    legend = fig.legend(
-        handles=[
-            Line2D(
-                [0],
-                [0],
-                color=color,
-                marker='o',
-                markersize=3.6,
-                linewidth=style.DATA_LINEWIDTH,
-                label=f'{fraction:g}%',
-            )
-            for fraction, color in colors.items()
-        ],
-        # Ascending fractions in one tight row, so the key reads as the sequential
-        # ramp it is. The defaults leave enough air between handle, label and
-        # column for the eight entries to read as eight unrelated series. The
-        # anchor clears panel C's rotated tick block and its axis label, which a
-        # legend seated any higher lands on top of.
-        title='batch fraction',
-        loc='lower center',
-        bbox_to_anchor=(0.5, -0.105),
-        ncols=len(colors),
-        handlelength=1.4,
-        handletextpad=0.45,
-        columnspacing=1.3,
-        borderpad=0.0,
-    )
-    legend.get_title().set_fontsize(7.5)
-    legend.get_title().set_fontweight('semibold')
-    for text in legend.get_texts():
-        text.set_fontsize(7.5)
     style.save(fig, 'fig04_batch')
 
 
